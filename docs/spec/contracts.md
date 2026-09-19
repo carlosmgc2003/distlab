@@ -11,6 +11,11 @@ belong to the kernel contract layer; importing them must not import runtime
 models, application packages, or UI. Concrete dependencies are injected by an
 application composition root. See [ADR-001](adr/001-deterministic-execution.md).
 
+The TypeScript encoding lives in [`packages/contracts`](../../packages/contracts)
+(`@distlab/contracts`, with kernel-only entry `@distlab/contracts/kernel`).
+That package must not drift from the types in this directory. If they disagree,
+treat this document as the prose source and reconcile the package.
+
 ## Canonical values and identities
 
 ```ts
