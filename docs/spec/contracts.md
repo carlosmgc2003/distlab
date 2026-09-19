@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Draft |
 | Owner | DistLab core team |
-| Last updated | 2026-09-17 |
+| Last updated | 2026-09-19 |
 
 These contracts are normative for the component specs in this directory. They
 belong to the kernel contract layer; importing them must not import runtime
@@ -174,6 +174,12 @@ native async handlers, raw promises, detached tasks, shared waits, or
 tasks and aggregate their outcomes deterministically. See the core spec for the
 dispatch algorithm. This deliberately narrow protocol makes the supported
 execution boundary explicit; it is not an arbitrary JavaScript sandbox.
+
+The draft runtime extension in
+[ADR-002](adr/002-runtime-model-semantics.md#kernel-integration-refinements)
+defines trusted task-abandonment and boundary-read ports. Abandoned operations
+cannot resume their former task; late completion is inert. These ports are
+injected infrastructure capabilities, never application-handler capabilities.
 
 ## Correlation
 

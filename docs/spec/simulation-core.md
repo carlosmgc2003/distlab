@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Draft |
 | Owner | DistLab core team |
-| Last updated | 2026-09-17 |
+| Last updated | 2026-09-19 |
 | Related issues | None |
 
 ## Responsibility
@@ -136,6 +136,12 @@ Model handlers must perform bounded synchronous work; arbitrary programs and
 preemption of an infinite loop are outside the supported runtime contract.
 
 ### Modeled failures and terminal failures
+
+The runtime draft extension in
+[ADR-002](adr/002-runtime-model-semantics.md#kernel-integration-refinements)
+specifies trusted owner/process task abandonment and deterministic read hooks
+after initialization, after event bookkeeping, and at completion/failure. These
+hooks preserve the dispatch order above and expose no application mutation port.
 
 Runtime adapters own the boundary between domain behavior and kernel errors.
 Timeouts and failed storage/network operations settle controlled operations with
