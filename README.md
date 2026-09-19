@@ -4,9 +4,13 @@ DistLab is a work-in-progress browser-based educational simulator for distribute
 
 ## Project status
 
-DistLab is currently in the design and specification phase. There is no application code, build process, or runnable release yet because foundational product and implementation decisions are still being worked through.
+DistLab is in the design and specification phase. The first TypeScript package,
+`@distlab/contracts`, encodes the shared simulation types from `docs/spec/`
+without implementing the engine.
 
-The repository currently contains the project vision, architecture, shared terminology, and initial specifications for the deterministic simulation core.
+The repository contains the project vision, architecture, shared terminology,
+component specifications, and those contracts. There is no runnable simulator
+or browser UI yet.
 
 ## Goals
 
@@ -33,7 +37,7 @@ DistLab models the semantics that matter for learning rather than emulating spec
 - [Vision](docs/vision.md) describes the educational problem, target audience, reference domain, and intended product experience.
 - [Architecture](docs/architecture.md) defines the simulation model, runtime components, state boundaries, and architectural guarantees.
 - [Glossary](docs/glossary.md) establishes the terminology used throughout the project.
-- [Shared simulation contracts](docs/spec/contracts.md) defines common values, identities, capabilities, and correlation rules.
+- [Shared simulation contracts](docs/spec/contracts.md) defines common values, identities, capabilities, and correlation rules. The TypeScript encoding is [`packages/contracts`](packages/contracts) (`@distlab/contracts`).
 - [Component specifications](docs/spec/) covers the simulation core, scheduler, virtual clock, observability, and the following runtime and application models:
   - [Virtual Network](docs/spec/virtual-network.md) and [Message Bus](docs/spec/message-bus.md)
   - [Database](docs/spec/database.md) and [KeyValueStore](docs/spec/kv-store.md)
@@ -41,7 +45,13 @@ DistLab models the semantics that matter for learning rather than emulating spec
   - [Fault Engine](docs/spec/fault-engine.md) and [Scenario Engine](docs/spec/scenario-engine.md)
 - [Architecture decisions](docs/spec/adr/) records significant decisions about simulation semantics.
 
-The documentation is evolving while the remaining design decisions are made. When implementation begins, setup, development, test, and usage instructions will be added here.
+The documentation is evolving while the remaining design decisions are made.
+
+```sh
+npm install
+npm run typecheck
+npm test
+```
 
 ## License
 

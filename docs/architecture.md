@@ -366,6 +366,8 @@ apps/
   web/
 
 packages/
+  contracts/
+
   simulation-core/
   virtual-network/
   message-bus/
@@ -387,8 +389,6 @@ packages/
     clients/
     external-services/
 
-  shared/
-
 examples/
   catalog-cache/
   checkout/
@@ -408,6 +408,10 @@ docs/
 ```
 
 The exact package structure may evolve.
+
+`packages/contracts` (`@distlab/contracts`) is the TypeScript encoding of the
+public types in `docs/spec/`. Other packages import those contracts instead of
+redeclaring them. Kernel-only consumers use `@distlab/contracts/kernel`.
 
 The semantic component boundaries are more important than the folder names.
 
@@ -1417,6 +1421,8 @@ Infrastructure
 The intended dependency direction is approximately:
 
 ```text
+contracts
+      ↑
 simulation-core
       ↑
       │
