@@ -53,6 +53,10 @@ npm run typecheck
 npm test
 ```
 
+GitHub Actions runs `npm ci`, `npm run typecheck`, and `npm test` on pull
+requests and on `main`. The workflow lives at
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
 ## License
 
 DistLab is licensed under the [Apache License 2.0](LICENSE).

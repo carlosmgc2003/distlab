@@ -29,6 +29,11 @@ rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included
 ```
 
+CI is `.github/workflows/ci.yml`. It installs with `npm ci` and runs the root
+`typecheck` and `test` scripts on pull requests and on `main`. Keep those root
+scripts covering every workspace package so the workflow does not hard-code
+`-w @distlab/contracts`.
+
 Add new setup, build, run, and test commands here when introducing a toolchain;
 they should also be documented in the project README.
 
