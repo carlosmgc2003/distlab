@@ -1,0 +1,141 @@
+name: DistLab engineering task
+description: Propose a small, agent-friendly, reviewable DistLab change.
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this issue focused on one verifiable engineering outcome. Link the authoritative specification and list explicit non-goals. Fundamental semantic changes require an ADR.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What must be achieved?
+      placeholder: Describe one reviewable outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why does DistLab need this, and which educational or architectural capability does it unlock?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Link relevant specifications, architecture sections, ADRs, and dependent issues.
+      placeholder: |
+        - Specification: docs/spec/...
+        - Architecture: docs/architecture.md §...
+        - ADR: docs/spec/adr/...
+        - Related issues: #...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Explicit work included in this issue.
+      placeholder: |
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of Scope
+      description: Work that must not be implemented as part of this issue. This section is mandatory.
+      placeholder: |
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: Proposed Behavior
+      description: Describe expected behavior without unnecessarily prescribing implementation. Include examples where useful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Use concrete, verifiable criteria and prefer observable behavior.
+      placeholder: |
+        - [ ] Given ..., when ..., then ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests
+      description: Specify expected unit, integration, deterministic, headless-scenario, or UI/E2E coverage.
+      placeholder: |
+        - Unit: ...
+        - Integration: ...
+        - Determinism: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List issues that must be completed first. Write “None” when independent.
+      placeholder: |
+        Depends on:
+        - #...
+    validations:
+      required: true
+
+  - type: textarea
+    id: unlocks
+    attributes:
+      label: Unlocks
+      description: List subsequent work enabled by this issue. Write “None” when terminal.
+      placeholder: |
+        Unlocks:
+        - #...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: adr
+    attributes:
+      label: Architecture decision impact
+      description: Changes to time, scheduling, determinism, delivery, ownership, component boundaries, snapshots, or dependency direction require an ADR.
+      options:
+        - No fundamental semantic change
+        - ADR included or explicitly required in scope
+        - Unsure — architecture review required before implementation
+    validations:
+      required: true
+
+  - type: textarea
+    id: definition_of_done
+    attributes:
+      label: Definition of Done
+      description: Keep this checklist in the issue and check items only when the work is complete.
+      value: |
+        - [ ] Implementation is complete for the stated scope.
+        - [ ] Required tests pass.
+        - [ ] Public contracts and package dependency direction are respected.
+        - [ ] Documentation is updated where behavior or setup changed.
+        - [ ] No unrelated architectural changes are included.
+        - [ ] No TODO implementation is required to satisfy the acceptance criteria.
+    validations:
+      required: true
