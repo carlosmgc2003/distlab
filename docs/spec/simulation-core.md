@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
 | Last updated | 2026-09-19 |
 | Related issues | None |

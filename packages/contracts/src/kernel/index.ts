@@ -58,6 +58,12 @@ export {
   type SchedulerController,
   type SchedulerState,
 } from "./scheduler.js";
+export {
+  SEEDED_RANDOM_ALGORITHM,
+  type RandomDraw,
+  type SeededRandomAlgorithm,
+  type SeededRandomPort,
+} from "./random.js";
 export type {
   ExecutionHistoryExport,
   ExecutionHistoryReader,

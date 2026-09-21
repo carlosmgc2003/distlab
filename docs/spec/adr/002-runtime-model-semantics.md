@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed draft specification baseline |
+| Status | Accepted for the MVP implementation baseline |
 | Date | 2026-09-19 |
 | Scope | Runtime and scenario specifications; no implementation yet |
 

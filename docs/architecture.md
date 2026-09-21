@@ -1090,11 +1090,11 @@ message.delivered
 message.acked
 message.redelivered
 
-db.transaction.started
-db.row.inserted
-db.row.updated
-db.transaction.committed
-db.transaction.rolled_back
+database.transaction.begun
+database.row.read
+database.write.staged
+database.transaction.committed
+database.transaction.rolledback
 
 kv.set
 kv.expired
@@ -1114,8 +1114,8 @@ Example:
 t=0      customer.place_order
 t=10     network.request.sent
 t=20     orders.request.received
-t=25     db.transaction.started
-t=30     db.transaction.committed
+t=25     database.transaction.begun
+t=30     database.transaction.committed
 t=35     message.published
 t=50     message.delivered
 t=60     payments.external_request.sent

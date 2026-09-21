@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
 | Last updated | 2026-09-19 |
 
@@ -180,11 +180,34 @@ tasks and aggregate their outcomes deterministically. See the core spec for the
 dispatch algorithm. This deliberately narrow protocol makes the supported
 execution boundary explicit; it is not an arbitrary JavaScript sandbox.
 
-The draft runtime extension in
+The accepted runtime extension in
 [ADR-002](adr/002-runtime-model-semantics.md#kernel-integration-refinements)
 defines trusted task-abandonment and boundary-read ports. Abandoned operations
 cannot resume their former task; late completion is inert. These ports are
 injected infrastructure capabilities, never application-handler capabilities.
+
+## Seeded randomness
+
+The kernel owns the deterministic random stream described in
+[Seeded Random](seeded-random.md):
+
+```ts
+const SEEDED_RANDOM_ALGORITHM = "xoshiro128ss-splitmix32-v1";
+interface RandomDraw {
+  readonly index: number;
+  readonly algorithm: typeof SEEDED_RANDOM_ALGORITHM;
+  readonly uint32: number;
+  readonly unit: number;
+}
+interface SeededRandomPort {
+  draw(label: string): RandomDraw;
+}
+```
+
+Trusted runtime adapters receive this port only when their model semantics need
+probabilistic delay, loss, duplication, or fault selection. Application handlers,
+UI code, subscribers, projections, and assertions do not receive it. Reset
+recreates the stream from the normalized seed and rejects stale ports.
 
 ## Correlation
 
@@ -231,6 +254,23 @@ a global "last observation", so interleaved tasks cannot steal one another's
 causation. An untraced initial event receives this event-start cause for its
 subsequent local work without acquiring a trace automatically.
 
+## Application boundary contracts
+
+The public application-facing protocol is versioned in
+[Application Boundary](application-boundary.md): `WorkerCommand`, `WorkerEvent`,
+`ApplicationError`, `RuntimeProjectionSet`, `ArchitectureProjection`,
+`SimulationProjection`, `ExecutionHistoryProjection`, and
+`ComponentStateProjection`. These shapes are exported from `@distlab/contracts`
+but not from `@distlab/contracts/kernel` because they belong to the host/UI
+boundary, not the kernel. They are detached read-only values and commands; they
+carry no writable runtime handles.
+
+The MVP catalog names in [MVP Catalog and Checkout Scenario](mvp-catalog-scenario.md)
+are also exported from `@distlab/contracts`: `MvpCatalogModels`,
+`MvpCatalogVersions`, `OrderCreatedDestination`,
+`CheckoutResponseLostScenarioId`, the checkout and message payload interfaces,
+and the reference assertion list.
+
 ## Validation and acceptance coverage
 
 - **CONTRACT-AC-1:** Canonical encoding ignores object insertion order, preserves
@@ -255,11 +295,17 @@ subsequent local work without acquiring a trace automatically.
 | createSimulation, registerHandler, registerObservationSchema | CONTRACT-AC-3 |
 | Setup schedule, context schedule | CONTRACT-AC-3, CONTRACT-AC-4 |
 | OperationController.create / complete | CONTRACT-AC-5 |
+| SeededRandomPort.draw | RAND-AC-1–4 |
 | CorrelationController.root / child and propagation | CONTRACT-AC-6 |
+| WorkerCommand / WorkerEvent and projections | APP-AC-1–4 |
+| MVP catalog constants and payloads | MVP-CAT-AC-1–3 |
 
 ## References
 
 - [Architecture: dependency direction](../architecture.md#37-dependency-direction)
 - [Architecture: trace model](../architecture.md#27-trace-model)
+- [Seeded Random](seeded-random.md)
+- [Application Boundary](application-boundary.md)
+- [MVP Catalog and Checkout Scenario](mvp-catalog-scenario.md)
 - [Vision: deterministic simulation](../vision.md#15-deterministic-simulation)
 - [Vision: definition of success](../vision.md#27-definition-of-success)

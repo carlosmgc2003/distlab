@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft |
+| Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
 | Last updated | 2026-09-17 |
 | Related issues | None |
@@ -224,7 +224,7 @@ authorize an unregistered type or the host-only lifecycle names):
 ```text
 simulation.*  clock.*      scheduler.*  client.*
 service.*     external.*   network.*    message.*
-db.*          kv.*         fault.*      assessment.*
+database.*    kv.*         fault.*      assessment.*
 ```
 
 ## Invariants
