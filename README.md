@@ -4,13 +4,10 @@ DistLab is a work-in-progress browser-based educational simulator for distribute
 
 ## Project status
 
-DistLab is in the design and specification phase. The first TypeScript package,
-`@distlab/contracts`, encodes the shared simulation types from `docs/spec/`
-without implementing the engine.
-
-The repository contains the project vision, architecture, shared terminology,
-component specifications, and those contracts. There is no runnable simulator
-or browser UI yet.
+DistLab is in the early implementation phase. `@distlab/contracts` encodes the
+shared simulation types; `@distlab/kernel` provides canonical data, execution
+history, deterministic scheduling, and virtual time. There is no runnable
+simulator or browser UI yet.
 
 ## Goals
 
@@ -49,6 +46,7 @@ The documentation is evolving while the remaining design decisions are made.
 
 ```sh
 npm install
+npm run build
 npm run typecheck
 npm test
 ```
