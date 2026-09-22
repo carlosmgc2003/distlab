@@ -1,0 +1,15 @@
+{
+  "name": "@distlab/kernel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Deterministic canonical-data and execution-history primitives for DistLab.",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "dependencies": { "@distlab/contracts": "0.0.0" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "npm run build -w @distlab/contracts --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit",
+    "test": "npm run build -w @distlab/contracts --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit && node --test --experimental-strip-types tests/*.test.ts"
+  }
+}
