@@ -2,11 +2,13 @@
   "name": "distlab",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "npm run build -w @distlab/contracts",
-    "typecheck": "npm run typecheck -w @distlab/contracts",
-    "test": "npm test -w @distlab/contracts"
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
