@@ -9,6 +9,12 @@ import { SeededRandom } from "./random.js";
 import { DeterministicVirtualNetwork, type NetworkLinks, type NetworkSetup } from "./network.js";
 import type { FaultDecisionPort } from "@distlab/contracts";
 
+/** Setup surface passed to a service adapter, including the terminal latch. */
+export type RuntimeSetup = SimulationSetup & NetworkSetup & {
+  /** Latch a terminal adapter error. A handler catch does not clear the run. */
+  failTask(code: string): never;
+};
+
 export type CoreClockPort = VirtualClock & ClockController & {
   advanceTo(time: ReturnType<VirtualClock["now"]>, causingEventId?: string): void;
   forOwner(owner: ComponentId, allowedTypes: ReadonlySet<string>): VirtualClock;
@@ -53,7 +59,7 @@ const fail = (code: string): never => throwSimulationError(code);
 export class HeadlessSimulationFactory implements SimulationFactory {
   readonly #options: HeadlessFactoryOptions;
   constructor(options: HeadlessFactoryOptions = {}) { this.#options = Object.freeze({ ...options }); }
-  createSimulation(inputs: RunInputs, initialize: (setup: SimulationSetup & NetworkSetup) => void): HeadlessSimulation {
+  createSimulation(inputs: RunInputs, initialize: (setup: RuntimeSetup) => void): HeadlessSimulation {
     return new HeadlessSimulation(inputs, initialize, this.#options);
   }
 }
@@ -80,12 +86,12 @@ export class HeadlessSimulation implements Simulation {
   #history!: CoreHistoryPort;
   #random!: SeededRandomPort;
   readonly #inputs!: RunInputs;
-  readonly #initialize!: (setup: SimulationSetup & NetworkSetup) => void;
+  readonly #initialize!: (setup: RuntimeSetup) => void;
   readonly #runId!: string;
   readonly #options: HeadlessFactoryOptions;
   #boundaryHook: BoundaryReadHook | undefined;
 
-  constructor(inputs: RunInputs, initialize: (setup: SimulationSetup & NetworkSetup) => void, options: HeadlessFactoryOptions = {}) {
+  constructor(inputs: RunInputs, initialize: (setup: RuntimeSetup) => void, options: HeadlessFactoryOptions = {}) {
     this.#options = options;
     try {
       const copied = canonicalCopy(inputs) as unknown as RunInputs;
@@ -105,6 +111,10 @@ export class HeadlessSimulation implements Simulation {
     this.#compose();
   }
   get status(): SimulationStatus { return this.#status; }
+  /** Trusted adapters use this to fence owner-bound capabilities. */
+  get activeTaskOwner(): ComponentId | undefined {
+    return this.#active?.owner ?? (this.#dispatching && this.#event ? this.#handlers.get(this.#event.type)?.owner : undefined);
+  }
   get time() { return this.#clock.now(); }
   get history(): ExecutionHistoryReader {
     const history = this.#history;
@@ -225,7 +235,8 @@ export class HeadlessSimulation implements Simulation {
     if (network) for (const [type, handler] of network.handlers()) { owners.set(type, "simulation"); this.#handlers.set(type, { owner: "simulation", handler }); }
     let sealed = false;
     let active = true;
-    const setup: SimulationSetup & NetworkSetup = Object.freeze({
+    const setup: RuntimeSetup = Object.freeze({
+      failTask: (code: string): never => this.#guard(generation, () => fail(code)),
       networkFor: (owner: ComponentId) => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.forOwner(owner); },
       networkController: () => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.controller; },
       networkInFlight: () => { this.#check(generation); if (!network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.inFlight(); },
