@@ -122,3 +122,24 @@ test("references, ownership, versions, times, and assertion modes are rejected",
     actions: [{ id: "go", at: 1.5, kind: "client", target: "orders", action: "missing", data: Number.NaN }],
   }).some(item => item.endsWith("CANONICAL")));
 });
+
+test("duplicate fault diagnostics retain source action indices", () => {
+  const service = { id: "orders", kind: "service", model: "demo.service", version: "1", configuration: {} };
+  assert.ok(codes({
+    ...baseScenario(), architecture: { components: [service] },
+    faults: [{ id: "same", point: "database.commit", name: "orders", from: 0, effect: { kind: "fail" } }],
+    actions: [
+      { id: "invalid", at: 0, kind: "service", target: "orders", state: "BOGUS" },
+      { id: "first", at: 0, kind: "fault", fault: { id: "same", kind: "crash", target: "orders" } },
+      { id: "second", at: 0, kind: "fault", fault: { id: "same", kind: "crash", target: "orders" } },
+    ],
+  }).includes("/actions/1/fault/id DUPLICATE"));
+  assert.ok(codes({
+    ...baseScenario(), architecture: { components: [service] },
+    actions: [
+      { id: "invalid", at: 0, kind: "service", target: "orders", state: "BOGUS" },
+      { id: "first", at: 0, kind: "fault", fault: { id: "same", kind: "crash", target: "orders" } },
+      { id: "second", at: 0, kind: "fault", fault: { id: "same", kind: "crash", target: "orders" } },
+    ],
+  }).includes("/actions/2/fault/id DUPLICATE"));
+});

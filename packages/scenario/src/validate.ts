@@ -97,14 +97,9 @@ function walk(input: CanonicalValue, catalog: ScenarioCatalog, assessment: Scena
   const architecture = readArchitecture(root.architecture, catalog, push);
   const external = readExternal(root.external, architecture?.components, catalog, push);
   const faults = readFaults(root.faults, architecture, startTime, push);
-  const actions = readActions(root.actions, architecture?.components, catalog, startTime, push);
+  const actions = readActions(root.actions, architecture?.components, catalog, startTime, new Set(faults?.rules.map(rule => rule.id)), push);
   const assertions = readAssertions(root.assertions, assessment, startTime, push);
   if (!name || !seed || !architecture || !external || !faults || !actions || !assertions || !configuration) return undefined;
-  const faultIds = new Set(faults.rules.map(rule => rule.id));
-  for (const action of actions) if (action.kind === "fault") {
-    if (faultIds.has(action.fault.id)) push(actionPath(actions, action), DiagnosticCodes.DUPLICATE);
-    faultIds.add(action.fault.id);
-  }
   const resolvedConfiguration = {
     startTime,
     historyLimit: configuration.historyLimit,
@@ -678,7 +673,7 @@ function freezeRule(draft: RuleDraft): FaultRule {
   });
 }
 
-function readActions(value: unknown, components: readonly ComponentInstance[] | undefined, catalog: ScenarioCatalog, startTime: SimulationTime, push: (path: string, code: DiagnosticCode) => void): ScenarioAction[] | undefined {
+function readActions(value: unknown, components: readonly ComponentInstance[] | undefined, catalog: ScenarioCatalog, startTime: SimulationTime, faultIds: Set<string>, push: (path: string, code: DiagnosticCode) => void): ScenarioAction[] | undefined {
   const items = array(value, "/actions", push);
   if (!items) return undefined;
   const byId = new Map((components ?? []).map(component => [component.id, component]));
@@ -698,7 +693,13 @@ function readActions(value: unknown, components: readonly ComponentInstance[] | 
     ids.add(id);
     if (at < startTime) push(`${path}/at`, DiagnosticCodes.BEFORE_START);
     const action = readAction(kind, id, at, record, path, byId, catalog, push);
-    if (action) actions.push(action);
+    if (action) {
+      if (action.kind === "fault") {
+        if (faultIds.has(action.fault.id)) push(`${path}/fault/id`, DiagnosticCodes.DUPLICATE);
+        faultIds.add(action.fault.id);
+      }
+      actions.push(action);
+    }
   }
   return actions;
 }
@@ -813,11 +814,6 @@ function readAssertions(value: unknown, assessment: ScenarioAssessment, startTim
     });
   }
   return assertions;
-}
-
-function actionPath(actions: readonly ScenarioAction[], action: ScenarioAction): string {
-  const index = actions.indexOf(action);
-  return `/actions/${index}/fault/id`;
 }
 
 function optionalComponent(value: unknown, path: string, architecture: ArchitectureDraft | undefined, push: (path: string, code: DiagnosticCode) => void): string | undefined {
