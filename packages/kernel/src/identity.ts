@@ -7,10 +7,14 @@ export class DeterministicIdAllocator {
   readonly #prefix: string;
   readonly #runId: string;
 
-  constructor(prefix: string, runId: string) {
+  constructor(prefix: string, runId: string, start = 0) {
     if (!isIdentifier(prefix) || !isIdentifier(runId)) throwSimulationError(ErrorCodes.INVALID_RUN_INPUT, { reason: "invalid identity namespace" });
+    if (!Number.isSafeInteger(start) || start < 0 || start > Number.MAX_SAFE_INTEGER || Object.is(start, -0)) {
+      throwSimulationError(ErrorCodes.INVALID_RUN_INPUT, { reason: "invalid identity sequence" });
+    }
     this.#prefix = prefix;
     this.#runId = runId;
+    this.#next = start;
   }
 
   canAllocate(): boolean {

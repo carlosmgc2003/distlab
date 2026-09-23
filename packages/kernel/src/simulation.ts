@@ -7,12 +7,18 @@ import { ExecutionHistory, type ExecutionHistoryOptions } from "./history.js";
 import { DeterministicIdAllocator } from "./identity.js";
 import { SeededRandom } from "./random.js";
 import { DeterministicVirtualNetwork, type NetworkLinks, type NetworkSetup } from "./network.js";
-import type { FaultDecisionPort } from "@distlab/contracts";
+import { DeterministicMessageBus, neutralFaultPort, type MessageBusInspection, type MessageCounterStart, type MessageDestinationInput } from "./message-bus.js";
+import type { FaultDecisionPort, MessageBus, MessageBusController } from "@distlab/contracts";
 
 /** Setup surface passed to a service adapter, including the terminal latch. */
 export type RuntimeSetup = SimulationSetup & NetworkSetup & {
   /** Latch a terminal adapter error. A handler catch does not clear the run. */
   failTask(code: string): never;
+  /** Owner-bound publish port. Admission success is not consumption. */
+  messageBusFor(owner: ComponentId): MessageBus;
+  messageBusController(): MessageBusController;
+  /** Detached destinations, routing records, cursors, counters, and dead letters. */
+  inspectMessageBus(): MessageBusInspection;
 };
 
 export type CoreClockPort = VirtualClock & ClockController & {
@@ -41,6 +47,8 @@ export interface HeadlessFactoryOptions {
   readonly createBoundaryHook?: (history: ExecutionHistoryReader, observations: ObservationSink) => BoundaryReadHook;
   /** Network configuration and neutral or injected fault decisions, recreated on reset. */
   readonly network?: { readonly targets: readonly ComponentId[]; readonly links: NetworkLinks; readonly faults?: FaultDecisionPort };
+  /** Broker destinations recreated on reset. Fault decisions default to a neutral port. */
+  readonly messageBus?: { readonly destinations: readonly MessageDestinationInput[]; readonly faults?: FaultDecisionPort; readonly initialCounters?: MessageCounterStart };
 }
 
 /** Yield only between boundaries; never consult host time or change modeled state. */
@@ -235,6 +243,15 @@ export class HeadlessSimulation implements Simulation {
       check: () => this.#check(generation),
     }) : undefined;
     if (network) for (const [type, handler] of network.handlers()) { owners.set(type, "simulation"); this.#handlers.set(type, { owner: "simulation", handler }); }
+    const messageBus = this.#options.messageBus ? new DeterministicMessageBus({
+      runId: this.#runId, destinations: this.#options.messageBus.destinations, clock: this.#clock, scheduler: this.#scheduler,
+      operations: this.operations, observations: networkObservations, faults: this.#options.messageBus.faults ?? neutralFaultPort,
+      ...(this.#options.messageBus.initialCounters ? { initialCounters: this.#options.messageBus.initialCounters } : {}),
+      activeOwner: () => this.#active?.owner, dispatching: () => this.#dispatching,
+      correlation: () => { const event = this.#originEvent ?? this.#event; return event ? { ...(event.traceId ? { traceId: event.traceId } : {}), ...(event.spanId ? { spanId: event.spanId } : {}), eventId: event.id } : {}; },
+      check: () => this.#check(generation),
+    }) : undefined;
+    if (messageBus) for (const [type, handler] of messageBus.handlers()) { owners.set(type, "simulation"); this.#handlers.set(type, { owner: "simulation", handler }); }
     let sealed = false;
     let active = true;
     const setup: RuntimeSetup = Object.freeze({
@@ -242,6 +259,9 @@ export class HeadlessSimulation implements Simulation {
       networkFor: (owner: ComponentId) => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.forOwner(owner); },
       networkController: () => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.controller; },
       networkInFlight: () => { this.#check(generation); if (!network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.inFlight(); },
+      messageBusFor: (owner: ComponentId) => { this.#check(generation); if (!active || !messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.forOwner(owner); },
+      messageBusController: () => { this.#check(generation); if (!active || !messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.controller; },
+      inspectMessageBus: () => { this.#check(generation); if (!messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.inspect(); },
       enqueueNetworkWork: (owner: ComponentId, type: string, payload: CanonicalValue) => this.#guard(generation, () => {
         this.#check(generation);
         if (!this.#dispatching || !network || this.#handlers.get(type)?.owner !== owner) return fail(ErrorCodes.INVALID_EVENT_TYPE);
@@ -265,7 +285,7 @@ export class HeadlessSimulation implements Simulation {
         this.#history.registerSchema(type, validate);
       },
       schedule: (draft: Parameters<SimulationSetup["schedule"]>[0]) => {
-        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY); sealed = true; network?.seal();
+        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY); sealed = true; network?.seal(); messageBus?.seal();
         if (draft.type === wakeType) return fail(ErrorCodes.INVALID_EVENT_TYPE);
         return this.#boundHandle(this.#scheduler.schedule(draft), generation);
       },
@@ -278,6 +298,7 @@ export class HeadlessSimulation implements Simulation {
       }) }));
       this.#initialize(setup);
       network?.seal();
+      messageBus?.seal();
       sealed = true; active = false;
       this.#boundaryHook?.afterInitialization();
       this.#status = "READY";
