@@ -196,8 +196,23 @@ complete, visible scheduler observations provide pending/processed event counts,
 and their specified random draw count is zero. Modified or arbitrary scenarios
 are rejected with `INVALID_SCENARIO`: general scenario hosting requires a kernel
 counter read port, including reliable counts when history is incomplete or
-redacted. No counters are inferred from incomplete history. UI controls beyond
-the chooser are reserved for subsequent issues.
+redacted. No counters are inferred from incomplete history. Simulation controls
+beyond loading a scenario are reserved for subsequent issues.
+
+The checkout architecture uses a fixed React Flow layout with labeled category
+and relationship cues. Select a node with a click, Enter, or Space to inspect
+static model/version/configuration and resource ownership; Escape clears the
+selection. Pan by dragging or using the arrow buttons, and use the zoom and fit
+buttons to adjust the viewport. The inspector skip link moves keyboard focus
+directly to the metadata panel. These interactions remain local to the UI and
+send no worker commands.
+
+Request links and subscriptions come from the architecture projection. The
+Orders publication relationship and model-owned resource descriptions are
+documented lesson copy, restricted to the two packaged checkout lessons and
+their model versions. The inspector never renders live component state.
+Browser tests cover keyboard focus, desktop/mobile accessibility with axe,
+empty/error states, and unchanged worker history after UI interactions.
 
 ## Checkout lesson
 

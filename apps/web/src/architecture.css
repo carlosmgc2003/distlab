@@ -1,0 +1,48 @@
+:root { color: #172033; background: #f5f7fb; font-family: system-ui, sans-serif; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1480px; margin: 0 auto; padding: 24px; }
+h1 { margin: 0 0 24px; letter-spacing: -.04em; }
+h2 { font-size: 1.3rem; }
+button, select { font: inherit; padding: 8px 12px; border: 1px solid #64748b; border-radius: 6px; background: white; color: #172033; }
+button { cursor: pointer; }
+button:hover { background: #e2e8f0; }
+button, a, summary { touch-action: manipulation; }
+button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible, .inspector:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+.inspector-link { display: inline-block; margin-bottom: 12px; color: #1d4ed8; }
+.inspector-link:hover { color: #172033; }
+.pan-controls { display: flex; gap: 4px; }
+.pan-controls button { width: 36px; height: 36px; padding: 0; }
+.architecture-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: stretch; }
+.graph-help { max-width: 85ch; color: #475569; }
+.graph-canvas { height: 610px; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }
+.component-node { width: 215px; min-height: 90px; padding: 17px; border: 2px solid #475569; background: white; color: #172033; }
+.component-node strong { display: block; line-height: 1.4; overflow-wrap: anywhere; }
+.category-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
+.category-client { border-radius: 28px; background: #eff6ff; }
+.category-service { border-radius: 6px; background: #f0fdf4; }
+.category-external { border-style: dashed; border-radius: 6px; background: #fff7ed; }
+.category-infrastructure { border: 4px double #475569; border-radius: 15px; background: #f5f3ff; }
+.react-flow__node.component-node[aria-pressed="true"] { outline: 3px solid #1d4ed8; outline-offset: 4px; }
+.react-flow__node.component-node:focus-visible { outline: 4px solid #172033; outline-offset: 7px; }
+.component-node .react-flow__handle { opacity: 0; pointer-events: none; }
+.react-flow__controls button { width: 36px; height: 36px; color: #172033; }
+.react-flow__controls button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.react-flow__attribution a { color: #475569; }
+.inspector { min-width: 0; padding: 20px; background: white; border: 1px solid #94a3b8; border-radius: 12px; overflow-wrap: anywhere; }
+.inspector h3 { margin-top: 0; }
+.inspector h4 { margin-bottom: 8px; }
+dl { margin: 0; }
+dt { font-size: .8rem; font-weight: 650; color: #475569; margin-top: 12px; }
+dd { margin: 3px 0 0; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #f1f5f9; border-radius: 6px; }
+.inspector ul { padding-left: 20px; }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: .85rem; }
+.line-sample { display: inline-block; vertical-align: middle; width: 30px; border-top: 2px solid #334155; margin-right: 6px; }
+.line-sample.subscription { border-top-style: dashed; }
+.line-sample.publication { border-top-style: dotted; }
+.connections summary { cursor: pointer; width: fit-content; }
+.execution dl { display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline; }
+[role="alert"] { border-left: 4px solid #b91c1c; padding: 12px; background: #fef2f2; }
+@media (max-width: 900px) { .architecture-layout { grid-template-columns: 1fr; } .graph-canvas { height: 570px; } }
+@media (max-width: 480px) { main { padding: 16px; } .graph-canvas { height: 480px; } select { max-width: 100%; margin: 8px 0; } }

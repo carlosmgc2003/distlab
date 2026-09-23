@@ -28,7 +28,7 @@ function imports(file: string): { path: string; names: string[]; typeOnly: boole
 }
 
 test("main-thread import graph uses application contracts and data, never runtime mutation ports", () => {
-  const allowed = new Set(["ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent"]);
+  const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;
@@ -41,8 +41,8 @@ test("main-thread import graph uses application contracts and data, never runtim
       } else if (dependency.path.startsWith(".")) {
         const target = resolve(dirname(file), dependency.path);
         assert.ok(target.startsWith(app) || target === dataModule, `Only the catalog's data-only source may cross a source boundary: ${target}`);
-        walk(target);
-      } else assert.ok(["react", "react-dom/client"].includes(dependency.path), `Runtime dependency ${dependency.path} in ${file}`);
+        if (!target.endsWith(".css")) walk(target);
+      } else assert.ok(["react", "react-dom/client", "@xyflow/react", "@xyflow/react/dist/style.css"].includes(dependency.path), `Runtime dependency ${dependency.path} in ${file}`);
     }
   }
   walk(resolve(app, "main.tsx"));
