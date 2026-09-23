@@ -227,7 +227,8 @@ export class DeterministicServiceRuntime {
         } : value;
       } });
     } });
-    const kv = this.#options.kv && new Proxy(this.#options.kv, { get: (target, property) => {
+    const ownedKv = this.#options.kv ?? this.#options.setup.keyValueStoreFor(this.#options.id);
+    const kv = ownedKv && new Proxy(ownedKv, { get: (target, property) => {
       this.#capability(generation);
       const value: unknown = Reflect.get(target, property);
       return typeof value === "function" ? (...args: unknown[]) => {
