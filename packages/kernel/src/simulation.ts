@@ -287,6 +287,12 @@ export class HeadlessSimulation implements Simulation {
       keyValues.set(definition.owner, store);
       this.#handlers.set(type, { owner: definition.owner, handler: event => store.expire(event) });
     }
+    let expiriesArmed = false;
+    const armExpiries = (): void => {
+      if (expiriesArmed) return;
+      expiriesArmed = true;
+      for (const store of keyValues.values()) store.scheduleInitialExpiries();
+    };
     const network = this.#options.network ? new DeterministicVirtualNetwork({
       ...this.#options.network, clock: this.#clock, scheduler: this.#scheduler, operations: this.operations,
       observations: networkObservations, random: this.random, runId: this.#runId,
@@ -340,7 +346,9 @@ export class HeadlessSimulation implements Simulation {
         this.#history.registerSchema(type, validate);
       },
       schedule: (draft: Parameters<SimulationSetup["schedule"]>[0]) => {
-        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY); sealed = true; network?.seal(); messageBus?.seal();
+        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY);
+        armExpiries();
+        sealed = true; network?.seal(); messageBus?.seal();
         if (draft.type === wakeType) return fail(ErrorCodes.INVALID_EVENT_TYPE);
         return this.#boundHandle(this.#scheduler.schedule(draft), generation);
       },
@@ -352,6 +360,7 @@ export class HeadlessSimulation implements Simulation {
         this.#check(generation); return history.record(input);
       }) }));
       this.#initialize(setup);
+      armExpiries();
       network?.seal();
       messageBus?.seal();
       sealed = true; active = false;

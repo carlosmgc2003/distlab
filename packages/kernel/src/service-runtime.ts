@@ -142,12 +142,12 @@ export class DeterministicServiceRuntime {
       this.#violation(code || ErrorCodes.HANDLER_FAILED);
     }
   }
-  #capability(generation: number): void {
+  #capability(generation: number, foreignCode: string = ErrorCodes.INVALID_OPERATION): void {
     if (this.#violated) this.#violation(ErrorCodes.INVALID_OPERATION);
     try { this.#options.setup.networkInFlight(); }
     catch (error) { this.#violation(codeOf(error) || ErrorCodes.STALE_CAPABILITY); }
     if (generation !== this.#generation) this.#violation(ErrorCodes.STALE_CAPABILITY);
-    if (this.#options.activeOwner() !== this.#options.id) this.#violation(ErrorCodes.INVALID_OPERATION);
+    if (this.#options.activeOwner() !== this.#options.id) this.#violation(foreignCode);
   }
   #observe(context: HandlerContext, event: ScheduledEvent, type: string, data: CanonicalValue): void {
     this.#invoke(() => context.observations.record({ type, source: this.#options.id, eventId: event.id,
@@ -229,10 +229,11 @@ export class DeterministicServiceRuntime {
     } });
     const ownedKv = this.#options.kv ?? this.#options.setup.keyValueStoreFor(this.#options.id);
     const kv = ownedKv && new Proxy(ownedKv, { get: (target, property) => {
-      this.#capability(generation);
+      this.#capability(generation, ErrorCodes.INVALID_KV_OPERATION);
       const value: unknown = Reflect.get(target, property);
       return typeof value === "function" ? (...args: unknown[]) => {
-        this.#capability(generation); return this.#invoke(() => Reflect.apply(value as (...parameters: unknown[]) => unknown, target, args));
+        this.#capability(generation, ErrorCodes.INVALID_KV_OPERATION);
+        return this.#invoke(() => Reflect.apply(value as (...parameters: unknown[]) => unknown, target, args));
       } : value;
     } });
     return Object.freeze({ ...(db ? { db } : {}), ...(kv ? { kv } : {}), events: scopedEvents, http: scopedHttp, clock: scopedClock, log });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DeterministicServiceRuntime, HeadlessSimulationFactory } from "@distlab/kernel";
+import { DeterministicServiceRuntime, ExecutionHistory, HeadlessSimulationFactory } from "@distlab/kernel";
 import { duration, simulationTime } from "@distlab/contracts/kernel";
 import type { RunInputs } from "@distlab/contracts/kernel";
 import type { KeyValueDefinition, KeyValueStore, MessageBus, ServiceDefinition } from "@distlab/contracts";
@@ -131,7 +131,7 @@ test("invalid input, counter errors, foreign and stale capabilities fail without
       else setup.schedule(at(mode === "stale" ? 5 : 2, "fail", runtime));
     }, mode === "foreign" ? setup => setup.registerHandler("foreign.read", "foreign", () => { saved.get("text"); }) : undefined);
     const code = mode === "integer" ? "KV_NOT_INTEGER" : mode === "overflow" ? "KV_COUNTER_OVERFLOW" :
-      mode === "stale" ? "STALE_CAPABILITY" : mode === "foreign" ? "INVALID_OPERATION" : "INVALID_KV_OPERATION";
+      mode === "stale" ? "STALE_CAPABILITY" : "INVALID_KV_OPERATION";
     if (mode === "integer" || mode === "overflow") {
       await sim.run();
       assert.equal(sim.history.query({ type: "service.handler.failed" })[0]?.data &&
@@ -139,4 +139,51 @@ test("invalid input, counter errors, foreign and stale capabilities fail without
     } else await assert.rejects(sim.run(), { code });
     assert.equal(sim.history.query({ type: "kv.changed" }).length, 0);
   }
+});
+
+test("expiry keeps the correlation of the write that set the TTL", async () => {
+  const { sim } = fixture([], {
+    write: kv => { kv.set("lease", "a", { ttl: duration(5) }); },
+    bump: kv => { kv.increment("lease"); },
+    read: kv => { kv.get("lease"); },
+  }, (setup, runtime) => {
+    setup.schedule({ time: simulationTime(1), type: runtime.backgroundEventType, payload: { name: "write", data: null }, traceId: "writer", spanId: "write-span" });
+    setup.schedule({ time: simulationTime(2), type: runtime.backgroundEventType, payload: { name: "bump", data: null }, traceId: "incrementer", spanId: "bump-span" });
+    setup.schedule({ time: simulationTime(6), type: runtime.backgroundEventType, payload: { name: "read", data: null }, traceId: "reader", spanId: "read-span" });
+  });
+  await sim.run();
+  const expired = sim.history.query({ type: "kv.expired" });
+  assert.equal(expired.length, 1);
+  assert.equal(expired[0]?.traceId, "writer");
+  assert.equal(expired[0]?.spanId, "write-span");
+  assert.notEqual(expired[0]?.eventId, sim.history.query({ type: "kv.read" }).at(-1)?.eventId);
+});
+
+test("kv sink failure seals the run", async () => {
+  let caught = false;
+  const sim = new HeadlessSimulationFactory({
+    createHistory: options => {
+      const history = new ExecutionHistory(options);
+      const record = history.record.bind(history);
+      history.record = input => {
+        if (input.type === "kv.changed") throw Object.assign(new Error("HISTORY_LIMIT_EXCEEDED"), { code: "HISTORY_LIMIT_EXCEEDED", context: null });
+        return record(input);
+      };
+      return history;
+    },
+    network: { targets: [owner], links: [] }, keyValues: [{ owner, initial: [] }],
+  }).createSimulation(inputs, setup => {
+    const runtime = new DeterministicServiceRuntime({ id: owner, version: "1", setup, events,
+      taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner,
+      resolve: () => ({ id: owner, version: "1", endpoints: {}, consumers: {}, background: {
+        fail: (_data, ctx) => { try { ctx.kv!.set("k", 1); } catch { caught = true; } },
+      } }) });
+    setup.schedule({ time: simulationTime(0), type: runtime.lifecycleEventType, payload: { next: "RUNNING" } });
+    setup.schedule({ time: simulationTime(1), type: runtime.backgroundEventType, payload: { name: "fail", data: null } });
+  });
+  await assert.rejects(sim.run(), { code: "HISTORY_LIMIT_EXCEEDED" });
+  assert.equal(caught, true);
+  assert.equal(sim.history.export().terminalFailure?.code, "HISTORY_LIMIT_EXCEEDED");
+  assert.equal(sim.history.query({ type: "simulation.completed" }).length, 0);
+  assert.equal(sim.history.query({ type: "service.handler.completed" }).length, 0);
 });
