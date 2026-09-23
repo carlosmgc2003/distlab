@@ -99,6 +99,22 @@ One service publishes `OrderCreated` and another service consumes it.
 are verified by `npm test`, including the shared publication, delivery, and
 acknowledgement trace.
 
+`DeterministicExternalServiceRuntime` is a provider outside the simulated
+service. Construct it in the initializer with a versioned definition. The
+initializer `configure` callback, and later `dispatch` on that provider's
+scenario event, are the controller. Service code reaches the provider only
+through `VirtualNetwork`. `inspect` returns the declared visible projection.
+
+Golden scenario 06 is a runnable, UI-free fixture in
+[`packages/kernel/examples/golden-06.ts`](packages/kernel/examples/golden-06.ts).
+Billing calls a provider `authorize` operation and receives the provider
+callback. `npm run golden:06` prints the final state and canonical history. Its
+checked-in
+[digest and expected state](packages/kernel/examples/golden-06.expected.json)
+are verified by `npm test`. The response-suppression fixture in
+[`packages/kernel/examples/response-suppression.ts`](packages/kernel/examples/response-suppression.ts)
+commits the remote effect and still settles the caller with `NETWORK_TIMEOUT`.
+
 ```sh
 npm install
 npm run build
@@ -106,6 +122,7 @@ npm run typecheck
 npm test
 npm run golden:01                # print headless golden scenario 01
 npm run golden:04                # print headless golden scenario 04
+npm run golden:06                # print headless golden scenario 06
 ```
 
 ## License
