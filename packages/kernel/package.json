@@ -10,11 +10,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "npm run build -w @distlab/contracts --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit",
-    "golden:01": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/golden-01.ts",
-    "golden:04": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/golden-04.ts",
-    "golden:05": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/golden-05.ts",
-    "golden:06": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/golden-06.ts",
-    "golden:07": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/golden-07.ts",
+    "golden:01": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/harness.ts 01",
+    "golden:02": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/harness.ts 02",
+    "golden:04": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/harness.ts 04",
+    "golden:05": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/harness.ts 05",
+    "golden:06": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/harness.ts 06",
+    "golden:07": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/harness.ts 07",
     "test": "npm run build -w @distlab/contracts --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit && node --test --experimental-strip-types tests/*.test.ts"
   }
 }
