@@ -8,7 +8,8 @@ DistLab is in the early implementation phase. `@distlab/contracts` encodes the
 shared simulation types; `@distlab/kernel` provides canonical data, execution
 history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
-There is no browser UI yet. `@distlab/catalogs` provides versioned checkout
+`apps/web` provides a minimal React scenario chooser backed by a Web Worker.
+`@distlab/catalogs` provides versioned checkout
 models, two scenarios, and their assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
 deterministic event boundaries. Golden scenarios 01, 02, 04, 05, 06, and 07
@@ -138,9 +139,14 @@ by `npm test` across fresh runs and reset.
 
 ```sh
 npm install
+npm run browser:install          # install Chromium once for the browser smoke test
+npm run dev                      # build packages and start the browser app on localhost
 npm run build
+npm run build:packages           # compile the headless workspaces only
 npm run typecheck
-npm test
+npm test                         # all unit, integration, boundary, and browser tests
+npm run test:browser             # browser smoke test against the production build
+npm run test:boundaries          # verify the main-thread and package import boundaries
 npm run golden:01                # print headless golden scenario 01
 npm run golden:02                # print headless golden scenario 02
 npm run golden:04                # print headless golden scenario 04
@@ -152,6 +158,46 @@ npm run golden:07                # print headless golden scenario 07
 ## License
 
 DistLab is licensed under the [Apache License 2.0](LICENSE).
+
+## Browser worker host
+
+Use Node.js 22.12 or newer and `npm install`. `npm run dev` starts Vite at
+`http://127.0.0.1:5173`; choose either checkout scenario and press **Load scenario**
+to receive READY, architecture, and execution projections from the worker.
+`npm run build` produces the static site in `apps/web/dist`, including its worker
+bundle; no backend is required. Linux CI images may also need
+`npm exec -w @distlab/web -- playwright install --with-deps chromium`.
+
+The [application boundary](docs/spec/application-boundary.md) contracts are used
+unchanged. `SimulationHost` exposes load, run, pause, step, reset, and a read-only
+snapshot; status arrives inside projections. React uses only this host and
+scenario data. The data-only catalog scenario module is imported directly so
+model factories and the ScenarioEngine never enter the main-thread module graph.
+The worker adapter owns the engine and delegates controls to Simulation.
+
+Each load terminates the previous worker and clears its projection. Host worker
+generations and unique request IDs fence late messages even when two loads have
+the same deterministic run ID. Invalid loads expose no runnable partial session;
+worker startup, transport, and worker errors clear the projection and surface a
+structured `WORKER_UNAVAILABLE` host error. Loading again starts a fresh worker.
+Host subscriber failures do not change canonical history.
+
+The adapter acknowledges valid commands with `accepted`. `load` finishes with
+`loaded`; `step`, `pause`, and `reset` finish with a correlated
+`projection.updated`. `run` publishes its final boundary projection followed by
+`run.finished`; runtime failure instead produces `SIMULATION_FAILED` with the
+kernel error context. Projection notifications are coalesced to control
+boundaries, and the kernel yields every 16 events so pause messages can arrive.
+Projections are copied and recursively frozen on both sides of structured clone.
+Component state is labeled `host` visibility and is not rendered by the shell.
+
+This initial host accepts exactly the two packaged checkout documents. Their
+complete, visible scheduler observations provide pending/processed event counts,
+and their specified random draw count is zero. Modified or arbitrary scenarios
+are rejected with `INVALID_SCENARIO`: general scenario hosting requires a kernel
+counter read port, including reliable counts when history is incomplete or
+redacted. No counters are inferred from incomplete history. UI controls beyond
+the chooser are reserved for subsequent issues.
 
 ## Checkout lesson
 
