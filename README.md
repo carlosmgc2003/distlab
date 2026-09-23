@@ -99,6 +99,17 @@ One service publishes `OrderCreated` and another service consumes it.
 are verified by `npm test`, including the shared publication, delivery, and
 acknowledgement trace.
 
+`DeterministicFaultEngine` selects ordered, seeded rules at network, message
+delivery, and database commit boundaries. Construct it in each simulation
+initializer with the run clock, random port, and observation sink, then inject
+its decision port into the boundary owner. Scheduled crash and provider
+availability faults use narrow trusted callbacks inside scenario events.
+
+Golden scenario 05 duplicates one `OrderCreated` delivery through a fault rule.
+`npm run golden:05` prints its state and canonical history; its checked-in
+[expected digest](packages/kernel/examples/golden-05.expected.json) is verified
+by `npm test` across fresh runs and reset.
+
 `DeterministicExternalServiceRuntime` is a provider outside the simulated
 service. Construct it in the initializer with a versioned definition. The
 initializer `configure` callback, and later `dispatch` on that provider's
@@ -115,6 +126,12 @@ are verified by `npm test`. The response-suppression fixture in
 [`packages/kernel/examples/response-suppression.ts`](packages/kernel/examples/response-suppression.ts)
 commits the remote effect and still settles the caller with `NETWORK_TIMEOUT`.
 
+Golden scenario 07 drops a processor's successful response through a fault
+rule. The processor applies its effect, while the caller times out. Run
+`npm run golden:07`; its checked-in
+[expected digest](packages/kernel/examples/golden-07.expected.json) is verified
+by `npm test` across fresh runs and reset.
+
 ```sh
 npm install
 npm run build
@@ -122,7 +139,9 @@ npm run typecheck
 npm test
 npm run golden:01                # print headless golden scenario 01
 npm run golden:04                # print headless golden scenario 04
+npm run golden:05                # print headless golden scenario 05
 npm run golden:06                # print headless golden scenario 06
+npm run golden:07                # print headless golden scenario 07
 ```
 
 ## License

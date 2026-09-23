@@ -1,0 +1,8 @@
+{
+  "digest": "c2fa9de486dae27a1bfc8a5de162ea922e32e25823f65a187236427d95ae9cae",
+  "state": {
+    "processorEffects": 1,
+    "callerOutcome": "NETWORK_TIMEOUT"
+  },
+  "observationCount": 23
+}
