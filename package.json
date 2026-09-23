@@ -10,7 +10,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "golden:01": "npm run golden:01 -w @distlab/kernel",
-    "golden:04": "npm run golden:04 -w @distlab/kernel"
+    "golden:04": "npm run golden:04 -w @distlab/kernel",
+    "golden:06": "npm run golden:06 -w @distlab/kernel"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

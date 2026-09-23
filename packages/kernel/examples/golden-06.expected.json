@@ -1,0 +1,11 @@
+{
+  "digest": "bb53c53b8496433706e12f1b8aa86f1f07b01519ab34cb112721ec5be2692e7f",
+  "state": {
+    "authorizationId": "auth-o1",
+    "status": "approved",
+    "callbackEventId": "e1",
+    "authorizationCount": 1,
+    "availability": "AVAILABLE"
+  },
+  "observationCount": 69
+}

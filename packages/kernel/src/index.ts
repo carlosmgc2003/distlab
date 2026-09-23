@@ -11,3 +11,4 @@ export { DeterministicDatabase, type DatabaseOptions } from "./database.js";
 export { DeterministicKeyValueStore, type KeyValueStoreOptions } from "./key-value-store.js";
 export { DeterministicClientRuntime, type ClientRuntimeOptions, type ClientActionView } from "./client-runtime.js";
 export { DeterministicMessageBus, neutralFaultPort, type MessageBusOptions, type MessageBusInspection, type MessageDestinationInput, type MessageCounterStart } from "./message-bus.js";
+export { DeterministicExternalServiceRuntime, type ExternalServiceRuntimeOptions, type ExternalInspection, type ExternalBoundary } from "./external-service-runtime.js";

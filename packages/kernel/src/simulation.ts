@@ -16,6 +16,8 @@ import { DeterministicKeyValueStore } from "./key-value-store.js";
 export type RuntimeSetup = SimulationSetup & NetworkSetup & {
   /** Latch a terminal adapter error. A handler catch does not clear the run. */
   failTask(code: string): never;
+  /** Run-guarded sink. Source is the recording component, including during initialization. */
+  observations: ObservationSink;
   /** Owner-bound publish port. Admission success is not consumption. */
   messageBusFor(owner: ComponentId): MessageBus;
   messageBusController(): MessageBusController;
@@ -314,6 +316,13 @@ export class HeadlessSimulation implements Simulation {
     let active = true;
     const setup: RuntimeSetup = Object.freeze({
       failTask: (code: string): never => this.#guard(generation, () => fail(code)),
+      observations: Object.freeze({
+        record: (input: ObservationInput) => this.#guard(generation, () => {
+          this.#check(generation);
+          try { return this.#history.record(input); }
+          catch (error) { this.#terminal(error, this.#event, ErrorCodes.HANDLER_FAILED, input.type); throw this.#failure; }
+        }),
+      }),
       networkFor: (owner: ComponentId) => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.forOwner(owner); },
       networkController: () => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.controller; },
       networkInFlight: () => { this.#check(generation); if (!network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.inFlight(); },
