@@ -204,6 +204,7 @@ test("client, service, external provider and callback cross scheduled network le
 
 test("network sink failure seals the run instead of timing out", async () => {
   let caught = false;
+  let remoteCommits = 0;
   const sim = new HeadlessSimulationFactory({
     createHistory: options => {
       const history = new ExecutionHistory(options);
@@ -217,7 +218,7 @@ test("network sink failure seals the run instead of timing out", async () => {
     network: { targets: ["client", "service"], links: [{ source: "client", target: "service", policy: { timeout: duration(20) } }] },
   }).createSimulation(inputs, setup => {
     const client = setup.networkFor("client"), controller = setup.networkController();
-    controller.register("service", { accept(id) { try { controller.reply(id, { status: "ok", body: null }); } catch { caught = true; } } });
+    controller.register("service", { accept(id) { remoteCommits++; try { controller.reply(id, { status: "ok", body: null }); } catch { caught = true; } } });
     setup.registerHandler("start", "client", function* (): ControlledTask {
       yield client.request({ target: "service", endpoint: "x", body: null });
     });
@@ -225,7 +226,13 @@ test("network sink failure seals the run instead of timing out", async () => {
   });
   await assert.rejects(sim.run(), { code: "HISTORY_LIMIT_EXCEEDED" });
   assert.equal(caught, true);
-  assert.equal(sim.history.export().terminalFailure?.code, "HISTORY_LIMIT_EXCEEDED");
+  assert.equal(remoteCommits, 1);
+  const failure = sim.history.export().terminalFailure;
+  assert.equal(failure?.code, "HISTORY_LIMIT_EXCEEDED");
+  assert.equal(failure?.historyComplete, false);
+  assert.equal((failure?.context as { rejectedObservationType: string }).rejectedObservationType, "network.response.sent");
   assert.equal(sim.history.query({ type: "network.request.timedout" }).length, 0);
+  assert.equal(sim.history.query({ type: "simulation.event.failed" }).length, 0);
+  assert.equal(sim.history.query({ type: "simulation.failed" }).length, 0);
   assert.equal(sim.history.query({ type: "simulation.completed" }).length, 0);
 });

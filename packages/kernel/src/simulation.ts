@@ -208,7 +208,11 @@ export class HeadlessSimulation implements Simulation {
     this.#scheduler = this.#options.createScheduler?.(schedulerOptions) ?? new DeterministicScheduler(schedulerOptions);
     // Record through the run guard so a caught sink failure still seals the run.
     const networkObservations = {
-      record: (input: ObservationInput) => this.#guard(generation, () => this.#history.record(input)),
+      record: (input: ObservationInput) => this.#guard(generation, () => {
+        this.#check(generation);
+        try { return this.#history.record(input); }
+        catch (error) { this.#terminal(error, this.#event, ErrorCodes.HANDLER_FAILED, input.type); throw this.#failure; }
+      }),
       registerSchema: (type: string, validate: (data: CanonicalValue | undefined) => boolean) => this.#history.registerSchema(type, validate),
     };
     const network = this.#options.network ? new DeterministicVirtualNetwork({
@@ -295,17 +299,20 @@ export class HeadlessSimulation implements Simulation {
       throw this.#failure;
     } finally { this.#active = undefined; this.#originEvent = undefined; }
   }
-  #terminal(error: unknown, event?: ScheduledEvent, fallback: string = ErrorCodes.HANDLER_FAILED): void {
+  #terminal(error: unknown, event?: ScheduledEvent, fallback: string = ErrorCodes.HANDLER_FAILED, rejectedObservationType?: string): void {
     if (this.#failure) return;
     let original: SimulationError = isError(error) && error.code.length > 0 ? error : { code: fallback, context: null };
     try { original = { code: original.code, context: canonicalCopy(original.context) }; }
     catch { original = { code: fallback, context: null }; }
-    const context = { ...(event ? { eventId: this.#originEvent?.id ?? event.id, dispatchedEventId: this.#event?.id ?? event.id } : {}), cause: original.context };
+    const context = { ...(event ? { eventId: this.#originEvent?.id ?? event.id, dispatchedEventId: this.#event?.id ?? event.id } : {}),
+      ...(rejectedObservationType ? { rejectedObservationType } : {}), cause: original.context };
     const failure = Object.assign(new Error(original.code), { code: original.code, context });
     this.#failure = failure; this.#status = "FAILED";
-    let historyComplete = true;
-    try { if (event) this.#record(Obs.EventFailed, event, { code: failure.code }); this.#record(Obs.Failed, undefined, { code: failure.code, context }); }
-    catch { historyComplete = false; }
+    let historyComplete = rejectedObservationType === undefined;
+    if (historyComplete) {
+      try { if (event) this.#record(Obs.EventFailed, event, { code: failure.code }); this.#record(Obs.Failed, undefined, { code: failure.code, context }); }
+      catch { historyComplete = false; }
+    }
     const last = this.#history.all().at(-1);
     this.#history.sealFailure({ time: this.#clock.now(), code: failure.code, context, historyComplete, ...(last ? { lastObservationId: last.id } : {}) });
     try { this.#boundaryHook?.onFailure(failure); } catch { /* original failure wins */ }
