@@ -56,6 +56,8 @@ export interface ServiceRuntimeOptions {
   readonly kv?: KeyValueStore;
   /** Trusted resource cleanup discards this process's uncommitted work. */
   readonly abandonResources?: (processGeneration: number) => void;
+  /** Trusted fault adapter verifies that a crash runs in its scheduled event. */
+  readonly activeEvent?: () => ScheduledEvent | undefined;
 }
 
 /** One service in one simulation attempt. Construct it again during reset setup. */
@@ -115,6 +117,12 @@ export class DeterministicServiceRuntime {
   get processGeneration(): number { return this.#generation; }
   get lifecycleEventType(): string { return this.#types.lifecycle; }
   get backgroundEventType(): string { return this.#types.background; }
+  /** Trusted synchronous fault boundary; never exposed to a service handler. */
+  crash(event: ScheduledEvent): void {
+    if (!this.#options.activeEvent || this.#options.activeEvent() !== event || this.#options.activeOwner() !== this.#options.id) fail(ErrorCodes.INVALID_FAULT);
+    if (this.#state === "CRASHED") fail(ErrorCodes.INVALID_SERVICE_TRANSITION);
+    this.#transition("CRASHED", undefined, event, "fault");
+  }
   inspect(): Readonly<{ state: ServiceState; processGeneration: number; tasks: readonly Readonly<Work>[] }> {
     return Object.freeze({ state: this.#state, processGeneration: this.#generation,
       tasks: Object.freeze([...this.#tasks.values()].map(task => Object.freeze({ ...task }))) });
@@ -149,14 +157,14 @@ export class DeterministicServiceRuntime {
     if (generation !== this.#generation) this.#violation(ErrorCodes.STALE_CAPABILITY);
     if (this.#options.activeOwner() !== this.#options.id) this.#violation(foreignCode);
   }
-  #observe(context: HandlerContext, event: ScheduledEvent, type: string, data: CanonicalValue): void {
-    this.#invoke(() => context.observations.record({ type, source: this.#options.id, eventId: event.id,
+  #observe(context: HandlerContext | undefined, event: ScheduledEvent, type: string, data: CanonicalValue): void {
+    this.#invoke(() => (context?.observations ?? this.#options.setup.observations).record({ type, source: this.#options.id, eventId: event.id,
       entityRefs: [{ kind: "service", id: this.#options.id }],
       ...(event.traceId ? { traceId: event.traceId } : {}), ...(event.spanId ? { spanId: event.spanId } : {}),
       ...(event.parentSpanId ? { parentSpanId: event.parentSpanId } : {}),
       ...(event.causationId ? { causationId: event.causationId } : {}), data }));
   }
-  #transition(next: ServiceState, context: HandlerContext, event: ScheduledEvent, reason: string): void {
+  #transition(next: ServiceState, context: HandlerContext | undefined, event: ScheduledEvent, reason: string): void {
     if (typeof reason !== "string" || !reason.trim()) fail(ErrorCodes.INVALID_EVENT_PAYLOAD);
     if (next === this.#state) return;
     if (!allowed[this.#state].includes(next)) fail(ErrorCodes.INVALID_SERVICE_TRANSITION);

@@ -27,7 +27,9 @@ npm run typecheck                 # typecheck both workspaces and tests
 npm test                          # run contracts, kernel, and headless scenario tests
 npm run golden:01                 # print UI-free golden scenario 01 state/history
 npm run golden:04                 # print UI-free golden scenario 04 state/history
+npm run golden:05                 # print UI-free golden scenario 05 state/history
 npm run golden:06                 # print UI-free golden scenario 06 state/history
+npm run golden:07                 # print UI-free golden scenario 07 state/history
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included

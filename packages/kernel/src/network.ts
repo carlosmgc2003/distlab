@@ -160,9 +160,13 @@ export class DeterministicVirtualNetwork {
     const jitter = flight.policy.jitter ? Math.floor(random.draw(`network.${leg}.jitter`).unit * (flight.policy.jitter + 1)) : 0;
     const rate = flight.policy.failureRate;
     const lost = rate === 1 || (rate > 0 && random.draw(`network.${leg}.loss`).unit < rate);
-    const effect = faults?.evaluate({ point: `network.${leg}`, subjectId: flight.requestId, source: flight.source, target: flight.target, name: flight.endpoint }) ?? neutral();
+    const effect = faults?.evaluate({ point: `network.${leg}`, subjectId: flight.requestId,
+      source: leg === "request" ? flight.source : flight.target, target: leg === "request" ? flight.target : flight.source,
+      name: flight.endpoint }) ?? neutral();
     if (!nonnegative(effect.extraDelay) || typeof effect.drop !== "boolean" || effect.fail || effect.additionalCopies || effect.copySpacing) fail(ErrorCodes.INVALID_FAULT);
-    return { delay: jitter + effect.extraDelay, dropped: lost || effect.drop, reason: effect.drop ? "fault" : "loss" };
+    const delay = jitter + effect.extraDelay;
+    if (!Number.isSafeInteger(delay)) fail(ErrorCodes.TIME_OVERFLOW);
+    return { delay, dropped: lost || effect.drop, reason: effect.drop ? "fault" : "loss" };
   }
   #observe(type: string, flight: Flight, data: CanonicalValue, eventId?: string) {
     const response = type.startsWith("network.response.");
@@ -174,7 +178,9 @@ export class DeterministicVirtualNetwork {
     const result = this.#decision(flight, leg);
     if (result.dropped) { this.#observe(`network.${leg}.dropped`, flight, { requestId: flight.requestId, reason: result.reason }); return; }
     const base = leg === "request" ? flight.policy.requestLatency : flight.policy.responseLatency;
-    const due = addDuration(this.#options.clock.now(), duration(base + result.delay));
+    const delay = base + result.delay;
+    if (!Number.isSafeInteger(delay)) fail(ErrorCodes.TIME_OVERFLOW);
+    const due = addDuration(this.#options.clock.now(), duration(delay));
     this.#options.scheduler.schedule({ time: due, type: leg === "request" ? deliveryType : responseType,
       payload: canonicalCopy(leg === "request" ? { requestId: flight.requestId } : { requestId: flight.requestId, reply: reply! }),
       source: "simulation", target: "simulation", traceId: flight.traceId, spanId: flight.spanId, causationId: flight.sentId });

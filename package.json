@@ -11,7 +11,9 @@
     "test": "npm test --workspaces --if-present",
     "golden:01": "npm run golden:01 -w @distlab/kernel",
     "golden:04": "npm run golden:04 -w @distlab/kernel",
-    "golden:06": "npm run golden:06 -w @distlab/kernel"
+    "golden:05": "npm run golden:05 -w @distlab/kernel",
+    "golden:06": "npm run golden:06 -w @distlab/kernel",
+    "golden:07": "npm run golden:07 -w @distlab/kernel"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
