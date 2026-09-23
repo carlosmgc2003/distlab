@@ -206,9 +206,14 @@ export class HeadlessSimulation implements Simulation {
     const owners = new Map<string, string>([[wakeType, "simulation"]]);
     const schedulerOptions: SchedulerOptions = { runId: this.#runId, clock: this.#clock, handlers: owners, observations: this.#history };
     this.#scheduler = this.#options.createScheduler?.(schedulerOptions) ?? new DeterministicScheduler(schedulerOptions);
+    // Record through the run guard so a caught sink failure still seals the run.
+    const networkObservations = {
+      record: (input: ObservationInput) => this.#guard(generation, () => this.#history.record(input)),
+      registerSchema: (type: string, validate: (data: CanonicalValue | undefined) => boolean) => this.#history.registerSchema(type, validate),
+    };
     const network = this.#options.network ? new DeterministicVirtualNetwork({
       ...this.#options.network, clock: this.#clock, scheduler: this.#scheduler, operations: this.operations,
-      observations: this.#history, random: this.random, runId: this.#runId,
+      observations: networkObservations, random: this.random, runId: this.#runId,
       activeOwner: () => this.#active?.owner, dispatching: () => this.#dispatching,
       correlation: () => { const event = this.#originEvent ?? this.#event; return event ? { ...(event.traceId ? { traceId: event.traceId } : {}), ...(event.spanId ? { spanId: event.spanId } : {}), eventId: event.id } : {}; },
       check: () => this.#check(generation),

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HeadlessSimulationFactory, SeededRandom } from "@distlab/kernel";
+import { ExecutionHistory, HeadlessSimulationFactory, SeededRandom } from "@distlab/kernel";
 import { duration, simulationTime } from "@distlab/contracts/kernel";
 import type { ControlledTask, RunInputs } from "@distlab/contracts/kernel";
 import type { NetworkController, VirtualNetwork } from "@distlab/contracts";
@@ -200,4 +200,32 @@ test("client, service, external provider and callback cross scheduled network le
   assert.equal(sent.length, 3);
   assert.equal(new Set(sent.map(record => record.traceId)).size, 1);
   assert.equal(new Set(sent.map(record => record.spanId)).size, 3);
+});
+
+test("network sink failure seals the run instead of timing out", async () => {
+  let caught = false;
+  const sim = new HeadlessSimulationFactory({
+    createHistory: options => {
+      const history = new ExecutionHistory(options);
+      const record = history.record.bind(history);
+      history.record = input => {
+        if (input.type === "network.response.sent") throw Object.assign(new Error("HISTORY_LIMIT_EXCEEDED"), { code: "HISTORY_LIMIT_EXCEEDED", context: null });
+        return record(input);
+      };
+      return history;
+    },
+    network: { targets: ["client", "service"], links: [{ source: "client", target: "service", policy: { timeout: duration(20) } }] },
+  }).createSimulation(inputs, setup => {
+    const client = setup.networkFor("client"), controller = setup.networkController();
+    controller.register("service", { accept(id) { try { controller.reply(id, { status: "ok", body: null }); } catch { caught = true; } } });
+    setup.registerHandler("start", "client", function* (): ControlledTask {
+      yield client.request({ target: "service", endpoint: "x", body: null });
+    });
+    setup.schedule({ time: simulationTime(0), type: "start", payload: null });
+  });
+  await assert.rejects(sim.run(), { code: "HISTORY_LIMIT_EXCEEDED" });
+  assert.equal(caught, true);
+  assert.equal(sim.history.export().terminalFailure?.code, "HISTORY_LIMIT_EXCEEDED");
+  assert.equal(sim.history.query({ type: "network.request.timedout" }).length, 0);
+  assert.equal(sim.history.query({ type: "simulation.completed" }).length, 0);
 });
