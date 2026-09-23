@@ -1,6 +1,6 @@
 import type { ClientContext, ClientController, ClientDefinition, ClientState, LogLevel, NetworkController, NetworkReply, NetworkRequest, RuntimeLogger, VirtualNetwork } from "@distlab/contracts";
 import { ClientObservationTypes, RuntimeObservationTypes } from "@distlab/contracts";
-import type { CanonicalValue, ComponentId, ControlledOperation, ControlledTask, HandlerContext, ScheduledEvent } from "@distlab/contracts/kernel";
+import type { CanonicalValue, ComponentId, ControlledOperation, ControlledTask, HandlerContext, ScheduledEvent, SimulationSetup } from "@distlab/contracts/kernel";
 import { ErrorCodes, ModeledErrorCodes, duration, throwSimulationError } from "@distlab/contracts/kernel";
 import { canonicalCopy } from "./canonical.js";
 import { registerRuntimeLogSchema } from "./runtime-log.js";
@@ -14,6 +14,15 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 const reply = (value: unknown): value is NetworkReply => object(value) &&
   Object.keys(value).length === 2 && (value.status === "ok" || value.status === "error") && Object.hasOwn(value, "body");
 const tagged = (value: CanonicalValue | undefined): CanonicalValue => value === undefined ? { present: false } : { present: true, value };
+const registeredSchemas = new WeakSet<SimulationSetup>();
+const schemas: Readonly<Record<string, (data: CanonicalValue | undefined) => boolean>> = {
+  [ClientObservationTypes.ActionStarted]: data => object(data) && typeof data.actionId === "string" && typeof data.name === "string" && Object.hasOwn(data, "input"),
+  [ClientObservationTypes.ActionCompleted]: data => object(data) && typeof data.actionId === "string" && Object.hasOwn(data, "result"),
+  [ClientObservationTypes.ActionFailed]: data => object(data) && typeof data.actionId === "string" && typeof data.code === "string",
+  [ClientObservationTypes.StateChanged]: data => object(data) && typeof data.key === "string" && object(data.before) && object(data.after),
+  [ClientObservationTypes.CallbackStarted]: data => object(data) && typeof data.requestId === "string" && typeof data.endpoint === "string",
+  [ClientObservationTypes.CallbackCompleted]: data => object(data) && typeof data.requestId === "string" && (data.outcome === "completed" || data.outcome === "failed"),
+};
 
 export interface ClientRuntimeOptions {
   readonly id: ComponentId;
@@ -21,6 +30,8 @@ export interface ClientRuntimeOptions {
   readonly resolve: (id: ComponentId, version: string) => ClientDefinition;
   readonly setup: RuntimeSetup;
   readonly activeOwner: () => ComponentId | undefined;
+  /** Kernel event currently on the stack. `start` is legal only for that scenario event. */
+  readonly activeEvent: () => ScheduledEvent | undefined;
   /** The scenario adapter owns this registered handler type. */
   readonly scenarioEventType: string;
 }
@@ -68,15 +79,10 @@ export class DeterministicClientRuntime {
     this.#networkController = options.setup.networkController();
     this.#actionType = `client.${options.id}.action`;
     this.#callbackType = `client.${options.id}.callback`;
-    const schemas: Record<string, (data: CanonicalValue | undefined) => boolean> = {
-      [ClientObservationTypes.ActionStarted]: data => object(data) && typeof data.actionId === "string" && typeof data.name === "string" && Object.hasOwn(data, "input"),
-      [ClientObservationTypes.ActionCompleted]: data => object(data) && typeof data.actionId === "string" && Object.hasOwn(data, "result"),
-      [ClientObservationTypes.ActionFailed]: data => object(data) && typeof data.actionId === "string" && typeof data.code === "string",
-      [ClientObservationTypes.StateChanged]: data => object(data) && typeof data.key === "string" && object(data.before) && object(data.after),
-      [ClientObservationTypes.CallbackStarted]: data => object(data) && typeof data.requestId === "string" && typeof data.endpoint === "string",
-      [ClientObservationTypes.CallbackCompleted]: data => object(data) && typeof data.requestId === "string" && (data.outcome === "completed" || data.outcome === "failed"),
-    };
-    for (const [type, validate] of Object.entries(schemas)) options.setup.registerObservationSchema(type, validate);
+    if (!registeredSchemas.has(options.setup)) {
+      for (const [type, validate] of Object.entries(schemas)) options.setup.registerObservationSchema(type, validate);
+      registeredSchemas.add(options.setup);
+    }
     registerRuntimeLogSchema(options.setup);
     options.setup.registerHandler(this.#actionType, options.id, (event, context) => this.#action(event, context));
     options.setup.registerHandler(this.#callbackType, options.id, (event, context) => this.#callback(event, context));
@@ -94,21 +100,23 @@ export class DeterministicClientRuntime {
       callbacks: Object.freeze([...this.#callbacks]) });
   }
 
-  /** Give the scenario adapter its controller only for this dispatch's synchronous body. */
+  /** Give the scenario adapter its controller only while this scenario event is on the stack. */
   dispatch(event: ScheduledEvent, context: HandlerContext, invoke: (controller: ClientController) => void): void {
-    if (this.#dispatching || this.#options.activeOwner() !== this.#options.id ||
-        event.type !== this.#options.scenarioEventType || typeof invoke !== "function")
-      this.#violation(ErrorCodes.INVALID_CLIENT_ACTION);
+    if (this.#dispatching || !this.#scenario(event) || typeof invoke !== "function") this.#violation(ErrorCodes.INVALID_CLIENT_ACTION);
     this.#dispatching = true;
     try { invoke(this.#controller(event, context)); }
     finally { this.#dispatching = false; }
   }
 
+  #scenario(event: ScheduledEvent): boolean {
+    return this.#options.activeEvent() === event && this.#options.activeOwner() === this.#options.id &&
+      event.type === this.#options.scenarioEventType;
+  }
   #controller(event: ScheduledEvent, context: HandlerContext): ClientController {
     return Object.freeze({ start: (actionId: string, action: string, data: CanonicalValue) => {
-      if (!this.#dispatching || this.#options.activeOwner() !== this.#options.id || event.type !== this.#options.scenarioEventType ||
-          typeof actionId !== "string" || !actionId.trim() || typeof action !== "string" || !Object.hasOwn(this.#definition.actions, action) ||
-          this.#actions.has(actionId)) this.#violation(ErrorCodes.INVALID_CLIENT_ACTION);
+      if (!this.#dispatching || !this.#scenario(event) || typeof actionId !== "string" || !actionId.trim() ||
+          typeof action !== "string" || !Object.hasOwn(this.#definition.actions, action) || this.#actions.has(actionId))
+        this.#violation(ErrorCodes.INVALID_CLIENT_ACTION);
       let input: CanonicalValue;
       try { input = canonicalCopy(data); } catch { this.#violation(ErrorCodes.INVALID_CLIENT_ACTION); }
       const sequence = this.#nextTrace++;

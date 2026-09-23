@@ -115,6 +115,8 @@ export class HeadlessSimulation implements Simulation {
   get activeTaskOwner(): ComponentId | undefined {
     return this.#active?.owner ?? (this.#dispatching && this.#event ? this.#handlers.get(this.#event.type)?.owner : undefined);
   }
+  /** Event whose handler is on the stack. Adapters use it to reject stale dispatch. */
+  get activeEvent(): ScheduledEvent | undefined { return this.#event; }
   get time() { return this.#clock.now(); }
   get history(): ExecutionHistoryReader {
     const history = this.#history;

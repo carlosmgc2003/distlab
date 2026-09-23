@@ -36,6 +36,7 @@ export function createGolden02() {
       } }), taskLifecycle: () => simulation.taskLifecycle, activeOwner: () => simulation.activeTaskOwner, events });
     client = new DeterministicClientRuntime({ id: "client", version: "1", setup,
       scenarioEventType: "scenario.client.action", activeOwner: () => simulation.activeTaskOwner,
+      activeEvent: () => simulation.activeEvent,
       resolve: () => ({ id: "client", version: "1", initialState: { pending: null }, actions: {
         place: function* (body, ctx) {
           ctx.state.set("pending", body);

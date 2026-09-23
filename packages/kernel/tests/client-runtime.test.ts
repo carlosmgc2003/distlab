@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { DeterministicClientRuntime, DeterministicServiceRuntime, ExecutionHistory, HeadlessSimulationFactory } from "@distlab/kernel";
 import { duration, simulationTime, throwSimulationError } from "@distlab/contracts/kernel";
-import type { RunInputs } from "@distlab/contracts/kernel";
+import type { HandlerContext, RunInputs, ScheduledEvent } from "@distlab/contracts/kernel";
 import type { ClientContext, ClientDefinition, MessageBus, ServiceDefinition } from "@distlab/contracts";
 import { createGolden02, golden02Result } from "../examples/golden-02.ts";
 
@@ -38,7 +38,7 @@ test("action, callback, logs, detached state and root/child correlation", async 
       } }, { notice: (body, ctx) => {
         ctx.state.set("notice", body);
         return { status: "ok", body: "received" };
-      } }, { pending: null }), activeOwner: () => sim.activeTaskOwner });
+      } }, { pending: null }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
     setup.registerHandler("scenario.action", "client", (event, ctx) => runtime.dispatch(event, ctx, controller => controller.start("a1", "place", input)));
     setup.schedule({ time: simulationTime(0), type: "service.service.lifecycle", payload: { next: "RUNNING" } });
     setup.schedule({ time: simulationTime(1), type: "scenario.action", payload: null });
@@ -66,7 +66,7 @@ test("shared log schema works with a lone client and client-first construction",
       .createSimulation(inputs, setup => {
         runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
           resolve: () => client({ log: (_body, ctx) => { ctx.log.write("info", "client only"); return null; } }),
-          activeOwner: () => sim.activeTaskOwner });
+          activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
         if (withService) new DeterministicServiceRuntime({ id: "service", version: "1", setup,
           resolve: () => service({}), taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner, events });
         setup.registerHandler("scenario.action", "client", (event, ctx) => runtime.dispatch(event, ctx, controller => controller.start("log", "log", null)));
@@ -97,7 +97,7 @@ test("lost response leaves server effects distinct from an explicit bounded retr
           }
         }
         return null;
-      } }), activeOwner: () => sim.activeTaskOwner });
+      } }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
     setup.registerHandler("scenario.action", "client", (event, ctx) => runtime.dispatch(event, ctx, controller => controller.start("a1", "place", { key: "k1" })));
     setup.schedule({ time: simulationTime(0), type: "service.service.lifecycle", payload: { next: "RUNNING" } });
     setup.schedule({ time: simulationTime(1), type: "scenario.action", payload: null });
@@ -120,7 +120,7 @@ test("concurrent state follows scheduler order and reset recreates history and c
       taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner, events });
     runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
       resolve: () => client({ write: function* (data, ctx) { if (!stale) stale = ctx; yield ctx.clock.sleep(duration(data as number)); ctx.state.set("last", data); return data; } }, {}, { last: 0 }),
-      activeOwner: () => sim.activeTaskOwner });
+      activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
     setup.registerHandler("scenario.action", "client", (event, ctx) => {
       const data = event.payload as { id: string; delay: number };
       runtime.dispatch(event, ctx, controller => controller.start(data.id, "write", data.delay));
@@ -147,7 +147,7 @@ test("invalid dispatch, native async and bad state seal the run", async () => {
       runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
         resolve: () => client({ work: (_data, ctx) => mode === "async" ? Promise.resolve(null) as never :
           mode === "state" ? (ctx.state.set("x", { bad: 1n } as never), null) :
-          mode === "return" ? { bad: 1n } as never : null }), activeOwner: () => sim.activeTaskOwner });
+          mode === "return" ? { bad: 1n } as never : null }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
       setup.registerHandler("scenario.action", "client", (event, ctx) => {
         runtime.dispatch(event, ctx, controller => {
           controller.start("a", mode === "unknown" ? "missing" : "work", null);
@@ -166,7 +166,7 @@ test("saved controller cannot start outside scenario dispatch", async () => {
   let controller!: Parameters<Parameters<DeterministicClientRuntime["dispatch"]>[2]>[0];
   const sim = new HeadlessSimulationFactory({ network: { targets: ["client"], links: [] } }).createSimulation(inputs, setup => {
     runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
-      resolve: () => client({ work: () => null }), activeOwner: () => sim.activeTaskOwner });
+      resolve: () => client({ work: () => null }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
     setup.registerHandler("scenario.action", "client", (event, ctx) => runtime.dispatch(event, ctx, value => { controller = value; }));
     setup.registerHandler("client.later", "client", () => controller.start("late", "work", null));
     setup.schedule({ time: simulationTime(0), type: "scenario.action", payload: null });
@@ -192,7 +192,7 @@ test("sink failure after service effect seals run without client completion", as
         const result = yield ctx.http.request({ target: "service", endpoint: "commit", body: null });
         try { ctx.log.write("info", "committed"); } catch { /* terminal latch wins */ }
         return result as never;
-      } }), activeOwner: () => sim.activeTaskOwner });
+      } }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
     setup.registerHandler("scenario.action", "client", (event, ctx) => runtime.dispatch(event, ctx, controller => controller.start("a", "commit", null)));
     setup.schedule({ time: simulationTime(0), type: "service.service.lifecycle", payload: { next: "RUNNING" } });
     setup.schedule({ time: simulationTime(1), type: "scenario.action", payload: null });
@@ -219,4 +219,82 @@ test("golden 02 is reproducible and executable headlessly", async () => {
   const script = fileURLToPath(new URL("../examples/golden-02.ts", import.meta.url));
   const cli = JSON.parse(execFileSync(process.execPath, ["--experimental-strip-types", script], { encoding: "utf8" }));
   assert.equal(cli.digest, first.digest);
+});
+
+test("two clients share observation schemas and isolate state", async () => {
+  let first!: DeterministicClientRuntime;
+  let second!: DeterministicClientRuntime;
+  const define = (id: string): ClientDefinition => ({ id, version: "1", initialState: { mine: "init" }, callbacks: {},
+    actions: { set: (data, ctx) => { ctx.state.set("mine", data); return data; } } });
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["a", "b"], links: [] } }).createSimulation(inputs, setup => {
+    first = new DeterministicClientRuntime({ id: "a", version: "1", setup, scenarioEventType: "scenario.a",
+      resolve: () => define("a"), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
+    second = new DeterministicClientRuntime({ id: "b", version: "1", setup, scenarioEventType: "scenario.b",
+      resolve: () => define("b"), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
+    setup.registerHandler("scenario.a", "a", (event, ctx) => first.dispatch(event, ctx, controller => controller.start("1", "set", "from-a")));
+    setup.registerHandler("scenario.b", "b", (event, ctx) => second.dispatch(event, ctx, controller => controller.start("1", "set", "from-b")));
+    setup.schedule({ time: simulationTime(0), type: "scenario.a", payload: null });
+    setup.schedule({ time: simulationTime(0), type: "scenario.b", payload: null });
+  });
+  await sim.run();
+  assert.equal(first.inspect().state.mine, "from-a");
+  assert.equal(second.inspect().state.mine, "from-b");
+  assert.equal(sim.history.query({ type: "client.action.completed" }).length, 2);
+});
+
+test("one scenario event can start two actions", async () => {
+  let runtime!: DeterministicClientRuntime;
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["client"], links: [] } }).createSimulation(inputs, setup => {
+    runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
+      resolve: () => client({ first: () => "a", second: () => "b" }),
+      activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
+    setup.registerHandler("scenario.action", "client", (event, ctx) => runtime.dispatch(event, ctx, controller => {
+      controller.start("a", "first", null); controller.start("b", "second", null);
+    }));
+    setup.schedule({ time: simulationTime(0), type: "scenario.action", payload: null });
+  });
+  await sim.run();
+  assert.deepEqual(runtime.inspect().actions.map(action => [action.actionId, action.status, action.result]), [["a", "COMPLETED", "a"], ["b", "COMPLETED", "b"]]);
+  assert.notEqual(sim.history.query({ type: "client.action.started" })[0]?.traceId, sim.history.query({ type: "client.action.started" })[1]?.traceId);
+});
+
+test("a saved scenario event cannot start an action from a later handler", async () => {
+  let runtime!: DeterministicClientRuntime;
+  let savedEvent!: ScheduledEvent;
+  let savedContext!: HandlerContext;
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["client"], links: [] } }).createSimulation(inputs, setup => {
+    runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
+      resolve: () => client({ work: () => "ok" }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
+    setup.registerHandler("scenario.action", "client", (event, ctx) => {
+      savedEvent = event; savedContext = ctx;
+      runtime.dispatch(event, ctx, controller => controller.start("a", "work", null));
+    });
+    setup.registerHandler("client.later", "client", () => runtime.dispatch(savedEvent, savedContext, controller => controller.start("b", "work", null)));
+    setup.schedule({ time: simulationTime(0), type: "scenario.action", payload: null });
+    setup.schedule({ time: simulationTime(1), type: "client.later", payload: null });
+  });
+  await assert.rejects(sim.run(), { code: "INVALID_CLIENT_ACTION" });
+  assert.deepEqual(runtime.inspect().actions.map(action => action.actionId), ["a"]);
+  assert.equal(sim.history.query({ type: "client.action.started" }).length, 1);
+});
+
+test("an action cannot reenter dispatch to start another action", async () => {
+  let runtime!: DeterministicClientRuntime;
+  let savedEvent!: ScheduledEvent;
+  let savedContext!: HandlerContext;
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["client"], links: [] } }).createSimulation(inputs, setup => {
+    runtime = new DeterministicClientRuntime({ id: "client", version: "1", setup, scenarioEventType: "scenario.action",
+      resolve: () => client({
+        work: () => { runtime.dispatch(savedEvent, savedContext, controller => controller.start("extra", "other", null)); return "ok"; },
+        other: () => "no",
+      }), activeOwner: () => sim.activeTaskOwner, activeEvent: () => sim.activeEvent });
+    setup.registerHandler("scenario.action", "client", (event, ctx) => {
+      savedEvent = event; savedContext = ctx;
+      runtime.dispatch(event, ctx, controller => controller.start("a", "work", null));
+    });
+    setup.schedule({ time: simulationTime(0), type: "scenario.action", payload: null });
+  });
+  await assert.rejects(sim.run(), { code: "INVALID_CLIENT_ACTION" });
+  assert.deepEqual(runtime.inspect().actions.map(action => action.actionId), ["a"]);
+  assert.equal(sim.history.query({ type: "client.action.started" }).length, 1);
 });
