@@ -22,8 +22,9 @@ documents when a code change alters a stated architectural guarantee.
 
 ```sh
 npm install                       # install workspace dependencies
-npm run typecheck                 # typecheck @distlab/contracts
-npm test                          # build contracts and run constructor tests
+npm run build                     # build contracts and kernel
+npm run typecheck                 # typecheck both workspaces and tests
+npm test                          # run contracts, kernel, and headless scenario tests
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included
@@ -48,7 +49,7 @@ Future simulation code must preserve determinism: use the virtual clock instead 
 
 ## Testing Guidelines
 
-`@distlab/contracts` is typechecked with `tsc` and has constructor tests for `simulationTime` and `duration`. For documentation-only changes, verify rendered Markdown, internal consistency, and clean output from `git diff --check`. New executable features should include tests in the same pull request, especially reproducibility tests that run identical architecture, scenario, configuration, and seed inputs twice and compare results.
+`@distlab/contracts` and `@distlab/kernel` are typechecked with `tsc`; tests cover constructors, deterministic kernel primitives, controls, and a headless replay scenario. For documentation-only changes, verify rendered Markdown, internal consistency, and clean output from `git diff --check`. New executable features should include tests in the same pull request, especially reproducibility tests that run identical architecture, scenario, configuration, and seed inputs twice and compare results.
 
 ## Commit & Pull Request Guidelines
 

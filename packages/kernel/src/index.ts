@@ -1,3 +1,5 @@
+export { HeadlessSimulation, HeadlessSimulationFactory, type HeadlessFactoryOptions, type CoreClockPort, type CoreSchedulerPort, type CoreHistoryPort } from "./simulation.js";
+export { SeededRandom } from "./random.js";
 export { canonicalCopy, canonicalEncode, fingerprintRunInputs, sha256Hex } from "./canonical.js";
 export { DeterministicCorrelationController, DeterministicIdAllocator, isIdentifier } from "./identity.js";
 export { ExecutionHistory, type ExecutionHistoryOptions, type VirtualTimeSource } from "./history.js";
