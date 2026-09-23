@@ -67,6 +67,7 @@ export class DeterministicServiceRuntime {
   readonly #tasks = new Map<string, Work>();
   readonly #local = new Set<ScheduledHandle>();
   readonly #open = new Set<ReturnType<Database["begin"]>>();
+  readonly #openWork = new Map<string, Set<ReturnType<Database["begin"]>>>();
   #definition: ServiceDefinition;
   #state: ServiceState = "STARTING";
   #generation = 0;
@@ -166,8 +167,11 @@ export class DeterministicServiceRuntime {
       this.#tasks.clear();
       for (const handle of this.#local) handle.cancel();
       this.#local.clear();
-      for (const transaction of this.#open) transaction.rollback();
+      if (this.#options.db && "abandonGeneration" in this.#options.db)
+        (this.#options.db as Database & { abandonGeneration(generation: number): void }).abandonGeneration(this.#generation);
+      else for (const transaction of this.#open) transaction.rollback();
       this.#open.clear();
+      this.#openWork.clear();
       this.#options.abandonResources?.(this.#generation);
       this.#options.taskLifecycle().abandon(this.#options.id, this.#generation);
       this.#generation++;
@@ -177,7 +181,7 @@ export class DeterministicServiceRuntime {
     this.#observe(context, event, ServiceObservationTypes.LifecycleChanged,
       { before: previous, after: next, processGeneration: this.#generation, reason });
   }
-  #context(context: HandlerContext, event: ScheduledEvent, generation: number): ServiceContext {
+  #context(context: HandlerContext, event: ScheduledEvent, generation: number, reference: string): ServiceContext {
     const http = this.#http;
     const clock = context.clock;
     const inherited = (metadata?: ScheduleMetadata): ScheduleMetadata => ({
@@ -210,13 +214,15 @@ export class DeterministicServiceRuntime {
       this.#capability(generation);
       const transaction = this.#invoke(() => this.#options.db!.begin());
       this.#open.add(transaction);
+      const workTransactions = this.#openWork.get(reference) ?? new Set<ReturnType<Database["begin"]>>();
+      workTransactions.add(transaction); this.#openWork.set(reference, workTransactions);
       return new Proxy(transaction, { get: (target, property) => {
         this.#capability(generation);
         const value: unknown = Reflect.get(target, property);
         return typeof value === "function" ? (...args: unknown[]) => {
           this.#capability(generation);
           const result = this.#invoke(() => Reflect.apply(value as (...parameters: unknown[]) => unknown, target, args));
-          if (property === "commit" || property === "rollback") this.#open.delete(transaction);
+          if (property === "commit" || property === "rollback") { this.#open.delete(transaction); workTransactions.delete(transaction); }
           return result;
         } : value;
       } });
@@ -238,6 +244,8 @@ export class DeterministicServiceRuntime {
   }
   #finish(work: Work, context: HandlerContext, event: ScheduledEvent, outcome: "completed" | "failed", code?: string): void {
     this.#tasks.delete(work.reference);
+    for (const transaction of this.#openWork.get(work.reference) ?? []) { transaction.rollback(); this.#open.delete(transaction); }
+    this.#openWork.delete(work.reference);
     this.#observe(context, event, outcome === "completed" ? ServiceObservationTypes.HandlerCompleted : ServiceObservationTypes.HandlerFailed,
       { kind: work.kind, name: work.name, reference: work.reference, outcome, ...(code ? { code } : {}) });
   }
@@ -279,7 +287,7 @@ export class DeterministicServiceRuntime {
     if (generation !== this.#generation) return;
     const handler = this.#definition.endpoints[endpoint] ?? fail(ErrorCodes.INVALID_REGISTRATION);
     const work = this.#start("endpoint", endpoint, requestId, context, event);
-    const serviceContext = this.#context(context, event, work.generation);
+    const serviceContext = this.#context(context, event, work.generation, work.reference);
     const complete = (reply: NetworkReply) => this.#networkController.reply(requestId, reply);
     return this.#run(work, () => handler(body, serviceContext), context, event, complete,
       code => complete({ status: "error", body: { code } }));
@@ -289,7 +297,7 @@ export class DeterministicServiceRuntime {
     if (generation !== this.#generation) return;
     const handler: ConsumerHandler = this.#definition.consumers[delivery.destination] ?? fail(ErrorCodes.INVALID_REGISTRATION);
     const work = this.#start("consumer", delivery.destination, delivery.deliveryId, context, event);
-    return this.#run(work, () => handler(delivery, this.#context(context, event, work.generation)), context, event,
+    return this.#run(work, () => handler(delivery, this.#context(context, event, work.generation, work.reference)), context, event,
       () => this.#options.busController?.acknowledge(delivery.deliveryId, "ack"), () => this.#options.busController?.acknowledge(delivery.deliveryId, "nack"));
   }
   #background(event: ScheduledEvent, context: HandlerContext): void | ControlledTask {
@@ -298,6 +306,6 @@ export class DeterministicServiceRuntime {
     if (this.#state !== "RUNNING") { this.#observe(context, event, ServiceObservationTypes.WorkSkipped, { name, lifecycle: this.#state }); return; }
     const handler: BackgroundHandler = this.#definition.background[name] ?? fail(ErrorCodes.INVALID_REGISTRATION);
     const work = this.#start("background", name, `${event.id}:${this.#nextWork++}`, context, event);
-    return this.#run(work, () => handler(data, this.#context(context, event, work.generation)), context, event, () => {}, () => {});
+    return this.#run(work, () => handler(data, this.#context(context, event, work.generation, work.reference)), context, event, () => {}, () => {});
   }
 }

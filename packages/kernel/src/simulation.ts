@@ -123,6 +123,27 @@ export class HeadlessSimulation implements Simulation {
   get activeTaskOwner(): ComponentId | undefined {
     return this.#active?.owner ?? (this.#dispatching && this.#event ? this.#handlers.get(this.#event.type)?.owner : undefined);
   }
+  /** Trusted storage adapters use task identity to fence writable handles. */
+  get activeTaskIdentity(): Readonly<{ id: string; owner: ComponentId; processGeneration: number }> | undefined {
+    const task = this.#active;
+    return task && Object.freeze({ id: task.id, owner: task.owner, processGeneration: task.processGeneration });
+  }
+  /** Trusted adapter ports; every use remains subject to the run's terminal latch. */
+  get storageObservations(): ObservationSink { const generation = this.#generation; return Object.freeze({
+    record: (input: ObservationInput) => this.#guard(generation, () => { this.#check(generation); return this.#history.record(input); }),
+  }); }
+  scheduleStorage(type: string, payload: CanonicalValue): void {
+    const generation = this.#generation;
+    this.#guard(generation, () => {
+      this.#check(generation);
+      const owner = this.#active?.owner;
+      if (!owner || this.#handlers.get(type)?.owner !== owner) return fail(ErrorCodes.INVALID_EVENT_TYPE);
+      const event = this.#originEvent ?? this.#event;
+      this.#scheduler.schedule({ time: this.#clock.now(), type, payload, source: owner, target: owner,
+        ...(event?.traceId ? { traceId: event.traceId } : {}), ...(event?.spanId ? { spanId: event.spanId } : {}),
+        ...(event?.parentSpanId ? { parentSpanId: event.parentSpanId } : {}), ...(event?.causationId ? { causationId: event.causationId } : {}) });
+    });
+  }
   /** Event whose handler is on the stack. Adapters use it to reject stale dispatch. */
   get activeEvent(): ScheduledEvent | undefined { return this.#event; }
   get time() { return this.#clock.now(); }
