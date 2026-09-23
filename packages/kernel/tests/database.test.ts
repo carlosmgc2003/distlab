@@ -22,7 +22,7 @@ function fixture(background: Background, schedule: (runtime: DeterministicServic
       db = new DeterministicDatabase({ definition, checks: { nonnegative: row => typeof row.available === "number" && row.available >= 0 },
         setup, clock: { now: () => sim.time }, schedule: (type, payload) => sim.scheduleStorage(type, payload),
         operations: { create: () => sim.operations.create(), complete: (id, outcome) => sim.operations.complete(id, outcome) },
-        observations: { record: input => sim.storageObservations.record(input) }, task: () => sim.activeTaskIdentity, event: () => sim.activeEvent,
+        observations: { record: input => sim.storageObservations.record(input) }, task: () => sim.activeTaskIdentity, event: () => sim.activeTaskEvent,
         ...(options.fault ? { faults: options.fault } : {}) });
       const runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, db,
         resolve: () => ({ id: "service", version: "1", endpoints: {}, consumers: {}, background }),
@@ -107,7 +107,7 @@ test("reset restores state, counters, and history on replay", async () => {
     latest = new DeterministicDatabase({ definition, checks: { nonnegative: row => (row.available as number) >= 0 }, setup,
       clock: { now: () => sim.time }, schedule: (type, payload) => sim.scheduleStorage(type, payload),
       operations: { create: () => sim.operations.create(), complete: (id, outcome) => sim.operations.complete(id, outcome) },
-        observations: { record: input => sim.storageObservations.record(input) }, task: () => sim.activeTaskIdentity, event: () => sim.activeEvent });
+        observations: { record: input => sim.storageObservations.record(input) }, task: () => sim.activeTaskIdentity, event: () => sim.activeTaskEvent });
     const runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, db: latest, events,
       resolve: () => ({ id: "service", version: "1", endpoints: {}, consumers: {}, background: { save: function* (_, ctx): ControlledTask {
         const tx = ctx.db!.begin(); tx.update("stock", "a", { sku: "a", available: 1 }); yield tx.commit();
@@ -233,4 +233,68 @@ test("a synchronous service handler can read and its open writes roll back on ex
   assert.deepEqual(seen, [2]);
   assert.equal(run.db.inspect().tables.stock!.a!.available, 2);
   assert.equal(run.sim.history.query({ type: "database.transaction.rolledback" }).length, 1);
+});
+
+test("commit keeps every staged row when names contain U+0000", async () => {
+  const delimited: DatabaseDefinition = { owner: "service", tables: [
+    { name: "a", unique: [], checks: [] },
+    { name: "a\u0000b", unique: [], checks: [] },
+  ], initial: { a: {}, "a\u0000b": {} } };
+  let db!: DeterministicDatabase;
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["service"], links: [] } }).createSimulation(inputs, setup => {
+    db = new DeterministicDatabase({ definition: delimited, checks: {}, setup, clock: { now: () => sim.time },
+      schedule: (type, payload) => sim.scheduleStorage(type, payload),
+      operations: { create: () => sim.operations.create(), complete: (id, outcome) => sim.operations.complete(id, outcome) },
+      observations: { record: input => sim.storageObservations.record(input) }, task: () => sim.activeTaskIdentity, event: () => sim.activeTaskEvent });
+    const runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, db, events,
+      resolve: () => ({ id: "service", version: "1", endpoints: {}, consumers: {}, background: { save: function* (_, ctx): ControlledTask {
+        const tx = ctx.db!.begin();
+        tx.insert("a", "b\u0000c", { v: 1 });
+        tx.insert("a\u0000b", "c", { v: 2 });
+        yield tx.commit();
+      } } }), taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner });
+    setup.schedule({ time: simulationTime(0), type: runtime.lifecycleEventType, payload: { next: "RUNNING" } });
+    work(runtime, setup, "save", 1);
+  });
+  await sim.run();
+  assert.equal(db.inspect().tables.a!["b\u0000c"]!.v, 1);
+  assert.equal(db.inspect().tables["a\u0000b"]!.c!.v, 2);
+  assert.equal(db.revision, 1);
+});
+
+test("a transaction started after sleep keeps the task correlation", async () => {
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["service", "client"], links: [{ source: "client", target: "service" }] } })
+    .createSimulation(inputs, setup => {
+      const db = new DeterministicDatabase({ definition, checks: { nonnegative: row => typeof row.available === "number" && row.available >= 0 },
+        setup, clock: { now: () => sim.time }, schedule: (type, payload) => sim.scheduleStorage(type, payload),
+        operations: { create: () => sim.operations.create(), complete: (id, outcome) => sim.operations.complete(id, outcome) },
+        observations: { record: input => sim.storageObservations.record(input) }, task: () => sim.activeTaskIdentity, event: () => sim.activeTaskEvent });
+      const client = setup.networkFor("client");
+      const runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, db, events,
+        resolve: () => ({ id: "service", version: "1", consumers: {}, background: {}, endpoints: {
+          save: function* (_body, ctx) {
+            yield ctx.clock.sleep(duration(1));
+            const tx = ctx.db!.begin();
+            tx.update("stock", "a", { sku: "a", available: 1 });
+            tx.get("stock", "a");
+            yield tx.commit();
+            return { status: "ok", body: null };
+          },
+        } }), taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner });
+      setup.registerHandler("client.call", "client", function* (): ControlledTask { yield client.request({ target: "service", endpoint: "save", body: null }); });
+      setup.schedule({ time: simulationTime(0), type: runtime.lifecycleEventType, payload: { next: "RUNNING" } });
+      setup.schedule({ time: simulationTime(1), type: "client.call", payload: null });
+    });
+  await sim.run();
+  const started = sim.history.query({ type: "service.handler.started" })[0];
+  const begun = sim.history.query({ type: "database.transaction.begun" })[0];
+  const read = sim.history.query({ type: "database.row.read" }).at(-1);
+  const committed = sim.history.query({ type: "database.transaction.committed" })[0];
+  for (const record of [begun, read, committed]) {
+    assert.equal(record?.traceId, started?.traceId);
+    assert.equal(record?.spanId, started?.spanId);
+    assert.equal(record?.causationId, started?.causationId);
+  }
+  assert.equal(begun?.eventId, started?.eventId);
+  assert.notEqual(committed?.eventId, started?.eventId);
 });

@@ -217,7 +217,7 @@ export class DeterministicDatabase implements Database {
 class LocalTransaction implements Transaction {
   status: "open" | "submitted" | "closed" | "rolledback" = "open";
   staged = false;
-  readonly #writes = new Map<string, Change>();
+  readonly #writes = new Map<string, Map<string, Change>>();
   constructor(readonly db: DeterministicDatabase, readonly id: string, readonly task: TaskIdentity, readonly epoch: number,
     readonly baseRevision: number, readonly snapshot: Tables, readonly origin: ScheduledEvent) {}
   get generation(): number { return this.task.processGeneration; }
@@ -235,15 +235,20 @@ class LocalTransaction implements Transaction {
     const current = rows.get(key);
     if (after === undefined) rows.delete(key); else rows.set(key, after);
     this.staged = true;
-    const changeKey = `${table}\u0000${key}`;
-    const previous = this.#writes.get(changeKey);
-    this.#writes.set(changeKey, { table, key, before: previous ? previous.before : current, after });
+    let writes = this.#writes.get(table);
+    if (!writes) this.#writes.set(table, writes = new Map());
+    const previous = writes.get(key);
+    writes.set(key, { table, key, before: previous ? previous.before : current, after });
     this.db.staged(this, { table, key, before: current, after });
   }
   insert(table: string, key: string, row: DatabaseRow): void { const rows = this.#table(table); this.db.key(key); const value = this.db.row(row); if (rows.has(key)) fail(ErrorCodes.ROW_EXISTS); this.#write(table, key, value); }
   update(table: string, key: string, row: DatabaseRow): void { const rows = this.#table(table); this.db.key(key); const value = this.db.row(row); if (!rows.has(key)) fail(ErrorCodes.ROW_NOT_FOUND); this.#write(table, key, value); }
   delete(table: string, key: string): boolean { const rows = this.#table(table); this.db.key(key); if (!rows.has(key)) return false; this.#write(table, key, undefined); return true; }
-  changes(): Change[] { return sorted(this.#writes.values(), change => `${change.table}\u0000${change.key}`).filter(change => change.before !== change.after); }
+  changes(): Change[] {
+    const changes: Change[] = [];
+    for (const writes of this.#writes.values()) for (const change of writes.values()) if (change.before !== change.after) changes.push(change);
+    return changes.sort((left, right) => left.table < right.table ? -1 : left.table > right.table ? 1 : left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+  }
   commit(): ControlledOperation { return this.db.submit(this); }
   rollback(): void { this.db.rollback(this, "explicit"); }
   cleanup(): void { this.db.cleanup(this); }

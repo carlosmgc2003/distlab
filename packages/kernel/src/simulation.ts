@@ -151,6 +151,8 @@ export class HeadlessSimulation implements Simulation {
   }
   /** Event whose handler is on the stack. Adapters use it to reject stale dispatch. */
   get activeEvent(): ScheduledEvent | undefined { return this.#event; }
+  /** Task event while a generator runs, so storage correlation survives a wake or commit dispatch. */
+  get activeTaskEvent(): ScheduledEvent | undefined { return this.#originEvent ?? this.activeEvent; }
   get time() { return this.#clock.now(); }
   get history(): ExecutionHistoryReader {
     const history = this.#history;
