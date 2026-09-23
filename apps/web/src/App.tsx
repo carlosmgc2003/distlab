@@ -1,13 +1,18 @@
 import { useState, useSyncExternalStore } from "react";
+import { ArchitectureView } from "./ArchitectureView.tsx";
+import type { PackagedScenario } from "./scenarios.ts";
 import type { SimulationHost } from "./host.ts";
-import { scenarios } from "./scenarios.ts";
+import { packagedMetadata, scenarios } from "./scenarios.ts";
 
 export function App({ host }: { readonly host: SimulationHost }) {
   const { projection, error, loading } = useSyncExternalStore(host.subscribe, host.getSnapshot);
   const [selected, setSelected] = useState<string>(scenarios[0].id);
 
+  const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
+
   const load = () => {
     const choice = scenarios.find(item => item.id === selected)!;
+    setLoadedChoice(choice);
     // The host publishes structured failures; the event handler owns no simulation state.
     void host.load(choice.scenario).catch(() => {});
   };
@@ -24,10 +29,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {projection ? <>
       <section aria-labelledby="architecture-heading">
         <h2 id="architecture-heading">Architecture</h2>
-        <ul>{projection.architecture.components.map(component => <li key={component.id}>{component.label} ({component.kind})</li>)}</ul>
-        <p>{projection.architecture.links.length} links</p>
+        <ArchitectureView architecture={projection.architecture}
+          {...(loadedChoice ? { metadata: packagedMetadata(loadedChoice).architecture, scenarioName: packagedMetadata(loadedChoice).name } : {})} />
       </section>
-      <section aria-labelledby="execution-heading">
+      <section className="execution" aria-labelledby="execution-heading">
         <h2 id="execution-heading">Execution</h2>
         <dl>
           <dt>Virtual time</dt><dd>{projection.simulation.time}</dd>

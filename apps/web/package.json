@@ -16,6 +16,7 @@
     "@distlab/contracts": "0.0.0",
     "@distlab/kernel": "0.0.0",
     "@distlab/scenario": "0.0.0",
+    "@xyflow/react": "^12.11.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
