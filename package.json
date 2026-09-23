@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @distlab/contracts && npm run build -w @distlab/kernel && npm run build -w @distlab/scenario && npm run build -w @distlab/catalogs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "golden:01": "npm run golden:01 -w @distlab/kernel",

@@ -22,9 +22,9 @@ documents when a code change alters a stated architectural guarantee.
 
 ```sh
 npm install                       # install workspace dependencies
-npm run build                     # build contracts and kernel
-npm run typecheck                 # typecheck both workspaces and tests
-npm test                          # run contracts, kernel, and headless scenario tests
+npm run build                     # build contracts, kernel, scenario, and catalogs
+npm run typecheck                 # typecheck all workspaces and tests
+npm test                          # run contracts, kernel, scenario, and checkout tests
 npm run golden:01                 # print UI-free golden scenario 01 state/history
 npm run golden:02                 # print UI-free golden scenario 02 state/history
 npm run golden:04                 # print UI-free golden scenario 04 state/history

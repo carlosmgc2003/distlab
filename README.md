@@ -8,8 +8,9 @@ DistLab is in the early implementation phase. `@distlab/contracts` encodes the
 shared simulation types; `@distlab/kernel` provides canonical data, execution
 history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
-There is no browser UI yet. `@distlab/scenario` validates a scenario
-document, composes the kernel runtimes, and evaluates assertions at
+There is no browser UI yet. `@distlab/catalogs` provides versioned checkout
+models, two scenarios, and their assessment predicates. `@distlab/scenario`
+validates a scenario document, composes the kernel runtimes, and evaluates assertions at
 deterministic event boundaries. Golden scenarios 01, 02, 04, 05, 06, and 07
 are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
 
@@ -151,3 +152,15 @@ npm run golden:07                # print headless golden scenario 07
 ## License
 
 DistLab is licensed under the [Apache License 2.0](LICENSE).
+
+## Checkout lesson
+
+`@distlab/catalogs` exports `checkoutCatalog`, `checkoutAssessment`, and
+`checkoutScenario("normal" | "response-lost")`. The two scenarios share one
+architecture. The response-lost input selects a `network.response` FaultEngine
+rule; the provider records one approved authorization while Payments records
+`UNKNOWN` and `NETWORK_TIMEOUT`. Run `npm test -w @distlab/catalogs` for the
+headless proof, including fresh, stepped, and reset replay comparisons.
+
+Install with `npm install`, then use `npm run build`, `npm run typecheck`, and
+`npm test` for all workspaces.
