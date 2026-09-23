@@ -469,11 +469,14 @@ export class DeterministicMessageBus {
       this.#observe(MessageObservationTypes.Dropped, copy.consumer, { messageId: record.messageId, deliveryId: copy.deliveryId, routingId: record.routingId, reason: "fault" }, link, this.#entities(record, copy.deliveryId));
       return;
     }
-    const subscription = this.#subscription(record.destination, copy.consumer) ?? fail(ErrorCodes.INVALID_MESSAGE_OPERATION);
     const open = record.state === "IN_FLIGHT" && record.attempt === copy.attempt && !record.settled;
+    if (!open) {
+      this.#observe(MessageObservationTypes.Dropped, copy.consumer, { messageId: record.messageId, deliveryId: copy.deliveryId, routingId: record.routingId, reason: "settled" }, link, this.#entities(record, copy.deliveryId));
+      return;
+    }
+    const subscription = this.#subscription(record.destination, copy.consumer) ?? fail(ErrorCodes.INVALID_MESSAGE_OPERATION);
     if (!subscription.receiver.ready()) {
-      if (open) this.#fail(record, "unavailable", false, copy);
-      else this.#observe(MessageObservationTypes.Dropped, copy.consumer, { messageId: record.messageId, deliveryId: copy.deliveryId, routingId: record.routingId, reason: "unavailable" }, link, this.#entities(record, copy.deliveryId));
+      this.#fail(record, "unavailable", false, copy);
       return;
     }
     copy.delivered = true;

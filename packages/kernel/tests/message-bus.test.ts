@@ -169,7 +169,14 @@ test("delay reorders arrivals, drop retries the same message, and duplicates rep
   const ids: { messageId: string; deliveryId: string }[] = [];
   const duplicate: FaultDecisionPort = { evaluate: () => decision({ ruleIds: ["once"], additionalCopies: 1, copySpacing: duration(0) }) };
   const repeated = create({ destinations: [queue("jobs")], faults: duplicate }, ({ controller, bus, setup }) => {
-    controller.subscribe("jobs", "worker", { ready: () => true, accept: delivery => { copies += 1; ids.push({ messageId: delivery.messageId, deliveryId: delivery.deliveryId }); controller.acknowledge(delivery.deliveryId, "ack"); } });
+    controller.subscribe("jobs", "worker", { ready: () => true, accept: delivery => {
+      copies += 1;
+      ids.push({ messageId: delivery.messageId, deliveryId: delivery.deliveryId });
+      if (ids.length === 2) {
+        controller.acknowledge(ids[0]!.deliveryId, "ack");
+        controller.acknowledge(ids[1]!.deliveryId, "ack");
+      }
+    } });
     setup.registerHandler("go", "publisher", function* (): ControlledTask { yield bus.publish("jobs", { type: "Work", body: "effect" }); });
     setup.schedule({ time: simulationTime(0), type: "go", payload: null });
   });
@@ -182,6 +189,33 @@ test("delay reorders arrivals, drop retries the same message, and duplicates rep
   assert.notEqual(spans[0]!.spanId, spans[1]!.spanId);
   assert.equal(spans[0]!.parentSpanId, spans[1]!.parentSpanId);
   assert.equal(repeated.sim.history.query({ type: "message.ack.stale" }).length, 1);
+});
+
+test("a duplicate scheduled after settlement does not start a new handler", async () => {
+  const seen: string[] = [];
+  const faults: FaultDecisionPort = { evaluate: () => decision({ additionalCopies: 1, copySpacing: duration(10) }) };
+  const { sim } = create({ destinations: [queue("jobs", { ackTimeout: duration(5), maxAttempts: 1 })], faults }, ({ controller, bus, setup }) => {
+    controller.subscribe("jobs", "worker", { ready: () => true, accept: delivery => {
+      seen.push(delivery.deliveryId);
+      controller.acknowledge(delivery.deliveryId, "ack");
+    } });
+    setup.registerHandler("go", "publisher", function* (): ControlledTask { yield bus.publish("jobs", { type: "Work", body: null }); });
+    setup.schedule({ time: simulationTime(0), type: "go", payload: null });
+  });
+  await sim.run();
+  assert.equal(seen.length, 1);
+  assert.equal(sim.history.query({ type: "message.delivered" }).length, 1);
+  assert.equal(data<{ reason: string }>(sim.history.query({ type: "message.dropped" })[0]!).reason, "settled");
+
+  const expired = create({ destinations: [queue("jobs", { ackTimeout: duration(5), maxAttempts: 1 })], faults }, ({ controller, bus, setup }) => {
+    controller.subscribe("jobs", "worker", { ready: () => true, accept: () => {} });
+    setup.registerHandler("go", "publisher", function* (): ControlledTask { yield bus.publish("jobs", { type: "Work", body: null }); });
+    setup.schedule({ time: simulationTime(0), type: "go", payload: null });
+  });
+  await expired.sim.run();
+  assert.equal(expired.sim.history.query({ type: "message.delivered" }).length, 1);
+  assert.equal(expired.sim.history.query({ type: "message.dead" }).length, 1);
+  assert.equal(data<{ reason: string }>(expired.sim.history.query({ type: "message.dropped" })[0]!).reason, "settled");
 });
 
 test("alias mutation, invalid input, overflow, and observation failure leave no partial routing success", async () => {
