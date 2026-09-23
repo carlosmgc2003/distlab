@@ -1,0 +1,23 @@
+{
+  "name": "@distlab/catalogs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Versioned checkout MVP catalog and headless lesson scenarios.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@distlab/contracts": "0.0.0",
+    "@distlab/scenario": "0.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && npm run build -w @distlab/scenario --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit",
+    "test": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && npm run build -w @distlab/scenario --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit && node --test --experimental-strip-types tests/*.test.ts"
+  }
+}
