@@ -8,7 +8,10 @@ DistLab is in the early implementation phase. `@distlab/contracts` encodes the
 shared simulation types; `@distlab/kernel` provides canonical data, execution
 history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
-There is no browser UI yet.
+There is no browser UI yet. `@distlab/scenario` validates a scenario
+document, composes the kernel runtimes, and evaluates assertions at
+deterministic event boundaries. Golden scenarios 01, 02, 04, 05, 06, and 07
+are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
 
 ## Goals
 
@@ -138,6 +141,7 @@ npm run build
 npm run typecheck
 npm test
 npm run golden:01                # print headless golden scenario 01
+npm run golden:02                # print headless golden scenario 02
 npm run golden:04                # print headless golden scenario 04
 npm run golden:05                # print headless golden scenario 05
 npm run golden:06                # print headless golden scenario 06
