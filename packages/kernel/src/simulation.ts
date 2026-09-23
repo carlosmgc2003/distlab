@@ -105,6 +105,10 @@ export class HeadlessSimulation implements Simulation {
     this.#compose();
   }
   get status(): SimulationStatus { return this.#status; }
+  /** Trusted adapters use this to fence owner-bound capabilities. */
+  get activeTaskOwner(): ComponentId | undefined {
+    return this.#active?.owner ?? (this.#dispatching && this.#event ? this.#handlers.get(this.#event.type)?.owner : undefined);
+  }
   get time() { return this.#clock.now(); }
   get history(): ExecutionHistoryReader {
     const history = this.#history;
