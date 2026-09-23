@@ -9,6 +9,8 @@ import { SeededRandom } from "./random.js";
 import { DeterministicVirtualNetwork, type NetworkLinks, type NetworkSetup } from "./network.js";
 import { DeterministicMessageBus, neutralFaultPort, type MessageBusInspection, type MessageCounterStart, type MessageDestinationInput } from "./message-bus.js";
 import type { FaultDecisionPort, MessageBus, MessageBusController } from "@distlab/contracts";
+import type { KeyValueDefinition, KeyValueStore } from "@distlab/contracts";
+import { DeterministicKeyValueStore } from "./key-value-store.js";
 
 /** Setup surface passed to a service adapter, including the terminal latch. */
 export type RuntimeSetup = SimulationSetup & NetworkSetup & {
@@ -19,6 +21,8 @@ export type RuntimeSetup = SimulationSetup & NetworkSetup & {
   messageBusController(): MessageBusController;
   /** Detached destinations, routing records, cursors, counters, and dead letters. */
   inspectMessageBus(): MessageBusInspection;
+  keyValueStoreFor(owner: ComponentId): KeyValueStore | undefined;
+  inspectKeyValueStore(owner: ComponentId): ReturnType<DeterministicKeyValueStore["inspect"]>;
 };
 
 export type CoreClockPort = VirtualClock & ClockController & {
@@ -49,6 +53,7 @@ export interface HeadlessFactoryOptions {
   readonly network?: { readonly targets: readonly ComponentId[]; readonly links: NetworkLinks; readonly faults?: FaultDecisionPort };
   /** Broker destinations recreated on reset. Fault decisions default to a neutral port. */
   readonly messageBus?: { readonly destinations: readonly MessageDestinationInput[]; readonly faults?: FaultDecisionPort; readonly initialCounters?: MessageCounterStart };
+  readonly keyValues?: readonly KeyValueDefinition[];
 }
 
 /** Yield only between boundaries; never consult host time or change modeled state. */
@@ -66,7 +71,12 @@ const fail = (code: string): never => throwSimulationError(code);
 /** A headless composition root. Each attempt owns its own concrete ports. */
 export class HeadlessSimulationFactory implements SimulationFactory {
   readonly #options: HeadlessFactoryOptions;
-  constructor(options: HeadlessFactoryOptions = {}) { this.#options = Object.freeze({ ...options }); }
+  constructor(options: HeadlessFactoryOptions = {}) {
+    let keyValues: readonly KeyValueDefinition[] | undefined;
+    try { if (options.keyValues !== undefined) keyValues = canonicalCopy(options.keyValues) as unknown as readonly KeyValueDefinition[]; }
+    catch { fail(ErrorCodes.INVALID_KV_OPERATION); }
+    this.#options = Object.freeze({ ...options, ...(keyValues === undefined ? {} : { keyValues }) });
+  }
   createSimulation(inputs: RunInputs, initialize: (setup: RuntimeSetup) => void): HeadlessSimulation {
     return new HeadlessSimulation(inputs, initialize, this.#options);
   }
@@ -263,6 +273,26 @@ export class HeadlessSimulation implements Simulation {
       }),
       registerSchema: (type: string, validate: (data: CanonicalValue | undefined) => boolean) => this.#history.registerSchema(type, validate),
     };
+    const keyValues = new Map<ComponentId, DeterministicKeyValueStore>();
+    for (const definition of this.#options.keyValues ?? []) {
+      if (!definition || typeof definition.owner !== "string" || !definition.owner.trim() ||
+          !Array.isArray(definition.initial) || keyValues.has(definition.owner)) fail(ErrorCodes.INVALID_REGISTRATION);
+      const type = `kv.expiry.${definition.owner}`;
+      if (owners.has(type)) fail(ErrorCodes.INVALID_REGISTRATION);
+      owners.set(type, definition.owner);
+      const store = new DeterministicKeyValueStore({ definition, clock: this.#clock, scheduler: this.#scheduler,
+        observations: networkObservations, activeOwner: () => this.activeTaskOwner,
+        dispatching: () => this.#dispatching, activeEvent: () => this.#originEvent ?? this.#event,
+        check: () => this.#check(generation) });
+      keyValues.set(definition.owner, store);
+      this.#handlers.set(type, { owner: definition.owner, handler: event => store.expire(event) });
+    }
+    let expiriesArmed = false;
+    const armExpiries = (): void => {
+      if (expiriesArmed) return;
+      expiriesArmed = true;
+      for (const store of keyValues.values()) store.scheduleInitialExpiries();
+    };
     const network = this.#options.network ? new DeterministicVirtualNetwork({
       ...this.#options.network, clock: this.#clock, scheduler: this.#scheduler, operations: this.operations,
       observations: networkObservations, random: this.random, runId: this.#runId,
@@ -290,6 +320,9 @@ export class HeadlessSimulation implements Simulation {
       messageBusFor: (owner: ComponentId) => { this.#check(generation); if (!active || !messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.forOwner(owner); },
       messageBusController: () => { this.#check(generation); if (!active || !messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.controller; },
       inspectMessageBus: () => { this.#check(generation); if (!messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.inspect(); },
+      keyValueStoreFor: (owner: ComponentId) => { this.#check(generation); return keyValues.get(owner); },
+      inspectKeyValueStore: (owner: ComponentId) => { this.#check(generation); const store = keyValues.get(owner);
+        if (!store) return fail(ErrorCodes.INVALID_REGISTRATION); return store.inspect(); },
       enqueueNetworkWork: (owner: ComponentId, type: string, payload: CanonicalValue) => this.#guard(generation, () => {
         this.#check(generation);
         if (!this.#dispatching || !network || this.#handlers.get(type)?.owner !== owner) return fail(ErrorCodes.INVALID_EVENT_TYPE);
@@ -313,7 +346,9 @@ export class HeadlessSimulation implements Simulation {
         this.#history.registerSchema(type, validate);
       },
       schedule: (draft: Parameters<SimulationSetup["schedule"]>[0]) => {
-        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY); sealed = true; network?.seal(); messageBus?.seal();
+        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY);
+        armExpiries();
+        sealed = true; network?.seal(); messageBus?.seal();
         if (draft.type === wakeType) return fail(ErrorCodes.INVALID_EVENT_TYPE);
         return this.#boundHandle(this.#scheduler.schedule(draft), generation);
       },
@@ -325,6 +360,7 @@ export class HeadlessSimulation implements Simulation {
         this.#check(generation); return history.record(input);
       }) }));
       this.#initialize(setup);
+      armExpiries();
       network?.seal();
       messageBus?.seal();
       sealed = true; active = false;
