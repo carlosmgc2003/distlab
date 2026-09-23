@@ -3,6 +3,7 @@ import type { ApplicationError, CanonicalValue, RuntimeProjectionSet, WorkerComm
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): value is RecordValue => value !== null && typeof value === "object" && !Array.isArray(value);
 const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const oneOf = (value: unknown, values: readonly string[]): boolean => typeof value === "string" && values.includes(value);
 const count = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 const keys = (value: RecordValue, required: string[], optional: string[] = []): boolean =>
   required.every(key => Object.hasOwn(value, key)) && Object.keys(value).every(key => required.includes(key) || optional.includes(key));
@@ -56,12 +57,12 @@ function isProjection(value: unknown): value is RuntimeProjectionSet {
   const { architecture, simulation, history, components } = value;
   if (!record(architecture) || !keys(architecture, ["components", "links"]) || !Array.isArray(architecture.components) || !Array.isArray(architecture.links)) return false;
   if (!architecture.components.every(node => record(node) && keys(node, ["id", "kind", "label"], ["model", "version"])
-    && text(node.id) && ["client", "service", "external", "infrastructure"].includes(String(node.kind)) && typeof node.label === "string"
+    && text(node.id) && oneOf(node.kind, ["client", "service", "external", "infrastructure"]) && typeof node.label === "string"
     && (!Object.hasOwn(node, "model") || text(node.model)) && (!Object.hasOwn(node, "version") || text(node.version)))) return false;
   if (!architecture.links.every(link => record(link) && keys(link, ["source", "target"], ["label"]) && text(link.source) && text(link.target)
     && (!Object.hasOwn(link, "label") || typeof link.label === "string"))) return false;
   if (!record(simulation) || !keys(simulation, ["runId", "status", "time", "pendingEvents", "processedEvents", "randomDrawCount"])
-    || !text(simulation.runId) || !["READY", "RUNNING", "PAUSED", "COMPLETED", "FAILED"].includes(String(simulation.status))
+    || !text(simulation.runId) || !oneOf(simulation.status, ["READY", "RUNNING", "PAUSED", "COMPLETED", "FAILED"])
     || ![simulation.time, simulation.pendingEvents, simulation.processedEvents, simulation.randomDrawCount].every(count)) return false;
   if (!record(history) || !keys(history, ["observations"]) || !Array.isArray(history.observations)) return false;
   if (!history.observations.every(item => {
@@ -72,7 +73,7 @@ function isProjection(value: unknown): value is RuntimeProjectionSet {
       && (!Object.hasOwn(item, "entityRefs") || (Array.isArray(item.entityRefs) && item.entityRefs.every(ref => record(ref) && keys(ref, ["kind", "id"]) && text(ref.kind) && text(ref.id))));
   })) return false;
   return Array.isArray(components) && components.every(item => record(item) && keys(item, ["componentId", "state", "visibility"])
-    && text(item.componentId) && ["student", "assessment", "host"].includes(String(item.visibility)));
+    && text(item.componentId) && oneOf(item.visibility, ["student", "assessment", "host"]));
 }
 
 export function isWorkerEvent(value: unknown): value is WorkerEvent {
@@ -84,7 +85,7 @@ export function isWorkerEvent(value: unknown): value is WorkerEvent {
   switch (value.type) {
     case "accepted": return keys(value, base);
     case "loaded": return keys(value, [...base, "projection"]) && isProjection(value.projection);
-    case "run.finished": return keys(value, [...base, "status"]) && ["PAUSED", "COMPLETED", "FAILED"].includes(String(value.status));
+    case "run.finished": return keys(value, [...base, "status"]) && oneOf(value.status, ["PAUSED", "COMPLETED", "FAILED"]);
     case "error": return keys(value, [...base, "error"]) && record(value.error) && keys(value.error, ["code", "message", "context"]) && text(value.error.code) && typeof value.error.message === "string";
     default: return false;
   }

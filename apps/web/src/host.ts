@@ -76,7 +76,7 @@ export class SimulationHost {
     if (!isWorkerCommand(command)) {
       const error = applicationError("INVALID_WORKER_COMMAND", "The command does not match protocol version 1.");
       if (loading) this.#release(error);
-      this.#update({ ...this.#snapshot, error, loading: false });
+      this.#update({ ...this.#snapshot, error, loading: loading ? false : this.#snapshot.loading });
       return Promise.reject(error);
     }
     if (!this.#worker || (command.type !== "load" && !this.#snapshot.projection)) {

@@ -97,3 +97,57 @@ test("a failed projection never resolves a control before its structured termina
     assert.equal(host.getSnapshot().error?.code, "SIMULATION_FAILED");
   }
 });
+
+test("invalid controls do not end an outstanding load", async () => {
+  const worker = new FakeWorker();
+  const host = new SimulationHost(() => worker);
+  const loading = host.load({});
+  await assert.rejects(host.run(-1), { code: "INVALID_WORKER_COMMAND" });
+  assert.equal(host.getSnapshot().loading, true);
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "loaded", projection: projection() });
+  await loading;
+  assert.equal(host.getSnapshot().loading, false);
+  assert.equal(host.getSnapshot().error, null);
+});
+
+test("reload after worker failure fences queued callbacks and pending control responses", async () => {
+  const workers: FakeWorker[] = [];
+  const callbacks: EventListener[] = [];
+  const host = new SimulationHost(() => {
+    const worker = new FakeWorker();
+    const add = worker.addEventListener.bind(worker);
+    worker.addEventListener = (type, listener) => {
+      if (type === "message" && typeof listener === "function") callbacks.push(listener);
+      add(type, listener);
+    };
+    workers.push(worker);
+    return worker;
+  });
+  const first = host.load({});
+  const old = workers[0]!;
+  old.emit({ version: 1, requestId: old.last().requestId, type: "loaded", projection: projection() });
+  await first;
+  const running = assert.rejects(host.run(), { code: "WORKER_UNAVAILABLE" });
+  const runId = old.last().requestId;
+  old.dispatchEvent(new Event("error"));
+  await running;
+  const reloading = host.load({});
+  const current = workers[1]!;
+  current.emit({ version: 1, requestId: current.last().requestId, type: "loaded", projection: projection() });
+  await reloading;
+  // Invoke the removed listener directly to model an already queued callback.
+  callbacks[0]!(new MessageEvent("message", { data: { version: 1, type: "projection.updated", projection: projection("FAILED") } }));
+  current.emit({ version: 1, requestId: runId, type: "run.finished", status: "FAILED" });
+  assert.equal(host.getSnapshot().projection?.simulation.status, "READY");
+  assert.equal(host.getSnapshot().error, null);
+  const resetting = host.reset();
+  const resetId = current.last().requestId;
+  const resetProjection = projection();
+  current.emit({ version: 1, requestId: resetId, type: "projection.updated", projection: resetProjection });
+  await resetting;
+  (resetProjection.components[0]!.state as { value: number }).value = 2;
+  assert.deepEqual(host.getSnapshot().projection?.components[0]!.state, { value: 1 });
+  assert.ok(Object.isFrozen(host.getSnapshot().projection?.components[0]!.state));
+  current.emit({ version: 1, requestId: resetId, type: "projection.updated", projection: projection("FAILED") });
+  assert.equal(host.getSnapshot().projection?.simulation.status, "READY");
+});

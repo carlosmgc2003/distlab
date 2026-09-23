@@ -49,3 +49,15 @@ test("projection copies are detached and recursively frozen after structured clo
   assert.deepEqual(copy.components[0]!.state, { value: 1 });
   assert.ok(Object.isFrozen(detached(structuredClone(copy)).components[0]!.state));
 });
+
+test("enum fields reject canonical nonstrings without coercing or throwing", () => {
+  for (const value of [["READY"], ["COMPLETED"], ["service"], ["host"], { toString: null }]) {
+    const initial = projection();
+    for (const broken of [
+      { version: 1, requestId: "x", type: "run.finished", status: value },
+      { version: 1, type: "projection.updated", projection: { ...initial, simulation: { ...initial.simulation, status: value } } },
+      { version: 1, type: "projection.updated", projection: { ...initial, architecture: { ...initial.architecture, components: [{ ...initial.architecture.components[0], kind: value }] } } },
+      { version: 1, type: "projection.updated", projection: { ...initial, components: [{ ...initial.components[0], visibility: value }] } },
+    ]) assert.equal(isWorkerEvent(broken), false);
+  }
+});
