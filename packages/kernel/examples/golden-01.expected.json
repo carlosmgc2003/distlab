@@ -1,0 +1,9 @@
+{
+  "digest": "d90230e96c9b236b4420f82191df9c3530bca7f6207bbc7f34df6849ae050517",
+  "state": {
+    "order": ["begin", "marker", "awake", "finish:1"],
+    "draws": [1629508329],
+    "committed": 1
+  },
+  "observationCount": 23
+}

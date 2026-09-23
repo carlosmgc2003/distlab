@@ -6,8 +6,8 @@ DistLab is a work-in-progress browser-based educational simulator for distribute
 
 DistLab is in the early implementation phase. `@distlab/contracts` encodes the
 shared simulation types; `@distlab/kernel` provides canonical data, execution
-history, deterministic scheduling, and virtual time. There is no runnable
-simulator or browser UI yet.
+history, deterministic scheduling, virtual time, seeded randomness, and a
+headless simulation runner. There is no browser UI or runtime network model yet.
 
 ## Goals
 
@@ -44,11 +44,34 @@ DistLab models the semantics that matter for learning rather than emulating spec
 
 The documentation is evolving while the remaining design decisions are made.
 
+## Headless kernel
+
+`HeadlessSimulationFactory` from `@distlab/kernel` composes a fresh clock,
+scheduler, history, and random stream for every construction and reset. Optional
+`createClock`, `createScheduler`, `createHistory`, and `createRandom` port factories
+allow a composition root to inject per-attempt implementations. Pass
+normalized `RunInputs` and a synchronous initializer that registers handlers
+before scheduling initial events. The returned simulation supports `step()`,
+`run()`, `pause()`, and `reset()`; its `history.export()` provides canonical
+observations. Trusted adapters may use `operations` for controlled completion
+and `taskLifecycle` for abandonment. `HeadlessSimulationFactory` optionally
+accepts a per-attempt `createBoundaryHook` for deterministic read-side checks.
+The host yields through `MessageChannel` only between event boundaries.
+Handlers use generators and virtual sleeps, not native async work. No browser, React, or scenario interpreter is required.
+
+Golden scenario 01 is a runnable, UI-free fixture in
+[`packages/kernel/examples/golden-01.ts`](packages/kernel/examples/golden-01.ts).
+`npm run golden:01` prints its final state and canonical history. Its checked-in
+[digest and expected state](packages/kernel/examples/golden-01.expected.json)
+are verified by `npm test` across independent continuous runs, repeated steps,
+per-boundary resumes, and reset/replay.
+
 ```sh
 npm install
 npm run build
 npm run typecheck
 npm test
+npm run golden:01                # print headless golden scenario 01
 ```
 
 ## License
