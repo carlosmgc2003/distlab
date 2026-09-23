@@ -72,6 +72,18 @@ without it, the decision is neutral. See the executable
 [`network tests`](packages/kernel/tests/network.test.ts) for success, timeout,
 lost response, reset, and callback examples.
 
+To enable the message broker, pass `messageBus.destinations` to
+`HeadlessSimulationFactory`. Each destination is a queue or topic. Omitted
+delivery and retry delays default to 0, the ACK timeout to 1000 ms, max
+attempts to 3, and capacity to 10000. The initializer obtains an owner-bound
+publish port with `setup.messageBusFor(owner)` and the trusted subscription
+port with `setup.messageBusController()`. Subscribe before the first initial
+event is scheduled. `setup.inspectMessageBus()` returns detached routing
+state, cursors, counters, and dead letters. Publish success means the broker
+accepted the message. An optional `messageBus.faults` port supplies delivery
+delay, drop, and duplicate decisions; without it, the decision is neutral.
+See the executable [`message bus tests`](packages/kernel/tests/message-bus.test.ts).
+
 Golden scenario 01 is a runnable, UI-free fixture in
 [`packages/kernel/examples/golden-01.ts`](packages/kernel/examples/golden-01.ts).
 `npm run golden:01` prints its final state and canonical history. Its checked-in
@@ -79,12 +91,21 @@ Golden scenario 01 is a runnable, UI-free fixture in
 are verified by `npm test` across independent continuous runs, repeated steps,
 per-boundary resumes, and reset/replay.
 
+Golden scenario 04 is a runnable, UI-free fixture in
+[`packages/kernel/examples/golden-04.ts`](packages/kernel/examples/golden-04.ts).
+One service publishes `OrderCreated` and another service consumes it.
+`npm run golden:04` prints the final state and canonical history. Its checked-in
+[digest and expected state](packages/kernel/examples/golden-04.expected.json)
+are verified by `npm test`, including the shared publication, delivery, and
+acknowledgement trace.
+
 ```sh
 npm install
 npm run build
 npm run typecheck
 npm test
 npm run golden:01                # print headless golden scenario 01
+npm run golden:04                # print headless golden scenario 04
 ```
 
 ## License

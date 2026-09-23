@@ -1,0 +1,9 @@
+{
+  "digest": "e47a70ea6e8c613c7d7f8c82861ac169e2f743171a07f3b6c5bc873006379bd9",
+  "state": {
+    "messageId": "message:run:c80af12b101eb6fc4107ac705ef3ab8021d9b22e809ccdca5f4da2d69fa36a7c:0",
+    "deliveryId": "delivery:run:c80af12b101eb6fc4107ac705ef3ab8021d9b22e809ccdca5f4da2d69fa36a7c:0",
+    "orderId": "o1"
+  },
+  "observationCount": 44
+}
