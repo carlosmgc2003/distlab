@@ -6,7 +6,13 @@ h1 { margin: 0 0 24px; letter-spacing: -.04em; }
 h2 { font-size: 1.3rem; }
 button, select { font: inherit; padding: 8px 12px; border: 1px solid #64748b; border-radius: 6px; background: white; color: #172033; }
 button { cursor: pointer; }
-button:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+button:hover { background: #e2e8f0; }
+button, a, summary { touch-action: manipulation; }
+button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible, .inspector:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+.inspector-link { display: inline-block; margin-bottom: 12px; color: #1d4ed8; }
+.inspector-link:hover { color: #172033; }
+.pan-controls { display: flex; gap: 4px; }
+.pan-controls button { width: 36px; height: 36px; padding: 0; }
 .architecture-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: stretch; }
 .graph-help { max-width: 85ch; color: #475569; }
 .graph-canvas { height: 610px; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }

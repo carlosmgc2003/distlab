@@ -49,6 +49,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(page.getByRole("status").filter({ hasText: "READY" })).toBeVisible();
     const architecture = page.getByRole("region", { name: "Architecture", exact: true });
     const inspector = page.getByRole("complementary", { name: "Component inspector" });
+    await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
     await expect(inspector).toContainText("Select a component");
     await expect(architecture.locator(".react-flow__node")).toHaveCount(5);
     await expect(architecture.locator(".react-flow__edge")).toHaveCount(4);
@@ -92,6 +93,15 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByRole("button", { name: "Zoom Out", exact: true }).click();
     const pane = architecture.locator(".react-flow__pane");
     const viewport = architecture.locator(".react-flow__viewport");
+    const beforeButtons = await viewport.getAttribute("style");
+    for (const direction of ["left", "up", "down", "right"]) {
+      const previous = await viewport.getAttribute("style");
+      const button = page.getByRole("button", { name: `Pan ${direction}`, exact: true });
+      await button.focus();
+      await button.press("Enter");
+      await expect(viewport).not.toHaveAttribute("style", previous!);
+    }
+    await expect(viewport).toHaveAttribute("style", beforeButtons!);
     const transform = await viewport.getAttribute("style");
     await pane.scrollIntoViewIfNeeded();
     const bounds = (await pane.boundingBox())!;
@@ -103,6 +113,12 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByLabel("Scenario").selectOption(scenario === "normal" ? "response-lost" : "normal");
     await orders.click();
     await expect(inspector).toContainText("Database owned by orders: orders, outbox");
+    await expect(orders).toHaveAttribute("aria-controls", "component-inspector");
+    const inspectorLink = page.getByRole("link", { name: "Skip to component inspector" });
+    await inspectorLink.focus();
+    await inspectorLink.press("Enter");
+    await expect(inspector).toBeFocused();
+    await expect(inspector).toHaveCSS("outline-style", "solid");
     expect(await page.getByRole("region", { name: "Execution" }).innerText()).toBe(execution);
     expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load"]);
     await page.evaluate(() => window.workerEvidence.probeHistory());

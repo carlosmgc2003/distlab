@@ -2,7 +2,7 @@ import type { ArchitectureNode } from "./architecture-view.ts";
 import { categoryLabels } from "./architecture-view.ts";
 
 export function ComponentInspector({ node }: { readonly node: ArchitectureNode | undefined }) {
-  return <aside className="inspector" aria-labelledby="inspector-heading">
+  return <aside id="component-inspector" className="inspector" aria-labelledby="inspector-heading" tabIndex={-1}>
     <h3 id="inspector-heading">Component inspector</h3>
     {node ? <>
       <h4>{node.data.title}</h4>
