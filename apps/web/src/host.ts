@@ -12,6 +12,8 @@ export interface HostSnapshot {
   readonly projection: RuntimeProjectionSet | null;
   readonly error: ApplicationError | null;
   readonly loading: boolean;
+  /** Transport state only; never substitutes for the projected simulation lifecycle. */
+  readonly pendingCommands: readonly WorkerCommand["type"][];
 }
 
 type Pending = { type: WorkerCommand["type"]; resolve: (event: WorkerEvent) => void; reject: (error: ApplicationError) => void };
@@ -25,7 +27,7 @@ export class SimulationHost {
   #detach: (() => void) | undefined;
   #generation = 0;
   #sequence = 0;
-  #snapshot: HostSnapshot = Object.freeze({ projection: null, error: null, loading: false });
+  #snapshot: HostSnapshot = Object.freeze({ projection: null, error: null, loading: false, pendingCommands: Object.freeze([]) });
 
   constructor(createWorker: () => WorkerPort) { this.#createWorker = createWorker; }
   getSnapshot = (): HostSnapshot => this.#snapshot;
@@ -79,11 +81,15 @@ export class SimulationHost {
       this.#update({ ...this.#snapshot, error, loading: loading ? false : this.#snapshot.loading });
       return Promise.reject(error);
     }
-    if (!this.#worker || (command.type !== "load" && !this.#snapshot.projection)) {
-      return Promise.reject(applicationError("WORKER_UNAVAILABLE", "Load a scenario before sending controls."));
+    const recoveringFailure = command.type === "reset" && this.#snapshot.error?.code === "SIMULATION_FAILED";
+    if (!this.#worker || (command.type !== "load" && !this.#snapshot.projection && !recoveringFailure)) {
+      const error = applicationError("WORKER_UNAVAILABLE", "Load a scenario before sending controls.");
+      this.#update({ ...this.#snapshot, error });
+      return Promise.reject(error);
     }
     return new Promise((resolve, reject) => {
       this.#pending.set(command.requestId, { type: command.type, resolve, reject });
+      this.#update({ ...this.#snapshot, error: null });
       try { this.#worker!.postMessage(detached(command)); }
       catch { this.#unavailable(); }
     });
@@ -105,16 +111,16 @@ export class SimulationHost {
     }
     if (event.type === "loaded" && pending?.type !== "load") return;
     if (event.type === "run.finished" && pending?.type !== "run") return;
-    if (event.type === "projection.updated" && (pending?.type === "load" || !this.#snapshot.projection)) return;
-    if (event.type === "loaded" || event.type === "projection.updated") {
-      this.#update({ projection: event.projection, error: null, loading: false });
-    }
+    if (event.type === "projection.updated" && (pending?.type === "load" || (!this.#snapshot.projection && pending?.type !== "reset"))) return;
     const terminal = event.type === "loaded" || event.type === "run.finished"
       || (event.type === "projection.updated" && event.projection.simulation.status !== "FAILED" && pending && ["pause", "step", "reset"].includes(pending.type));
     if (terminal && pending && event.requestId !== undefined) {
       this.#pending.delete(event.requestId);
       pending.resolve(event);
     }
+    if (event.type === "loaded" || event.type === "projection.updated") {
+      this.#update({ projection: event.projection, error: null, loading: false });
+    } else if (terminal) this.#update(this.#snapshot);
   }
 
   #unavailable(message = "The simulation worker stopped or could not exchange messages."): ApplicationError {
@@ -130,8 +136,8 @@ export class SimulationHost {
     for (const pending of this.#pending.values()) pending.reject(error);
     this.#pending.clear();
   }
-  #update(snapshot: HostSnapshot): void {
-    this.#snapshot = Object.freeze(snapshot);
+  #update(snapshot: Omit<HostSnapshot, "pendingCommands">): void {
+    this.#snapshot = Object.freeze({ ...snapshot, pendingCommands: Object.freeze([...this.#pending.values()].map(item => item.type)) });
     for (const listener of this.#listeners) {
       try { listener(); } catch { this.#listeners.delete(listener); }
     }

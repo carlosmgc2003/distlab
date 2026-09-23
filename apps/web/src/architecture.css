@@ -7,6 +7,12 @@ h2 { font-size: 1.3rem; }
 button, select { font: inherit; padding: 8px 12px; border: 1px solid #64748b; border-radius: 6px; background: white; color: #172033; }
 button { cursor: pointer; }
 button:hover { background: #e2e8f0; }
+button:disabled, button[aria-disabled="true"] { cursor: not-allowed; color: #64748b; background: #f1f5f9; }
+.simulation-controls { margin: 20px 0; padding: 16px; border: 1px solid #94a3b8; border-radius: 12px; background: #fff; }
+.simulation-controls h2 { margin-top: 0; }
+.control-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.control-buttons button { min-width: 80px; min-height: 44px; }
+#controls-help { color: #475569; max-width: 85ch; }
 button, a, summary { touch-action: manipulation; }
 button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible, .inspector:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
 .inspector-link { display: inline-block; margin-bottom: 12px; color: #1d4ed8; }

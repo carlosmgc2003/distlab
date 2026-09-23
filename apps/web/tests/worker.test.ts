@@ -60,6 +60,14 @@ test("real worker loads ScenarioEngine, steps, resets and reproduces the headles
     assert.ok(headless.results().every(result => result.status === "PASS"));
     await send({ type: "reset" }); await send({ type: "run" });
     assert.deepEqual(latest(), finished);
+    await send({ type: "reset" });
+    assert.deepEqual(latest(), initial);
+    while (latest().simulation.status !== "COMPLETED") {
+      const previous = latest().simulation.processedEvents;
+      await send({ type: "step" });
+      assert.equal(latest().simulation.processedEvents, previous + 1);
+    }
+    assert.deepEqual(latest(), finished, "Run and repeated Step have identical canonical worker projections");
     assert.equal(initial.simulation.processedEvents, 0);
   }
 });
@@ -91,6 +99,16 @@ test("boundary pause is correlated and conflicting controls do not mutate a run"
   assert.ok(events.some(event => event.requestId === "busy" && event.type === "error" && event.error.code === "INVALID_WORKER_COMMAND"));
   assert.ok(events.some(event => event.requestId === "pause" && event.type === "projection.updated"));
   assert.ok(events.some(event => event.requestId === "run" && event.type === "run.finished" && event.status === "PAUSED"));
+  const running = events.find(event => event.type === "projection.updated" && event.projection.simulation.status === "RUNNING");
+  const paused = events.find(event => event.requestId === "pause" && event.type === "projection.updated");
+  assert.ok(running?.type === "projection.updated" && paused?.type === "projection.updated");
+  assert.equal(running.projection.simulation.processedEvents, 16);
+  assert.equal(paused.projection.simulation.processedEvents, 16);
+  assert.deepEqual(paused.projection.history, running.projection.history);
+  await adapter.receive({ version: 1, requestId: "step", type: "step" });
+  const stepped = events.at(-1);
+  assert.ok(stepped?.type === "projection.updated");
+  assert.equal(stepped.projection.simulation.processedEvents, 17);
 });
 
 test("terminal runtime failures return SIMULATION_FAILED with a failed boundary projection", async t => {
@@ -109,12 +127,21 @@ test("terminal runtime failures return SIMULATION_FAILED with a failed boundary 
   const events: WorkerEvent[] = [];
   const adapter = new WorkerAdapter(event => events.push(event));
   await adapter.receive({ version: 1, requestId: "load", type: "load", scenario: normalCheckout });
+  const initial = events.find(event => event.type === "loaded");
   await adapter.receive({ version: 1, requestId: "run", type: "run" });
   const failure = events.at(-1)!;
   assert.ok(failure.type === "error");
   assert.equal(failure.error.code, "SIMULATION_FAILED");
   assert.equal((failure.error.context as { code: string }).code, "INVALID_SERVICE_TRANSITION");
   assert.ok(events.some(event => event.type === "projection.updated" && event.projection.simulation.status === "FAILED"));
+  await adapter.receive({ version: 1, requestId: "reset", type: "reset" });
+  const reset = events.at(-1);
+  assert.ok(initial?.type === "loaded" && reset?.type === "projection.updated");
+  assert.deepEqual(reset.projection, initial.projection);
+  await adapter.receive({ version: 1, requestId: "step", type: "step" });
+  const step = events.at(-1);
+  assert.ok(step?.type === "projection.updated");
+  assert.equal(step.projection.simulation.processedEvents, 1);
 });
 
 test("failed subscribers leave canonical history unchanged", async () => {
@@ -122,7 +149,7 @@ test("failed subscribers leave canonical history unchanged", async () => {
   const adapter = new WorkerAdapter(event => { received.push(event); throw new Error("subscriber"); });
   await adapter.receive({ version: 1, requestId: "load", type: "load", scenario: normalCheckout });
   await adapter.receive({ version: 1, requestId: "run", type: "run" });
-  const projected = received.find(event => event.type === "projection.updated");
+  const projected = received.filter(event => event.type === "projection.updated").at(-1);
   assert.ok(projected?.type === "projection.updated");
   const baseline = new DeterministicScenarioEngine({ catalog: checkoutCatalog, assessment: checkoutAssessment }).create(normalCheckout);
   await baseline.simulation.run();
