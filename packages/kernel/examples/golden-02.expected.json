@@ -1,0 +1,12 @@
+{
+  "digest": "d72d0cfb916b5d7149e5d52f7c38f15b3897becca10707d829d86ea924c4e114",
+  "state": {
+    "client": {
+      "state": { "pending": null, "last-notice": { "orderId": "o1", "idempotencyKey": "k1" } },
+      "actions": [{ "actionId": "place-1", "name": "place", "status": "COMPLETED", "result": { "status": "ok", "body": { "accepted": true } } }],
+      "callbacks": []
+    },
+    "service": { "commits": 1 }
+  },
+  "observationCount": 64
+}

@@ -3,6 +3,7 @@ import { ServiceObservationTypes, RuntimeObservationTypes } from "@distlab/contr
 import type { CanonicalValue, ComponentId, ControlledOperation, ControlledTask, HandlerContext, ScheduleMetadata, ScheduledEvent, ScheduledHandle, SimulationSetup, TaskLifecycleController } from "@distlab/contracts/kernel";
 import { ErrorCodes, ModeledErrorCodes, throwSimulationError } from "@distlab/contracts/kernel";
 import { canonicalCopy } from "./canonical.js";
+import { registerRuntimeLogSchema } from "./runtime-log.js";
 import type { RuntimeSetup } from "./simulation.js";
 
 const fail = (code: string): never => throwSimulationError(code);
@@ -39,7 +40,6 @@ const schemas: Readonly<Record<string, (data: CanonicalValue | undefined) => boo
   [ServiceObservationTypes.HandlerFailed]: data => isObject(data) && exact(data, ["kind", "name", "reference", "outcome", "code"]) && kindOf(data.kind) && text(data.name) && text(data.reference) && data.outcome === "failed" && text(data.code) && data.code.length > 0,
   [ServiceObservationTypes.HandlerAbandoned]: data => isObject(data) && exact(data, ["kind", "name", "reference", "reason"]) && kindOf(data.kind) && text(data.name) && text(data.reference) && text(data.reason) && data.reason.trim().length > 0,
   [ServiceObservationTypes.WorkSkipped]: data => isObject(data) && exact(data, ["name", "lifecycle"]) && text(data.name) && stateOf(data.lifecycle),
-  [RuntimeObservationTypes.Log]: data => isObject(data) && exact(data, ["level", "message"], ["data"]) && text(data.level) && levels.has(data.level) && text(data.message),
 };
 
 export interface ServiceRuntimeOptions {
@@ -86,6 +86,7 @@ export class DeterministicServiceRuntime {
       for (const [type, validate] of Object.entries(schemas)) options.setup.registerObservationSchema(type, validate);
       registeredSchemas.add(options.setup);
     }
+    registerRuntimeLogSchema(options.setup);
     options.setup.registerHandler(this.#types.lifecycle, options.id, (event, context) => {
       const payload = event.payload as { next: ServiceState; reason?: string };
       this.#transition(payload.next, context, event, payload.reason ?? "scenario");
