@@ -6,6 +6,8 @@ import { DeterministicScheduler, type SchedulerOptions } from "./scheduler.js";
 import { ExecutionHistory, type ExecutionHistoryOptions } from "./history.js";
 import { DeterministicIdAllocator } from "./identity.js";
 import { SeededRandom } from "./random.js";
+import { DeterministicVirtualNetwork, type NetworkLinks, type NetworkSetup } from "./network.js";
+import type { FaultDecisionPort } from "@distlab/contracts";
 
 export type CoreClockPort = VirtualClock & ClockController & {
   advanceTo(time: ReturnType<VirtualClock["now"]>, causingEventId?: string): void;
@@ -31,6 +33,8 @@ export interface HeadlessFactoryOptions {
   readonly createRandom?: (seed: string) => SeededRandomPort;
   /** Construct a fresh read-only assessment hook for every attempt, before setup. */
   readonly createBoundaryHook?: (history: ExecutionHistoryReader, observations: ObservationSink) => BoundaryReadHook;
+  /** Network configuration and neutral or injected fault decisions, recreated on reset. */
+  readonly network?: { readonly targets: readonly ComponentId[]; readonly links: NetworkLinks; readonly faults?: FaultDecisionPort };
 }
 
 /** Yield only between boundaries; never consult host time or change modeled state. */
@@ -49,7 +53,7 @@ const fail = (code: string): never => throwSimulationError(code);
 export class HeadlessSimulationFactory implements SimulationFactory {
   readonly #options: HeadlessFactoryOptions;
   constructor(options: HeadlessFactoryOptions = {}) { this.#options = Object.freeze({ ...options }); }
-  createSimulation(inputs: RunInputs, initialize: (setup: SimulationSetup) => void): HeadlessSimulation {
+  createSimulation(inputs: RunInputs, initialize: (setup: SimulationSetup & NetworkSetup) => void): HeadlessSimulation {
     return new HeadlessSimulation(inputs, initialize, this.#options);
   }
 }
@@ -76,12 +80,12 @@ export class HeadlessSimulation implements Simulation {
   #history!: CoreHistoryPort;
   #random!: SeededRandomPort;
   readonly #inputs!: RunInputs;
-  readonly #initialize!: (setup: SimulationSetup) => void;
+  readonly #initialize!: (setup: SimulationSetup & NetworkSetup) => void;
   readonly #runId!: string;
   readonly #options: HeadlessFactoryOptions;
   #boundaryHook: BoundaryReadHook | undefined;
 
-  constructor(inputs: RunInputs, initialize: (setup: SimulationSetup) => void, options: HeadlessFactoryOptions = {}) {
+  constructor(inputs: RunInputs, initialize: (setup: SimulationSetup & NetworkSetup) => void, options: HeadlessFactoryOptions = {}) {
     this.#options = options;
     try {
       const copied = canonicalCopy(inputs) as unknown as RunInputs;
@@ -202,9 +206,29 @@ export class HeadlessSimulation implements Simulation {
     const owners = new Map<string, string>([[wakeType, "simulation"]]);
     const schedulerOptions: SchedulerOptions = { runId: this.#runId, clock: this.#clock, handlers: owners, observations: this.#history };
     this.#scheduler = this.#options.createScheduler?.(schedulerOptions) ?? new DeterministicScheduler(schedulerOptions);
+    const network = this.#options.network ? new DeterministicVirtualNetwork({
+      ...this.#options.network, clock: this.#clock, scheduler: this.#scheduler, operations: this.operations,
+      observations: this.#history, random: this.random, runId: this.#runId,
+      activeOwner: () => this.#active?.owner, dispatching: () => this.#dispatching,
+      correlation: () => { const event = this.#originEvent ?? this.#event; return event ? { ...(event.traceId ? { traceId: event.traceId } : {}), ...(event.spanId ? { spanId: event.spanId } : {}), eventId: event.id } : {}; },
+      check: () => this.#check(generation),
+    }) : undefined;
+    if (network) for (const [type, handler] of network.handlers()) { owners.set(type, "simulation"); this.#handlers.set(type, { owner: "simulation", handler }); }
     let sealed = false;
     let active = true;
-    const setup: SimulationSetup = Object.freeze({
+    const setup: SimulationSetup & NetworkSetup = Object.freeze({
+      networkFor: (owner: ComponentId) => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.forOwner(owner); },
+      networkController: () => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.controller; },
+      networkInFlight: () => { this.#check(generation); if (!network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.inFlight(); },
+      enqueueNetworkWork: (owner: ComponentId, type: string, payload: CanonicalValue) => this.#guard(generation, () => {
+        this.#check(generation);
+        if (!this.#dispatching || !network || this.#handlers.get(type)?.owner !== owner) return fail(ErrorCodes.INVALID_EVENT_TYPE);
+        const event = this.#event;
+        return this.#boundHandle(this.#scheduler.schedule({ time: this.#clock.now(), type, payload,
+          source: owner, target: owner, ...(event?.traceId ? { traceId: event.traceId } : {}),
+          ...(event?.spanId ? { spanId: event.spanId } : {}), ...(event?.parentSpanId ? { parentSpanId: event.parentSpanId } : {}),
+          ...(event?.causationId ? { causationId: event.causationId } : {}) }), generation);
+      }),
       registerHandler: (type: string, owner: string, handler: EventHandler) => {
         this.#check(generation);
         if (!active) fail(ErrorCodes.STALE_CAPABILITY);
@@ -219,7 +243,7 @@ export class HeadlessSimulation implements Simulation {
         this.#history.registerSchema(type, validate);
       },
       schedule: (draft: Parameters<SimulationSetup["schedule"]>[0]) => {
-        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY); sealed = true;
+        this.#check(generation); if (!active) fail(ErrorCodes.STALE_CAPABILITY); sealed = true; network?.seal();
         if (draft.type === wakeType) return fail(ErrorCodes.INVALID_EVENT_TYPE);
         return this.#boundHandle(this.#scheduler.schedule(draft), generation);
       },
@@ -231,6 +255,7 @@ export class HeadlessSimulation implements Simulation {
         this.#check(generation); return history.record(input);
       }) }));
       this.#initialize(setup);
+      network?.seal();
       sealed = true; active = false;
       this.#boundaryHook?.afterInitialization();
       this.#status = "READY";

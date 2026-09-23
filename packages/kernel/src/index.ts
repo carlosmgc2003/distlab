@@ -5,3 +5,4 @@ export { DeterministicCorrelationController, DeterministicIdAllocator, isIdentif
 export { ExecutionHistory, type ExecutionHistoryOptions, type VirtualTimeSource } from "./history.js";
 export { DeterministicScheduler, type SchedulerOptions } from "./scheduler.js";
 export { DeterministicVirtualClock, addDuration, type ClockOptions, type SleepPort } from "./clock.js";
+export { DeterministicVirtualNetwork, type NetworkLinks, type NetworkSetup, type NetworkFlight, type NetworkOptions } from "./network.js";

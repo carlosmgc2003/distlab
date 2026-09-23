@@ -7,7 +7,8 @@ DistLab is a work-in-progress browser-based educational simulator for distribute
 DistLab is in the early implementation phase. `@distlab/contracts` encodes the
 shared simulation types; `@distlab/kernel` provides canonical data, execution
 history, deterministic scheduling, virtual time, seeded randomness, and a
-headless simulation runner. There is no browser UI or runtime network model yet.
+headless simulation runner and deterministic virtual request/response network.
+There is no browser UI yet.
 
 ## Goals
 
@@ -58,6 +59,18 @@ and `taskLifecycle` for abandonment. `HeadlessSimulationFactory` optionally
 accepts a per-attempt `createBoundaryHook` for deterministic read-side checks.
 The host yields through `MessageChannel` only between event boundaries.
 Handlers use generators and virtual sleeps, not native async work. No browser, React, or scenario interpreter is required.
+
+To enable modeled network transport, pass directed `network.targets` and
+`network.links` to `HeadlessSimulationFactory`. The initializer obtains
+owner-bound request ports with `setup.networkFor(owner)` and a trusted reply and
+registration port with `setup.networkController()`. Receivers can enqueue
+target-owned work using `setup.enqueueNetworkWork(owner, type, payload)` during
+delivery. Register handlers and receivers before the first initial event is
+scheduled. `setup.networkInFlight()` returns detached pending metadata. An
+optional `network.faults` port supplies request and response leg decisions;
+without it, the decision is neutral. See the executable
+[`network tests`](packages/kernel/tests/network.test.ts) for success, timeout,
+lost response, reset, and callback examples.
 
 Golden scenario 01 is a runnable, UI-free fixture in
 [`packages/kernel/examples/golden-01.ts`](packages/kernel/examples/golden-01.ts).

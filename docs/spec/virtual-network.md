@@ -74,6 +74,16 @@ adapters receive `NetworkController`. Registration is initialization-only,
 unique per target, and sealed before scheduling. Receivers enqueue controlled
 target work through their adapter, never invoke another component inline.
 
+The headless kernel wires this through the optional factory `network` setting
+(`targets`, directed `links`, and optional fault-decision port). Its initializer
+exposes `networkFor`, `networkController`, `enqueueNetworkWork`, and
+`networkInFlight` to trusted adapters. The enqueue method schedules a
+target-owned handler at the current virtual time and carries the delivery
+correlation. A receiver may provide an `admit` check that returns
+`TARGET_UNAVAILABLE` or `ENDPOINT_NOT_FOUND`; the transport sends that code
+as an error reply. This adapter hook does not change the public
+`NetworkReceiver.accept` contract.
+
 ### Operation semantics and errors
 
 `request` is legal only in an active controlled task. Validate endpoint,
