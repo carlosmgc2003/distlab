@@ -325,6 +325,7 @@ export class HeadlessSimulation implements Simulation {
       }),
       networkFor: (owner: ComponentId) => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.forOwner(owner); },
       networkController: () => { this.#check(generation); if (!active || !network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.controller; },
+      networkHasLink: (source: ComponentId, target: ComponentId) => { this.#check(generation); if (!network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.hasLink(source, target); },
       networkInFlight: () => { this.#check(generation); if (!network) return fail(ErrorCodes.INVALID_REGISTRATION); return network.inFlight(); },
       messageBusFor: (owner: ComponentId) => { this.#check(generation); if (!active || !messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.forOwner(owner); },
       messageBusController: () => { this.#check(generation); if (!active || !messageBus) return fail(ErrorCodes.INVALID_REGISTRATION); return messageBus.controller; },

@@ -460,6 +460,30 @@ test("invalid configuration and invalid decisions terminate before provider stat
   assert.equal(payload<{ after: { latency: number } }>(changes[0]).after.latency, 5);
 });
 
+test("a callback without a provider link invalidates the whole decision before the effect", async () => {
+  const { sim, provider } = boot("callback-link", {
+    targets: ["billing", "unlinked", "provider"],
+    links: [{ source: "billing", target: "provider" }],
+    operation: { apply: (_body, state) => ({
+      nextState: { n: (state as { n: number }).n + 1 },
+      reply: { status: "ok", body: null },
+      visibleChanges: { n: 1 },
+      callbacks: [{ after: duration(0), request: { target: "unlinked", endpoint: "callback", body: null } }],
+    }) },
+    build: (setup, _provider, simulation) => {
+      const billing = service(simulation, setup, "billing", { endpoints: {}, background: { call: function* (_data, ctx): ControlledTask {
+        yield ctx.http.request({ target: "provider", endpoint: "authorize", body: null });
+      } } });
+      start(setup, billing); call(setup, billing, 1);
+    },
+  });
+  await assert.rejects(sim.run(), (error: unknown) => codeOf(error) === ErrorCodes.INVALID_EXTERNAL_CONFIGURATION);
+  assert.equal(provider.boundary().effectCount, 0);
+  assert.equal(provider.boundary().scheduledCallbackCount, 0);
+  assert.equal(provider.inspect().visible, null);
+  assert.equal(sim.history.query({ type: committed }).length, 0);
+});
+
 test("a business error reply commits the effect and still answers the caller", async () => {
   const replies: NetworkReply[] = [];
   const { sim, provider } = boot("business-error", {

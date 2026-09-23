@@ -9,6 +9,8 @@ export type NetworkLinks = readonly { readonly source: ComponentId; readonly tar
 export interface NetworkSetup {
   networkFor(owner: ComponentId): VirtualNetwork;
   networkController(): NetworkController;
+  /** Trusted topology check for validating provider callback plans before effects commit. */
+  networkHasLink(source: ComponentId, target: ComponentId): boolean;
   networkInFlight(): readonly NetworkFlight[];
   /** Trusted receiver adapter schedules target-owned controlled work. */
   enqueueNetworkWork(owner: ComponentId, type: string, payload: CanonicalValue): ScheduledHandle;
@@ -104,6 +106,10 @@ export class DeterministicVirtualNetwork {
     });
   }
   #key(source: string, target: string): string { return `${source}\u0000${target}`; }
+  hasLink(source: ComponentId, target: ComponentId): boolean {
+    this.#options.check();
+    return this.#targets.has(target) && this.#links.has(this.#key(source, target));
+  }
   seal(): void { this.#sealed = true; }
   forOwner(owner: ComponentId): VirtualNetwork {
     this.#options.check();

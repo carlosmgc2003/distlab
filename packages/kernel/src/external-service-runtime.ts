@@ -321,7 +321,7 @@ export class DeterministicExternalServiceRuntime implements ExternalRuntime {
     if (sameBehavior(current, next)) return;
     const before = published(current);
     this.#behaviors.set(operation, next);
-    this.#observe(ExternalObservationTypes.BehaviorChanged, { operation, before, after: published(next) });
+    this.#observe(ExternalObservationTypes.BehaviorChanged, { operation, before, after: published(next) }, this.#initializing ? undefined : this.#options.activeEvent());
   }
 
   #setAvailability(state: ExternalAvailability): void {
@@ -330,7 +330,7 @@ export class DeterministicExternalServiceRuntime implements ExternalRuntime {
     if (state === this.#availability) return;
     const before = this.#availability;
     this.#availability = state;
-    this.#observe(ExternalObservationTypes.AvailabilityChanged, { before, after: state });
+    this.#observe(ExternalObservationTypes.AvailabilityChanged, { before, after: state }, this.#initializing ? undefined : this.#options.activeEvent());
   }
 
   #observe(type: string, data: CanonicalValue, event?: ScheduledEvent): void {
@@ -427,7 +427,8 @@ export class DeterministicExternalServiceRuntime implements ExternalRuntime {
       if (!plain(plan) || !exact(plan, ["after", "request"]) || !isDuration(plan.after)) this.#fail(ErrorCodes.INVALID_EXTERNAL_CONFIGURATION);
       const request = plan.request;
       if (!plain(request) || !exact(request, ["target", "endpoint", "body"]) || !isIdentifier(request.target)
-        || typeof request.endpoint !== "string" || !request.endpoint.trim()) {
+        || typeof request.endpoint !== "string" || !request.endpoint.trim()
+        || !this.#options.setup.networkHasLink(this.#definition.id, request.target)) {
         this.#fail(ErrorCodes.INVALID_EXTERNAL_CONFIGURATION);
       }
       let due: SimulationTime;
