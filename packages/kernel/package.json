@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "npm run build -w @distlab/contracts --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit",
+    "golden:01": "npm run build -w @distlab/contracts --silent && npm run build -w @distlab/kernel --silent && node --experimental-strip-types examples/golden-01.ts",
     "test": "npm run build -w @distlab/contracts --silent && tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit && node --test --experimental-strip-types tests/*.test.ts"
   }
 }

@@ -59,11 +59,19 @@ accepts a per-attempt `createBoundaryHook` for deterministic read-side checks.
 The host yields through `MessageChannel` only between event boundaries.
 Handlers use generators and virtual sleeps, not native async work. No browser, React, or scenario interpreter is required.
 
+Golden scenario 01 is a runnable, UI-free fixture in
+[`packages/kernel/examples/golden-01.ts`](packages/kernel/examples/golden-01.ts).
+`npm run golden:01` prints its final state and canonical history. Its checked-in
+[digest and expected state](packages/kernel/examples/golden-01.expected.json)
+are verified by `npm test` across independent continuous runs, repeated steps,
+per-boundary resumes, and reset/replay.
+
 ```sh
 npm install
 npm run build
 npm run typecheck
 npm test
+npm run golden:01                # print headless golden scenario 01
 ```
 
 ## License

@@ -1,40 +1,56 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HeadlessSimulationFactory, SeededRandom } from "@distlab/kernel";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { createGolden01, golden01Result } from "../examples/golden-01.ts";
+import { HeadlessSimulationFactory, SeededRandom, canonicalEncode } from "@distlab/kernel";
 import { duration, simulationTime } from "@distlab/contracts/kernel";
 import type { RunInputs, SimulationSetup } from "@distlab/contracts/kernel";
 
 const inputs: RunInputs = { contractVersion: 1, modelVersions: { "kernel.random": "xoshiro128ss-splitmix32-v1" }, architecture: {}, scenario: {}, configuration: { startTime: simulationTime(0), historyLimit: 1000, visibility: { defaultMode: "visible", byType: {}, summaryFields: {} }, models: {} }, seed: "distlab" };
 const factory = new HeadlessSimulationFactory();
-function fixture(output: string[]) {
-  return factory.createSimulation(inputs, setup => {
-    setup.registerHandler("start", "service", function* (_, ctx) {
-      output.push("start");
-      yield ctx.clock.sleep(duration(2));
-      output.push("awake");
-      yield ctx.clock.sleep(duration(0));
-      output.push("done");
-    });
-    setup.registerHandler("other", "service", () => { output.push("other"); });
-    setup.schedule({ time: simulationTime(0), type: "start", payload: {} });
-    setup.schedule({ time: simulationTime(1), type: "other", payload: {} });
-  });
-}
-test("golden 01: continuous, stepped, fresh and reset replay identical history", async () => {
-  const a: string[] = [], b: string[] = [];
-  const continuous = fixture(a), stepped = fixture(b);
-  assert.equal((await continuous.run({ maxEventsPerYield: 1 })).processedEvents, 4);
-  while (stepped.status !== "COMPLETED") await stepped.step();
-  assert.deepEqual(a, ["start", "other", "awake", "done"]);
-  assert.deepEqual(a, b);
-  assert.deepEqual(continuous.history.export(), stepped.history.export());
-  const first = continuous.history.export();
-  a.length = 0;
-  await continuous.reset();
-  await continuous.run();
-  assert.deepEqual(continuous.history.export(), first);
-  assert.deepEqual(a, b);
+test("golden 01: fresh, reset, continuous, stepping, and per-boundary resume match canonical output", async () => {
+  const continuous = createGolden01();
+  const fresh = createGolden01();
+  const stepped = createGolden01();
+  const bounded = createGolden01();
+  const initial = golden01Result(continuous);
+  assert.deepEqual(golden01Result(fresh), initial);
+  assert.equal((await continuous.simulation.run()).processedEvents, 4);
+  assert.equal((await fresh.simulation.run({ maxEventsPerYield: 1 })).processedEvents, 4);
+  const sequences: number[] = [];
+  while (stepped.simulation.status !== "COMPLETED") {
+    const step = await stepped.simulation.step();
+    if (step) sequences.push(step.sequence);
+  }
+  assert.deepEqual(sequences, [0, 1, 2, 3]);
+  while (bounded.simulation.status !== "COMPLETED") {
+    const result = await bounded.simulation.run({ maxEvents: 1, maxEventsPerYield: 1 });
+    assert.equal(result.processedEvents, 1);
+  }
+  const expected = JSON.parse(readFileSync(new URL("../examples/golden-01.expected.json", import.meta.url), "utf8")) as {
+    digest: string; state: { order: string[]; draws: number[]; committed: number }; observationCount: number;
+  };
+  const result = golden01Result(continuous);
+  assert.equal(result.digest, expected.digest);
+  assert.equal(canonicalEncode(result.state), canonicalEncode(expected.state));
+  assert.equal(result.history.observations.length, expected.observationCount);
+  for (const another of [fresh, stepped, bounded]) assert.deepEqual(golden01Result(another), result);
+  await continuous.simulation.reset();
+  assert.deepEqual(golden01Result(continuous), initial);
+  await continuous.simulation.run();
+  assert.deepEqual(golden01Result(continuous), result);
 });
+test("golden 01 is executable headlessly as a standalone CLI", () => {
+  const script = fileURLToPath(new URL("../examples/golden-01.ts", import.meta.url));
+  const result = JSON.parse(execFileSync(process.execPath, ["--experimental-strip-types", script], { encoding: "utf8" })) as ReturnType<typeof golden01Result>;
+  const expected = JSON.parse(readFileSync(new URL("../examples/golden-01.expected.json", import.meta.url), "utf8")) as { digest: string };
+  assert.equal(result.status, "COMPLETED");
+  assert.equal(result.digest, expected.digest);
+  assert.equal(result.history.terminalFailure, undefined);
+});
+
 test("equal-time wakeups resume in scheduler sequence, including zero-delay sleeps", async () => {
   const order: string[] = [];
   const sim = factory.createSimulation(inputs, setup => {
@@ -81,7 +97,7 @@ test("seed vectors and revoked random ports", async () => {
   assert.deepEqual(Array.from({ length: 5 }, () => random.draw("test").uint32), [1629508329, 3786623983, 3349857114, 1564400182, 2109307711]);
   const second = new SeededRandom("mvp-response-lost-001");
   assert.deepEqual(Array.from({ length: 5 }, () => second.draw("test").uint32), [1848708011, 276145100, 3342336838, 2133524352, 2602090516]);
-  const sim = fixture([]), port = sim.random;
+  const sim = createGolden01().simulation, port = sim.random;
   await sim.reset();
   assert.throws(() => port.draw("old"), { code: "STALE_CAPABILITY" });
 });
