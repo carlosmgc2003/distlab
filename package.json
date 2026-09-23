@@ -3,10 +3,16 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "build": "npm run build -w @distlab/contracts && npm run build -w @distlab/kernel && npm run build -w @distlab/scenario && npm run build -w @distlab/catalogs",
+    "build": "npm run build:packages && npm run build -w @distlab/web",
+    "build:packages": "npm run build -w @distlab/contracts && npm run build -w @distlab/kernel && npm run build -w @distlab/scenario && npm run build -w @distlab/catalogs",
+    "dev": "npm run build:packages && npm run dev -w @distlab/web",
+    "test:browser": "npm run build:packages && npm run test:browser -w @distlab/web",
+    "test:boundaries": "npm run test:boundaries -w @distlab/web",
+    "browser:install": "npm exec -w @distlab/web -- playwright install chromium",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "golden:01": "npm run golden:01 -w @distlab/kernel",
@@ -21,6 +27,6 @@
     "typescript": "^5.9.2"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   }
 }

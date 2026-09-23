@@ -22,9 +22,14 @@ documents when a code change alters a stated architectural guarantee.
 
 ```sh
 npm install                       # install workspace dependencies
-npm run build                     # build contracts, kernel, scenario, and catalogs
+npm run browser:install            # install Chromium once for browser tests
+npm run dev                       # build packages and start the Vite browser app
+npm run build                     # build packages and the static browser/worker bundles
+npm run build:packages            # build contracts, kernel, scenario, and catalogs
 npm run typecheck                 # typecheck all workspaces and tests
-npm test                          # run contracts, kernel, scenario, and checkout tests
+npm test                          # run all unit, worker, boundary, and browser tests
+npm run test:browser               # browser smoke test against the production build
+npm run test:boundaries            # verify app and package import boundaries
 npm run golden:01                 # print UI-free golden scenario 01 state/history
 npm run golden:02                 # print UI-free golden scenario 02 state/history
 npm run golden:04                 # print UI-free golden scenario 04 state/history
@@ -38,6 +43,18 @@ git status --short                # confirm the intended files are included
 
 Add new setup, build, run, and test commands here when introducing a toolchain;
 they should also be documented in the project README.
+
+The browser toolchain requires Node.js 22.12 or newer. On Linux CI, install
+Chromium system dependencies with
+`npm exec -w @distlab/web -- playwright install --with-deps chromium` if needed.
+`apps/web/src/worker/` is the browser runtime composition root. Main-thread
+modules may import application contracts, the host client, and the data-only
+`packages/catalogs/src/scenarios.ts` module; they must not import runtime model
+factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
+`@distlab/contracts`, and status is a projection field, not a new command.
+The initial host accepts only the two packaged checkout documents; broader
+scenario support requires an explicit counter read port rather than inferred
+counts from arbitrary/redacted history.
 
 ## Coding Style & Naming Conventions
 
