@@ -222,3 +222,15 @@ test("a foreign controlled task cannot begin against the service database", asyn
   await assert.rejects(run.sim.run(), { code: "INVALID_DATABASE_OPERATION" });
   assert.equal(run.db.revision, 0);
 });
+
+test("a synchronous service handler can read and its open writes roll back on exit", async () => {
+  const seen: unknown[] = [];
+  const run = fixture({ inspect: (_, ctx) => {
+    const tx = ctx.db!.begin(); seen.push(tx.get("stock", "a")?.available);
+    tx.update("stock", "a", { sku: "a", available: 0 });
+  } }, (runtime, setup) => work(runtime, setup, "inspect", 1));
+  await run.sim.run();
+  assert.deepEqual(seen, [2]);
+  assert.equal(run.db.inspect().tables.stock!.a!.available, 2);
+  assert.equal(run.sim.history.query({ type: "database.transaction.rolledback" }).length, 1);
+});

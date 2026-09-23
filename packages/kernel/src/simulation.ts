@@ -126,7 +126,12 @@ export class HeadlessSimulation implements Simulation {
   /** Trusted storage adapters use task identity to fence writable handles. */
   get activeTaskIdentity(): Readonly<{ id: string; owner: ComponentId; processGeneration: number }> | undefined {
     const task = this.#active;
-    return task && Object.freeze({ id: task.id, owner: task.owner, processGeneration: task.processGeneration });
+    if (task) return Object.freeze({ id: task.id, owner: task.owner, processGeneration: task.processGeneration });
+    const event = this.#dispatching ? this.#event : undefined;
+    const owner = event && this.#handlers.get(event.type)?.owner;
+    const processGeneration = owner ? this.#processGenerations.get(owner) : undefined;
+    return event && owner && processGeneration !== undefined
+      ? Object.freeze({ id: `dispatch:${event.id}`, owner, processGeneration }) : undefined;
   }
   /** Trusted adapter ports; every use remains subject to the run's terminal latch. */
   get storageObservations(): ObservationSink { const generation = this.#generation; return Object.freeze({
