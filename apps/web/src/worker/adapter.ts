@@ -4,6 +4,7 @@ import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, normalizeScenario } from "@distlab/scenario";
 import type { DeterministicScenarioSession } from "@distlab/scenario";
 import { applicationError, detached, isCanonical, isWorkerCommand, requestIdOf } from "../protocol.ts";
+import { studentComponents } from "./student-projection.ts";
 
 /** The sole runtime composition root. The transport delegates every control to Simulation. */
 export class WorkerAdapter {
@@ -142,8 +143,11 @@ export class WorkerAdapter {
         pendingEvents, processedEvents, randomDrawCount: 0,
       },
       history: { observations: history.observations },
-      // The scenario boundary is authorized host state, not implicitly student-visible state.
-      components: Object.entries(components).map(([componentId, state]) => ({ componentId, state, visibility: "host" as const })),
+      components: [
+        // Host entries preserve the assessment read model and stay unrendered.
+        ...Object.entries(components).map(([componentId, state]) => ({ componentId, state, visibility: "host" as const })),
+        ...studentComponents(read),
+      ],
     });
   }
   #emit(event: WorkerEvent): void {

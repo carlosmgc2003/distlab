@@ -58,7 +58,6 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(architecture).toContainText("Dashed arrow: MessageBus subscription");
     const before = await page.evaluate(() => window.workerEvidence.events.find(event => event.type === "loaded"));
     expect(before?.type).toBe("loaded");
-    const execution = await page.getByRole("region", { name: "Execution" }).innerText();
     for (const component of components) {
       const node = page.getByRole("button", { name: `${component.name}, ${component.category}`, exact: true });
       await expect(node).toContainText(component.category);
@@ -109,8 +108,11 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.mouse.down(); await page.mouse.move(bounds.x + 75, bounds.y + bounds.height / 2 + 30, { steps: 8 }); await page.mouse.up();
     await expect(viewport).not.toHaveAttribute("style", transform!);
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
-    // A picker change must not replace the metadata belonging to the loaded graph.
-    await page.getByLabel("Scenario").selectOption(scenario === "normal" ? "response-lost" : "normal");
+    // Changing the experiment replaces the worker. The shared architecture metadata remains.
+    const other = scenario === "normal" ? "response-lost" : "normal";
+    await page.getByLabel("Scenario").selectOption(other);
+    await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+    await expect(page.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1");
     await orders.click();
     await expect(inspector).toContainText("Database owned by orders: orders, outbox");
     await expect(orders).toHaveAttribute("aria-controls", "component-inspector");
@@ -119,14 +121,16 @@ for (const scenario of ["normal", "response-lost"]) {
     await inspectorLink.press("Enter");
     await expect(inspector).toBeFocused();
     await expect(inspector).toHaveCSS("outline-style", "solid");
-    expect(await page.getByRole("region", { name: "Execution" }).innerText()).toBe(execution);
-    expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load"]);
+    expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load", "load"]);
+    const switched = await page.evaluate(() => window.workerEvidence.events.filter(event => event.type === "loaded").at(-1));
     await page.evaluate(() => window.workerEvidence.probeHistory());
     await expect.poll(() => page.evaluate(() => window.workerEvidence.events.some(event => event.type === "projection.updated" && event.requestId === "e2e-history-probe"))).toBe(true);
     const after = await page.evaluate(() => window.workerEvidence.events.find(event => event.type === "projection.updated" && event.requestId === "e2e-history-probe"));
-    if (before?.type !== "loaded" || after?.type !== "projection.updated") throw new Error("Missing worker evidence");
-    expect(after.projection.history).toEqual(before.projection.history);
-    expect(after.projection.components).toEqual(before.projection.components);
+    if (before?.type !== "loaded" || switched?.type !== "loaded" || after?.type !== "projection.updated") throw new Error("Missing worker evidence");
+    expect(switched.projection.simulation.runId).not.toBe(before.projection.simulation.runId);
+    expect(switched.projection.simulation.processedEvents).toBe(0);
+    expect(after.projection.history).toEqual(switched.projection.history);
+    expect(after.projection.components).toEqual(switched.projection.components);
     expect(after.projection.simulation.processedEvents).toBe(0);
     await page.screenshot({ path: testInfo.outputPath("architecture.png"), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

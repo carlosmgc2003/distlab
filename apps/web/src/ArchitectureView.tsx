@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Background, Controls, Handle, Panel, Position, ReactFlow, useReactFlow } from "@xyflow/react";
 import type { NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
@@ -52,12 +53,13 @@ function PanControls() {
   </Panel>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText }: {
+export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
   readonly emphasis?: GraphEmphasis;
   readonly movementText?: string;
+  readonly inspectorFacts?: (componentId: string) => ReactNode;
 }) {
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
@@ -115,7 +117,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           <PanControls />
         </ReactFlow>
       </div>
-      <ComponentInspector node={graph.nodes.find(node => node.id === selectedId)} />
+      <ComponentInspector node={graph.nodes.find(node => node.id === selectedId)}>
+        {selectedId && inspectorFacts ? inspectorFacts(selectedId) : null}
+      </ComponentInspector>
     </div>
     <div className="graph-legend" aria-label="Architecture legend">
       <p><span className="line-sample request" aria-hidden="true" /> Solid arrow: request link</p>

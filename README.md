@@ -189,7 +189,7 @@ The adapter acknowledges valid commands with `accepted`. `load` finishes with
 kernel error context. Projection notifications are coalesced to control
 boundaries, and the kernel yields every 16 events so pause messages can arrive.
 Projections are copied and recursively frozen on both sides of structured clone.
-Component state is labeled `host` visibility and is not rendered by the shell.
+Component state labeled `host` stays on the projection for assessment comparison and is not rendered. The shell renders a separate `student` projection: committed Orders and Payments rows, service lifecycle, bus delivery state, the client-observed checkout outcome, and Payment Processor authorization facts. Provider counters and runtime handles are omitted from that projection.
 
 This initial host accepts exactly the two packaged checkout documents. Their
 complete, visible scheduler observations provide pending/processed event counts,
@@ -234,7 +234,7 @@ the same way a projectionless failure stays visible until reset.
 Request links and subscriptions come from the architecture projection. The
 Orders publication relationship and model-owned resource descriptions are
 documented lesson copy, restricted to the two packaged checkout lessons and
-their model versions. The inspector never renders live component state.
+their model versions. The component inspector adds the student-visible facts for the selected component. Distributed state shows the loaded scenario name, seed, and fault rule, and it selects the matching timeline observation. A network timeout is described as a missing response, not as proof of denial or rollback. Changing the experiment after a session is loaded replaces the worker; fault rules are not edited during a run.
 Browser tests cover keyboard focus, desktop/mobile accessibility with axe,
 empty/error states, and unchanged worker history after UI interactions.
 
