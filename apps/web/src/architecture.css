@@ -53,6 +53,10 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
 .fact-list dt { margin-top: 0; }
 .scenario-help { max-width: 85ch; color: #475569; }
+.lesson-guide { margin-top: 16px; padding: 16px; border: 1px solid #94a3b8; border-radius: 12px; background: #fff; }
+.lesson-guide h2 { margin: 0 0 8px; }
+.lesson-guide p { max-width: 85ch; margin: 8px 0; }
+.lesson-guide [role="status"] { border-left: 4px solid #0f766e; background: #f0fdfa; padding: 10px 12px; }
 .graph-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: .85rem; }
 .line-sample { display: inline-block; vertical-align: middle; width: 30px; border-top: 2px solid #334155; margin-right: 6px; }
 .line-sample.subscription { border-top-style: dashed; }

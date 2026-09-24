@@ -4,11 +4,11 @@ DistLab is a work-in-progress browser-based educational simulator for distribute
 
 ## Project status
 
-DistLab is in the early implementation phase. `@distlab/contracts` encodes the
-shared simulation types; `@distlab/kernel` provides canonical data, execution
+DistLab has a browser checkout lesson backed by deterministic headless models.
+`@distlab/contracts` encodes the shared simulation types; `@distlab/kernel` provides canonical data, execution
 history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
-`apps/web` provides a minimal React scenario chooser backed by a Web Worker.
+`apps/web` provides the React lesson backed by a Web Worker.
 `@distlab/catalogs` provides versioned checkout
 models, two scenarios, and their assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
@@ -153,6 +153,7 @@ npm run golden:04                # print headless golden scenario 04
 npm run golden:05                # print headless golden scenario 05
 npm run golden:06                # print headless golden scenario 06
 npm run golden:07                # print headless golden scenario 07
+npm exec -w @distlab/web -- playwright test checkout-lesson.spec.ts # focused lesson E2E
 ```
 
 ## License
@@ -247,5 +248,30 @@ rule; the provider records one approved authorization while Payments records
 `UNKNOWN` and `NETWORK_TIMEOUT`. Run `npm test -w @distlab/catalogs` for the
 headless proof, including fresh, stepped, and reset replay comparisons.
 
-Install with `npm install`, then use `npm run build`, `npm run typecheck`, and
-`npm test` for all workspaces.
+With Node.js 22.12 or newer, run `npm install`, `npm run browser:install`, and
+`npm run dev`, then open `http://127.0.0.1:5173` in Chromium. Select **Checkout
+with lost processor response** and **Load scenario**. The lesson guides a first
+run through the four category cues, request and message links, Run/Pause/Step,
+movement, timeline, component state, and fault evidence. Inspect the processor's
+approved authorization alongside Payments' `NETWORK_TIMEOUT` and `UNKNOWN` row.
+The timeout means Payments did not receive a response; it does not establish
+payment failure. Reset and run again to reproduce the same virtual-time history.
+The normal checkout uses the same architecture without a fault rule.
+
+The entry point reports an empty session before load, loading and worker errors,
+and a completed run with a reset prompt. Keyboard users can Tab to controls and
+graph nodes, activate them with Enter or Space, and use the timeline with arrow
+keys. Reduced motion removes the movement animation while retaining its text
+cue. The layout fits a 390 px viewport without horizontal page overflow.
+
+Run `npm run build`, `npm run typecheck`, and `npm test` for the full repository.
+For the focused browser workflow, run
+`npm exec -w @distlab/web -- playwright test checkout-lesson.spec.ts` after
+`npm run build:packages`. The browser test captures the actual worker projection,
+compares its canonical observations, host state, time, and assertion observations
+with a fresh headless response-lost run whose assessment results all pass, then
+checks equality across a reset and rerun. Headless scenarios remain the semantic
+oracle; browser checks cover the lesson interaction and presentation. The browser
+runs locally from static assets and a Web Worker, with no backend. Editing the
+architecture, adding scenarios, grading, persistence, snapshots, and deployment
+services remain outside this checkout MVP.

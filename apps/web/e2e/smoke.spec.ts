@@ -41,12 +41,12 @@ for (const scenario of ["normal", "response-lost"]) {
     page.on("pageerror", error => errors.push(error.message));
     await observeWorker(page);
     await page.goto("/");
-    await expect(page.getByRole("status")).toHaveText("Choose a scenario to begin.");
+    await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("Choose a scenario to begin.");
     await page.getByLabel("Scenario").selectOption(scenario);
     const started = page.waitForEvent("worker");
     await page.getByRole("button", { name: "Load scenario" }).click();
     expect((await started).url()).toMatch(/entry-.*\.js$/);
-    await expect(page.getByRole("status").filter({ hasText: "READY" })).toBeVisible();
+    await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     const architecture = page.getByRole("region", { name: "Architecture", exact: true });
     const inspector = page.getByRole("complementary", { name: "Component inspector" });
     await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();

@@ -25,6 +25,12 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const edges = useMemo(() => projection && lesson
     ? movementEdges(mapArchitecture(projection.architecture, lesson.architecture, lesson.name).edges) : [], [projection, lesson]);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
+  const lessonState = loading ? "Loading the checkout lesson…"
+    : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
+    : snapshot.error ? "The lesson could not be opened. Choose a scenario and load it again."
+    : !projection ? "No lesson is loaded. Choose a checkout experiment to begin."
+    : projection.simulation.status === "COMPLETED" ? "Run complete. Compare Payments with the processor, then Reset and run again."
+    : "Lesson ready. Follow the request from Customer App through Orders, MessageBus, Payments, and the processor.";
   const sessionKey = `${loadedChoice?.id ?? ""}:${snapshot.attempt}:${projection?.simulation.runId ?? ""}`;
 
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
@@ -56,6 +62,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
       <button disabled={busy} onClick={() => replaceSession(selected)}>Load scenario</button>
     </div>
     <p id="scenario-help" className="scenario-help">Choose the normal checkout or the recorded response-lost rule. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+    <section className="lesson-guide" aria-labelledby="lesson-heading">
+      <h2 id="lesson-heading">Checkout lesson</h2>
+      <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
+      <p>For the response-lost experiment, find the processor authorization, the dropped response, and the Payments timeout. What does Payments know, and what does the processor know? Does the timeout prove that payment failed?</p>
+      <p>Reset and run again to compare the same virtual-time history.</p>
+      <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
+    </section>
     <SimulationControls host={host} snapshot={snapshot} />
     {projection ? <>
       <section aria-labelledby="architecture-heading">
