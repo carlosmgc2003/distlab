@@ -28,7 +28,7 @@ function imports(file: string): { path: string; names: string[]; typeOnly: boole
 }
 
 test("main-thread import graph uses application contracts and data, never runtime mutation ports", () => {
-  const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent"]);
+  const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent", "Observation", "ObservationFilter", "EntityRef", "SimulationTime"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;

@@ -1,9 +1,13 @@
-import { useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ArchitectureView } from "./ArchitectureView.tsx";
+import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { SimulationControls } from "./SimulationControls.tsx";
+import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedScenario } from "./scenarios.ts";
 import type { SimulationHost } from "./host.ts";
 import { packagedMetadata, scenarios } from "./scenarios.ts";
+import { terminalCopy, terminalMark } from "./timeline.ts";
+import type { GraphEmphasis } from "./timeline.ts";
 
 export function App({ host }: { readonly host: SimulationHost }) {
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
@@ -12,6 +16,14 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [selected, setSelected] = useState<string>(scenarios[0].id);
 
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
+  const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
+  const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
+  const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
+  const edges = useMemo(() => projection && lesson
+    ? movementEdges(mapArchitecture(projection.architecture, lesson.architecture, lesson.name).edges) : [], [projection, lesson]);
+  const mark = terminalMark(projection?.simulation.status, snapshot.error);
+
+  useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
 
   const load = () => {
     const choice = scenarios.find(item => item.id === selected)!;
@@ -32,7 +44,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
       <section aria-labelledby="architecture-heading">
         <h2 id="architecture-heading">Architecture</h2>
         <ArchitectureView architecture={projection.architecture}
-          {...(loadedChoice ? { metadata: packagedMetadata(loadedChoice).architecture, scenarioName: packagedMetadata(loadedChoice).name } : {})} />
+          {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
+          {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})} />
       </section>
       <section className="execution" aria-labelledby="execution-heading">
         <h2 id="execution-heading">Execution</h2>
@@ -43,7 +56,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
           <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
         </dl>
+        {mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
+        <h3 id="timeline-heading">Timeline</h3>
+        <TimelineView observations={projection.history.observations} edges={edges} onEmphasis={onEmphasis} />
       </section>
-    </> : null}
+    </> : mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
   </main>;
 }

@@ -68,7 +68,7 @@ Where a difference exists, follow the spec. If you cannot tell how to resolve
 it — conflicting specs, a missing type, or an ambiguous refinement — ask
 instead of inventing a name, alias, or shape.
 
-Future simulation code must preserve determinism: use the virtual clock instead of `Date.now()`, `setTimeout()`, or `setInterval()`, and use seeded randomness instead of `Math.random()`. Components must communicate through the modeled network or message bus.
+Future simulation code must preserve determinism: use the virtual clock instead of `Date.now()`, `setTimeout()`, or `setInterval()`, and use seeded randomness instead of `Math.random()`. Components must communicate through the modeled network or message bus. Browser timeline playback may use a host timer to move its cursor and paint movement cues; that timer must not advance virtual time, record observations, or send worker commands.
 
 ## Testing Guidelines
 

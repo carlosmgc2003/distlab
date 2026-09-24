@@ -3,8 +3,10 @@ import { Background, Controls, Handle, Panel, Position, ReactFlow, useReactFlow 
 import type { NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { categoryLabels, mapArchitecture } from "./architecture-view.ts";
-import type { ArchitectureNode } from "./architecture-view.ts";
+import type { ArchitectureEdge, ArchitectureNode } from "./architecture-view.ts";
 import { ComponentInspector } from "./ComponentInspector.tsx";
+import { movementPulseClass } from "./timeline.ts";
+import type { GraphEmphasis } from "./timeline.ts";
 import "@xyflow/react/dist/style.css";
 import "./architecture.css";
 
@@ -25,6 +27,17 @@ const ariaLabelConfig = {
 };
 const fitViewOptions = { padding: 0.18, maxZoom: 1 };
 
+function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined): ArchitectureEdge {
+  if (!emphasis?.edgeId || edge.id !== emphasis.edgeId) return edge;
+  const stroke = emphasis.kind === "message" ? "#6d28d9" : emphasis.kind === "response" ? "#0f766e" : "#1d4ed8";
+  const pulse = emphasis.pulseId ? ` ${movementPulseClass(emphasis.pulseId)}` : "";
+  return {
+    ...edge,
+    className: `${emphasis.kind ? `is-movement movement-${emphasis.kind}` : "is-involved-edge"}${pulse}`,
+    style: { ...edge.style, stroke, strokeWidth: 3 },
+  };
+}
+
 function PanControls() {
   const { getViewport, setViewport } = useReactFlow();
   const pan = (x: number, y: number) => {
@@ -39,17 +52,26 @@ function PanControls() {
   </Panel>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName }: {
+export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
+  readonly emphasis?: GraphEmphasis;
+  readonly movementText?: string;
 }) {
   const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName), [architecture, metadata, scenarioName]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const nodes = useMemo(() => graph.nodes.map(node => ({
-    ...node, selected: node.id === selectedId,
-    domAttributes: { "aria-pressed": node.id === selectedId, "aria-controls": "component-inspector" },
-  })), [graph.nodes, selectedId]);
+  const nodes = useMemo(() => graph.nodes.map(node => {
+    const involved = emphasis?.nodeIds.includes(node.id) === true;
+    const pulse = involved && emphasis?.pulseId ? ` ${movementPulseClass(emphasis.pulseId)}` : "";
+    return {
+      ...node,
+      ...(involved ? { className: `${node.className ?? ""} is-involved${pulse}`.trim() } : {}),
+      selected: node.id === selectedId,
+      domAttributes: { "aria-pressed": node.id === selectedId, "aria-controls": "component-inspector" },
+    };
+  }), [graph.nodes, selectedId, emphasis]);
+  const edges = useMemo(() => graph.edges.map(edge => emphasize(edge, emphasis)), [graph.edges, emphasis]);
   // Accept only selection changes. Positions and graph structure are immutable presentation inputs.
   const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode>[]) => {
     setSelectedId(previous => {
@@ -69,16 +91,17 @@ export function ArchitectureView({ architecture, metadata, scenarioName }: {
   if (!nodes.length) return <p>No architecture components to display.</p>;
   return <>
     <p className="graph-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom buttons to change the view.</p>
+    <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>
     <a className="inspector-link" href="#component-inspector">Skip to component inspector</a>
     <div className="architecture-layout">
-      <div className="graph-canvas" aria-label="Architecture graph" onKeyDownCapture={event => {
+      <div className="graph-canvas" aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
         if (event.key === "Escape") {
           event.preventDefault(); event.stopPropagation(); clearSelection();
         }
       }}>
-        <ReactFlow aria-label="Architecture graph" nodes={nodes} edges={graph.edges} nodeTypes={nodeTypes}
+        <ReactFlow aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes}
           onNodesChange={onNodesChange} onPaneClick={clearSelection}
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}

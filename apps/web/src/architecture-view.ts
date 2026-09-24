@@ -3,6 +3,7 @@ import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
+import type { MovementEdge } from "./timeline.ts";
 
 export const categoryLabels = {
   client: "Client",
@@ -95,4 +96,11 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     });
   }
   return { nodes, edges, error: null };
+}
+
+/** Read-only link identity for observation movement. Relationship comes from the presentation edge. */
+export function movementEdges(edges: readonly ArchitectureEdge[]): MovementEdge[] {
+  return edges.flatMap(edge => edge.data ? [{
+    id: edge.id, source: edge.source, target: edge.target, relationship: edge.data.relationship,
+  }] : []);
 }

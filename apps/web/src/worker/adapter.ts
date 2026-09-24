@@ -77,13 +77,20 @@ export class WorkerAdapter {
       }
     } catch (error) {
       const failed = this.#session?.simulation.status === "FAILED";
+      const failure = failed && this.#session ? this.#session.simulation.history.export().terminalFailure : undefined;
       if (command.type === "load") { this.#session = undefined; this.#architecture = undefined; }
-      else if (failed && this.#session?.simulation.history.export().terminalFailure?.historyComplete !== false) this.#publish(command.requestId);
+      else if (failed && failure?.historyComplete !== false) this.#publish(command.requestId);
       const detail = error !== null && typeof error === "object" ? error as { code?: unknown; context?: unknown } : {};
+      const code = failure?.code ?? (typeof detail.code === "string" ? detail.code : "UNKNOWN");
+      const nested = failure ? failure.context : isCanonical(detail.context) ? detail.context : null;
       this.#emit({ version: 1, requestId: command.requestId, type: "error", error: applicationError(
         failed ? "SIMULATION_FAILED" : command.type === "load" ? "INVALID_SCENARIO" : "INVALID_WORKER_COMMAND",
         failed ? "The simulation failed at an event boundary." : command.type === "load" ? "The scenario could not be loaded." : "The simulation control could not be applied.",
-        { code: typeof detail.code === "string" ? detail.code : "UNKNOWN", context: isCanonical(detail.context) ? detail.context : null },
+        {
+          code, context: nested,
+          ...(failure ? { historyComplete: failure.historyComplete, time: failure.time } : {}),
+          ...(failure?.lastObservationId ? { lastObservationId: failure.lastObservationId } : {}),
+        },
       ) });
     }
   }
