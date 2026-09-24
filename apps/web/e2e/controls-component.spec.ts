@@ -122,6 +122,29 @@ test("Step and Reset serialize commands; structured failure remains inspectable 
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
 
+test("a projectionless simulation failure stays FAILED until reset restores the scenario", async ({ page }) => {
+  await mount(page);
+  await emitProjection(page, "READY", "loaded");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.evaluate(() => {
+    const requestId = window.controlFixture.commands.at(-1)!.requestId;
+    window.controlFixture.emit({ version: 1, requestId, type: "error", error: {
+      code: "SIMULATION_FAILED", message: "The simulation failed at an event boundary.", context: { code: "OBSERVATION_CAPACITY" },
+    } });
+  });
+  await enabled(page, ["Reset"]);
+  const status = page.getByRole("status", { name: "Simulation status" });
+  await expect(status).toHaveText("FAILED");
+  await expect(page.getByRole("alert")).toContainText("OBSERVATION_CAPACITY");
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(status).toHaveText("FAILED · Resetting scenario…");
+  await expect(page.getByRole("alert")).toContainText("SIMULATION_FAILED");
+  await emitProjection(page, "READY");
+  await enabled(page, ["Run", "Step", "Reset"]);
+  await expect(status).toHaveText("READY");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
 test("busy errors preserve lifecycle and transport failures require a fresh load", async ({ page }) => {
   await mount(page);
   await emitProjection(page, "READY", "loaded");

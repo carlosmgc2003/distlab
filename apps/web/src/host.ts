@@ -89,7 +89,9 @@ export class SimulationHost {
     }
     return new Promise((resolve, reject) => {
       this.#pending.set(command.requestId, { type: command.type, resolve, reject });
-      this.#update({ ...this.#snapshot, error: null });
+      // A projectionless failure has no lifecycle status except this error. Keep it until reset delivers a projection.
+      const error = recoveringFailure && !this.#snapshot.projection ? this.#snapshot.error : null;
+      this.#update({ ...this.#snapshot, error });
       try { this.#worker!.postMessage(detached(command)); }
       catch { this.#unavailable(); }
     });

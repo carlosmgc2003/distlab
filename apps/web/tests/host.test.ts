@@ -63,6 +63,9 @@ test("reset can recover a failed session whose history could not supply a projec
   await failed;
   assert.equal(host.getSnapshot().projection, null);
   const reset = host.reset();
+  assert.equal(host.getSnapshot().error?.code, "SIMULATION_FAILED");
+  assert.equal(host.getSnapshot().projection, null);
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["reset"]);
   worker.emit({ version: 1, requestId: worker.last().requestId, type: "projection.updated", projection: projection() });
   await reset;
   assert.equal(host.getSnapshot().projection?.simulation.status, "READY");

@@ -16,6 +16,7 @@ export function SimulationControls({ host, snapshot }: {
     : pendingCommands.includes("step") ? "Stepping one event…"
     : pendingCommands.includes("run") ? "Run in progress…"
     : loading ? "Loading…" : "";
+  const statusLabel = status ?? (error?.code === "SIMULATION_FAILED" ? "FAILED" : error ? "Simulation unavailable." : "Choose a scenario to begin.");
 
   return <section className="simulation-controls" aria-labelledby="controls-heading">
     <h2 id="controls-heading">Simulation controls</h2>
@@ -28,7 +29,7 @@ export function SimulationControls({ host, snapshot }: {
     </div>
     <p id="controls-help">Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
     <p role="status" aria-label="Simulation status" aria-atomic="true">
-      {status ?? (error ? "Simulation unavailable." : "Choose a scenario to begin.")}
+      {statusLabel}
       {pendingMessage ? ` · ${pendingMessage}` : ""}
     </p>
     {status === "COMPLETED" ? <p>Execution completed. Reset to run this scenario again.</p> : null}
