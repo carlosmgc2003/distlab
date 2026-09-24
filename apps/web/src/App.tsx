@@ -31,6 +31,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   useEffect(() => { setEvidenceFocus(null); }, [sessionKey]);
 
   const replaceSession = (id: string) => {
+    if (busy) return;
     const choice = scenarios.find(item => item.id === id);
     if (!choice) return;
     setSelected(choice.id);
@@ -40,6 +41,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     void host.load(choice.scenario).catch(() => {});
   };
   const onScenario = (id: string) => {
+    if (busy) return;
     if (projection || snapshot.error) replaceSession(id);
     else setSelected(id);
   };
