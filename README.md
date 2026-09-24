@@ -218,6 +218,19 @@ buttons to adjust the viewport. The inspector skip link moves keyboard focus
 directly to the metadata panel. These interactions remain local to the UI and
 send no worker commands.
 
+The execution timeline lists canonical observations in sequence and labels time
+as virtual time. Filters for component, type, trace, event, and entity follow
+the history query rules. The selected row shows trace, span, and causation
+links plus any stored before/after data. Redacted and omitted payloads stay
+marked as stored; missing fields are not reconstructed. Request and message
+observations highlight the matching architecture link with a transient movement
+cue and a text alternative. Play, pause, and the playback cursor are UI state:
+a host timer may advance that cursor, and it does not advance virtual time,
+record observations, or send worker commands. Reset clears the selection and
+movement cue and shows the new run. A terminal failure says whether the
+published history is complete. Incomplete history is withheld with the failure,
+the same way a projectionless failure stays visible until reset.
+
 Request links and subscriptions come from the architecture projection. The
 Orders publication relationship and model-owned resource descriptions are
 documented lesson copy, restricted to the two packaged checkout lessons and

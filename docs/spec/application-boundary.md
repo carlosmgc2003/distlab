@@ -76,6 +76,10 @@ operation handles, generator state, writable databases, scheduler controllers,
 random state internals, and live callbacks. `randomDrawCount` is an observable
 counter only; it cannot reveal or advance the generator. React Flow positions
 and selection remain UI-owned state and are excluded from every projection.
+Timeline filters, the selected observation, and the playback cursor are UI-owned
+too. Playback may use a host timer only to move that cursor and to paint a
+transient request or message cue. It does not advance virtual time, record
+observations, or send worker commands.
 Authorized projections may reveal more detail to assessment than the student UI,
 but neither projection can
 schedule events, mutate state, complete operations, or consume randomness.
