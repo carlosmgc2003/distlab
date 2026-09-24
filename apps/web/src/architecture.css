@@ -3,6 +3,8 @@
 body { margin: 0; }
 main { max-width: 1480px; margin: 0 auto; padding: 24px; }
 h1 { margin: 0 0 24px; letter-spacing: -.04em; }
+.scenario-picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#scenario { max-width: 100%; min-width: 0; flex: 1 1 16rem; }
 h2 { font-size: 1.3rem; }
 button, select { font: inherit; padding: 8px 12px; border: 1px solid #64748b; border-radius: 6px; background: white; color: #172033; }
 button { cursor: pointer; }
@@ -42,7 +44,15 @@ dl { margin: 0; }
 dt { font-size: .8rem; font-weight: 650; color: #475569; margin-top: 12px; }
 dd { margin: 3px 0 0; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: #f1f5f9; border-radius: 6px; }
-.inspector ul { padding-left: 20px; }
+.inspector ul, .fact-list { padding-left: 20px; }
+.state-inspection { margin: 16px 0; padding: 16px; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow-wrap: anywhere; }
+.state-inspection h3, .state-inspection h4 { margin-bottom: 8px; }
+.knowledge-boundary { border-left: 4px solid #0f766e; background: #f0fdfa; padding: 12px; max-width: 85ch; }
+.evidence-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.evidence-links button { max-width: 100%; }
+.fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
+.fact-list dt { margin-top: 0; }
+.scenario-help { max-width: 85ch; color: #475569; }
 .graph-legend { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: .85rem; }
 .line-sample { display: inline-block; vertical-align: middle; width: 30px; border-top: 2px solid #334155; margin-right: 6px; }
 .line-sample.subscription { border-top-style: dashed; }

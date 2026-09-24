@@ -28,10 +28,12 @@ const emptyDraft = {
 
 type Draft = typeof emptyDraft;
 
-export function TimelineView({ observations, edges, onEmphasis }: {
+export function TimelineView({ observations, edges, onEmphasis, focusedObservationId, focusToken = 0 }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
   readonly onEmphasis: (emphasis: GraphEmphasis | undefined) => void;
+  readonly focusedObservationId?: string;
+  readonly focusToken?: number;
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [filter, setFilter] = useState<ObservationFilter>({});
@@ -67,6 +69,16 @@ export function TimelineView({ observations, edges, onEmphasis }: {
   }, [selected, edges, liveCue]);
 
   useEffect(() => { onEmphasis(emphasis); }, [emphasis, onEmphasis]);
+
+  useEffect(() => {
+    if (focusedObservationId === undefined) return;
+    setPlaying(false);
+    setFilter({});
+    setDraft(emptyDraft);
+    setFilterError(null);
+    setSelectedId(focusedObservationId);
+    scrollerRef.current?.scrollIntoView({ block: "nearest" });
+  }, [focusedObservationId, focusToken]);
 
   useEffect(() => {
     const previous = previousRef.current;

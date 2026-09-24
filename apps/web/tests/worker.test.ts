@@ -56,7 +56,7 @@ test("real worker loads ScenarioEngine, steps, resets and reproduces the headles
     const result = await headless.simulation.run();
     assert.equal(finished.simulation.processedEvents, result.totalEvents);
     assert.deepEqual(finished.history.observations, structuredClone(headless.simulation.history.all()));
-    assert.deepEqual(Object.fromEntries(finished.components.map(item => [item.componentId, item.state])), structuredClone(headless.projection().components));
+    assert.deepEqual(Object.fromEntries(finished.components.filter(item => item.visibility === "host").map(item => [item.componentId, item.state])), structuredClone(headless.projection().components));
     assert.ok(headless.results().every(result => result.status === "PASS"));
     await send({ type: "reset" }); await send({ type: "run" });
     assert.deepEqual(latest(), finished);

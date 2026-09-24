@@ -87,6 +87,26 @@ test("outstanding Run/Pause stays busy until both terminal replies and uses no o
   expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run", "pause"]);
 });
 
+test("fault selection cannot replace a pending or running session", async ({ page }) => {
+  await mount(page);
+  await emitProjection(page, "READY", "loaded");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  const selector = page.getByLabel("Scenario", { exact: true });
+  await expect(selector).toBeDisabled();
+  const forceChange = () => page.evaluate(() => {
+    const select = document.querySelector<HTMLSelectElement>("#scenario")!;
+    select.value = "response-lost";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await forceChange();
+  await expect(selector).toHaveValue("normal");
+  await emitProjection(page, "RUNNING");
+  await expect(selector).toBeDisabled();
+  await forceChange();
+  await expect(selector).toHaveValue("normal");
+  expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run"]);
+});
+
 test("Step and Reset serialize commands; structured failure remains inspectable and reset recovers", async ({ page }) => {
   await mount(page);
   await emitProjection(page, "READY", "loaded");
