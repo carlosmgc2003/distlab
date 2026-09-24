@@ -12,6 +12,67 @@ async function ready() {
   return { host, worker };
 }
 
+test("pending transport commands reconcile only on their correlated terminal responses", async () => {
+  const { host, worker } = await ready();
+  assert.deepEqual(host.getSnapshot().pendingCommands, []);
+  const run = host.run();
+  const runId = worker.last().requestId;
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["run"]);
+  assert.equal(host.getSnapshot().projection?.simulation.status, "READY");
+  worker.emit({ version: 1, requestId: runId, type: "accepted" });
+  worker.emit({ version: 1, requestId: runId, type: "projection.updated", projection: projection("RUNNING") });
+  const pause = host.pause();
+  const pauseId = worker.last().requestId;
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["run", "pause"]);
+  worker.emit({ version: 1, requestId: pauseId, type: "accepted" });
+  assert.equal(host.getSnapshot().projection?.simulation.status, "RUNNING");
+  worker.emit({ version: 1, requestId: runId, type: "projection.updated", projection: projection("PAUSED") });
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["run", "pause"]);
+  worker.emit({ version: 1, requestId: runId, type: "run.finished", status: "PAUSED" });
+  await run;
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["pause"]);
+  worker.emit({ version: 1, requestId: pauseId, type: "projection.updated", projection: projection("PAUSED") });
+  await pause;
+  assert.deepEqual(host.getSnapshot().pendingCommands, []);
+  assert.ok(Object.isFrozen(host.getSnapshot().pendingCommands));
+});
+
+test("control errors settle their own request while a run remains busy", async () => {
+  const { host, worker } = await ready();
+  const run = host.run();
+  const runId = worker.last().requestId;
+  const rejected = assert.rejects(host.reset(), { code: "INVALID_WORKER_COMMAND" });
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "error", error: {
+    code: "INVALID_WORKER_COMMAND", message: "Busy", context: { reason: "CONTROL_BUSY" },
+  } });
+  await rejected;
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["run"]);
+  assert.deepEqual(host.getSnapshot().error?.context, { reason: "CONTROL_BUSY" });
+  worker.emit({ version: 1, requestId: runId, type: "projection.updated", projection: projection("COMPLETED") });
+  worker.emit({ version: 1, requestId: runId, type: "run.finished", status: "COMPLETED" });
+  await run;
+  assert.deepEqual(host.getSnapshot().pendingCommands, []);
+});
+
+test("reset can recover a failed session whose history could not supply a projection", async () => {
+  const { host, worker } = await ready();
+  const failed = assert.rejects(host.run(), { code: "SIMULATION_FAILED" });
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "error", error: {
+    code: "SIMULATION_FAILED", message: "Failed", context: { code: "OBSERVATION_CAPACITY" },
+  } });
+  await failed;
+  assert.equal(host.getSnapshot().projection, null);
+  const reset = host.reset();
+  assert.equal(host.getSnapshot().error?.code, "SIMULATION_FAILED");
+  assert.equal(host.getSnapshot().projection, null);
+  assert.deepEqual(host.getSnapshot().pendingCommands, ["reset"]);
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "projection.updated", projection: projection() });
+  await reset;
+  assert.equal(host.getSnapshot().projection?.simulation.status, "READY");
+  assert.equal(host.getSnapshot().error, null);
+  assert.deepEqual(host.getSnapshot().pendingCommands, []);
+});
+
 test("request correlation waits beyond accepted and run projections to the terminal response", async () => {
   const { host, worker } = await ready();
   let settled = false;

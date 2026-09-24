@@ -196,8 +196,19 @@ complete, visible scheduler observations provide pending/processed event counts,
 and their specified random draw count is zero. Modified or arbitrary scenarios
 are rejected with `INVALID_SCENARIO`: general scenario hosting requires a kernel
 counter read port, including reliable counts when history is incomplete or
-redacted. No counters are inferred from incomplete history. Simulation controls
-beyond loading a scenario are reserved for subsequent issues.
+redacted. No counters are inferred from incomplete history. When a terminal
+failure seals incomplete history, the host drops that projection, shows
+`FAILED`, and still accepts Reset for the same loaded scenario.
+
+Run, Pause, Step, and Reset are the shell controls. They follow the simulation
+lifecycle and stay disabled while a command is outstanding. Pause is accepted
+during Run and takes effect at the next kernel yield boundary, every 16 events.
+Boundary samples are read only after an event boundary has completed. Step
+publishes one new boundary when its command completes. Reset rebuilds the loaded
+scenario after completion or failure. A modeled network timeout stays inside
+that completed scenario as the payment outcome `NETWORK_TIMEOUT`. The worker
+samples boundaries with message tasks between kernel yields, and virtual time
+advances only inside the simulation.
 
 The checkout architecture uses a fixed React Flow layout with labeled category
 and relationship cues. Select a node with a click, Enter, or Space to inspect

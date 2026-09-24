@@ -64,7 +64,10 @@ export class WorkerAdapter {
       const simulation = this.#session.simulation;
       if (command.type === "run") {
         // Yield cadence is host-only; the kernel retains all scheduling and pause semantics.
-        const result = await simulation.run({ maxEventsPerYield: 16, ...(command.maxEvents === undefined ? {} : { maxEvents: command.maxEvents }) });
+        const running = simulation.run({ maxEventsPerYield: 16, ...(command.maxEvents === undefined ? {} : { maxEvents: command.maxEvents }) });
+        const stopUpdates = this.#streamBoundaries(command.requestId);
+        let result;
+        try { result = await running; } finally { stopUpdates(); }
         this.#publish(command.requestId);
         this.#emit({ version: 1, requestId: command.requestId, type: "run.finished", status: result.status });
       } else {
@@ -87,6 +90,27 @@ export class WorkerAdapter {
 
   #noSession(requestId: string): void {
     this.#emit({ version: 1, requestId, type: "error", error: applicationError("INVALID_WORKER_COMMAND", "Load a scenario before sending controls.") });
+  }
+  /** Message tasks can read only between synchronous kernel event boundaries.
+   * Sampling neither advances nor pauses the run, and duplicate samples are coalesced.
+   */
+  #streamBoundaries(requestId: string): () => void {
+    const channel = new MessageChannel();
+    let previousBoundary = -1;
+    const sample = () => {
+      if (this.#session?.simulation.status !== "RUNNING") return;
+      try {
+        const projection = this.#project();
+        if (projection.simulation.processedEvents !== previousBoundary) {
+          previousBoundary = projection.simulation.processedEvents;
+          this.#emit({ version: 1, requestId, type: "projection.updated", projection });
+        }
+      } catch { /* Projection subscribers cannot fail or control simulation execution. */ }
+      channel.port2.postMessage(null);
+    };
+    channel.port1.onmessage = sample;
+    sample();
+    return () => { channel.port1.close(); channel.port2.close(); };
   }
   #publish(requestId: string): void {
     this.#emit({ version: 1, requestId, type: "projection.updated", projection: this.#project() });
