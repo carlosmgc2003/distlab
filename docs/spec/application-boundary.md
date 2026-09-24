@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-09-21 |
-| Related issues | #3 |
+| Last updated | 2026-09-24 |
+| Related issues | #3, #47 |
 
 ## Responsibility
 
@@ -133,6 +133,47 @@ Invalid commands return `INVALID_WORKER_COMMAND`. Invalid scenario input returns
 `INVALID_SCENARIO`. Runtime terminal failures return `SIMULATION_FAILED` with the
 simulation error context. A failed subscriber or UI render path is host-only and
 cannot alter canonical history.
+
+## Shell action matrix
+
+Browser controls follow the simulation lifecycle. A disabled Run, Pause, Step, or
+Reset means that command is unavailable in the current state. The shell does not
+add a worker command to stand in for it. Scenario choice and Load replace the
+session only when no command is outstanding and the simulation is not running.
+
+Timeline filters, the selected observation, evidence and trace navigation, graph
+gestures, and playback stay in the UI. They do not advance virtual time, record
+observations, or send worker commands. Restart timeline moves the playback
+cursor to the first visible observation and leaves the simulation where it is.
+
+While a command is outstanding, scenario choice, Load, Run, Step, and Reset are
+unavailable. Pause stays available only when Run is the sole outstanding command,
+and it takes effect at an event boundary.
+
+| Action | Empty | Ready | Running | Paused | Completed | Error |
+| --- | --- | --- | --- | --- | --- | --- |
+| Scenario choice | Choose a packaged scenario | Choosing a different scenario replaces the session | Unavailable while the run is in progress | Choosing a different scenario replaces the session | Choosing a different scenario replaces the session | Choose again, then Load |
+| Load scenario | Load the chosen scenario | Replace the session | Unavailable | Replace the session | Replace the session | Load again after a load or worker error. `SIMULATION_FAILED` recovers through Reset |
+| Run | Unavailable until a session is loaded | Start the loaded scenario | Unavailable. Pause is the command for a run in progress | Continue from the current boundary | Unavailable because the run has finished. Reset runs the loaded scenario again | Unavailable |
+| Pause | Unavailable | Unavailable | Request a pause at the next event boundary | Unavailable | Unavailable because the run is not in progress | Unavailable |
+| Step | Unavailable | Process one scheduled event | Unavailable | Process one scheduled event | Unavailable because the run has finished | Unavailable |
+| Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
+| Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
+| Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
+| Timeline filters | Not shown | Narrow the visible rows. Clear filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
+| Evidence, causation, and trace | Not shown | Select the recorded observation, show its row and detail, and move focus to that row. A filter cleared to reveal it is announced | Same read-only navigation | Same read-only navigation | Same read-only navigation | Not shown when history is withheld |
+| Play / Restart | Not shown | Play moves the cursor through visible rows. Zero or one visible row leaves Play unavailable. On the last visible row the control is Restart timeline | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
+| Pause timeline | Not shown | Unavailable until playback is running | Stop the cursor | Stop the cursor | Stop the cursor | Not shown when history is withheld |
+| Previous / Next | Not shown | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Not shown when history is withheld |
+
+Empty means no session is loaded. Error means a host error is showing. A terminal
+`SIMULATION_FAILED` withholds incomplete history, keeps the failure visible, and
+still accepts Reset for the loaded scenario. Ready, paused, and completed
+projections keep the timeline. Before any row is selected, Next selects the
+first visible observation and Previous selects the last, including when the
+filter matches one row. After that only row is selected, both controls are
+unavailable. Previous is unavailable on the first visible row, and Next is
+unavailable on the last.
 
 ## Deferred capabilities
 
