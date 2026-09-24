@@ -279,13 +279,16 @@ function DetailBody({ observation, observations, hidden, onSelect, onShowTrace }
   </>;
 }
 
-function SpanList({ nodes, selectedId, onSelect }: {
+function SpanList({ nodes, selectedId, onSelect, depth = 0 }: {
   readonly nodes: readonly SpanNode[];
   readonly selectedId: string;
   readonly onSelect: (id: string) => void;
+  readonly depth?: number;
 }) {
   if (!nodes.length) return null;
-  return <ul className="timeline-tree">{nodes.map(node => {
+  if (depth >= SPAN_PREVIEW) return <p>{nodes.length} nested spans. Use the trace filter to inspect their observations in order.</p>;
+  const shown = nodes.slice(0, SPAN_PREVIEW);
+  return <ul className="timeline-tree">{shown.map(node => {
     const preview = node.observations.length <= SPAN_PREVIEW ? node.observations
       : [...node.observations.slice(0, SPAN_PREVIEW - 1), ...(node.observations.slice(0, SPAN_PREVIEW - 1).some(item => item.id === selectedId)
         ? [] : node.observations.filter(item => item.id === selectedId))];
@@ -296,7 +299,7 @@ function SpanList({ nodes, selectedId, onSelect }: {
         <button type="button" onClick={() => onSelect(item.id)}>{item.type} at virtual time {item.time}</button>
       </li>)}</ul>
       {hidden > 0 ? <p>{hidden} more observations in this span. Show this trace to read them in order.</p> : null}
-      <SpanList nodes={node.children} selectedId={selectedId} onSelect={onSelect} />
+      <SpanList nodes={node.children} selectedId={selectedId} onSelect={onSelect} depth={depth + 1} />
     </li>;
-  })}</ul>;
+  })}{nodes.length > shown.length ? <li>{nodes.length - shown.length} more spans. Use the trace filter to inspect their observations in order.</li> : null}</ul>;
 }

@@ -197,6 +197,16 @@ test("request and message observations project onto the checkout links", async (
   assert.match(movementCue(dropped, checkoutEdges)?.text ?? "", /Response dropped from payment-processor to payments/);
 });
 
+test("movement only highlights an edge with the matching relationship", () => {
+  const edges: MovementEdge[] = [
+    { id: "publication", source: "orders", target: "payments", relationship: "publication" },
+    { id: "request", source: "payments", target: "orders", relationship: "request" },
+  ];
+  const response = observation({ id: "response", time: 1, sequence: 1, type: "network.response.sent", source: "orders", target: "payments" });
+  assert.equal(movementCue(response, edges)?.edgeId, "request");
+  assert.equal(movementCue(response, edges.filter(edge => edge.relationship === "publication"))?.edgeId, undefined);
+});
+
 test("playback, filters, and reset stay on the UI copy of history", () => {
   const rows = [observation({ id: "a", time: 0, sequence: 0, type: "simulation.created", source: "simulation" })];
   const copy = structuredClone(rows);

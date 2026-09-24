@@ -73,6 +73,16 @@ test("reset can recover a failed session whose history could not supply a projec
   assert.deepEqual(host.getSnapshot().pendingCommands, []);
 });
 
+test("successful reset changes the host attempt even when the run fingerprint repeats", async () => {
+  const { host, worker } = await ready();
+  const initial = host.getSnapshot();
+  const reset = host.reset();
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "projection.updated", projection: projection() });
+  await reset;
+  assert.equal(host.getSnapshot().projection?.simulation.runId, initial.projection?.simulation.runId);
+  assert.equal(host.getSnapshot().attempt, initial.attempt + 1);
+});
+
 test("request correlation waits beyond accepted and run projections to the terminal response", async () => {
   const { host, worker } = await ready();
   let settled = false;

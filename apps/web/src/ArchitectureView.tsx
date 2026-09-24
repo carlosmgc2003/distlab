@@ -59,7 +59,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   readonly emphasis?: GraphEmphasis;
   readonly movementText?: string;
 }) {
-  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName), [architecture, metadata, scenarioName]);
+  // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
+  const architectureKey = JSON.stringify(architecture);
+  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName), [architectureKey, metadata, scenarioName]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const nodes = useMemo(() => graph.nodes.map(node => {
     const involved = emphasis?.nodeIds.includes(node.id) === true;

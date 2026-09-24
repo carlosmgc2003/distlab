@@ -58,7 +58,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         </dl>
         {mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
         <h3 id="timeline-heading">Timeline</h3>
-        <TimelineView observations={projection.history.observations} edges={edges} onEmphasis={onEmphasis} />
+        <TimelineView key={snapshot.attempt} observations={projection.history.observations} edges={edges} onEmphasis={onEmphasis} />
       </section>
     </> : mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
   </main>;

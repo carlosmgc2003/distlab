@@ -14,6 +14,8 @@ export interface HostSnapshot {
   readonly loading: boolean;
   /** Transport state only; never substitutes for the projected simulation lifecycle. */
   readonly pendingCommands: readonly WorkerCommand["type"][];
+  /** Host-owned attempt identity; a deterministic runId repeats after reset. */
+  readonly attempt: number;
 }
 
 type Pending = { type: WorkerCommand["type"]; resolve: (event: WorkerEvent) => void; reject: (error: ApplicationError) => void };
@@ -27,7 +29,8 @@ export class SimulationHost {
   #detach: (() => void) | undefined;
   #generation = 0;
   #sequence = 0;
-  #snapshot: HostSnapshot = Object.freeze({ projection: null, error: null, loading: false, pendingCommands: Object.freeze([]) });
+  #attempt = 0;
+  #snapshot: HostSnapshot = Object.freeze({ projection: null, error: null, loading: false, pendingCommands: Object.freeze([]), attempt: 0 });
 
   constructor(createWorker: () => WorkerPort) { this.#createWorker = createWorker; }
   getSnapshot = (): HostSnapshot => this.#snapshot;
@@ -118,6 +121,7 @@ export class SimulationHost {
       || (event.type === "projection.updated" && event.projection.simulation.status !== "FAILED" && pending && ["pause", "step", "reset"].includes(pending.type));
     if (terminal && pending && event.requestId !== undefined) {
       this.#pending.delete(event.requestId);
+      if (pending.type === "reset") this.#attempt++;
       pending.resolve(event);
     }
     if (event.type === "loaded" || event.type === "projection.updated") {
@@ -138,8 +142,8 @@ export class SimulationHost {
     for (const pending of this.#pending.values()) pending.reject(error);
     this.#pending.clear();
   }
-  #update(snapshot: Omit<HostSnapshot, "pendingCommands">): void {
-    this.#snapshot = Object.freeze({ ...snapshot, pendingCommands: Object.freeze([...this.#pending.values()].map(item => item.type)) });
+  #update(snapshot: Omit<HostSnapshot, "pendingCommands" | "attempt">): void {
+    this.#snapshot = Object.freeze({ ...snapshot, pendingCommands: Object.freeze([...this.#pending.values()].map(item => item.type)), attempt: this.#attempt });
     for (const listener of this.#listeners) {
       try { listener(); } catch { this.#listeners.delete(listener); }
     }

@@ -91,6 +91,7 @@ const RESPONSE_TYPES = new Set([
 ]);
 
 export function orderObservations(observations: readonly Observation[]): readonly Observation[] {
+  if (observations.every((observation, index) => index === 0 || observations[index - 1]!.sequence <= observation.sequence)) return observations;
   return observations.map((observation, index) => ({ observation, index }))
     .sort((left, right) => left.observation.sequence - right.observation.sequence || left.index - right.index)
     .map(item => item.observation);
@@ -230,7 +231,8 @@ export function correlation(observations: readonly Observation[], observation: O
     item.traceId === observation.traceId && item.spanId === observation.parentSpanId);
   const effects = orderObservations(observations).filter(item => item.id !== observation.id && (
     item.causationId === observation.id
-    || (observation.spanId !== undefined && item.parentSpanId === observation.spanId && item.spanId !== observation.spanId)
+    || (observation.traceId !== undefined && item.traceId === observation.traceId && observation.spanId !== undefined
+      && item.parentSpanId === observation.spanId && item.spanId !== observation.spanId)
   ));
   return {
     ...(cause !== undefined ? { cause } : {}),
@@ -368,9 +370,9 @@ function leg(
 }
 
 function findEdge(edges: readonly MovementEdge[], from: string, to: string, relationship?: MovementEdge["relationship"]): MovementEdge | undefined {
-  return edges.find(edge => edge.relationship === relationship && edge.source === from && edge.target === to)
-    ?? edges.find(edge => edge.source === from && edge.target === to)
-    ?? edges.find(edge => edge.relationship === relationship && edge.source === to && edge.target === from)
+  if (relationship !== undefined) return edges.find(edge => edge.relationship === relationship && edge.source === from && edge.target === to)
+    ?? edges.find(edge => edge.relationship === relationship && edge.source === to && edge.target === from);
+  return edges.find(edge => edge.source === from && edge.target === to)
     ?? edges.find(edge => edge.source === to && edge.target === from);
 }
 

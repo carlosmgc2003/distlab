@@ -57,6 +57,13 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.locator("#timeline-order")).toContainText("Virtual time is the simulation clock");
   const ready = await latestProjection(page);
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
+  await page.getByLabel("Type", { exact: true }).fill("simulation.created");
+  await page.locator("#timeline-rows button").first().click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(status).toHaveText("READY");
+  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
+  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
+  expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
 
   await stepUntil(page, "network.request.sent");
   await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
@@ -107,6 +114,8 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
 
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
+  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
+  await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
