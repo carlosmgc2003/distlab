@@ -6,7 +6,7 @@ export function ComponentInspector({ node, children }: {
   readonly node: ArchitectureNode | undefined;
   readonly children?: ReactNode;
 }) {
-  return <aside id="component-inspector" className="inspector" aria-labelledby="inspector-heading" tabIndex={-1}>
+  return <aside id="component-inspector" className="inspector" aria-labelledby="inspector-heading" tabIndex={0}>
     <h3 id="inspector-heading">Component inspector</h3>
     {node ? <>
       <h4>{node.data.title}</h4>

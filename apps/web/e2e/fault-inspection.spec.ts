@@ -1,4 +1,11 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
+async function revealRawState(page: Page) {
+  const raw = page.locator("details.raw-state");
+  await expect(raw).toBeVisible();
+  if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
+}
 
 test("response-lost selection shows remote authorization and local timeout as distinct facts", async ({ page }) => {
   test.setTimeout(60_000);
@@ -9,6 +16,7 @@ test("response-lost selection shows remote authorization and local timeout as di
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(status).toHaveText("READY");
+  await revealRawState(page);
   await expect(panel).toContainText("checkout-processor-response-lost@1");
   await expect(panel).toContainText("mvp-response-lost-001");
   await expect(panel).toContainText("drop-first-processor-authorize-response");
@@ -59,6 +67,7 @@ test("response-lost selection shows remote authorization and local timeout as di
 
   await page.getByLabel("Scenario", { exact: true }).selectOption("normal");
   await expect(status).toHaveText("READY");
+  await revealRawState(page);
   await expect(panel).toContainText("checkout-normal@1");
   await expect(panel).toContainText("mvp-normal-001");
   await expect(panel).toContainText("Status: not recorded");

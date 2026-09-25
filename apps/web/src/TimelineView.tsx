@@ -50,6 +50,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
   const [feedback, setFeedback] = useState("");
   const [liveCueId, setLiveCueId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [rowViewport, setRowViewport] = useState(TIMELINE_VIEWPORT);
   const [focusNonce, setFocusNonce] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
@@ -97,6 +98,20 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
   const haltPlayback = () => { setPhase(current => current === "idle" ? "idle" : "paused"); };
 
   useEffect(() => { onEmphasis(emphasis); }, [emphasis, onEmphasis]);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    // The row window follows the panel height so a shorter workspace still virtualizes the visible rows.
+    const measure = () => {
+      const height = node.clientHeight;
+      if (height > 0) setRowViewport(current => current === height ? current : height);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (focusedObservationId === undefined) return;
@@ -290,10 +305,13 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     setPhase("paused");
     setFeedback("Playback is paused.");
   };
-  const range = visibleRowRange(filtered.length, scrollTop, TIMELINE_VIEWPORT, TIMELINE_ROW_HEIGHT);
+  const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
 
   return <>
+    <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
+    <h3 id="timeline-heading">Timeline</h3>
+    <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
     <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
     <form className="timeline-filters" aria-label="Timeline filters" onSubmit={event => event.preventDefault()}>
       <label>Virtual time from<input inputMode="numeric" value={draft.fromTime} onChange={event => update("fromTime", event.target.value)} /></label>
@@ -307,7 +325,6 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
       <button type="button" disabled={timelineDraftIsBlank(draft)} onClick={() => applyDraft(emptyTimelineDraft)}>Clear filters</button>
     </form>
     {filterError ? <p role="alert">{filterError}</p> : null}
-    <p className="timeline-count">{filtered.length} of {observations.length} observations in virtual-time order.</p>
     <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
     <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
       <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
@@ -317,6 +334,8 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     </div>
     <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)}</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+    </div>
+    <p className="timeline-count">{filtered.length} of {observations.length} observations in virtual-time order.</p>
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
       aria-label="Timeline observations" onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
@@ -351,6 +370,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
         })}
       </div>
     </div>
+    </section>
     <ObservationDetail observation={selected} observations={observations} hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={reveal} onShowTrace={showTrace} />
   </>;
@@ -363,7 +383,7 @@ function ObservationDetail({ observation, observations, hidden, onSelect, onShow
   readonly onSelect: (id: string) => void;
   readonly onShowTrace: (traceId: string) => void;
 }) {
-  return <section className="timeline-detail" aria-labelledby="observation-detail-heading">
+  return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h3 id="observation-detail-heading">Observation detail</h3>
     {!observation ? <p>Select an observation to inspect its trace, causation, and stored data.</p> : <DetailBody
       observation={observation} observations={observations} hidden={hidden} onSelect={onSelect} onShowTrace={onShowTrace} />}

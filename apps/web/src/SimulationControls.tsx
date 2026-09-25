@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
 import type { SimulationHost, HostSnapshot } from "./host.ts";
 
-export function SimulationControls({ host, snapshot }: {
+export function SimulationControls({ host, snapshot, children, notices }: {
   readonly host: SimulationHost;
   readonly snapshot: HostSnapshot;
+  readonly children?: ReactNode;
+  readonly notices?: ReactNode;
 }) {
   const { projection, pendingCommands, loading, error } = snapshot;
   const status = projection?.simulation.status;
@@ -18,24 +21,30 @@ export function SimulationControls({ host, snapshot }: {
     : loading ? "Loading…" : "";
   const statusLabel = status ?? (error?.code === "SIMULATION_FAILED" ? "FAILED" : error ? "Simulation unavailable." : "Choose a scenario to begin.");
 
-  return <section className="simulation-controls" aria-labelledby="controls-heading">
-    <h2 id="controls-heading">Simulation controls</h2>
-    <div className="control-buttons" role="group" aria-label="Simulation commands" aria-describedby="controls-help">
-      {/* aria-disabled keeps keyboard focus on a control while its command settles. */}
-      <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.run().catch(() => {}); }}>Run</button>
-      <button aria-disabled={!canPause} onClick={() => { if (canPause) void host.pause().catch(() => {}); }}>Pause</button>
-      <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.step().catch(() => {}); }}>Step</button>
-      <button aria-disabled={!canReset} onClick={() => { if (canReset) void host.reset().catch(() => {}); }}>Reset</button>
+  return <>
+    <div className="toolbar-row command-row">
+      <h2 id="controls-heading" className="sr-only">Simulation controls</h2>
+      <div className="control-buttons" role="group" aria-label="Simulation commands" aria-describedby="controls-help">
+        {/* aria-disabled keeps keyboard focus on a control while its command settles. */}
+        <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.run().catch(() => {}); }}>Run</button>
+        <button aria-disabled={!canPause} onClick={() => { if (canPause) void host.pause().catch(() => {}); }}>Pause</button>
+        <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.step().catch(() => {}); }}>Step</button>
+        <button aria-disabled={!canReset} onClick={() => { if (canReset) void host.reset().catch(() => {}); }}>Reset</button>
+      </div>
+      <p id="controls-help" className="sr-only">Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
+      {children}
     </div>
-    <p id="controls-help">Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
-    <p role="status" aria-label="Simulation status" aria-atomic="true">
-      {statusLabel}
-      {pendingMessage ? ` · ${pendingMessage}` : ""}
-    </p>
-    {status === "COMPLETED" ? <p>Execution completed. Reset to run this scenario again.</p> : null}
-    {error ? <div role="alert">
-      <p>{error.code}: {error.message}</p>
-      {error.context !== null ? <details><summary>Error details</summary><pre>{JSON.stringify(error.context, null, 2)}</pre></details> : null}
-    </div> : null}
-  </section>;
+    <div className="status-line">
+      <p role="status" aria-label="Simulation status" aria-atomic="true">
+        {statusLabel}
+        {pendingMessage ? ` · ${pendingMessage}` : ""}
+      </p>
+      {status === "COMPLETED" ? <p className="status-note">Execution completed. Reset to run this scenario again.</p> : null}
+      {error ? <div role="alert">
+        <p>{error.code}: {error.message}</p>
+        {error.context !== null ? <details><summary>Error details</summary><pre>{JSON.stringify(error.context, null, 2)}</pre></details> : null}
+      </div> : null}
+      {notices}
+    </div>
+  </>;
 }

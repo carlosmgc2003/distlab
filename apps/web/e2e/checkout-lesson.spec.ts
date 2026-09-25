@@ -49,7 +49,9 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   const status = page.getByRole("status", { name: "Simulation status" });
   const lesson = page.getByRole("region", { name: "Checkout lesson" });
   await expect(lesson).toContainText("No lesson is loaded");
+  await page.locator(".lesson-guide summary").click();
   await expect(lesson).toContainText("Does the timeout prove that payment failed?");
+  await page.locator(".lesson-guide summary").click();
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await button("Load scenario").click();
   await expect(status).toHaveText("READY");
@@ -95,6 +97,8 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   });
   expect(verdicts).toEqual(fixture.results);
 
+  const raw = page.locator("details.raw-state");
+  if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
   const panel = page.getByRole("region", { name: "Distributed state" });
   await expect(panel).toContainText("Status: selected");
   await expect(panel).toContainText("NETWORK_TIMEOUT");
