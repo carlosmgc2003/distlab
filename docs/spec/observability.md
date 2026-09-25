@@ -104,6 +104,16 @@ apply an explicit, case-sensitive prefix or contains projection to an already
 visible history snapshot. That projection is UI-owned state in the application
 boundary. It is not a reader query, it does not read redacted payload fields,
 and it does not change canonical history.
+The browser timeline offers a Learning view over this visible snapshot and a Raw
+view of every observation. Learning may collapse the contiguous initial queue
+setup records before the first `simulation.event.started` observation and consecutive
+`scenario.assertion.evaluated` records when the same assertion's verdict and
+evidence are unchanged. Group members retain their original IDs, sequence, and
+virtual time and can be opened individually; changing assertion results,
+delivery attempts, side effects, commits, rollbacks, and faults remain separate
+records. Filters apply to observations before grouping. This presentation does
+not infer causal links from type, timestamp, or proximity. Later scheduled events
+stay separate because they belong to execution after startup queue setup.
 Invalid bounds/identifiers reject `INVALID_OBSERVATION_FILTER`; `byId` returns
 undefined for an unknown valid ID. `all`, `query`, and `export` return detached
 immutable snapshots; `byId` may return the stored immutable record.
