@@ -133,6 +133,7 @@ test("selection and filters survive panel changes and reset or session replaceme
   const before = await latestProjection(page);
   const commands = () => page.evaluate(() => window.workspaceEvidence.commands.map(command => command.type));
   const beforeCommands = await commands();
+  await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByLabel("Type", { exact: true }).fill("simulation.created");
   await page.locator("#timeline-rows button").first().click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("simulation.created");
@@ -161,6 +162,7 @@ test("selection and filters survive panel changes and reset or session replaceme
   await page.getByRole("button", { name: "Timeline", exact: true }).click();
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
+  await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByLabel("Type", { exact: true }).fill("simulation.created");
   await page.locator("#timeline-rows button").first().click();
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
