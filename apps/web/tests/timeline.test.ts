@@ -5,6 +5,7 @@ import { simulationTime } from "@distlab/contracts";
 import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine } from "@distlab/scenario";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
+import { learningTimeline } from "../src/learning-timeline.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import {
@@ -61,6 +62,42 @@ function observation(input: {
 }
 
 const runs = new Map<string, Promise<{ projection: RuntimeProjectionSet; query: (filter: ObservationFilter) => readonly Observation[] }>>();
+
+test("learning timeline collapses only contiguous unchanged bookkeeping and preserves raw members", async () => {
+  for (const [scenario, choice] of [[normalCheckout, scenarios[0]!], [responseLostCheckout, scenarios[1]!]] as const) {
+    const { projection } = await completed(scenario, choice);
+    const observations = projection.history.observations;
+    const entries = learningTimeline(observations);
+    assert.deepEqual(entries.flatMap(entry => entry.observations), orderObservations(observations));
+    assert.ok(entries.length < observations.length);
+    for (const entry of entries.filter(item => item.collapsed)) {
+      assert.ok(entry.observations.length > 1);
+      assert.ok(entry.observations.every((item, index) => index === 0 || item.sequence === entry.observations[index - 1]!.sequence + 1));
+    }
+    assert.ok(entries.some(entry => entry.summary.startsWith("Initial engine queue setup × ")));
+    if (choice.id === "response-lost") {
+      for (const type of ["external.effect.committed", "network.response.dropped", "network.request.timedout"]) {
+        assert.equal(entries.flatMap(entry => entry.observations).filter(item => item.type === type).length, 1);
+      }
+      const attempts = observations.filter(item => item.type === "message.delivered");
+      assert.ok(attempts.some(item => (item.data as Record<string, unknown> | undefined)?.attempt === 2));
+    }
+  }
+});
+
+test("same-time operations, duplicate delivery, retries, and changed assertion results remain separate", () => {
+  const rows = [
+    observation({ id: "write", time: 4, sequence: 1, type: "database.write.committed", source: "orders" }),
+    observation({ id: "request", time: 4, sequence: 2, type: "network.request.sent", source: "customer-app", target: "orders" }),
+    observation({ id: "delivery-1", time: 4, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } }),
+    observation({ id: "delivery-2", time: 4, sequence: 4, type: "message.delivered", source: "payments", data: { attempt: 2 } }),
+    observation({ id: "assertion-fail", time: 4, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: false, evidence: { count: 0 } } }),
+    observation({ id: "assertion-pass", time: 4, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: true, evidence: { count: 1 } } }),
+  ];
+  const entries = learningTimeline(rows);
+  assert.deepEqual(entries.flatMap(entry => entry.observations.map(item => item.id)), rows.map(item => item.id));
+  assert.ok(entries.every(entry => !entry.collapsed));
+});
 
 function completed(scenario: typeof normalCheckout, choice: (typeof scenarios)[number]) {
   const cached = runs.get(choice.id);

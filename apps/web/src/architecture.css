@@ -92,6 +92,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .terminal-history { border-left: 4px solid #b45309; background: #fff7ed; padding: 8px 12px; }
 .timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-playback { max-width: 85ch; color: #475569; }
 .timeline-count, #timeline-order { margin: 4px 0; }
+.timeline-mode { display: flex; gap: 8px; margin: 0; }
+.timeline-mode button[aria-pressed="true"] { background: #dbeafe; border-color: #1d4ed8; }
 .timeline-boundary, .timeline-playback { margin: 4px 0; }
 .timeline-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 4px 8px; margin: 4px 0; align-items: start; }
 .timeline-filters label { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: .75rem; font-weight: 650; color: #475569; }
@@ -120,6 +122,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-rows { scroll-margin-top: 12px; }
 .timeline-rows button[aria-pressed="true"] { background: #dbeafe; box-shadow: inset 4px 0 0 #1d4ed8; }
 .timeline-rows button:focus { outline: 3px solid #1d4ed8; outline-offset: -3px; z-index: 1; }
+.learning-entries { min-height: 100%; }
+.learning-row, .learning-group summary { display: grid; grid-template-columns: 64px 64px minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 4px; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-bottom: 1px solid #e2e8f0; background: #fff; text-align: left; }
+.learning-row > *, .learning-group summary > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.learning-group summary { cursor: pointer; }
+.learning-group ol { margin: 0; padding: 8px 8px 8px 36px; }
+.learning-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; }
+.learning-row[aria-pressed="true"] { background: #dbeafe; box-shadow: inset 4px 0 0 #1d4ed8; }
+.learning-row:focus-visible, .learning-group summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: -3px; }
 .timeline-detail h3 { scroll-margin: 16px; }
 .timeline-empty { margin: 12px; }
 .timeline-detail { margin: 0; overflow-wrap: anywhere; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; padding: 8px 12px; }
