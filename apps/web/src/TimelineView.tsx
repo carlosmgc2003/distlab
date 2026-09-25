@@ -402,12 +402,14 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         {windowRows.map((observation, offset) => {
           const index = range.start + offset;
           const path = observation.target ? `${observation.source} → ${observation.target}` : observation.source;
+          const type = observation.type.toLowerCase();
+          const semantic = type.includes("timeout") ? "is-warning" : type.includes("fault") || type.includes("failed") || type.includes("rejected") ? "is-error" : "";
           return <button key={observation.id} type="button" data-observation-id={observation.id} aria-pressed={observation.id === selectedId}
             style={{ position: "absolute", top: index * TIMELINE_ROW_HEIGHT, height: TIMELINE_ROW_HEIGHT, left: 0, right: 0 }}
             onClick={() => choose(observation.id)}>
             <span>t={observation.time}</span>
             <span>#{observation.sequence}</span>
-            <span>{observation.type}</span>
+            <span className={semantic}>{observation.type}</span>
             <span>{path}</span>
           </button>;
         })}
