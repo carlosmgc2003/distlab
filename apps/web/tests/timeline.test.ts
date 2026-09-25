@@ -26,6 +26,7 @@ import {
   visibleRowRange,
 } from "../src/timeline.ts";
 import type { MovementEdge } from "../src/timeline.ts";
+import { emptyTimelineDraft, parseTimelineQuery, queryTimeline, readerFilter, timelineSuggestions, visibleChoices } from "../src/timeline-query.ts";
 
 const checkoutEdges: readonly MovementEdge[] = [
   { id: "request:customer-app:orders:0", source: "customer-app", target: "orders", relationship: "request" },
@@ -195,6 +196,43 @@ test("request and message observations project onto the checkout links", async (
   const dropped = lost.projection.history.observations.find(item => item.type === "network.response.dropped");
   assert.ok(dropped);
   assert.match(movementCue(dropped, checkoutEdges)?.text ?? "", /Response dropped from payment-processor to payments/);
+});
+
+test("visible-history suggestions refresh across runs and exact mode matches the reader", async () => {
+  const normal = await completed(normalCheckout, scenarios[0]);
+  const lost = await completed(responseLostCheckout, scenarios[1]);
+  const normalTypes = timelineSuggestions(normal.projection.history.observations).types.map(choice => choice.value);
+  const lostTypes = timelineSuggestions(lost.projection.history.observations).types.map(choice => choice.value);
+  assert.equal(normalTypes.includes("network.response.dropped"), false);
+  assert.equal(lostTypes.includes("network.response.dropped"), true);
+  assert.equal(visibleChoices(timelineSuggestions(lost.projection.history.observations).types, "network").shown.some(choice => choice.value === "network.response.dropped"), true);
+  const chosen = parseTimelineQuery({ ...emptyTimelineDraft, type: "network.response.dropped", typeMode: "exact" });
+  assert.equal(chosen.ok, true);
+  if (!chosen.ok) return;
+  const dropped = queryTimeline(lost.projection.history.observations, chosen.query);
+  assert.ok(dropped.length > 0);
+  assert.equal(dropped.every(item => item.type === "network.response.dropped"), true);
+  assert.deepEqual(structuredClone(dropped), lost.query({ type: "network.response.dropped" }));
+  const prefix = parseTimelineQuery({ ...emptyTimelineDraft, type: "network", typeMode: "prefix" });
+  assert.equal(prefix.ok, true);
+  if (!prefix.ok) return;
+  assert.equal(readerFilter(prefix.query), undefined);
+  const prefixed = queryTimeline(lost.projection.history.observations, prefix.query);
+  assert.ok(prefixed.length > dropped.length);
+  assert.equal(prefixed.every(item => item.type.startsWith("network")), true);
+  const cases = [
+    { draft: {}, filter: {} },
+    { draft: { type: "network.request.sent" }, filter: { type: "network.request.sent" } },
+    { draft: { component: "orders" }, filter: { component: "orders" } },
+    { draft: { component: "payment-processor" }, filter: { component: "payment-processor" } },
+  ] as const;
+  for (const item of cases) {
+    const parsed = parseTimelineQuery({ ...emptyTimelineDraft, ...item.draft });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) continue;
+    assert.deepEqual(structuredClone(queryTimeline(normal.projection.history.observations, parsed.query)), normal.query(item.filter));
+    assert.deepEqual(queryTimeline(normal.projection.history.observations, parsed.query).map(row => row.id), filterObservations(normal.projection.history.observations, item.filter).map(row => row.id));
+  }
 });
 
 test("movement only highlights an edge with the matching relationship", () => {

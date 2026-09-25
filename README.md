@@ -220,10 +220,19 @@ directly to the metadata panel. These interactions remain local to the UI and
 send no worker commands.
 
 The execution timeline lists canonical observations in sequence and labels time
-as virtual time. Filters for component, type, trace, event, and entity follow
-the history query rules. The selected row shows trace, span, and causation
-links plus any stored before/after data. Redacted and omitted payloads stay
-marked as stored; missing fields are not reconstructed. Request and message
+as virtual time. Each text filter lists the values present in the current
+visible history. Component choices show a readable name and the canonical id.
+Trace, event, component, and entity values can be copied or applied from the
+selected observation. Exact, Prefix, and Contains are explicit: Exact follows
+the history query, and Prefix and Contains are case-sensitive read-only
+projections. Choosing a suggestion uses Exact. Active chips show the applied
+filters and can be removed one at a time or cleared together. Malformed or
+reversed virtual times stay on screen with an explanation, and an empty result
+names the recorded values and how to clear the filters. These controls do not
+change canonical history or `ExecutionHistoryReader` semantics. The selected
+row shows trace, span, and causation links plus any stored before/after data.
+Redacted and omitted payloads stay marked as stored; missing fields are not
+reconstructed. Request and message
 observations highlight the matching architecture link with a transient movement
 cue and a text alternative. Play, pause, and the playback cursor are UI state:
 a host timer may advance that cursor, and it does not advance virtual time,

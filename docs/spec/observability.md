@@ -99,6 +99,11 @@ Queries filter by time, type, component, trace, event, and entity.
 Filters combine with AND; time bounds are inclusive, `type` is an exact match,
 `component` matches source or target, and `entity` matches both kind and ID in
 `entityRefs`. Results preserve append order; no filter means all records.
+These rules describe `ExecutionHistoryReader` only. A student timeline may also
+apply an explicit, case-sensitive prefix or contains projection to an already
+visible history snapshot. That projection is UI-owned state in the application
+boundary. It is not a reader query, it does not read redacted payload fields,
+and it does not change canonical history.
 Invalid bounds/identifiers reject `INVALID_OBSERVATION_FILTER`; `byId` returns
 undefined for an unknown valid ID. `all`, `query`, and `export` return detached
 immutable snapshots; `byId` may return the stored immutable record.

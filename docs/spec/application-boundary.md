@@ -77,7 +77,17 @@ random state internals, and live callbacks. `randomDrawCount` is an observable
 counter only; it cannot reveal or advance the generator. React Flow positions
 and selection remain UI-owned state and are excluded from every projection.
 Timeline filters, the selected observation, and the playback cursor are UI-owned
-too. Playback may use a host timer only to move that cursor and to paint a
+too. Text filters offer the distinct canonical values already present in the
+visible history projection. Exact mode uses the same comparisons as
+`ExecutionHistoryReader.query`: inclusive virtual-time bounds, exact type,
+component as source or target, exact trace, exact event, and entity kind plus
+id on the same reference. Prefix and Contains are explicit, case-sensitive,
+read-only projections over that same snapshot. They are not reader queries,
+they do not accept a query language, and they never read assessment-only state
+or redacted payload fields. Choosing a suggestion applies Exact. Active chips,
+removal, result counts, and clear-all change only this UI state. Suggestions
+are recomputed from the history snapshot currently shown, including when a run
+is replaced. Playback may use a host timer only to move that cursor and to paint a
 transient request or message cue. It does not advance virtual time, record
 observations, or send worker commands.
 Authorized projections may reveal more detail to assessment than the student UI,
