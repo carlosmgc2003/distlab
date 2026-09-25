@@ -231,26 +231,35 @@ directly to the metadata panel. These interactions remain local to the UI and
 send no worker commands.
 
 The execution timeline lists canonical observations in sequence and labels time
-as virtual time. Filters for component, type, trace, event, and entity follow
-the history query rules. Previous and Next are available only when that
-direction selects a different visible row: both are unavailable for an empty
-list, Previous is unavailable on the first row, Next is unavailable on the last,
-and both are unavailable once the only matching row is selected. The selected
-row shows trace, span, and causation links plus any stored before/after data.
-Choosing an evidence, causation, or trace destination shows that row and its
-detail, moves focus to the row, and announces when filters were cleared or
-narrowed to reveal it. Redacted and omitted payloads stay marked as stored;
-missing fields are not reconstructed. Request and message observations highlight
-the matching architecture link with a transient movement cue and a text
-alternative. Play, pause, and the playback cursor are UI state: a host timer may
-advance that cursor, and it does not advance virtual time, record observations,
-or send worker commands. Play is unavailable when fewer than two rows are
-visible. On the last visible row the control is Restart timeline, which starts
-again at the first visible row. Pause timeline is available while that cursor is
-moving. Reset clears the selection and movement cue and shows the new run. A
-terminal failure says whether the published history is complete. Incomplete
-history is withheld with the failure, the same way a projectionless failure
-stays visible until reset. The [shell action matrix](docs/spec/application-boundary.md#shell-action-matrix)
+as virtual time. Each text filter lists the values present in the current
+visible history. Component choices show a readable name and the canonical id.
+Trace, event, component, and entity values can be copied or applied from the
+selected observation. Exact, Prefix, and Contains are explicit: Exact follows
+the history query, and Prefix and Contains are case-sensitive read-only
+projections. Choosing a suggestion uses Exact. Active chips show the applied
+filters and can be removed one at a time or cleared together. Malformed or
+reversed virtual times stay on screen with an explanation, and an empty result
+names the recorded values and how to clear the filters. These controls do not
+change canonical history or `ExecutionHistoryReader` semantics. Previous and
+Next are available only when that direction selects a different visible row:
+both are unavailable for an empty list, Previous is unavailable on the first
+row, Next is unavailable on the last, and both are unavailable once the only
+matching row is selected. The selected row shows trace, span, and causation
+links plus any stored before/after data. Choosing an evidence, causation, or
+trace destination shows that row and its detail, moves focus to the row, and
+announces when filters were cleared or narrowed to reveal it. Redacted and
+omitted payloads stay marked as stored; missing fields are not reconstructed.
+Request and message observations highlight the matching architecture link with
+a transient movement cue and a text alternative. Play, pause, and the playback
+cursor are UI state: a host timer may advance that cursor, and it does not
+advance virtual time, record observations, or send worker commands. Play is
+unavailable when fewer than two rows are visible. On the last visible row the
+control is Restart timeline, which starts again at the first visible row. Pause
+timeline is available while that cursor is moving. Reset clears the selection,
+the filters, and the movement cue and shows the new run. A terminal failure
+says whether the published history is complete. Incomplete history is withheld
+with the failure, the same way a projectionless failure stays visible until
+reset. The [shell action matrix](docs/spec/application-boundary.md#shell-action-matrix)
 lists scenario, simulation, graph, filter, evidence, and playback controls
 across empty, ready, running, paused, completed, and error states.
 

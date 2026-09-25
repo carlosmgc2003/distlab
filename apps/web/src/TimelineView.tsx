@@ -1,5 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Observation, ObservationFilter } from "@distlab/contracts";
+import type { Observation } from "@distlab/contracts";
+import {
+  TIMELINE_FILTER_HELP,
+  activeFilterChips,
+  clearTimelineField,
+  componentLabel,
+  emptyFilterExplanation,
+  emptyTimelineDraft,
+  narrowToTrace,
+  parseTimelineQuery,
+  queryTimeline,
+  revealTimelineObservation,
+  timelineDraftIsBlank,
+  timelineSuggestions,
+  visibleChoices,
+  withExactValue,
+} from "./timeline-query.ts";
+import type { ComponentTitle, FilterChoice, TextFilterField, TextMatchMode, TimelineDraft, TimelineQuery } from "./timeline-query.ts";
 import {
   TIMELINE_ROW_HEIGHT,
   TIMELINE_VIEWPORT,
@@ -8,42 +25,37 @@ import {
   continuesHistory,
   correlation,
   emphasisFor,
-  emptyTimelineDraft,
-  filterObservations,
   movementCue,
   movementMessage,
-  parseTimelineFilter,
   payloadCopy,
   payloadVisibility,
   playbackAdvance,
   playbackControl,
   playbackStatus,
   revealMessage,
-  revealObservation,
   selectionAvailability,
   selectionMessage,
   selectionStep,
-  showTraceFilter,
-  timelineDraftIsBlank,
   traceFilterMessage,
   traceView,
   visibleRowRange,
 } from "./timeline.ts";
-import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode, TimelineFilterDraft } from "./timeline.ts";
+import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode } from "./timeline.ts";
 
 /** Host interval for the playback cursor only. It never calls the simulation host. */
 const PLAYBACK_INTERVAL_MS = 1000;
 const SPAN_PREVIEW = 12;
 
-export function TimelineView({ observations, edges, onEmphasis, focusedObservationId, focusToken = 0 }: {
+export function TimelineView({ observations, edges, componentTitles = [], onEmphasis, focusedObservationId, focusToken = 0 }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
+  readonly componentTitles?: readonly ComponentTitle[];
   readonly onEmphasis: (emphasis: GraphEmphasis | undefined) => void;
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
 }) {
-  const [draft, setDraft] = useState<TimelineFilterDraft>(emptyTimelineDraft);
-  const [filter, setFilter] = useState<ObservationFilter>({});
+  const [draft, setDraft] = useState<TimelineDraft>(emptyTimelineDraft);
+  const [query, setQuery] = useState<TimelineQuery>({});
   const [filterError, setFilterError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phase, setPhase] = useState<PlaybackPhase>("idle");
@@ -60,7 +72,13 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
   const pendingFocusId = useRef<string | null>(null);
   const playHadFocus = useRef(false);
   const returnFocusToPlay = useRef(false);
-  const filtered = useMemo(() => filterObservations(observations, filter), [observations, filter]);
+  const suggestions = useMemo(() => timelineSuggestions(observations, componentTitles), [observations, componentTitles]);
+  const filtered = useMemo(() => queryTimeline(observations, query), [observations, query]);
+  const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
+  const explanation = useMemo(
+    () => filtered.length === 0 && observations.length > 0 ? emptyFilterExplanation(query, observations, componentTitles) : "",
+    [filtered.length, observations, query, componentTitles],
+  );
   const filteredRef = useRef(filtered);
   const selectedRef = useRef(selectedId);
   const draftRef = useRef(draft);
@@ -121,10 +139,10 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
       setFeedback("That observation is not in this history.");
       return;
     }
-    const revealed = revealObservation(draftRef.current, observation);
+    const revealed = revealTimelineObservation(draftRef.current, observation);
     if (revealed.changed) {
       setDraft(revealed.draft);
-      setFilter(revealed.filter);
+      setQuery(revealed.query);
       setFilterError(null);
     }
     setSelectedId(observation.id);
@@ -145,6 +163,9 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
       setFeedback("");
       setLiveCueId(null);
       setScrollTop(0);
+      setDraft(emptyTimelineDraft);
+      setQuery({});
+      setFilterError(null);
       seenRef.current = observations.at(-1)?.sequence ?? -1;
       return;
     }
@@ -203,7 +224,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     }
   }, [phase]);
 
-  const filterKey = JSON.stringify(filter);
+  const filterKey = JSON.stringify(query);
   useEffect(() => {
     if (pendingFocusId.current) return;
     const node = scrollerRef.current;
@@ -232,16 +253,16 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     if (!row) return;
     pendingFocusId.current = null;
     row.focus({ preventScroll: true });
-    node.scrollIntoView({ block: "start", inline: "nearest" });
+    node.scrollIntoView({ block: "nearest", inline: "nearest" });
+    document.getElementById("inspection-panel")?.scrollTo(0, 0);
   }, [filtered, focusNonce, scrollTop]);
 
-  const applyDraft = (next: TimelineFilterDraft) => {
+  const applyDraft = (next: TimelineDraft) => {
     setDraft(next);
-    const parsed = parseTimelineFilter(next);
-    if (parsed.ok) { setFilter(parsed.filter); setFilterError(null); }
+    const parsed = parseTimelineQuery(next);
+    if (parsed.ok) { setQuery(parsed.query); setFilterError(null); }
     else setFilterError(parsed.message);
   };
-  const update = (key: keyof TimelineFilterDraft, value: string) => applyDraft({ ...draft, [key]: value });
   const choose = (id: string) => {
     haltPlayback();
     setSelectedId(id);
@@ -255,10 +276,10 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
       return;
     }
     haltPlayback();
-    const revealed = revealObservation(draft, observation);
+    const revealed = revealTimelineObservation(draft, observation);
     if (revealed.changed) {
       setDraft(revealed.draft);
-      setFilter(revealed.filter);
+      setQuery(revealed.query);
       setFilterError(null);
     }
     setSelectedId(observation.id);
@@ -266,7 +287,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     requestFocus(observation.id);
   };
   const showTrace = (traceId: string) => {
-    const change = showTraceFilter(draft, traceId);
+    const change = narrowToTrace(draft, traceId);
     haltPlayback();
     applyDraft(change.draft);
     setFeedback(traceFilterMessage(traceId, change));
@@ -305,26 +326,48 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     setPhase("paused");
     setFeedback("Playback is paused.");
   };
+  const useText = (field: TextFilterField, value: string) => applyDraft(withExactValue(draft, field, value));
+  const useEntity = (kind: string, id: string) => applyDraft(withExactValue(withExactValue(draft, "entityKind", kind), "entityId", id));
   const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
+  const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null;
 
   return <>
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
     <h3 id="timeline-heading">Timeline</h3>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
     <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
-    <form className="timeline-filters" aria-label="Timeline filters" onSubmit={event => event.preventDefault()}>
-      <label>Virtual time from<input inputMode="numeric" value={draft.fromTime} onChange={event => update("fromTime", event.target.value)} /></label>
-      <label>Virtual time to<input inputMode="numeric" value={draft.toTime} onChange={event => update("toTime", event.target.value)} /></label>
-      <label>Type<input value={draft.type} onChange={event => update("type", event.target.value)} /></label>
-      <label>Component<input value={draft.component} onChange={event => update("component", event.target.value)} /></label>
-      <label>Trace<input value={draft.traceId} onChange={event => update("traceId", event.target.value)} /></label>
-      <label>Event<input value={draft.eventId} onChange={event => update("eventId", event.target.value)} /></label>
-      <label>Entity kind<input value={draft.entityKind} onChange={event => update("entityKind", event.target.value)} /></label>
-      <label>Entity id<input value={draft.entityId} onChange={event => update("entityId", event.target.value)} /></label>
-      <button type="button" disabled={timelineDraftIsBlank(draft)} onClick={() => applyDraft(emptyTimelineDraft)}>Clear filters</button>
+    <p id="timeline-filter-help" className="timeline-help">{TIMELINE_FILTER_HELP}</p>
+    <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => event.preventDefault()}>
+      <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.fromTime} onChange={event => applyDraft({ ...draft, fromTime: event.target.value })} /></label>
+      <label>Virtual time to<input id="timeline-to" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.toTime} onChange={event => applyDraft({ ...draft, toTime: event.target.value })} /></label>
+      <SuggestionField id="timeline-type" label="Type" value={draft.type} mode={draft.typeMode} choices={suggestions.types}
+        onValue={value => applyDraft({ ...draft, type: value })} onMode={typeMode => applyDraft({ ...draft, typeMode })}
+        onChoose={value => applyDraft({ ...draft, type: value, typeMode: "exact" })} />
+      <SuggestionField id="timeline-component" label="Component" value={draft.component} mode={draft.componentMode} choices={suggestions.components}
+        onValue={value => applyDraft({ ...draft, component: value })} onMode={componentMode => applyDraft({ ...draft, componentMode })}
+        onChoose={value => applyDraft({ ...draft, component: value, componentMode: "exact" })} />
+      <SuggestionField id="timeline-trace" label="Trace" value={draft.traceId} mode={draft.traceMode} choices={suggestions.traces}
+        onValue={value => applyDraft({ ...draft, traceId: value })} onMode={traceMode => applyDraft({ ...draft, traceMode })}
+        onChoose={value => applyDraft({ ...draft, traceId: value, traceMode: "exact" })} />
+      <SuggestionField id="timeline-event" label="Event" value={draft.eventId} mode={draft.eventMode} choices={suggestions.events}
+        onValue={value => applyDraft({ ...draft, eventId: value })} onMode={eventMode => applyDraft({ ...draft, eventMode })}
+        onChoose={value => applyDraft({ ...draft, eventId: value, eventMode: "exact" })} />
+      <SuggestionField id="timeline-entity-kind" label="Entity kind" value={draft.entityKind} mode={draft.entityKindMode} choices={suggestions.entityKinds}
+        onValue={value => applyDraft({ ...draft, entityKind: value })} onMode={entityKindMode => applyDraft({ ...draft, entityKindMode })}
+        onChoose={value => applyDraft({ ...draft, entityKind: value, entityKindMode: "exact" })} />
+      <SuggestionField id="timeline-entity-id" label="Entity id" value={draft.entityId} mode={draft.entityIdMode} choices={suggestions.entityIds}
+        onValue={value => applyDraft({ ...draft, entityId: value })} onMode={entityIdMode => applyDraft({ ...draft, entityIdMode })}
+        onChoose={value => applyDraft({ ...draft, entityId: value, entityIdMode: "exact" })} />
+      <div className="timeline-chip-row">
+        {chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">{chips.map(chip => <li key={chip.field}>
+          <span>{chip.label}</span>
+          <button type="button" aria-label={chip.removeLabel} onClick={() => applyDraft(clearTimelineField(draft, chip.field))}>Remove</button>
+        </li>)}</ul> : null}
+        <button type="button" disabled={!filtersActive} onClick={() => applyDraft(emptyTimelineDraft)}>Clear all filters</button>
+      </div>
     </form>
-    {filterError ? <p role="alert">{filterError}</p> : null}
+    {filterError ? <p id="timeline-filter-error" role="alert">{filterError}</p> : null}
     <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
     <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
       <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
@@ -354,7 +397,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
           else selectIndex(last);
         }
       }}>
-      {filtered.length === 0 ? <p className="timeline-empty">{observations.length === 0 ? "No observations have been recorded for this run." : "No observations match these filters."}</p> : null}
+      {filtered.length === 0 ? <p className="timeline-empty">{observations.length === 0 ? "No observations have been recorded for this run." : explanation}</p> : null}
       <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
         {windowRows.map((observation, offset) => {
           const index = range.start + offset;
@@ -371,50 +414,175 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
       </div>
     </div>
     </section>
-    <ObservationDetail observation={selected} observations={observations} hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
-      onSelect={reveal} onShowTrace={showTrace} />
+    <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
+      hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
+      onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
   </>;
 }
 
-function ObservationDetail({ observation, observations, hidden, onSelect, onShowTrace }: {
+function suggestionBox(anchor: HTMLElement, count: number): { top: number; left: number; width: number } {
+  const rect = anchor.getBoundingClientRect();
+  const width = rect.width;
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+  const estimated = Math.min(280, count * 36 + 28);
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const top = spaceBelow < estimated && rect.top > spaceBelow
+    ? Math.max(8, rect.top - estimated - 4)
+    : rect.bottom + 4;
+  return { top, left, width };
+}
+
+function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onChoose }: {
+  readonly id: string;
+  readonly label: string;
+  readonly value: string;
+  readonly mode: TextMatchMode;
+  readonly choices: readonly FilterChoice[];
+  readonly onValue: (value: string) => void;
+  readonly onMode: (mode: TextMatchMode) => void;
+  readonly onChoose: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [box, setBox] = useState<{ top: number; left: number; width: number } | null>(null);
+  const anchorRef = useRef<HTMLInputElement>(null);
+  const listId = `${id}-list`;
+  const noteId = `${id}-note`;
+  const { shown, hidden } = visibleChoices(choices, value);
+  const index = activeIndex >= 0 && activeIndex < shown.length ? activeIndex : -1;
+  const active = index >= 0 ? shown[index] : undefined;
+  const trimmed = value.trim();
+  const note = shown.length === 0
+    ? `No recorded values contain "${trimmed}".`
+    : hidden > 0 ? `${hidden} more. Keep typing to narrow this list.` : "";
+  const choose = (next: string) => {
+    onChoose(next);
+    setOpen(false);
+    setActiveIndex(-1);
+  };
+  useEffect(() => {
+    const anchor = anchorRef.current;
+    if (!open || !anchor) return;
+    const place = () => setBox(suggestionBox(anchor, Math.max(shown.length, 1)));
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, shown.length, value]);
+  return <div className="filter-field">
+    <label htmlFor={id}>{label}</label>
+    <input ref={anchorRef} id={id} role="combobox" aria-autocomplete="list" aria-expanded={open} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+      aria-controls={open && shown.length > 0 ? listId : undefined} aria-activedescendant={open && active ? `${id}-option-${index}` : undefined}
+      aria-describedby={open && note ? noteId : undefined} value={value}
+      onFocus={() => setOpen(true)}
+      onBlur={() => { setOpen(false); setActiveIndex(-1); }}
+      onChange={event => { setOpen(true); setActiveIndex(-1); onValue(event.target.value); }}
+      onKeyDown={event => {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setOpen(true);
+          setActiveIndex(current => shown.length === 0 ? -1 : Math.min(shown.length - 1, (current < 0 ? -1 : current) + 1));
+        } else if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setOpen(true);
+          setActiveIndex(current => current <= 0 ? -1 : current - 1);
+        } else if (event.key === "Escape") {
+          if (open) { event.preventDefault(); setOpen(false); setActiveIndex(-1); }
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          const exact = shown.filter(choice => choice.value === trimmed);
+          const picked = active ?? (exact.length === 1 ? exact[0] : undefined);
+          if (open && picked) choose(picked.value);
+          else setOpen(false);
+        }
+      }} />
+    <label htmlFor={`${id}-mode`}>{label} match</label>
+    <select id={`${id}-mode`} value={mode} onChange={event => {
+      const next = event.target.value;
+      if (next === "exact" || next === "prefix" || next === "contains") onMode(next);
+    }}>
+      <option value="exact">Exact</option>
+      <option value="prefix">Prefix</option>
+      <option value="contains">Contains</option>
+    </select>
+    {open && box ? <div className="suggestion-popover" style={{ top: box.top, left: box.left, width: box.width }}>
+      {shown.length > 0 ? <ul id={listId} role="listbox" aria-label={`${label} choices`}>{shown.map((choice, optionIndex) => <li key={choice.value}
+        id={`${id}-option-${optionIndex}`} role="option" aria-selected={mode === "exact" && choice.value === trimmed}
+        className={optionIndex === index ? "is-active" : undefined}
+        onPointerDown={event => event.preventDefault()}
+        onClick={() => choose(choice.value)}>{choice.label}</li>)}</ul> : null}
+      {note ? <p id={noteId} className="suggestion-note">{note}</p> : null}
+    </div> : null}
+  </div>;
+}
+
+function ObservationDetail({ observation, observations, componentTitles, hidden, onSelect, onShowTrace, onUseText, onUseEntity }: {
   readonly observation: Observation | undefined;
   readonly observations: readonly Observation[];
+  readonly componentTitles: readonly ComponentTitle[];
   readonly hidden: boolean;
   readonly onSelect: (id: string) => void;
   readonly onShowTrace: (traceId: string) => void;
+  readonly onUseText: (field: TextFilterField, value: string) => void;
+  readonly onUseEntity: (kind: string, id: string) => void;
 }) {
   return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h3 id="observation-detail-heading">Observation detail</h3>
     {!observation ? <p>Select an observation to inspect its trace, causation, and stored data.</p> : <DetailBody
-      observation={observation} observations={observations} hidden={hidden} onSelect={onSelect} onShowTrace={onShowTrace} />}
+      observation={observation} observations={observations} componentTitles={componentTitles} hidden={hidden}
+      onSelect={onSelect} onShowTrace={onShowTrace} onUseText={onUseText} onUseEntity={onUseEntity} />}
   </section>;
 }
 
-function DetailBody({ observation, observations, hidden, onSelect, onShowTrace }: {
+function DetailBody({ observation, observations, componentTitles, hidden, onSelect, onShowTrace, onUseText, onUseEntity }: {
   readonly observation: Observation;
   readonly observations: readonly Observation[];
+  readonly componentTitles: readonly ComponentTitle[];
   readonly hidden: boolean;
   readonly onSelect: (id: string) => void;
   readonly onShowTrace: (traceId: string) => void;
+  readonly onUseText: (field: TextFilterField, value: string) => void;
+  readonly onUseEntity: (kind: string, id: string) => void;
 }) {
   const links = correlation(observations, observation);
   const evidence = changeEvidence(observation);
   const visibility = payloadVisibility(observation);
   const trace = observation.traceId !== undefined ? traceView(observations, observation.traceId) : undefined;
+  const eventId = observation.eventId;
+  const traceId = observation.traceId;
+  const target = observation.target;
+  const entities = observation.entityRefs ?? [];
   return <>
     {hidden ? <p>This observation is hidden by the current filters.</p> : null}
     <dl>
+      <dt>Observation</dt><dd><span>{observation.id}</span><CopyButton label="Copy observation id" value={observation.id} /></dd>
       <dt>Virtual time</dt><dd>{observation.time}</dd>
       <dt>Sequence</dt><dd>{observation.sequence}</dd>
       <dt>Type</dt><dd>{observation.type}</dd>
-      <dt>Source</dt><dd>{observation.source}</dd>
-      {observation.target !== undefined ? <><dt>Target</dt><dd>{observation.target}</dd></> : null}
-      {observation.traceId !== undefined ? <><dt>Trace</dt><dd>{observation.traceId}</dd></> : null}
+      <dt>Source</dt><dd>
+        <span>{componentLabel(observation.source, componentTitles)}</span>
+        <button type="button" onClick={() => onUseText("component", observation.source)}>Use source as component filter</button>
+        <CopyButton label="Copy source id" value={observation.source} />
+      </dd>
+      {target !== undefined ? <><dt>Target</dt><dd>
+        <span>{componentLabel(target, componentTitles)}</span>
+        <button type="button" onClick={() => onUseText("component", target)}>Use target as component filter</button>
+        <CopyButton label="Copy target id" value={target} />
+      </dd></> : null}
+      {traceId !== undefined ? <><dt>Trace</dt><dd><span>{traceId}</span><CopyButton label="Copy trace id" value={traceId} /></dd></> : null}
       {observation.spanId !== undefined ? <><dt>Span</dt><dd>{observation.spanId}</dd></> : null}
       {observation.parentSpanId !== undefined ? <><dt>Parent span</dt><dd>{observation.parentSpanId}</dd></> : null}
       {observation.causationId !== undefined ? <><dt>Causation</dt><dd>{observation.causationId}</dd></> : null}
-      {observation.eventId !== undefined ? <><dt>Event</dt><dd>{observation.eventId}</dd></> : null}
+      {eventId !== undefined ? <><dt>Event</dt><dd><span>{eventId}</span><CopyButton label="Copy event id" value={eventId} /></dd></> : null}
+      {entities.length > 0 ? <><dt>Entities</dt><dd>{entities.map(entity => `${entity.kind} ${entity.id}`).join(", ")}</dd></> : null}
     </dl>
+    {eventId !== undefined || entities.length > 0 ? <div className="timeline-actions" role="group" aria-label="Filter from this observation">
+      {eventId !== undefined ? <button type="button" onClick={() => onUseText("eventId", eventId)}>Use this event</button> : null}
+      {entities.map((entity, index) => <button key={`${entity.kind}:${entity.id}:${index}`} type="button" onClick={() => onUseEntity(entity.kind, entity.id)}>Use entity {entity.kind} {entity.id}</button>)}
+    </div> : null}
     <h4>Stored data</h4>
     <p>{payloadCopy(observation)}</p>
     {visibility === "redacted" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
@@ -435,7 +603,7 @@ function DetailBody({ observation, observations, hidden, onSelect, onShowTrace }
       <button type="button" aria-controls="timeline-rows" onClick={() => onSelect(effect.id)}>Select effect {effect.type} at virtual time {effect.time}</button>
     </li>)}{links.effects.length > SPAN_PREVIEW ? <li>{links.effects.length - SPAN_PREVIEW} more effects. Show this trace to read them in order.</li> : null}</ul> : <p>No later observation points at this record.</p>}
     <h4>Trace</h4>
-    {observation.traceId ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onShowTrace(observation.traceId!)}>Show this trace</button></p> : <p>This observation has no trace.</p>}
+    {traceId !== undefined ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onShowTrace(traceId)}>Show this trace</button></p> : <p>This observation has no trace.</p>}
     {trace ? <>
       <SpanList nodes={trace.roots} selectedId={observation.id} onSelect={onSelect} />
       {trace.unspanned.length > 0 ? <div>
@@ -448,6 +616,23 @@ function DetailBody({ observation, observations, hidden, onSelect, onShowTrace }
         <li key={item.effectId}>Causation {item.causeId} is not in this history.</li>)}</ul> : null}
     </> : null}
   </>;
+}
+
+function CopyButton({ label, value }: { readonly label: string; readonly value: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+  useEffect(() => {
+    if (state !== "copied") return;
+    const timer = window.setTimeout(() => setState("idle"), 4000);
+    return () => window.clearTimeout(timer);
+  }, [state]);
+  return <span className="copy-control">
+    <button type="button" onClick={() => {
+      const clipboard = navigator.clipboard;
+      if (!clipboard?.writeText) { setState("manual"); return; }
+      void clipboard.writeText(value).then(() => setState("copied"), () => setState("manual"));
+    }}>{state === "copied" ? `Copied ${label.replace(/^Copy /, "")}` : label}</button>
+    {state === "manual" ? <input readOnly value={value} aria-label={`${label.replace(/^Copy /, "")} to copy`} onFocus={event => event.currentTarget.select()} /> : null}
+  </span>;
 }
 
 function SpanList({ nodes, selectedId, onSelect, depth = 0 }: {

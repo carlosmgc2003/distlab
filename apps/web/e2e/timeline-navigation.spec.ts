@@ -51,14 +51,14 @@ test("single dropped response disables both boundaries and evidence navigation k
   const commands = await commandTypes(page);
 
   await page.getByLabel("Type", { exact: true }).fill("not.a.real.type");
-  await expect(page.getByText("No observations match these filters.")).toBeVisible();
+  await expect(page.getByText("No observations match every active filter.")).toBeVisible();
   await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
   for (const name of ["Previous observation", "Next observation", "Play timeline", "Pause timeline"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
   }
 
-  await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.getByRole("button", { name: "Clear filters" })).toBeDisabled();
+  await page.getByRole("button", { name: "Clear all filters", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Clear all filters", exact: true })).toBeDisabled();
   await page.getByLabel("Type", { exact: true }).fill("network.response.dropped");
   await expect(page.locator(".timeline-count")).toContainText(/^1 of /);
   await expect(page.getByRole("button", { name: "Next observation" })).toBeEnabled();
@@ -104,9 +104,11 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.getByLabel("Virtual time from", { exact: true }).fill("999999");
   await page.getByLabel("Virtual time to", { exact: true }).fill("0");
   await page.getByLabel("Type", { exact: true }).fill("network.response.dropped");
-  await expect(page.getByRole("alert")).toContainText("Virtual time from is after virtual time to.");
+  await expect(page.getByRole("alert")).toContainText("Virtual time from 999999 is after virtual time to 0");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
+  const raw = page.locator("details.raw-state");
+  if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
   await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(selected).toContainText("external.effect.committed");
   await expect(selected).toBeFocused();
@@ -147,6 +149,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("button", { name: "Play timeline" })).toBeEnabled();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
   await expect(page.getByRole("button", { name: "Play timeline" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(await commandTypes(page)).toEqual(commands);

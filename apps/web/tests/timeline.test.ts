@@ -13,7 +13,6 @@ import {
   continuesHistory,
   correlation,
   emphasisFor,
-  emptyTimelineDraft,
   filterObservations,
   movementCue,
   movementMessage,
@@ -26,9 +25,7 @@ import {
   playbackControl,
   playbackStatus,
   revealMessage,
-  revealObservation,
   selectionStep,
-  showTraceFilter,
   terminalCopy,
   terminalMark,
   traceFilterMessage,
@@ -36,6 +33,7 @@ import {
   visibleRowRange,
 } from "../src/timeline.ts";
 import type { MovementEdge } from "../src/timeline.ts";
+import { emptyTimelineDraft, narrowToTrace, parseTimelineQuery, queryTimeline, readerFilter, revealTimelineObservation, timelineSuggestions, visibleChoices } from "../src/timeline-query.ts";
 
 const checkoutEdges: readonly MovementEdge[] = [
   { id: "request:customer-app:orders:0", source: "customer-app", target: "orders", relationship: "request" },
@@ -207,6 +205,43 @@ test("request and message observations project onto the checkout links", async (
   assert.match(movementCue(dropped, checkoutEdges)?.text ?? "", /Response dropped from payment-processor to payments/);
 });
 
+test("visible-history suggestions refresh across runs and exact mode matches the reader", async () => {
+  const normal = await completed(normalCheckout, scenarios[0]);
+  const lost = await completed(responseLostCheckout, scenarios[1]);
+  const normalTypes = timelineSuggestions(normal.projection.history.observations).types.map(choice => choice.value);
+  const lostTypes = timelineSuggestions(lost.projection.history.observations).types.map(choice => choice.value);
+  assert.equal(normalTypes.includes("network.response.dropped"), false);
+  assert.equal(lostTypes.includes("network.response.dropped"), true);
+  assert.equal(visibleChoices(timelineSuggestions(lost.projection.history.observations).types, "network").shown.some(choice => choice.value === "network.response.dropped"), true);
+  const chosen = parseTimelineQuery({ ...emptyTimelineDraft, type: "network.response.dropped", typeMode: "exact" });
+  assert.equal(chosen.ok, true);
+  if (!chosen.ok) return;
+  const dropped = queryTimeline(lost.projection.history.observations, chosen.query);
+  assert.ok(dropped.length > 0);
+  assert.equal(dropped.every(item => item.type === "network.response.dropped"), true);
+  assert.deepEqual(structuredClone(dropped), lost.query({ type: "network.response.dropped" }));
+  const prefix = parseTimelineQuery({ ...emptyTimelineDraft, type: "network", typeMode: "prefix" });
+  assert.equal(prefix.ok, true);
+  if (!prefix.ok) return;
+  assert.equal(readerFilter(prefix.query), undefined);
+  const prefixed = queryTimeline(lost.projection.history.observations, prefix.query);
+  assert.ok(prefixed.length > dropped.length);
+  assert.equal(prefixed.every(item => item.type.startsWith("network")), true);
+  const cases = [
+    { draft: {}, filter: {} },
+    { draft: { type: "network.request.sent" }, filter: { type: "network.request.sent" } },
+    { draft: { component: "orders" }, filter: { component: "orders" } },
+    { draft: { component: "payment-processor" }, filter: { component: "payment-processor" } },
+  ] as const;
+  for (const item of cases) {
+    const parsed = parseTimelineQuery({ ...emptyTimelineDraft, ...item.draft });
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) continue;
+    assert.deepEqual(structuredClone(queryTimeline(normal.projection.history.observations, parsed.query)), normal.query(item.filter));
+    assert.deepEqual(queryTimeline(normal.projection.history.observations, parsed.query).map(row => row.id), filterObservations(normal.projection.history.observations, item.filter).map(row => row.id));
+  }
+});
+
 test("movement only highlights an edge with the matching relationship", () => {
   const edges: MovementEdge[] = [
     { id: "publication", source: "orders", target: "payments", relationship: "publication" },
@@ -274,39 +309,58 @@ test("navigation clears only the filters that hide the destination", () => {
     traceId: "trace-9", eventId: "event-2", entityRefs: [{ kind: "authorization", id: "authorization-1" }],
   });
   const before = structuredClone(cause);
-  const hidden = revealObservation({ ...blank(), type: "network.response.dropped", component: "payment-processor" }, cause);
+  const hidden = revealTimelineObservation({ ...emptyTimelineDraft, type: "network.response.dropped", component: "payment-processor" }, cause);
   assert.deepEqual(hidden.cleared, ["type"]);
-  assert.equal(hidden.filter.type, undefined);
-  assert.equal(hidden.filter.component, "payment-processor");
-  assert.deepEqual(filterObservations([cause], hidden.filter).map(item => item.id), ["cause"]);
+  assert.equal(hidden.draft.type, "");
+  assert.equal(hidden.draft.component, "payment-processor");
+  const hiddenReader = readerFilter(hidden.query);
+  assert.ok(hiddenReader);
+  assert.equal(hiddenReader.type, undefined);
+  assert.equal(hiddenReader.component, "payment-processor");
+  assert.deepEqual(filterObservations([cause], hiddenReader).map(item => item.id), ["cause"]);
   assert.match(revealMessage(hidden.cleared, cause), /The type filter was cleared so this observation is visible/);
-  const visible = revealObservation({ ...blank(), component: "payment-processor" }, cause);
+  const visible = revealTimelineObservation({ ...emptyTimelineDraft, component: "payment-processor" }, cause);
   assert.equal(visible.changed, false);
   assert.match(revealMessage(visible.cleared, cause), /^Selected #174 external\.effect\.committed at virtual time 5\.$/);
-  const several = revealObservation({
-    ...blank(), type: "network.response.dropped", traceId: "other", fromTime: "20", entityKind: "order", entityId: "order-1",
+  const prefixed = revealTimelineObservation({
+    ...emptyTimelineDraft, type: "external", typeMode: "prefix", component: "pay", componentMode: "prefix",
+  }, cause);
+  assert.deepEqual(prefixed.cleared, []);
+  assert.equal(prefixed.draft.typeMode, "prefix");
+  assert.equal(prefixed.draft.component, "pay");
+  const missed = revealTimelineObservation({ ...emptyTimelineDraft, type: "network", typeMode: "contains" }, cause);
+  assert.deepEqual(missed.cleared, ["type"]);
+  assert.equal(missed.draft.type, "");
+  assert.equal(missed.draft.typeMode, "exact");
+  const several = revealTimelineObservation({
+    ...emptyTimelineDraft, type: "network.response.dropped", traceId: "other", fromTime: "20", entityKind: "order", entityId: "order-1",
   }, cause);
   assert.deepEqual(several.cleared, ["virtual time from", "type", "trace", "entity"]);
   assert.match(revealMessage(several.cleared, cause), /virtual time from, type, trace, and entity filters were cleared/);
-  const invalid = revealObservation({ ...blank(), fromTime: "nope", type: "other" }, cause);
-  assert.equal(invalid.filter.fromTime, undefined);
-  assert.equal(invalid.filter.type, undefined);
+  const invalid = revealTimelineObservation({ ...emptyTimelineDraft, fromTime: "nope", type: "other" }, cause);
+  assert.equal(invalid.draft.fromTime, "");
+  assert.equal(invalid.draft.type, "");
+  const invalidReader = readerFilter(invalid.query);
+  assert.ok(invalidReader);
+  assert.equal(invalidReader.fromTime, undefined);
+  assert.equal(invalidReader.type, undefined);
   assert.match(revealMessage(invalid.cleared, cause), /cleared so this observation is visible/);
-  const invertedAtUpperBound = revealObservation({ ...blank(), fromTime: "10", toTime: "5" }, cause);
+  const invertedAtUpperBound = revealTimelineObservation({ ...emptyTimelineDraft, fromTime: "10", toTime: "5" }, cause);
   assert.deepEqual(invertedAtUpperBound.cleared, ["virtual time from"]);
-  assert.deepEqual(invertedAtUpperBound.filter, { toTime: 5 });
-  const invertedBetweenBounds = revealObservation({ ...blank(), fromTime: "10", toTime: "2" }, cause);
+  assert.equal(invertedAtUpperBound.draft.toTime, "5");
+  assert.deepEqual(readerFilter(invertedAtUpperBound.query), { toTime: 5 });
+  const invertedBetweenBounds = revealTimelineObservation({ ...emptyTimelineDraft, fromTime: "10", toTime: "2" }, cause);
   assert.deepEqual(invertedBetweenBounds.cleared, ["virtual time from", "virtual time to"]);
-  assert.deepEqual(invertedBetweenBounds.filter, {});
-  const trace = showTraceFilter({ ...blank(), type: "network.response.dropped", traceId: "other" }, "trace-9");
+  assert.deepEqual(readerFilter(invertedBetweenBounds.query), {});
+  const trace = narrowToTrace({ ...emptyTimelineDraft, type: "network.response.dropped", traceId: "other" }, "trace-9");
   assert.equal(trace.changed, true);
   assert.deepEqual(trace.draft, { ...emptyTimelineDraft, traceId: "trace-9" });
   assert.match(traceFilterMessage("trace-9", trace), /The timeline now shows trace trace-9/);
   assert.match(traceFilterMessage("trace-9", trace), /type and trace filters were cleared/);
-  const same = showTraceFilter({ ...blank(), traceId: "trace-9" }, "trace-9");
+  const same = narrowToTrace({ ...emptyTimelineDraft, traceId: "trace-9" }, "trace-9");
   assert.equal(same.changed, false);
   assert.match(traceFilterMessage("trace-9", same), /already shows trace trace-9/);
-  const opened = showTraceFilter(blank(), "trace-9");
+  const opened = narrowToTrace(emptyTimelineDraft, "trace-9");
   assert.equal(opened.cleared.length, 0);
   assert.match(traceFilterMessage("trace-9", opened), /The timeline now shows trace trace-9\.$/);
   assert.match(movementMessage(cause, 0, 1), /Selected #174/);

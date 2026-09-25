@@ -5,7 +5,7 @@
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
 | Last updated | 2026-09-24 |
-| Related issues | #3, #47 |
+| Related issues | #3, #46, #47 |
 
 ## Responsibility
 
@@ -77,7 +77,17 @@ random state internals, and live callbacks. `randomDrawCount` is an observable
 counter only; it cannot reveal or advance the generator. React Flow positions
 and selection remain UI-owned state and are excluded from every projection.
 Timeline filters, the selected observation, and the playback cursor are UI-owned
-too. Playback may use a host timer only to move that cursor and to paint a
+too. Text filters offer the distinct canonical values already present in the
+visible history projection. Exact mode uses the same comparisons as
+`ExecutionHistoryReader.query`: inclusive virtual-time bounds, exact type,
+component as source or target, exact trace, exact event, and entity kind plus
+id on the same reference. Prefix and Contains are explicit, case-sensitive,
+read-only projections over that same snapshot. They are not reader queries,
+they do not accept a query language, and they never read assessment-only state
+or redacted payload fields. Choosing a suggestion applies Exact. Active chips,
+removal, result counts, and clear-all change only this UI state. Suggestions
+are recomputed from the history snapshot currently shown, including when a run
+is replaced. Playback may use a host timer only to move that cursor and to paint a
 transient request or message cue. It does not advance virtual time, record
 observations, or send worker commands.
 Authorized projections may reveal more detail to assessment than the student UI,
@@ -160,7 +170,7 @@ and it takes effect at an event boundary.
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
 | Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
-| Timeline filters | Not shown | Narrow the visible rows. Clear filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
+| Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
 | Evidence, causation, and trace | Not shown | Select the recorded observation, show its row and detail, and move focus to that row. A filter cleared to reveal it is announced | Same read-only navigation | Same read-only navigation | Same read-only navigation | Not shown when history is withheld |
 | Play / Restart | Not shown | Play moves the cursor through visible rows. Zero or one visible row leaves Play unavailable. On the last visible row the control is Restart timeline | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
 | Pause timeline | Not shown | Unavailable until playback is running | Stop the cursor | Stop the cursor | Stop the cursor | Not shown when history is withheld |

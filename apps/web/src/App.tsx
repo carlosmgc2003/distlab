@@ -46,8 +46,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
   const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
   const report = useMemo(() => projection && lesson ? inspectFaults(projection, lesson) : null, [projection, lesson]);
-  const edges = useMemo(() => projection && lesson
-    ? movementEdges(mapArchitecture(projection.architecture, lesson.architecture, lesson.name).edges) : [], [projection, lesson]);
+  const graph = useMemo(() => projection && lesson
+    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name) : null, [projection, lesson]);
+  const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
+  const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   const lessonState = loading ? "Loading the checkout lesson…"
     : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
@@ -146,7 +148,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
           {...(report ? { inspectorFacts: componentId => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
       </section>
       <div className="timeline-layout">
-        <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} onEmphasis={onEmphasis}
+        <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
           {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
       </div>
     </div> : <div className="investigation-workspace" data-panel={panel}>

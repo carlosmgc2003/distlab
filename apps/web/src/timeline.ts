@@ -291,40 +291,12 @@ export function playbackAdvance(index: number, count: number): { readonly cursor
   return { cursor: next, playing: true };
 }
 
-export interface TimelineFilterDraft {
-  readonly fromTime: string;
-  readonly toTime: string;
-  readonly type: string;
-  readonly component: string;
-  readonly traceId: string;
-  readonly eventId: string;
-  readonly entityKind: string;
-  readonly entityId: string;
-}
-
-export const emptyTimelineDraft: TimelineFilterDraft = {
-  fromTime: "", toTime: "", type: "", component: "", traceId: "", eventId: "", entityKind: "", entityId: "",
-};
-
 export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
 
 export interface PlaybackControl {
   readonly action: "play" | "restart" | "unavailable";
   readonly label: "Play timeline" | "Restart timeline";
   readonly reason: string;
-}
-
-export interface FilterReveal {
-  readonly draft: TimelineFilterDraft;
-  readonly filter: ObservationFilter;
-  readonly cleared: readonly string[];
-  readonly changed: boolean;
-}
-
-export interface TraceFilterChange {
-  readonly draft: TimelineFilterDraft;
-  readonly changed: boolean;
-  readonly cleared: readonly string[];
 }
 
 /** Index of the row this direction would select, or null when the selection would stay put. */
@@ -383,48 +355,6 @@ export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): 
   return control.reason;
 }
 
-export function timelineDraftIsBlank(draft: TimelineFilterDraft): boolean {
-  return (Object.keys(emptyTimelineDraft) as (keyof TimelineFilterDraft)[]).every(key => draft[key].trim() === "");
-}
-
-/** Drop only the draft constraints that exclude this stored observation. */
-export function revealObservation(draft: TimelineFilterDraft, observation: Observation): FilterReveal {
-  const next: { -readonly [Key in keyof TimelineFilterDraft]: string } = { ...draft };
-  const cleared: string[] = [];
-  const clear = (label: string, apply: () => void) => {
-    apply();
-    if (!cleared.includes(label)) cleared.push(label);
-  };
-  if (!parseTimelineFilter(next).ok) {
-    if (bound(next.fromTime) === "invalid") clear("virtual time from", () => { next.fromTime = ""; });
-    if (bound(next.toTime) === "invalid") clear("virtual time to", () => { next.toTime = ""; });
-    if ((text(next.entityKind) === undefined) !== (text(next.entityId) === undefined)) {
-      clear("entity", () => { next.entityKind = ""; next.entityId = ""; });
-    }
-  }
-  const from = bound(next.fromTime);
-  const to = bound(next.toTime);
-  if (from !== undefined && from !== "invalid" && observation.time < from) {
-    clear("virtual time from", () => { next.fromTime = ""; });
-  }
-  if (to !== undefined && to !== "invalid" && observation.time > to) {
-    clear("virtual time to", () => { next.toTime = ""; });
-  }
-  const parsed = parseTimelineFilter(next);
-  const filter = parsed.ok ? parsed.filter : {};
-  if (filter.type !== undefined && observation.type !== filter.type) clear("type", () => { next.type = ""; });
-  if (filter.component !== undefined && observation.source !== filter.component && observation.target !== filter.component) {
-    clear("component", () => { next.component = ""; });
-  }
-  if (filter.traceId !== undefined && observation.traceId !== filter.traceId) clear("trace", () => { next.traceId = ""; });
-  if (filter.eventId !== undefined && observation.eventId !== filter.eventId) clear("event", () => { next.eventId = ""; });
-  if (filter.entity !== undefined && !(observation.entityRefs ?? []).some(entity => entity.kind === filter.entity!.kind && entity.id === filter.entity!.id)) {
-    clear("entity", () => { next.entityKind = ""; next.entityId = ""; });
-  }
-  const finalParse = parseTimelineFilter(next);
-  return { draft: next, filter: finalParse.ok ? finalParse.filter : {}, cleared, changed: cleared.length > 0 };
-}
-
 export function selectionMessage(observation: Observation): string {
   return `Selected #${observation.sequence} ${observation.type} at virtual time ${observation.time}.`;
 }
@@ -441,34 +371,7 @@ export function movementMessage(observation: Observation, index: number, count: 
   return `${selectionMessage(observation)} ${boundaryCopy(index, count)}`;
 }
 
-/** Narrow the timeline to one trace and report every other constraint that was cleared. */
-export function showTraceFilter(draft: TimelineFilterDraft, traceId: string): TraceFilterChange {
-  const next: TimelineFilterDraft = { ...emptyTimelineDraft, traceId };
-  const cleared: string[] = [];
-  const fields: readonly [keyof TimelineFilterDraft, string][] = [
-    ["fromTime", "virtual time from"],
-    ["toTime", "virtual time to"],
-    ["type", "type"],
-    ["component", "component"],
-    ["traceId", "trace"],
-    ["eventId", "event"],
-    ["entityKind", "entity"],
-    ["entityId", "entity"],
-  ];
-  for (const [key, label] of fields) {
-    const value = draft[key].trim();
-    if (!value || (key === "traceId" && value === traceId)) continue;
-    if (key === "entityKind" || key === "entityId") {
-      if (!cleared.includes("entity")) cleared.push("entity");
-      continue;
-    }
-    cleared.push(label);
-  }
-  const changed = (Object.keys(next) as (keyof TimelineFilterDraft)[]).some(key => draft[key].trim() !== next[key]);
-  return { draft: next, changed, cleared };
-}
-
-export function traceFilterMessage(traceId: string, change: TraceFilterChange): string {
+export function traceFilterMessage(traceId: string, change: { readonly changed: boolean; readonly cleared: readonly string[] }): string {
   if (!change.changed) return `The timeline already shows trace ${traceId}.`;
   if (change.cleared.length === 0) return `The timeline now shows trace ${traceId}.`;
   const verb = change.cleared.length === 1 ? "filter was" : "filters were";
