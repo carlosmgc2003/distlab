@@ -42,6 +42,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
   const [playing, setPlaying] = useState(false);
   const [liveCueId, setLiveCueId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [rowViewport, setRowViewport] = useState(TIMELINE_VIEWPORT);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const previousRef = useRef<readonly Observation[] | null>(null);
   const seenRef = useRef(-1);
@@ -69,6 +70,20 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
   }, [selected, edges, liveCue]);
 
   useEffect(() => { onEmphasis(emphasis); }, [emphasis, onEmphasis]);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    // The row window follows the panel height so a shorter workspace still virtualizes the visible rows.
+    const measure = () => {
+      const height = node.clientHeight;
+      if (height > 0) setRowViewport(current => current === height ? current : height);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (focusedObservationId === undefined) return;
@@ -164,10 +179,13 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
     if (index < 0 || index >= filtered.length - 1) setSelectedId(filtered[0]!.id);
     setPlaying(filtered.length > 1);
   };
-  const range = visibleRowRange(filtered.length, scrollTop, TIMELINE_VIEWPORT, TIMELINE_ROW_HEIGHT);
+  const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
 
   return <>
+    <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
+    <h3 id="timeline-heading">Timeline</h3>
+    <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
     <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
     <form className="timeline-filters" aria-label="Timeline filters" onSubmit={event => event.preventDefault()}>
       <label>Virtual time from<input inputMode="numeric" value={draft.fromTime} onChange={event => update("fromTime", event.target.value)} /></label>
@@ -181,13 +199,14 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
       <button type="button" onClick={() => applyDraft(emptyDraft)}>Clear filters</button>
     </form>
     {filterError ? <p role="alert">{filterError}</p> : null}
-    <p className="timeline-count">{filtered.length} of {observations.length} observations in virtual-time order.</p>
     <div className="control-buttons" role="group" aria-label="Timeline playback">
       <button type="button" aria-pressed={playing} disabled={filtered.length === 0} onClick={play}>Play timeline</button>
       <button type="button" disabled={!playing} onClick={() => setPlaying(false)}>Pause timeline</button>
       <button type="button" disabled={filtered.length === 0} onClick={() => move(-1)}>Previous observation</button>
       <button type="button" disabled={filtered.length === 0} onClick={() => move(1)}>Next observation</button>
     </div>
+    </div>
+    <p className="timeline-count">{filtered.length} of {observations.length} observations in virtual-time order.</p>
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
       aria-label="Timeline observations" onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
@@ -212,6 +231,7 @@ export function TimelineView({ observations, edges, onEmphasis, focusedObservati
         })}
       </div>
     </div>
+    </section>
     <ObservationDetail observation={selected} observations={observations} hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={choose} onShowTrace={traceId => applyDraft({ ...emptyDraft, traceId })} />
   </>;
@@ -224,7 +244,7 @@ function ObservationDetail({ observation, observations, hidden, onSelect, onShow
   readonly onSelect: (id: string) => void;
   readonly onShowTrace: (traceId: string) => void;
 }) {
-  return <section className="timeline-detail" aria-labelledby="observation-detail-heading">
+  return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h3 id="observation-detail-heading">Observation detail</h3>
     {!observation ? <p>Select an observation to inspect its trace, causation, and stored data.</p> : <DetailBody
       observation={observation} observations={observations} hidden={hidden} onSelect={onSelect} onShowTrace={onShowTrace} />}
