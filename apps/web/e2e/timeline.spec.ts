@@ -56,11 +56,13 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
   await expect(page.locator("#timeline-order")).toContainText("Virtual time is the simulation clock");
   const ready = await latestProjection(page);
+  await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
   await page.getByLabel("Type", { exact: true }).fill("simulation.created");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
+  await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
@@ -135,6 +137,9 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   const observations = (await latestProjection(page)).history.observations;
   await expect(page.getByRole("button", { name: "Learning", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".learning-group").first()).toContainText("Initial engine queue setup");
+  expect(await page.locator(".learning-group summary").first().evaluate(node => node.getBoundingClientRect().width > 200)).toBe(true);
+  expect(await page.locator("#timeline-rows").evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  expect(await page.locator(".learning-rows > button").first().evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(3);
   await expect(page.locator(".timeline-count")).toContainText("records summarized");
   await page.screenshot({ path: "e2e/evidence/issue-49-learning-timeline.png", fullPage: true });
   const group = page.locator(".learning-group").first();
@@ -161,6 +166,7 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
   await page.locator("#timeline-rows button").first().click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders");

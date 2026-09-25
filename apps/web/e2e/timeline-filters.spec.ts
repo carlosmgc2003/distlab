@@ -40,6 +40,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(status).toHaveText("READY");
+  await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.locator("#timeline-filter-help")).toContainText("combine with AND");
   await expect(page.locator("#timeline-filter-help")).toContainText("case-sensitive");
 
@@ -133,6 +134,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
 
   await page.getByLabel("Scenario", { exact: true }).selectOption("normal");
   await expect(status).toHaveText("READY");
+  await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   await typeInput.fill("network.response.dropped");

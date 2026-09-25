@@ -351,6 +351,8 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     <h3 id="timeline-heading">Timeline</h3>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
     <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
+    <details className="timeline-filter-disclosure">
+    <summary>Filters{chips.length > 0 ? ` (${chips.length} active)` : ""}</summary>
     <p id="timeline-filter-help" className="timeline-help">{TIMELINE_FILTER_HELP}</p>
     <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => event.preventDefault()}>
       <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.fromTime} onChange={event => applyDraft({ ...draft, fromTime: event.target.value })} /></label>
@@ -382,6 +384,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       </div>
     </form>
     {filterError ? <p id="timeline-filter-error" role="alert">{filterError}</p> : null}
+    </details>
     <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
     <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
       <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
@@ -446,7 +449,7 @@ function LearningRows({ items, selectedId, expandedGroups, onToggle, onChoose }:
   return <div className="learning-rows">{items.map(item => {
     if (item.kind === "observation") return <button key={item.observation.id} type="button" data-observation-id={item.observation.id}
       aria-pressed={item.observation.id === selectedId} onClick={() => onChoose(item.observation.id)}>
-      <span>{item.summary} <small>{item.observation.type}</small></span><span>t={item.observation.time} · #{item.observation.sequence}</span><span>{item.observation.source}{item.observation.target ? ` → ${item.observation.target}` : ""}</span>
+      <span>{item.summary}{item.summary !== item.observation.type ? <small>{item.observation.type}</small> : null}</span><span>t={item.observation.time} · #{item.observation.sequence}</span><span>{item.observation.source}{item.observation.target ? ` → ${item.observation.target}` : ""}</span>
     </button>;
     const open = expandedGroups.has(item.id) || item.observations.some(observation => observation.id === selectedId);
     const first = item.observations[0]!;
@@ -457,7 +460,7 @@ function LearningRows({ items, selectedId, expandedGroups, onToggle, onChoose }:
       <summary>{open ? "Hide" : "Show"} {item.observations.length} records: {item.summary} (#{first.sequence}–#{last.sequence}, t={first.time}–{last.time})</summary>
       <ul id={`${item.id}-members`} className="learning-members">{item.observations.map(observation => <li key={observation.id}>
         <button type="button" data-observation-id={observation.id} aria-label="Open raw observation" aria-pressed={observation.id === selectedId} onClick={() => onChoose(observation.id)}>
-          <span>#{observation.sequence}</span><span>t={observation.time}</span><span>{observation.type}</span><span>{observation.id}</span>
+          <span>#{observation.sequence}</span><span>t={observation.time}</span><span>{observation.type}</span><span className="sr-only">{observation.id}</span>
         </button>
       </li>)}</ul>
     </details>;

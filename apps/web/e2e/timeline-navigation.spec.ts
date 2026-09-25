@@ -49,6 +49,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   const commands = await commandTypes(page);
+  await page.locator(".timeline-filter-disclosure summary").click();
 
   await page.getByLabel("Type", { exact: true }).fill("not.a.real.type");
   await expect(page.getByText("No observations match every active filter.")).toBeVisible();

@@ -72,7 +72,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       ...node,
       ...(involved ? { className: `${node.className ?? ""} is-involved${pulse}`.trim() } : {}),
       selected: node.id === selectedId,
-      domAttributes: { "aria-pressed": node.id === selectedId, "aria-controls": "component-inspector" },
+      domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
     };
   }), [graph.nodes, selectedId, emphasis]);
   const edges = useMemo(() => graph.edges.map(edge => emphasize(edge, emphasis)), [graph.edges, emphasis]);
@@ -96,8 +96,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   return <>
     <p className="graph-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom buttons to change the view.</p>
     <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>
-    <a className="inspector-link" href="#component-inspector">Skip to component inspector</a>
-    <div className="architecture-layout">
+    {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
+    <div className={`architecture-layout${selectedId ? " has-selection" : ""}`}>
       <div className="graph-canvas" aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
@@ -117,9 +117,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           <PanControls />
         </ReactFlow>
       </div>
-      <ComponentInspector node={graph.nodes.find(node => node.id === selectedId)}>
-        {selectedId && inspectorFacts ? inspectorFacts(selectedId) : null}
-      </ComponentInspector>
+      {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId)}>
+        {inspectorFacts ? inspectorFacts(selectedId) : null}
+      </ComponentInspector> : null}
     </div>
     <div className="graph-legend" aria-label="Architecture legend">
       <p><span className="line-sample request" aria-hidden="true" /> Solid arrow: request link</p>
