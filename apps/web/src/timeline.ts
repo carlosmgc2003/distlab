@@ -40,10 +40,15 @@ export type LearningTimelineItem =
  */
 export function learningTimeline(observations: readonly Observation[]): readonly LearningTimelineItem[] {
   const ordered = orderObservations(observations);
+  const firstStartedEvent = ordered.findIndex(observation => observation.type === "simulation.event.started");
   const items: LearningTimelineItem[] = [];
   for (let index = 0; index < ordered.length;) {
     const first = ordered[index]!;
-    const groupKind = collapsibleKind(first);
+    // Startup queue construction is the only scheduler bookkeeping that is
+    // collapsed. Later scheduling is part of the execution story and remains
+    // individually inspectable.
+    const setup = firstStartedEvent < 0 || index < firstStartedEvent;
+    const groupKind = collapsibleKind(first, setup);
     if (!groupKind) {
       items.push({ kind: "observation", observation: first, summary: learningSummary(first) });
       index += 1;
@@ -51,7 +56,7 @@ export function learningTimeline(observations: readonly Observation[]): readonly
     }
     const members = [first];
     let cursor = index + 1;
-    while (cursor < ordered.length && sameCollapsedContext(first, ordered[cursor]!, groupKind)) {
+    while (cursor < ordered.length && sameCollapsedContext(first, ordered[cursor]!, groupKind, firstStartedEvent, cursor)) {
       members.push(ordered[cursor]!);
       cursor += 1;
     }
@@ -59,7 +64,7 @@ export function learningTimeline(observations: readonly Observation[]): readonly
     else items.push({
       kind: "group",
       id: `learning:${groupKind}:${members[0]!.id}`,
-      summary: groupKind === "setup" ? "Simulation scheduling and clock bookkeeping" : "Unchanged assertion evaluations",
+      summary: groupKind === "setup" ? "Initial engine queue setup" : "Unchanged assertion evaluations",
       observations: members,
     });
     index = cursor;
@@ -478,19 +483,35 @@ export function terminalCopy(mark: TerminalMark): string {
   return `Terminal failure${code}. Execution history completeness was not reported.`;
 }
 
-function collapsibleKind(observation: Observation): "setup" | "assertion" | undefined {
-  if (observation.type.startsWith("scheduler.") || observation.type.startsWith("clock.")) return "setup";
+function collapsibleKind(observation: Observation, setup: boolean): "setup" | "assertion" | undefined {
+  if (setup && (observation.type.startsWith("scheduler.") || observation.type.startsWith("clock."))) return "setup";
   if (observation.type === "scenario.assertion.evaluated") return "assertion";
   return undefined;
 }
 
-function sameCollapsedContext(first: Observation, candidate: Observation, kind: "setup" | "assertion"): boolean {
-  if (collapsibleKind(candidate) !== kind) return false;
-  // Scheduler/clock records are adjacent implementation bookkeeping. Assertions
-  // collapse only when their stored result is unchanged, so a changed result is visible.
-  return kind === "setup" || (JSON.stringify(first.data) === JSON.stringify(candidate.data)
+function sameCollapsedContext(
+  first: Observation,
+  candidate: Observation,
+  kind: "setup" | "assertion",
+  firstStartedEvent: number,
+  candidateIndex: number,
+): boolean {
+  const candidateSetup = firstStartedEvent < 0 || candidateIndex < firstStartedEvent;
+  if (collapsibleKind(candidate, candidateSetup) !== kind) return false;
+  // Assertions collapse only when their stored result and correlation context
+  // are unchanged. Never merge records merely because their timestamps match.
+  return kind === "setup" || (stableValue(first.data) === stableValue(candidate.data)
     && first.source === candidate.source && first.target === candidate.target
     && first.traceId === candidate.traceId && first.eventId === candidate.eventId);
+}
+
+function stableValue(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableValue).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableValue(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function attemptLabel(observation: Observation): string {
