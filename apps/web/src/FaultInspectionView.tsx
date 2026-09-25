@@ -9,6 +9,14 @@ function Rows({ rows }: { readonly rows: readonly RowFact[] }) {
   </li>)}</ul>;
 }
 
+function stateClass(value: string): string {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("unknown") || normalized.includes("uncertain")) return "semantic-state is-uncertain";
+  if (normalized.includes("timeout") || normalized.includes("fault") || normalized.includes("failed")) return "semantic-state is-warning";
+  if (normalized.includes("approved") || normalized.includes("authorized") || normalized.includes("committed") || normalized.includes("success")) return "semantic-state is-approved";
+  return "semantic-state";
+}
+
 function ServiceFacts({ title, service, stagedNote }: {
   readonly title: string;
   readonly service: ServiceSnapshot | null;
@@ -60,13 +68,20 @@ export function DistributedState({ report, onShowEvidence }: {
     <h4>Customer App observed outcome</h4>
     <dl>
       <dt>Request</dt><dd>{report.clientRequest}</dd>
-      <dt>Outcome</dt><dd>{report.clientOutcome}</dd>
+      <dt>Outcome</dt><dd><span className={stateClass(report.clientOutcome)}>{report.clientOutcome}</span>
+        {report.clientOutcome.toLowerCase().includes("unknown") ? <span className="state-explanation"> Uncertain: the local result does not establish denial.</span> : null}</dd>
     </dl>
+    <h4>Payments local outcomes</h4>
+    {report.paymentRows.length ? <ul className="fact-list">{report.paymentRows.map(payment => <li key={payment.paymentId}>
+      Payment {payment.paymentId} for order {payment.orderId}: <span className={stateClass(payment.state)}>{payment.state}</span>
+      {payment.outcome ? <> · outcome <span className={stateClass(payment.outcome)}>{payment.outcome}</span></> : null}
+      {payment.state === "UNKNOWN" ? <span className="state-explanation"> Local state is uncertain; this does not prove denial.</span> : null}
+    </li>)}</ul> : <p>No local payment row is committed.</p>}
     <ServiceFacts title="Orders committed state" service={report.orders} stagedNote={report.stagedNote} />
     <ServiceFacts title="Payments committed state" service={report.paymentsService} stagedNote={report.stagedNote} />
     <h4>Payment Processor visible authorizations</h4>
     {report.authorizations.length ? <ul className="fact-list">{report.authorizations.map(item => <li key={item.authorizationId}>
-      {item.authorizationId} status {item.status}, amount {item.amount}, order {item.orderId}, payment {item.paymentId}.
+      {item.authorizationId} status <span className={stateClass(item.status)}>{item.status}</span>, amount {item.amount}, order {item.orderId}, payment {item.paymentId}.
     </li>)}</ul> : <p>No visible authorization is declared.</p>}
     <h4>Bus delivery</h4>
     <DeliveryList deliveries={report.deliveries} />
