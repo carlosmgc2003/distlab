@@ -122,6 +122,37 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
+test("Learning summarizes repeated engine bookkeeping and opens each exact raw record", async ({ page }) => {
+  test.setTimeout(60_000);
+  await observeWorker(page);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Load scenario" }).click();
+  const status = page.getByRole("status", { name: "Simulation status" });
+  await expect(status).toHaveText("READY");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("COMPLETED");
+  const observations = (await latestProjection(page)).history.observations;
+  await expect(page.getByRole("button", { name: "Learning", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".learning-group").first()).toContainText("Initial engine queue setup");
+  await expect(page.locator(".timeline-count")).toContainText("records summarized");
+  await page.screenshot({ path: "e2e/evidence/issue-49-learning-timeline.png", fullPage: true });
+  const group = page.locator(".learning-group").first();
+  await group.locator("summary").click();
+  const rawMembers = group.locator("li");
+  await expect(rawMembers).toHaveCount(10);
+  const exactId = observations.find(item => item.type === "scheduler.event.scheduled")!.id;
+  await rawMembers.filter({ hasText: exactId }).getByRole("button", { name: "Open raw observation" }).click();
+  await expect(page.getByRole("region", { name: "Observation detail" })).toContainText(exactId);
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Raw", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".timeline-count")).toContainText(`${observations.length} of ${observations.length}`);
+  await expect(page.locator("#timeline-rows > div")).toHaveAttribute("style", new RegExp(`height: ${observations.length * 44}px`));
+  await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = node.scrollHeight; });
+  await expect(page.locator("#timeline-rows button").last()).toContainText(`#${observations.at(-1)!.sequence}`);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test("reduced motion keeps the movement text and does not animate the edge", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await observeWorker(page);
