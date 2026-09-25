@@ -149,6 +149,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
     if (active instanceof HTMLElement) active.blur();
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
   await typeInput.click();
   await expect(page.getByRole("listbox", { name: "Type choices" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

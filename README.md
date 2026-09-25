@@ -211,6 +211,17 @@ that completed scenario as the payment outcome `NETWORK_TIMEOUT`. The worker
 samples boundaries with message tasks between kernel yields, and virtual time
 advances only inside the simulation.
 
+Scenario selection, Run, Pause, Step, Reset, simulation status, and virtual time
+stay in a compact toolbar. At a laptop width the architecture and a timeline
+share the remaining viewport, and the selected observation opens in the adjacent
+inspector. The lesson guide and the distributed-state dump stay collapsed until
+their summaries are opened. Below 960px, including a phone width and the layout
+viewport Chrome uses at 200% zoom, Architecture, Timeline, and Inspection switch
+among those same panels. Timeline selection and filters survive that switch.
+Reset and loading another scenario clear run-specific timeline state. These
+layout choices do not change scheduling, virtual time, randomness, visibility,
+or canonical exports.
+
 The checkout architecture uses a fixed React Flow layout with labeled category
 and relationship cues. Select a node with a click, Enter, or Space to inspect
 static model/version/configuration and resource ownership; Escape clears the
@@ -283,8 +294,8 @@ and a completed run with a reset prompt. Keyboard users can Tab to controls and
 graph nodes, activate them with Enter or Space, and use the timeline with arrow
 keys. Arrow keys at the first or last visible row leave the selection in place
 and announce that boundary. Reduced motion removes the movement animation while
-retaining its text cue. The layout fits a 390 px viewport without horizontal
-page overflow.
+retaining its text cue. The toolbar and panels fit 1366×768 and 1534×897 without
+page scrolling, and a 390px viewport without horizontal page overflow.
 
 Run `npm run build`, `npm run typecheck`, and `npm test` for the full repository.
 For the focused browser workflow, run

@@ -62,6 +62,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const [feedback, setFeedback] = useState("");
   const [liveCueId, setLiveCueId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [rowViewport, setRowViewport] = useState(TIMELINE_VIEWPORT);
   const [focusNonce, setFocusNonce] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
@@ -115,6 +116,20 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const haltPlayback = () => { setPhase(current => current === "idle" ? "idle" : "paused"); };
 
   useEffect(() => { onEmphasis(emphasis); }, [emphasis, onEmphasis]);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    // The row window follows the panel height so a shorter workspace still virtualizes the visible rows.
+    const measure = () => {
+      const height = node.clientHeight;
+      if (height > 0) setRowViewport(current => current === height ? current : height);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (focusedObservationId === undefined) return;
@@ -238,7 +253,8 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     if (!row) return;
     pendingFocusId.current = null;
     row.focus({ preventScroll: true });
-    node.scrollIntoView({ block: "start", inline: "nearest" });
+    node.scrollIntoView({ block: "nearest", inline: "nearest" });
+    document.getElementById("inspection-panel")?.scrollTo(0, 0);
   }, [filtered, focusNonce, scrollTop]);
 
   const applyDraft = (next: TimelineDraft) => {
@@ -312,11 +328,14 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   };
   const useText = (field: TextFilterField, value: string) => applyDraft(withExactValue(draft, field, value));
   const useEntity = (kind: string, id: string) => applyDraft(withExactValue(withExactValue(draft, "entityKind", kind), "entityId", id));
-  const range = visibleRowRange(filtered.length, scrollTop, TIMELINE_VIEWPORT, TIMELINE_ROW_HEIGHT);
+  const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
   const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null;
 
   return <>
+    <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
+    <h3 id="timeline-heading">Timeline</h3>
+    <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
     <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
     <p id="timeline-filter-help" className="timeline-help">{TIMELINE_FILTER_HELP}</p>
     <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => event.preventDefault()}>
@@ -349,7 +368,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       </div>
     </form>
     {filterError ? <p id="timeline-filter-error" role="alert">{filterError}</p> : null}
-    <p className="timeline-count">{filtered.length} of {observations.length} observations in virtual-time order.</p>
     <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
     <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
       <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
@@ -359,6 +377,8 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     </div>
     <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)}</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+    </div>
+    <p className="timeline-count">{filtered.length} of {observations.length} observations in virtual-time order.</p>
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
       aria-label="Timeline observations" onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
@@ -393,10 +413,23 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         })}
       </div>
     </div>
+    </section>
     <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
       hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
   </>;
+}
+
+function suggestionBox(anchor: HTMLElement, count: number): { top: number; left: number; width: number } {
+  const rect = anchor.getBoundingClientRect();
+  const width = rect.width;
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+  const estimated = Math.min(280, count * 36 + 28);
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const top = spaceBelow < estimated && rect.top > spaceBelow
+    ? Math.max(8, rect.top - estimated - 4)
+    : rect.bottom + 4;
+  return { top, left, width };
 }
 
 function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onChoose }: {
@@ -411,6 +444,8 @@ function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onC
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [box, setBox] = useState<{ top: number; left: number; width: number } | null>(null);
+  const anchorRef = useRef<HTMLInputElement>(null);
   const listId = `${id}-list`;
   const noteId = `${id}-note`;
   const { shown, hidden } = visibleChoices(choices, value);
@@ -425,9 +460,21 @@ function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onC
     setOpen(false);
     setActiveIndex(-1);
   };
+  useEffect(() => {
+    const anchor = anchorRef.current;
+    if (!open || !anchor) return;
+    const place = () => setBox(suggestionBox(anchor, Math.max(shown.length, 1)));
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, shown.length, value]);
   return <div className="filter-field">
     <label htmlFor={id}>{label}</label>
-    <input id={id} role="combobox" aria-autocomplete="list" aria-expanded={open} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+    <input ref={anchorRef} id={id} role="combobox" aria-autocomplete="list" aria-expanded={open} autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
       aria-controls={open && shown.length > 0 ? listId : undefined} aria-activedescendant={open && active ? `${id}-option-${index}` : undefined}
       aria-describedby={open && note ? noteId : undefined} value={value}
       onFocus={() => setOpen(true)}
@@ -461,7 +508,7 @@ function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onC
       <option value="prefix">Prefix</option>
       <option value="contains">Contains</option>
     </select>
-    {open ? <div className="suggestion-popover">
+    {open && box ? <div className="suggestion-popover" style={{ top: box.top, left: box.left, width: box.width }}>
       {shown.length > 0 ? <ul id={listId} role="listbox" aria-label={`${label} choices`}>{shown.map((choice, optionIndex) => <li key={choice.value}
         id={`${id}-option-${optionIndex}`} role="option" aria-selected={mode === "exact" && choice.value === trimmed}
         className={optionIndex === index ? "is-active" : undefined}
@@ -482,7 +529,7 @@ function ObservationDetail({ observation, observations, componentTitles, hidden,
   readonly onUseText: (field: TextFilterField, value: string) => void;
   readonly onUseEntity: (kind: string, id: string) => void;
 }) {
-  return <section className="timeline-detail" aria-labelledby="observation-detail-heading">
+  return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h3 id="observation-detail-heading">Observation detail</h3>
     {!observation ? <p>Select an observation to inspect its trace, causation, and stored data.</p> : <DetailBody
       observation={observation} observations={observations} componentTitles={componentTitles} hidden={hidden}

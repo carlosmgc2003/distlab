@@ -107,6 +107,8 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("alert")).toContainText("Virtual time from 999999 is after virtual time to 0");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
+  const raw = page.locator("details.raw-state");
+  if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
   await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(selected).toContainText("external.effect.committed");
   await expect(selected).toBeFocused();
@@ -147,6 +149,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("button", { name: "Play timeline" })).toBeEnabled();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Timeline", exact: true }).click();
   await expect(page.getByRole("button", { name: "Play timeline" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(await commandTypes(page)).toEqual(commands);
