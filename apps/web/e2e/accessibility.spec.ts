@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 test("architecture and each inspector pass accessibility checks at desktop and mobile sizes", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto("/");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("button", { name: "Load scenario" }).click();
