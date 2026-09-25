@@ -276,6 +276,81 @@ export function timelineDraftIsBlank(draft: TimelineDraft): boolean {
     && draft.entityId.trim() === "" && draft.entityIdMode === "exact";
 }
 
+export interface TimelineReveal {
+  readonly draft: TimelineDraft;
+  readonly query: TimelineQuery;
+  readonly cleared: readonly string[];
+  readonly changed: boolean;
+}
+
+export interface TraceNarrowing {
+  readonly draft: TimelineDraft;
+  readonly changed: boolean;
+  readonly cleared: readonly string[];
+}
+
+/** Drop only the constraints that exclude this stored observation, including prefix and contains. */
+export function revealTimelineObservation(draft: TimelineDraft, observation: Observation): TimelineReveal {
+  let next = draft;
+  const cleared: string[] = [];
+  const clear = (label: string, field: TimelineFilterField) => {
+    next = clearTimelineField(next, field);
+    if (!cleared.includes(label)) cleared.push(label);
+  };
+  if (wholeTime(next.fromTime) === "invalid") clear("virtual time from", "fromTime");
+  if (wholeTime(next.toTime) === "invalid") clear("virtual time to", "toTime");
+  const from = wholeTime(next.fromTime);
+  const to = wholeTime(next.toTime);
+  if (typeof from === "number" && observation.time < from) clear("virtual time from", "fromTime");
+  if (typeof to === "number" && observation.time > to) clear("virtual time to", "toTime");
+  let parsed = parseTimelineQuery(next);
+  if (!parsed.ok) {
+    if (next.fromTime.trim()) clear("virtual time from", "fromTime");
+    if (next.toTime.trim()) clear("virtual time to", "toTime");
+    parsed = parseTimelineQuery(next);
+  }
+  if (parsed.ok) {
+    const query = parsed.query;
+    if (query.type !== undefined && !matchesText(observation.type, query.type)) clear("type", "type");
+    if (query.component !== undefined && !matchesComponent(observation, query.component)) clear("component", "component");
+    if (query.traceId !== undefined && !matchesText(observation.traceId, query.traceId)) clear("trace", "traceId");
+    if (query.eventId !== undefined && !matchesText(observation.eventId, query.eventId)) clear("event", "eventId");
+    if ((query.entityKind !== undefined || query.entityId !== undefined) && !matchesEntity(observation, query.entityKind, query.entityId)) {
+      if (next.entityKind.trim()) clear("entity", "entityKind");
+      if (next.entityId.trim()) clear("entity", "entityId");
+    }
+  }
+  const finalParse = parseTimelineQuery(next);
+  return { draft: next, query: finalParse.ok ? finalParse.query : {}, cleared, changed: cleared.length > 0 };
+}
+
+/** Narrow the timeline to one trace and report every other constraint that was cleared. */
+export function narrowToTrace(draft: TimelineDraft, traceId: string): TraceNarrowing {
+  const next = traceOnlyDraft(traceId);
+  const cleared: string[] = [];
+  const fields: readonly [TimelineFilterField, string][] = [
+    ["fromTime", "virtual time from"],
+    ["toTime", "virtual time to"],
+    ["type", "type"],
+    ["component", "component"],
+    ["traceId", "trace"],
+    ["eventId", "event"],
+    ["entityKind", "entity"],
+    ["entityId", "entity"],
+  ];
+  for (const [key, label] of fields) {
+    const value = draft[key].trim();
+    if (!value || (key === "traceId" && value === traceId)) continue;
+    if (key === "entityKind" || key === "entityId") {
+      if (!cleared.includes("entity")) cleared.push("entity");
+      continue;
+    }
+    cleared.push(label);
+  }
+  const changed = textFieldsDiffer(draft, next) || modeFieldsDiffer(draft, next);
+  return { draft: next, changed, cleared };
+}
+
 function matchesQuery(record: Observation, query: TimelineQuery): boolean {
   if (query.fromTime !== undefined && record.time < query.fromTime) return false;
   if (query.toTime !== undefined && record.time > query.toTime) return false;
@@ -346,6 +421,27 @@ function quote(value: string): string {
 function criterion(value: string, mode: TextMatchMode): TextCriterion | undefined {
   const trimmed = value.trim();
   return trimmed.length > 0 ? { value: trimmed, mode } : undefined;
+}
+
+function wholeTime(value: string): number | undefined | "invalid" {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!/^(0|[1-9][0-9]*)$/.test(trimmed) || !Number.isSafeInteger(Number(trimmed))) return "invalid";
+  return Number(trimmed);
+}
+
+function textFieldsDiffer(draft: TimelineDraft, next: TimelineDraft): boolean {
+  const keys: readonly TimelineFilterField[] = ["fromTime", "toTime", "type", "component", "traceId", "eventId", "entityKind", "entityId"];
+  return keys.some(key => draft[key].trim() !== next[key]);
+}
+
+function modeFieldsDiffer(draft: TimelineDraft, next: TimelineDraft): boolean {
+  return draft.typeMode !== next.typeMode
+    || draft.componentMode !== next.componentMode
+    || draft.traceMode !== next.traceMode
+    || draft.eventMode !== next.eventMode
+    || draft.entityKindMode !== next.entityKindMode
+    || draft.entityIdMode !== next.entityIdMode;
 }
 
 function bound(value: string, label: string): { ok: true; value: number | undefined } | { ok: false; message: string } {

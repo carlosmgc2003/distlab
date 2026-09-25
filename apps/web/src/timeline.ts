@@ -291,6 +291,93 @@ export function playbackAdvance(index: number, count: number): { readonly cursor
   return { cursor: next, playing: true };
 }
 
+export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
+
+export interface PlaybackControl {
+  readonly action: "play" | "restart" | "unavailable";
+  readonly label: "Play timeline" | "Restart timeline";
+  readonly reason: string;
+}
+
+/** Index of the row this direction would select, or null when the selection would stay put. */
+export function selectionStep(index: number, count: number, delta: -1 | 1): number | null {
+  if (count <= 0) return null;
+  if (index < 0) return delta < 0 ? count - 1 : 0;
+  const next = index + delta;
+  if (next < 0 || next >= count) return null;
+  return next;
+}
+
+export function selectionAvailability(index: number, count: number): { readonly previous: boolean; readonly next: boolean } {
+  return { previous: selectionStep(index, count, -1) !== null, next: selectionStep(index, count, 1) !== null };
+}
+
+export function boundaryCopy(index: number, count: number): string {
+  if (count <= 0) return "No visible observations.";
+  if (index < 0) {
+    return count === 1
+      ? "1 visible observation. Next and Previous select it."
+      : `${count} visible observations. Next selects the first. Previous selects the last.`;
+  }
+  const position = `Visible observation ${index + 1} of ${count}.`;
+  if (count === 1) return `${position} Previous and Next cannot move.`;
+  if (index === 0) return `${position} Previous cannot move.`;
+  if (index === count - 1) return `${position} Next cannot move.`;
+  return position;
+}
+
+/** Play, pause, and restart describe the UI cursor. They do not rewind the simulation. */
+export function playbackControl(index: number, count: number, playing: boolean): PlaybackControl {
+  if (playing) {
+    return {
+      action: "unavailable",
+      label: "Play timeline",
+      reason: "Playing the visible timeline. Pause stops the cursor. Virtual time does not change.",
+    };
+  }
+  if (count <= 0) return { action: "unavailable", label: "Play timeline", reason: "No visible observations to play." };
+  if (count === 1) return { action: "unavailable", label: "Play timeline", reason: "Only one visible observation. Playback cannot advance." };
+  if (index >= 0 && index >= count - 1) {
+    return {
+      action: "restart",
+      label: "Restart timeline",
+      reason: "At the end of the visible results. Restart timeline plays from the first visible observation.",
+    };
+  }
+  if (index < 0) return { action: "play", label: "Play timeline", reason: "Play timeline starts at the first visible observation." };
+  return { action: "play", label: "Play timeline", reason: "Play timeline continues from the selected observation." };
+}
+
+export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): string {
+  if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor. Virtual time does not change.";
+  if (phase === "paused") return "Playback is paused.";
+  if (phase === "ended") return "Playback reached the end of the visible results. Restart timeline plays from the first visible observation.";
+  return control.reason;
+}
+
+export function selectionMessage(observation: Observation): string {
+  return `Selected #${observation.sequence} ${observation.type} at virtual time ${observation.time}.`;
+}
+
+export function revealMessage(cleared: readonly string[], observation: Observation): string {
+  const selected = selectionMessage(observation);
+  if (cleared.length === 0) return selected;
+  const labels = listLabels(cleared);
+  const verb = cleared.length === 1 ? "filter was" : "filters were";
+  return `${selected} The ${labels} ${verb} cleared so this observation is visible.`;
+}
+
+export function movementMessage(observation: Observation, index: number, count: number): string {
+  return `${selectionMessage(observation)} ${boundaryCopy(index, count)}`;
+}
+
+export function traceFilterMessage(traceId: string, change: { readonly changed: boolean; readonly cleared: readonly string[] }): string {
+  if (!change.changed) return `The timeline already shows trace ${traceId}.`;
+  if (change.cleared.length === 0) return `The timeline now shows trace ${traceId}.`;
+  const verb = change.cleared.length === 1 ? "filter was" : "filters were";
+  return `The timeline now shows trace ${traceId}. The ${listLabels(change.cleared)} ${verb} cleared.`;
+}
+
 export function payloadCopy(observation: Observation): string {
   const visibility = payloadVisibility(observation);
   if (visibility === "omitted") return "No data field was stored.";
@@ -416,6 +503,12 @@ function bound(value: string): number | undefined | "invalid" {
 function text(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function listLabels(labels: readonly string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "";
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
 }
 
 function isRecord(value: unknown): value is Record<string, CanonicalValue> {
