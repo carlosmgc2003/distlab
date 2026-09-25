@@ -14,6 +14,8 @@ import {
   correlation,
   emphasisFor,
   filterObservations,
+  learningSummary,
+  learningTimeline,
   movementCue,
   movementMessage,
   movementPulseClass,
@@ -92,6 +94,26 @@ test("timeline keeps sequence order when virtual times are equal", () => {
   const before = JSON.stringify(rows);
   orderObservations(rows);
   assert.equal(JSON.stringify(rows), before);
+});
+
+test("learning timeline groups only adjacent bookkeeping and preserves attempts and changed outcomes", () => {
+  const rows = [
+    observation({ id: "schedule-1", time: 0, sequence: 1, type: "scheduler.event.scheduled", source: "simulation" }),
+    observation({ id: "schedule-2", time: 0, sequence: 2, type: "scheduler.event.scheduled", source: "simulation" }),
+    observation({ id: "delivery-1", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } }),
+    observation({ id: "delivery-2", time: 1, sequence: 4, type: "message.delivered", source: "payments", data: { attempt: 2 } }),
+    observation({ id: "assertion-1", time: 2, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: false } }),
+    observation({ id: "assertion-2", time: 2, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: false } }),
+    observation({ id: "assertion-change", time: 3, sequence: 7, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: true } }),
+    observation({ id: "unrelated", time: 3, sequence: 8, type: "message.published", source: "orders" }),
+  ];
+  const projection = learningTimeline(rows);
+  assert.deepEqual(projection.map(item => item.kind === "group" ? item.observations.map(member => member.id) : item.observation.id), [
+    ["schedule-1", "schedule-2"], "delivery-1", "delivery-2", ["assertion-1", "assertion-2"], "assertion-change", "unrelated",
+  ]);
+  assert.equal(learningSummary(rows[2]!), "Message delivered (attempt 1)");
+  assert.deepEqual(projection.flatMap(item => item.kind === "group" ? item.observations : [item.observation]).map(item => item.id),
+    orderObservations(rows).map(item => item.id));
 });
 
 test("filters match headless history queries and reject invalid virtual-time bounds", async () => {

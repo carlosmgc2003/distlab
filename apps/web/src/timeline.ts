@@ -29,6 +29,63 @@ export interface MovementCue {
   readonly text: string;
 }
 
+export type LearningTimelineItem =
+  | { readonly kind: "observation"; readonly observation: Observation; readonly summary: string }
+  | { readonly kind: "group"; readonly id: string; readonly summary: string; readonly observations: readonly Observation[] };
+
+/**
+ * A read-only teaching projection. Only adjacent scheduler/clock bookkeeping and
+ * byte-for-byte unchanged assertion evaluations collapse; every other record,
+ * including deliveries, retries, effects, and faults, remains its own item.
+ */
+export function learningTimeline(observations: readonly Observation[]): readonly LearningTimelineItem[] {
+  const ordered = orderObservations(observations);
+  const items: LearningTimelineItem[] = [];
+  for (let index = 0; index < ordered.length;) {
+    const first = ordered[index]!;
+    const groupKind = collapsibleKind(first);
+    if (!groupKind) {
+      items.push({ kind: "observation", observation: first, summary: learningSummary(first) });
+      index += 1;
+      continue;
+    }
+    const members = [first];
+    let cursor = index + 1;
+    while (cursor < ordered.length && sameCollapsedContext(first, ordered[cursor]!, groupKind)) {
+      members.push(ordered[cursor]!);
+      cursor += 1;
+    }
+    if (members.length === 1) items.push({ kind: "observation", observation: first, summary: learningSummary(first) });
+    else items.push({
+      kind: "group",
+      id: `learning:${groupKind}:${members[0]!.id}`,
+      summary: groupKind === "setup" ? "Simulation scheduling and clock bookkeeping" : "Unchanged assertion evaluations",
+      observations: members,
+    });
+    index = cursor;
+  }
+  return items;
+}
+
+/** Human-readable labels describe only the stored observation type, never inferred elapsed time or causation. */
+export function learningSummary(observation: Observation): string {
+  const type = observation.type;
+  if (type === "network.request.sent") return "Request sent";
+  if (type === "network.request.delivered") return "Request delivered";
+  if (type === "network.request.timedout") return "Request timed out";
+  if (type === "network.response.sent") return "Response sent";
+  if (type === "network.response.received") return "Response received";
+  if (type === "network.response.dropped") return "Response dropped";
+  if (type === "message.published") return "Message published";
+  if (type === "message.delivered") return `Message delivered${attemptLabel(observation)}`;
+  if (type === "message.acknowledged") return "Message acknowledged";
+  if (type === "database.transaction.committed") return "Database transaction committed";
+  if (type === "database.transaction.rolled_back") return "Database transaction rolled back";
+  if (type === "external.effect.committed") return "External side effect committed";
+  if (type.startsWith("fault.")) return "Fault selected";
+  return type;
+}
+
 export interface GraphEmphasis {
   readonly nodeIds: readonly string[];
   readonly edgeId?: string;
@@ -419,6 +476,27 @@ export function terminalCopy(mark: TerminalMark): string {
   if (mark.historyComplete === false) return `Terminal failure${code}. Execution history is incomplete.${last}`;
   if (mark.historyComplete === true) return `Terminal failure${code}. Execution history is complete.${last}`;
   return `Terminal failure${code}. Execution history completeness was not reported.`;
+}
+
+function collapsibleKind(observation: Observation): "setup" | "assertion" | undefined {
+  if (observation.type.startsWith("scheduler.") || observation.type.startsWith("clock.")) return "setup";
+  if (observation.type === "scenario.assertion.evaluated") return "assertion";
+  return undefined;
+}
+
+function sameCollapsedContext(first: Observation, candidate: Observation, kind: "setup" | "assertion"): boolean {
+  if (collapsibleKind(candidate) !== kind) return false;
+  // Scheduler/clock records are adjacent implementation bookkeeping. Assertions
+  // collapse only when their stored result is unchanged, so a changed result is visible.
+  return kind === "setup" || (JSON.stringify(first.data) === JSON.stringify(candidate.data)
+    && first.source === candidate.source && first.target === candidate.target
+    && first.traceId === candidate.traceId && first.eventId === candidate.eventId);
+}
+
+function attemptLabel(observation: Observation): string {
+  if (!isRecord(observation.data)) return "";
+  const attempt = observation.data.attempt;
+  return typeof attempt === "number" || typeof attempt === "string" ? ` (attempt ${attempt})` : "";
 }
 
 function leg(
