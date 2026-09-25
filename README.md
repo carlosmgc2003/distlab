@@ -232,16 +232,27 @@ send no worker commands.
 
 The execution timeline lists canonical observations in sequence and labels time
 as virtual time. Filters for component, type, trace, event, and entity follow
-the history query rules. The selected row shows trace, span, and causation
-links plus any stored before/after data. Redacted and omitted payloads stay
-marked as stored; missing fields are not reconstructed. Request and message
-observations highlight the matching architecture link with a transient movement
-cue and a text alternative. Play, pause, and the playback cursor are UI state:
-a host timer may advance that cursor, and it does not advance virtual time,
-record observations, or send worker commands. Reset clears the selection and
-movement cue and shows the new run. A terminal failure says whether the
-published history is complete. Incomplete history is withheld with the failure,
-the same way a projectionless failure stays visible until reset.
+the history query rules. Previous and Next are available only when that
+direction selects a different visible row: both are unavailable for an empty
+list, Previous is unavailable on the first row, Next is unavailable on the last,
+and both are unavailable once the only matching row is selected. The selected
+row shows trace, span, and causation links plus any stored before/after data.
+Choosing an evidence, causation, or trace destination shows that row and its
+detail, moves focus to the row, and announces when filters were cleared or
+narrowed to reveal it. Redacted and omitted payloads stay marked as stored;
+missing fields are not reconstructed. Request and message observations highlight
+the matching architecture link with a transient movement cue and a text
+alternative. Play, pause, and the playback cursor are UI state: a host timer may
+advance that cursor, and it does not advance virtual time, record observations,
+or send worker commands. Play is unavailable when fewer than two rows are
+visible. On the last visible row the control is Restart timeline, which starts
+again at the first visible row. Pause timeline is available while that cursor is
+moving. Reset clears the selection and movement cue and shows the new run. A
+terminal failure says whether the published history is complete. Incomplete
+history is withheld with the failure, the same way a projectionless failure
+stays visible until reset. The [shell action matrix](docs/spec/application-boundary.md#shell-action-matrix)
+lists scenario, simulation, graph, filter, evidence, and playback controls
+across empty, ready, running, paused, completed, and error states.
 
 Request links and subscriptions come from the architecture projection. The
 Orders publication relationship and model-owned resource descriptions are
@@ -272,9 +283,10 @@ The normal checkout uses the same architecture without a fault rule.
 The entry point reports an empty session before load, loading and worker errors,
 and a completed run with a reset prompt. Keyboard users can Tab to controls and
 graph nodes, activate them with Enter or Space, and use the timeline with arrow
-keys. Reduced motion removes the movement animation while retaining its text
-cue. The toolbar and panels fit 1366×768 and 1534×897 without page scrolling,
-and a 390px viewport without horizontal page overflow.
+keys. Arrow keys at the first or last visible row leave the selection in place
+and announce that boundary. Reduced motion removes the movement animation while
+retaining its text cue. The toolbar and panels fit 1366×768 and 1534×897 without
+page scrolling, and a 390px viewport without horizontal page overflow.
 
 Run `npm run build`, `npm run typecheck`, and `npm test` for the full repository.
 For the focused browser workflow, run

@@ -72,7 +72,7 @@ export function DistributedState({ report, onShowEvidence }: {
     <DeliveryList deliveries={report.deliveries} />
     <h4>Linked observations</h4>
     {report.evidence.length ? <div className="evidence-links">{report.evidence.map(item =>
-      <button key={item.observationId} type="button" onClick={() => onShowEvidence(item.observationId)}>{item.label}</button>)}</div>
+      <button key={item.observationId} type="button" aria-controls="timeline-rows" onClick={() => onShowEvidence(item.observationId)}>{item.label}</button>)}</div>
       : <p>No fault, timeout, authorization, or delivery observation has been recorded yet.</p>}
   </section>;
 }

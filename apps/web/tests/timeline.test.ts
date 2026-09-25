@@ -8,20 +8,30 @@ import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import {
+  boundaryCopy,
   changeEvidence,
   continuesHistory,
   correlation,
   emphasisFor,
+  emptyTimelineDraft,
   filterObservations,
   movementCue,
+  movementMessage,
   movementPulseClass,
   orderObservations,
   parseTimelineFilter,
   payloadCopy,
   payloadVisibility,
   playbackAdvance,
+  playbackControl,
+  playbackStatus,
+  revealMessage,
+  revealObservation,
+  selectionStep,
+  showTraceFilter,
   terminalCopy,
   terminalMark,
+  traceFilterMessage,
   traceView,
   visibleRowRange,
 } from "../src/timeline.ts";
@@ -227,6 +237,96 @@ test("playback, filters, and reset stay on the UI copy of history", () => {
   assert.match(terminalCopy(incomplete), /observation-9/);
   assert.match(terminalCopy(terminalMark(null, { code: "SIMULATION_FAILED", message: "failed", context: { code: "UNKNOWN" } })!), /not reported/);
   assert.equal(terminalMark("COMPLETED", null), null);
+});
+
+test("previous, next, and playback follow whether the visible selection can change", () => {
+  assert.equal(selectionStep(-1, 0, 1), null);
+  assert.equal(selectionStep(-1, 0, -1), null);
+  assert.equal(selectionStep(-1, 1, 1), 0);
+  assert.equal(selectionStep(-1, 1, -1), 0);
+  assert.equal(selectionStep(0, 1, 1), null);
+  assert.equal(selectionStep(0, 1, -1), null);
+  assert.equal(selectionStep(-1, 3, 1), 0);
+  assert.equal(selectionStep(-1, 3, -1), 2);
+  assert.equal(selectionStep(0, 3, -1), null);
+  assert.equal(selectionStep(2, 3, 1), null);
+  assert.equal(selectionStep(1, 3, 1), 2);
+  assert.match(boundaryCopy(0, 1), /Previous and Next cannot move/);
+  assert.match(boundaryCopy(2, 3), /Next cannot move/);
+  assert.match(boundaryCopy(0, 3), /Previous cannot move/);
+  assert.match(boundaryCopy(-1, 0), /No visible observations/);
+  assert.equal(playbackControl(-1, 0, false).action, "unavailable");
+  assert.equal(playbackControl(0, 1, false).action, "unavailable");
+  assert.equal(playbackControl(-1, 4, false).label, "Play timeline");
+  assert.equal(playbackControl(1, 4, false).action, "play");
+  assert.equal(playbackControl(3, 4, false).label, "Restart timeline");
+  assert.equal(playbackControl(1, 4, true).action, "unavailable");
+  assert.match(playbackStatus("ended", playbackControl(3, 4, false)), /Restart timeline/);
+  assert.match(playbackStatus("playing", playbackControl(1, 4, true)), /Pause/);
+  assert.match(playbackStatus("paused", playbackControl(1, 4, false)), /paused/);
+  const rows = [observation({ id: "a", time: 0, sequence: 0, type: "simulation.created", source: "simulation" })];
+  assert.equal(JSON.stringify(rows), JSON.stringify(structuredClone(rows)));
+});
+
+test("navigation clears only the filters that hide the destination", () => {
+  const cause = observation({
+    id: "cause", time: 5, sequence: 174, type: "external.effect.committed", source: "payment-processor",
+    traceId: "trace-9", eventId: "event-2", entityRefs: [{ kind: "authorization", id: "authorization-1" }],
+  });
+  const before = structuredClone(cause);
+  const hidden = revealObservation({ ...blank(), type: "network.response.dropped", component: "payment-processor" }, cause);
+  assert.deepEqual(hidden.cleared, ["type"]);
+  assert.equal(hidden.filter.type, undefined);
+  assert.equal(hidden.filter.component, "payment-processor");
+  assert.deepEqual(filterObservations([cause], hidden.filter).map(item => item.id), ["cause"]);
+  assert.match(revealMessage(hidden.cleared, cause), /The type filter was cleared so this observation is visible/);
+  const visible = revealObservation({ ...blank(), component: "payment-processor" }, cause);
+  assert.equal(visible.changed, false);
+  assert.match(revealMessage(visible.cleared, cause), /^Selected #174 external\.effect\.committed at virtual time 5\.$/);
+  const several = revealObservation({
+    ...blank(), type: "network.response.dropped", traceId: "other", fromTime: "20", entityKind: "order", entityId: "order-1",
+  }, cause);
+  assert.deepEqual(several.cleared, ["virtual time from", "type", "trace", "entity"]);
+  assert.match(revealMessage(several.cleared, cause), /virtual time from, type, trace, and entity filters were cleared/);
+  const invalid = revealObservation({ ...blank(), fromTime: "nope", type: "other" }, cause);
+  assert.equal(invalid.filter.fromTime, undefined);
+  assert.equal(invalid.filter.type, undefined);
+  assert.match(revealMessage(invalid.cleared, cause), /cleared so this observation is visible/);
+  const invertedAtUpperBound = revealObservation({ ...blank(), fromTime: "10", toTime: "5" }, cause);
+  assert.deepEqual(invertedAtUpperBound.cleared, ["virtual time from"]);
+  assert.deepEqual(invertedAtUpperBound.filter, { toTime: 5 });
+  const invertedBetweenBounds = revealObservation({ ...blank(), fromTime: "10", toTime: "2" }, cause);
+  assert.deepEqual(invertedBetweenBounds.cleared, ["virtual time from", "virtual time to"]);
+  assert.deepEqual(invertedBetweenBounds.filter, {});
+  const trace = showTraceFilter({ ...blank(), type: "network.response.dropped", traceId: "other" }, "trace-9");
+  assert.equal(trace.changed, true);
+  assert.deepEqual(trace.draft, { ...emptyTimelineDraft, traceId: "trace-9" });
+  assert.match(traceFilterMessage("trace-9", trace), /The timeline now shows trace trace-9/);
+  assert.match(traceFilterMessage("trace-9", trace), /type and trace filters were cleared/);
+  const same = showTraceFilter({ ...blank(), traceId: "trace-9" }, "trace-9");
+  assert.equal(same.changed, false);
+  assert.match(traceFilterMessage("trace-9", same), /already shows trace trace-9/);
+  const opened = showTraceFilter(blank(), "trace-9");
+  assert.equal(opened.cleared.length, 0);
+  assert.match(traceFilterMessage("trace-9", opened), /The timeline now shows trace trace-9\.$/);
+  assert.match(movementMessage(cause, 0, 1), /Selected #174/);
+  assert.match(movementMessage(cause, 0, 1), /cannot move/);
+  assert.deepEqual(cause, before);
+});
+
+test("the lost-response checkout has one dropped response at sequence 197", async () => {
+  const { projection } = await completed(responseLostCheckout, scenarios[1]);
+  const dropped = projection.history.observations.filter(item => item.type === "network.response.dropped");
+  assert.equal(dropped.length, 1);
+  assert.equal(dropped[0]?.sequence, 197);
+  const assertions = projection.history.observations.filter(item => item.type === "scenario.assertion.evaluated");
+  assert.ok(assertions.length > 1);
+  const authorization = projection.history.observations.find(item => item.type === "external.effect.committed" && item.source === "payment-processor");
+  assert.ok(authorization?.traceId);
+  assert.notEqual(authorization.type, dropped[0]?.type);
+  assert.ok(dropped[0]?.causationId);
+  assert.ok(dropped[0]?.traceId);
+  assert.ok(projection.history.observations.some(item => item.id === dropped[0]?.causationId));
 });
 
 function blank() {
