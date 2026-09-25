@@ -393,12 +393,12 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     </div>
     <div className="timeline-view-switch" role="group" aria-label="Timeline view">
-      <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning view</button>
-      <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw view</button>
+      <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning</button>
+      <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw</button>
     </div>
     <p className="timeline-count">{view === "learning"
       ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
-        : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records are inside expandable groups.`
+        : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized inside expandable groups.`
       : `${filtered.length} of ${observations.length} observations in virtual-time order.`}</p>
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
       aria-label={view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
@@ -451,15 +451,16 @@ function LearningRows({ items, selectedId, expandedGroups, onToggle, onChoose }:
     const open = expandedGroups.has(item.id) || item.observations.some(observation => observation.id === selectedId);
     const first = item.observations[0]!;
     const last = item.observations.at(-1)!;
-    return <div key={item.id} className="learning-group">
-      <button type="button" aria-expanded={open} aria-controls={`${item.id}-members`} onClick={() => onToggle(item.id)}>
-        {open ? "Hide" : "Show"} {item.observations.length} records: {item.summary} (#{first.sequence}–#{last.sequence}, t={first.time}–{last.time})
-      </button>
-      {open ? <div id={`${item.id}-members`} className="learning-members">{item.observations.map(observation => <button key={observation.id} type="button"
-        data-observation-id={observation.id} aria-pressed={observation.id === selectedId} onClick={() => onChoose(observation.id)}>
-        <span>#{observation.sequence}</span><span>t={observation.time}</span><span>{observation.type}</span><span>{observation.id}</span>
-      </button>)}</div> : null}
-    </div>;
+    return <details key={item.id} className="learning-group" open={open} onToggle={event => {
+      if (event.currentTarget.open !== open) onToggle(item.id);
+    }}>
+      <summary>{open ? "Hide" : "Show"} {item.observations.length} records: {item.summary} (#{first.sequence}–#{last.sequence}, t={first.time}–{last.time})</summary>
+      <ul id={`${item.id}-members`} className="learning-members">{item.observations.map(observation => <li key={observation.id}>
+        <button type="button" data-observation-id={observation.id} aria-label="Open raw observation" aria-pressed={observation.id === selectedId} onClick={() => onChoose(observation.id)}>
+          <span>#{observation.sequence}</span><span>t={observation.time}</span><span>{observation.type}</span><span>{observation.id}</span>
+        </button>
+      </li>)}</ul>
+    </details>;
   })}</div>;
 }
 

@@ -14,10 +14,11 @@ export function learningTimeline(observations: readonly Observation[]): readonly
   const entries: LearningTimelineEntry[] = [];
   for (let index = 0; index < ordered.length;) {
     const first = ordered[index]!;
-    const key = collapseKey(first, first.type !== "scheduler.event.scheduled" || (firstStartedEvent >= 0 && index < firstStartedEvent));
+    const setup = firstStartedEvent < 0 || index < firstStartedEvent;
+    const key = collapseKey(first, setup);
     let end = index + 1;
     if (key !== undefined) {
-      while (end < ordered.length && collapseKey(ordered[end]!, ordered[end]!.type !== "scheduler.event.scheduled" || (firstStartedEvent >= 0 && end < firstStartedEvent)) === key) end++;
+      while (end < ordered.length && collapseKey(ordered[end]!, firstStartedEvent < 0 || end < firstStartedEvent) === key) end++;
     }
     const group = ordered.slice(index, end);
     const collapsed = key !== undefined && group.length > 1;
@@ -32,7 +33,7 @@ export function learningTimeline(observations: readonly Observation[]): readonly
 }
 
 function collapseKey(observation: Observation, initialQueueSetup: boolean): string | undefined {
-  if (observation.type === "scheduler.event.scheduled") return initialQueueSetup ? "initial-queue-setup" : undefined;
+  if (initialQueueSetup && (observation.type === "scheduler.event.scheduled" || observation.type.startsWith("clock."))) return "initial-queue-setup";
   if (observation.type !== "scenario.assertion.evaluated") return undefined;
   const data = observation.data;
   if (!data || typeof data !== "object" || Array.isArray(data)) return undefined;
