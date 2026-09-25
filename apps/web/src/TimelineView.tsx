@@ -77,9 +77,9 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const returnFocusToPlay = useRef(false);
   const suggestions = useMemo(() => timelineSuggestions(observations, componentTitles), [observations, componentTitles]);
   const filtered = useMemo(() => queryTimeline(observations, query), [observations, query]);
-  const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
   const learningItems = useMemo(() => learningTimeline(filtered), [filtered]);
   const hiddenLearningRecords = filtered.length - learningItems.length;
+  const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
   const explanation = useMemo(
     () => filtered.length === 0 && observations.length > 0 ? emptyFilterExplanation(query, observations, componentTitles) : "",
     [filtered.length, observations, query, componentTitles],
@@ -144,6 +144,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       setFeedback("That observation is not in this history.");
       return;
     }
+    setView("raw");
     const revealed = revealTimelineObservation(draftRef.current, observation);
     if (revealed.changed) {
       setDraft(revealed.draft);
@@ -286,6 +287,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       return;
     }
     haltPlayback();
+    setView("raw");
     const revealed = revealTimelineObservation(draft, observation);
     if (revealed.changed) {
       setDraft(revealed.draft);
@@ -307,6 +309,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     const row = filtered[index];
     if (!row) return;
     haltPlayback();
+    setView("raw");
     setSelectedId(row.id);
     setFeedback(movementMessage(row, index, filtered.length));
     requestFocus(row.id);
@@ -324,6 +327,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     const start = transport.action === "restart" || selectedIndex < 0 ? 0 : selectedIndex;
     const row = filtered[start];
     if (!row) return;
+    setView("raw");
     playHadFocus.current = document.activeElement === playButtonRef.current;
     setSelectedId(row.id);
     setPhase("playing");
