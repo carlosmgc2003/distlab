@@ -292,6 +292,12 @@ test("navigation clears only the filters that hide the destination", () => {
   assert.equal(invalid.filter.fromTime, undefined);
   assert.equal(invalid.filter.type, undefined);
   assert.match(revealMessage(invalid.cleared, cause), /cleared so this observation is visible/);
+  const invertedAtUpperBound = revealObservation({ ...blank(), fromTime: "10", toTime: "5" }, cause);
+  assert.deepEqual(invertedAtUpperBound.cleared, ["virtual time from"]);
+  assert.deepEqual(invertedAtUpperBound.filter, { toTime: 5 });
+  const invertedBetweenBounds = revealObservation({ ...blank(), fromTime: "10", toTime: "2" }, cause);
+  assert.deepEqual(invertedBetweenBounds.cleared, ["virtual time from", "virtual time to"]);
+  assert.deepEqual(invertedBetweenBounds.filter, {});
   const trace = showTraceFilter({ ...blank(), type: "network.response.dropped", traceId: "other" }, "trace-9");
   assert.equal(trace.changed, true);
   assert.deepEqual(trace.draft, { ...emptyTimelineDraft, traceId: "trace-9" });

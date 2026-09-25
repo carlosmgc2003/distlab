@@ -152,7 +152,7 @@ and it takes effect at an event boundary.
 
 | Action | Empty | Ready | Running | Paused | Completed | Error |
 | --- | --- | --- | --- | --- | --- | --- |
-| Scenario choice | Choose a packaged scenario | Choosing a different scenario replaces the session | Unavailable while the run is in progress | Choosing a different scenario replaces the session | Choosing a different scenario replaces the session | Choose again, then Load |
+| Scenario choice | Choose a packaged scenario | Choosing a different scenario replaces the session | Unavailable while the run is in progress | Choosing a different scenario replaces the session | Choosing a different scenario replaces the session | Choosing a different packaged scenario loads a fresh session |
 | Load scenario | Load the chosen scenario | Replace the session | Unavailable | Replace the session | Replace the session | Load again after a load or worker error. `SIMULATION_FAILED` recovers through Reset |
 | Run | Unavailable until a session is loaded | Start the loaded scenario | Unavailable. Pause is the command for a run in progress | Continue from the current boundary | Unavailable because the run has finished. Reset runs the loaded scenario again | Unavailable |
 | Pause | Unavailable | Unavailable | Request a pause at the next event boundary | Unavailable | Unavailable because the run is not in progress | Unavailable |

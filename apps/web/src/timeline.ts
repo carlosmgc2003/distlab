@@ -402,10 +402,16 @@ export function revealObservation(draft: TimelineFilterDraft, observation: Obser
       clear("entity", () => { next.entityKind = ""; next.entityId = ""; });
     }
   }
+  const from = bound(next.fromTime);
+  const to = bound(next.toTime);
+  if (from !== undefined && from !== "invalid" && observation.time < from) {
+    clear("virtual time from", () => { next.fromTime = ""; });
+  }
+  if (to !== undefined && to !== "invalid" && observation.time > to) {
+    clear("virtual time to", () => { next.toTime = ""; });
+  }
   const parsed = parseTimelineFilter(next);
   const filter = parsed.ok ? parsed.filter : {};
-  if (filter.fromTime !== undefined && observation.time < filter.fromTime) clear("virtual time from", () => { next.fromTime = ""; });
-  if (filter.toTime !== undefined && observation.time > filter.toTime) clear("virtual time to", () => { next.toTime = ""; });
   if (filter.type !== undefined && observation.type !== filter.type) clear("type", () => { next.type = ""; });
   if (filter.component !== undefined && observation.source !== filter.component && observation.target !== filter.component) {
     clear("component", () => { next.component = ""; });

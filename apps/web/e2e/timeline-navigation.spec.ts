@@ -101,8 +101,10 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.locator("#timeline-feedback")).toContainText(/Selected #/);
   await expect(selected).not.toContainText("network.response.dropped");
 
-  const clearFilters = page.getByRole("button", { name: "Clear filters" });
-  if (await clearFilters.isEnabled()) await clearFilters.click();
+  await page.getByLabel("Virtual time from", { exact: true }).fill("999999");
+  await page.getByLabel("Virtual time to", { exact: true }).fill("0");
+  await page.getByLabel("Type", { exact: true }).fill("network.response.dropped");
+  await expect(page.getByRole("alert")).toContainText("Virtual time from is after virtual time to.");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
@@ -112,6 +114,8 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeInViewport();
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("external.effect.committed");
   await expect(page.locator("#timeline-feedback")).toContainText("Selected #");
+  await expect(page.locator("#timeline-feedback")).toContainText("filters were cleared");
+  await expect(page.getByRole("alert")).toHaveCount(0);
 
   await page.getByLabel("Trace", { exact: true }).fill("");
   await page.getByLabel("Type", { exact: true }).fill("");
@@ -257,8 +261,14 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   });
   await expect(status).toContainText("FAILED");
   await expect(page.locator("#timeline-rows")).toHaveCount(0);
+  await expect(page.getByLabel("Scenario", { exact: true })).toBeEnabled();
+  await expect(button("Load scenario")).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
   for (const name of ["Run", "Pause", "Step"]) await expect(button(name)).toBeDisabled();
+  await expect(page.getByRole("region", { name: "Architecture", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Distributed state", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("form", { name: "Timeline filters", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Timeline playback", exact: true })).toHaveCount(0);
   await expect(page.getByRole("status", { name: "Terminal history" })).toContainText("incomplete");
   expect(await page.evaluate(() => window.navigationFixture.commands.map(command => command.type))).toEqual(["load", "step"]);
 });
