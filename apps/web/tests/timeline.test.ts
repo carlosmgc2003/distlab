@@ -5,7 +5,7 @@ import { simulationTime } from "@distlab/contracts";
 import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine } from "@distlab/scenario";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
-import { learningTimeline } from "../src/learning-timeline.ts";
+import { learningTimeline as groupedLearningTimeline } from "../src/learning-timeline.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import {
@@ -15,6 +15,8 @@ import {
   correlation,
   emphasisFor,
   filterObservations,
+  learningSummary,
+  learningTimeline,
   movementCue,
   movementMessage,
   movementPulseClass,
@@ -67,7 +69,7 @@ test("learning timeline collapses only contiguous unchanged bookkeeping and pres
   for (const [scenario, choice] of [[normalCheckout, scenarios[0]!], [responseLostCheckout, scenarios[1]!]] as const) {
     const { projection } = await completed(scenario, choice);
     const observations = projection.history.observations;
-    const entries = learningTimeline(observations);
+    const entries = groupedLearningTimeline(observations);
     assert.deepEqual(entries.flatMap(entry => entry.observations), orderObservations(observations));
     assert.ok(entries.length < observations.length);
     for (const entry of entries.filter(item => item.collapsed)) {
@@ -94,7 +96,7 @@ test("same-time operations, duplicate delivery, retries, and changed assertion r
     observation({ id: "assertion-fail", time: 4, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: false, evidence: { count: 0 } } }),
     observation({ id: "assertion-pass", time: 4, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: true, evidence: { count: 1 } } }),
   ];
-  const entries = learningTimeline(rows);
+  const entries = groupedLearningTimeline(rows);
   assert.deepEqual(entries.flatMap(entry => entry.observations.map(item => item.id)), rows.map(item => item.id));
   assert.ok(entries.every(entry => !entry.collapsed));
 });
@@ -129,6 +131,26 @@ test("timeline keeps sequence order when virtual times are equal", () => {
   const before = JSON.stringify(rows);
   orderObservations(rows);
   assert.equal(JSON.stringify(rows), before);
+});
+
+test("learning timeline groups only adjacent bookkeeping and preserves attempts and changed outcomes", () => {
+  const rows = [
+    observation({ id: "schedule-1", time: 0, sequence: 1, type: "scheduler.event.scheduled", source: "simulation" }),
+    observation({ id: "schedule-2", time: 0, sequence: 2, type: "scheduler.event.scheduled", source: "simulation" }),
+    observation({ id: "delivery-1", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } }),
+    observation({ id: "delivery-2", time: 1, sequence: 4, type: "message.delivered", source: "payments", data: { attempt: 2 } }),
+    observation({ id: "assertion-1", time: 2, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: false } }),
+    observation({ id: "assertion-2", time: 2, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: false } }),
+    observation({ id: "assertion-change", time: 3, sequence: 7, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: true } }),
+    observation({ id: "unrelated", time: 3, sequence: 8, type: "message.published", source: "orders" }),
+  ];
+  const projection = learningTimeline(rows);
+  assert.deepEqual(projection.map(item => item.kind === "group" ? item.observations.map(member => member.id) : item.observation.id), [
+    ["schedule-1", "schedule-2"], "delivery-1", "delivery-2", ["assertion-1", "assertion-2"], "assertion-change", "unrelated",
+  ]);
+  assert.equal(learningSummary(rows[2]!), "Message delivered (attempt 1)");
+  assert.deepEqual(projection.flatMap(item => item.kind === "group" ? item.observations : [item.observation]).map(item => item.id),
+    orderObservations(rows).map(item => item.id));
 });
 
 test("filters match headless history queries and reject invalid virtual-time bounds", async () => {

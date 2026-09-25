@@ -25,6 +25,7 @@ import {
   continuesHistory,
   correlation,
   emphasisFor,
+  learningTimeline,
   movementCue,
   movementMessage,
   payloadCopy,
@@ -41,7 +42,6 @@ import {
   visibleRowRange,
 } from "./timeline.ts";
 import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode } from "./timeline.ts";
-import { learningTimeline } from "./learning-timeline.ts";
 
 /** Host interval for the playback cursor only. It never calls the simulation host. */
 const PLAYBACK_INTERVAL_MS = 1000;
@@ -58,13 +58,14 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const [draft, setDraft] = useState<TimelineDraft>(emptyTimelineDraft);
   const [query, setQuery] = useState<TimelineQuery>({});
   const [filterError, setFilterError] = useState<string | null>(null);
+  const [view, setView] = useState<"learning" | "raw">("learning");
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phase, setPhase] = useState<PlaybackPhase>("idle");
   const [feedback, setFeedback] = useState("");
   const [liveCueId, setLiveCueId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [rowViewport, setRowViewport] = useState(TIMELINE_VIEWPORT);
-  const [timelineMode, setTimelineMode] = useState<"learning" | "raw">("learning");
   const [focusNonce, setFocusNonce] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
@@ -76,8 +77,8 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const returnFocusToPlay = useRef(false);
   const suggestions = useMemo(() => timelineSuggestions(observations, componentTitles), [observations, componentTitles]);
   const filtered = useMemo(() => queryTimeline(observations, query), [observations, query]);
-  const learningEntries = useMemo(() => learningTimeline(filtered), [filtered]);
-  const hiddenCount = filtered.length - learningEntries.length;
+  const learningItems = useMemo(() => learningTimeline(filtered), [filtered]);
+  const hiddenLearningRecords = filtered.length - learningItems.length;
   const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
   const explanation = useMemo(
     () => filtered.length === 0 && observations.length > 0 ? emptyFilterExplanation(query, observations, componentTitles) : "",
@@ -143,7 +144,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       setFeedback("That observation is not in this history.");
       return;
     }
-    setTimelineMode("raw");
+    setView("raw");
     const revealed = revealTimelineObservation(draftRef.current, observation);
     if (revealed.changed) {
       setDraft(revealed.draft);
@@ -252,15 +253,20 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     if (!id || !node) return;
     const index = filtered.findIndex(item => item.id === id);
     if (index < 0) return;
-    const top = index * TIMELINE_ROW_HEIGHT;
-    if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) node.scrollTop = top;
     const row = node.querySelector<HTMLButtonElement>(`[data-observation-id="${CSS.escape(id)}"]`);
     if (!row) return;
+    // Learning groups have variable height; scroll the actual member rather than
+    // assuming the fixed raw-row geometry used by the virtualized Raw view.
+    if (view === "learning") row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    else {
+      const top = index * TIMELINE_ROW_HEIGHT;
+      if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) node.scrollTop = top;
+    }
     pendingFocusId.current = null;
     row.focus({ preventScroll: true });
     node.scrollIntoView({ block: "nearest", inline: "nearest" });
     document.getElementById("inspection-panel")?.scrollTo(0, 0);
-  }, [filtered, focusNonce, scrollTop]);
+  }, [filtered, focusNonce, scrollTop, view]);
 
   const applyDraft = (next: TimelineDraft) => {
     setDraft(next);
@@ -281,7 +287,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       return;
     }
     haltPlayback();
-    setTimelineMode("raw");
+    setView("raw");
     const revealed = revealTimelineObservation(draft, observation);
     if (revealed.changed) {
       setDraft(revealed.draft);
@@ -303,7 +309,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     const row = filtered[index];
     if (!row) return;
     haltPlayback();
-    setTimelineMode("raw");
+    setView("raw");
     setSelectedId(row.id);
     setFeedback(movementMessage(row, index, filtered.length));
     requestFocus(row.id);
@@ -321,7 +327,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     const start = transport.action === "restart" || selectedIndex < 0 ? 0 : selectedIndex;
     const row = filtered[start];
     if (!row) return;
-    setTimelineMode("raw");
+    setView("raw");
     playHadFocus.current = document.activeElement === playButtonRef.current;
     setSelectedId(row.id);
     setPhase("playing");
@@ -343,10 +349,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   return <>
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
     <h3 id="timeline-heading">Timeline</h3>
-    <div className="timeline-mode" role="group" aria-label="Timeline view">
-      <button type="button" aria-pressed={timelineMode === "learning"} onClick={() => setTimelineMode("learning")}>Learning</button>
-      <button type="button" aria-pressed={timelineMode === "raw"} onClick={() => setTimelineMode("raw")}>Raw</button>
-    </div>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
     <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
     <p id="timeline-filter-help" className="timeline-help">{TIMELINE_FILTER_HELP}</p>
@@ -390,59 +392,26 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)}</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     </div>
-    <p className="timeline-count">{timelineMode === "raw" || hiddenCount === 0
-      ? `${filtered.length} of ${observations.length} observations in virtual-time order.${timelineMode === "raw" ? " Nothing is summarized." : ""}`
-      : `${filtered.length} of ${observations.length} observations in virtual-time order; ${learningEntries.length} Learning entries, ${hiddenCount} startup/assertion bookkeeping records summarized.`}</p>
+    <div className="timeline-view-switch" role="group" aria-label="Timeline view">
+      <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning view</button>
+      <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw view</button>
+    </div>
+    <p className="timeline-count">{view === "learning"
+      ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
+        : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records are inside expandable groups.`
+      : `${filtered.length} of ${observations.length} observations in virtual-time order.`}</p>
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
-      aria-label={timelineMode === "raw" ? "Raw timeline observations" : "Learning timeline entries"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+      aria-label={view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
         if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
         else if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
-        else if (event.key === "Home") {
-          event.preventDefault();
-          if (filtered.length === 0) setFeedback(boundaryCopy(-1, 0));
-          else if (selectedIndex === 0) setFeedback(boundaryCopy(0, filtered.length));
-          else selectIndex(0);
-        } else if (event.key === "End") {
-          event.preventDefault();
-          const last = filtered.length - 1;
-          if (last < 0) setFeedback(boundaryCopy(-1, 0));
-          else if (selectedIndex === last) setFeedback(boundaryCopy(last, filtered.length));
-          else selectIndex(last);
-        }
+        else if (event.key === "Home") { event.preventDefault(); if (filtered.length === 0) setFeedback(boundaryCopy(-1, 0)); else selectIndex(0); }
+        else if (event.key === "End") { event.preventDefault(); const last = filtered.length - 1; if (last < 0) setFeedback(boundaryCopy(-1, 0)); else selectIndex(last); }
       }}>
       {filtered.length === 0 ? <p className="timeline-empty">{observations.length === 0 ? "No observations have been recorded for this run." : explanation}</p> : null}
-      {timelineMode === "raw" ? <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
-        {windowRows.map((observation, offset) => {
-          const index = range.start + offset;
-          const path = observation.target ? `${observation.source} → ${observation.target}` : observation.source;
-          const type = observation.type.toLowerCase();
-          const semantic = type.includes("timeout") ? "is-warning" : type.includes("fault") || type.includes("failed") || type.includes("rejected") ? "is-error" : "";
-          return <button key={observation.id} type="button" data-observation-id={observation.id} aria-pressed={observation.id === selectedId}
-            style={{ position: "absolute", top: index * TIMELINE_ROW_HEIGHT, height: TIMELINE_ROW_HEIGHT, left: 0, right: 0 }}
-            onClick={() => choose(observation.id)}>
-            <span>t={observation.time}</span>
-            <span>#{observation.sequence}</span>
-            <span className={semantic}>{observation.type}</span>
-            <span>{path}</span>
-          </button>;
-        })}
-      </div> : <div className="learning-entries">
-        {learningEntries.map(entry => {
-          const first = entry.observations[0]!;
-          const last = entry.observations.at(-1)!;
-          return entry.collapsed ? <details key={`${first.id}:${last.id}`} className="learning-group">
-            <summary><span>t={first.time}–{last.time}</span><span>#{first.sequence}–#{last.sequence}</span><strong>{entry.summary}</strong><span>{entry.observations.length} records</span></summary>
-            <ol aria-label={`${entry.summary} raw records`}>
-              {entry.observations.map(member => <li key={member.id}>
-                <span>t={member.time} · #{member.sequence} · {member.type} · {member.id}</span>
-                <button type="button" onClick={() => reveal(member.id)}>Open raw observation</button>
-              </li>)}
-            </ol>
-          </details> : <button key={first.id} type="button" data-observation-id={first.id} className="learning-row" aria-pressed={first.id === selectedId}
-            onClick={() => choose(first.id)}><span>t={first.time}</span><span>#{first.sequence}</span><strong>{entry.summary}</strong>
-            <span>{first.target ? `${first.source} → ${first.target}` : first.source}</span></button>;
-        })}
+      {view === "learning" ? <LearningRows items={learningItems} selectedId={selectedId} expandedGroups={expandedGroups}
+        onToggle={id => setExpandedGroups(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onChoose={choose} /> : <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
+        {windowRows.map((observation, offset) => <RawRow key={observation.id} observation={observation} index={range.start + offset} selectedId={selectedId} onChoose={choose} />)}
       </div>}
     </div>
     </section>
@@ -450,6 +419,48 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
   </>;
+}
+
+function RawRow({ observation, index, selectedId, onChoose }: {
+  readonly observation: Observation;
+  readonly index: number;
+  readonly selectedId: string | null;
+  readonly onChoose: (id: string) => void;
+}) {
+  const path = observation.target ? `${observation.source} → ${observation.target}` : observation.source;
+  const type = observation.type.toLowerCase();
+  const semantic = type.includes("timeout") ? "is-warning" : type.includes("fault") || type.includes("failed") || type.includes("rejected") ? "is-error" : "";
+  return <button type="button" data-observation-id={observation.id} aria-pressed={observation.id === selectedId}
+    style={{ position: "absolute", top: index * TIMELINE_ROW_HEIGHT, height: TIMELINE_ROW_HEIGHT, left: 0, right: 0 }} onClick={() => onChoose(observation.id)}>
+    <span>t={observation.time}</span><span>#{observation.sequence}</span><span className={semantic}>{observation.type}</span><span>{path}</span>
+  </button>;
+}
+
+function LearningRows({ items, selectedId, expandedGroups, onToggle, onChoose }: {
+  readonly items: ReturnType<typeof learningTimeline>;
+  readonly selectedId: string | null;
+  readonly expandedGroups: ReadonlySet<string>;
+  readonly onToggle: (id: string) => void;
+  readonly onChoose: (id: string) => void;
+}) {
+  return <div className="learning-rows">{items.map(item => {
+    if (item.kind === "observation") return <button key={item.observation.id} type="button" data-observation-id={item.observation.id}
+      aria-pressed={item.observation.id === selectedId} onClick={() => onChoose(item.observation.id)}>
+      <span>{item.summary} <small>{item.observation.type}</small></span><span>t={item.observation.time} · #{item.observation.sequence}</span><span>{item.observation.source}{item.observation.target ? ` → ${item.observation.target}` : ""}</span>
+    </button>;
+    const open = expandedGroups.has(item.id) || item.observations.some(observation => observation.id === selectedId);
+    const first = item.observations[0]!;
+    const last = item.observations.at(-1)!;
+    return <div key={item.id} className="learning-group">
+      <button type="button" aria-expanded={open} aria-controls={`${item.id}-members`} onClick={() => onToggle(item.id)}>
+        {open ? "Hide" : "Show"} {item.observations.length} records: {item.summary} (#{first.sequence}–#{last.sequence}, t={first.time}–{last.time})
+      </button>
+      {open ? <div id={`${item.id}-members`} className="learning-members">{item.observations.map(observation => <button key={observation.id} type="button"
+        data-observation-id={observation.id} aria-pressed={observation.id === selectedId} onClick={() => onChoose(observation.id)}>
+        <span>#{observation.sequence}</span><span>t={observation.time}</span><span>{observation.type}</span><span>{observation.id}</span>
+      </button>)}</div> : null}
+    </div>;
+  })}</div>;
 }
 
 function suggestionBox(anchor: HTMLElement, count: number): { top: number; left: number; width: number } {
