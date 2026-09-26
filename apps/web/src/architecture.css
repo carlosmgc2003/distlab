@@ -121,6 +121,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .state-explanation { display: inline-block; color: var(--status-uncertain); font-weight: 600; }
 .timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-playback { max-width: 85ch; color: #475569; }
 .timeline-count, #timeline-order { margin: 4px 0; }
+.timeline-cursor { margin: 4px 0; padding: 8px; border-left: 4px solid #1d4ed8; background: #eff6ff; font-weight: 650; }
 .timeline-mode { display: flex; gap: 8px; margin: 0; }
 .timeline-filter-disclosure summary { cursor: pointer; min-height: 44px; padding: 8px 2px; font-weight: 650; }
 .timeline-filter-disclosure .timeline-help { margin: 4px 0 8px; }

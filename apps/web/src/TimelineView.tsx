@@ -47,10 +47,12 @@ import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode } from "./tim
 const PLAYBACK_INTERVAL_MS = 1000;
 const SPAN_PREVIEW = 12;
 
-export function TimelineView({ observations, edges, componentTitles = [], onEmphasis, focusedObservationId, focusToken = 0 }: {
+export function TimelineView({ observations, edges, componentTitles = [], simulationTime, simulationStatus, onEmphasis, focusedObservationId, focusToken = 0 }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
   readonly componentTitles?: readonly ComponentTitle[];
+  readonly simulationTime?: number;
+  readonly simulationStatus?: string;
   readonly onEmphasis: (emphasis: GraphEmphasis | undefined) => void;
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
@@ -348,9 +350,14 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
 
   return <>
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
-    <h3 id="timeline-heading">Timeline</h3>
+    <h3 id="timeline-heading">Recorded history</h3>
+    <p className="timeline-cursor" role="status" aria-live="polite">{selected
+      ? `Reviewing observation ${selected.sequence} at virtual t=${selected.time}. `
+      : "Not reviewing a selected observation. "}{simulationTime !== undefined
+      ? `Latest simulation state${simulationStatus === "COMPLETED" ? " (completed)" : ""} is at virtual t=${simulationTime}; history navigation does not change it.`
+      : "History navigation does not change simulation state."}</p>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
-    <p id="timeline-order">Rows follow observation sequence. Virtual time is the simulation clock, not wall-clock time. Equal virtual times keep that sequence.</p>
+    <p id="timeline-order">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</p>
     <details className="timeline-filter-disclosure">
     <summary>Filters{chips.length > 0 ? ` (${chips.length} active)` : ""}</summary>
     <p id="timeline-filter-help" className="timeline-help">{TIMELINE_FILTER_HELP}</p>
@@ -392,7 +399,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       <button type="button" disabled={!availability.previous} aria-describedby="timeline-boundary" onClick={() => move(-1)}>Previous observation</button>
       <button type="button" disabled={!availability.next} aria-describedby="timeline-boundary" onClick={() => move(1)}>Next observation</button>
     </div>
-    <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)}</p>
+    <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)} Presentation speed: one observation per second; virtual time is unchanged.</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     </div>
     <div className="timeline-view-switch" role="group" aria-label="Timeline view">

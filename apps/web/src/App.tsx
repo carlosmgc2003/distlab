@@ -132,7 +132,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
           </div>
         </details> : null}
       </>}>
-        <p className="virtual-time">Virtual time {projection ? projection.simulation.time : "—"}</p>
+        <p className="virtual-time">Latest committed simulation state · {projection?.simulation.status === "COMPLETED" ? "completed" : projection?.simulation.status === "RUNNING" ? "executing" : "paused/ready"} at virtual t={projection ? projection.simulation.time : "—"}</p>
         <nav className="panel-nav" aria-label="Investigation panels">
           {panels.map(([id, label]) => <button key={id} type="button" {...(projection ? { "aria-controls": `${id}-panel` } : {})}
             {...(narrow ? { "aria-pressed": panel === id } : {})} onClick={() => showPanel(id)}>{label}</button>)}
@@ -148,7 +148,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
           {...(report ? { inspectorFacts: componentId => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
       </section>
       <div className="timeline-layout">
-        <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
+        <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} simulationTime={projection.simulation.time} simulationStatus={projection.simulation.status} onEmphasis={onEmphasis}
           {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
       </div>
     </div> : <div className="investigation-workspace" data-panel={panel}>
