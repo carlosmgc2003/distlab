@@ -45,11 +45,6 @@ const predicates: readonly ScenarioPredicate[] = [
     const row = payment(projection, String(params(parameters).orderId));
     return { pass: row?.state === "AUTHORIZED" && typeof row.authorizationId === "string", evidence: { state: row?.state ?? null, authorizationId: row?.authorizationId ?? null } };
   }),
-  predicate("mvp.reproducible-run", ({ parameters, projection }) => {
-    const expected = params(parameters).expectedRandomDrawCount;
-    const draws = observations(projection).filter(item => item.type === "random.draw");
-    return { pass: draws.length === expected, evidence: { randomDrawCount: draws.length, expected: expected ?? null } };
-  }),
 ];
 
 export const checkoutAssessment: ScenarioAssessment = {

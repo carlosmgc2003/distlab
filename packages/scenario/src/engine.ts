@@ -18,6 +18,7 @@ import type {
   RunInputs,
   SimulationStatus,
   SimulationTime,
+  ScheduledHandle,
 } from "@distlab/contracts/kernel";
 import { ErrorCodes, SEEDED_RANDOM_ALGORITHM, throwSimulationError } from "@distlab/contracts/kernel";
 import {
@@ -112,6 +113,7 @@ function compose(scenario: ScenarioDefinition, catalog: ScenarioCatalog, assessm
     predicates.set(assertion.predicate, predicate);
   }
   const live: { simulation?: HeadlessSimulation } = {};
+  const deadlineHandles = new Map<string, ScheduledHandle>();
   const current = (): HeadlessSimulation => live.simulation ?? fail(ErrorCodes.INVALID_OPERATION);
   const bag: RuntimeBag = {
     clients: new Map(), services: new Map(), externals: new Map(), databases: new Map(),
@@ -149,7 +151,18 @@ function compose(scenario: ScenarioDefinition, catalog: ScenarioCatalog, assessm
         record: input => observations.record(input),
       });
       cell.results = () => attempt.results;
-      return attempt;
+      return {
+        get results() { return attempt.results; },
+        afterInitialization: () => attempt.afterInitialization(),
+        afterEvent: event => {
+          attempt.afterEvent(event);
+          for (const result of attempt.results) {
+            if (result.status !== "PENDING") deadlineHandles.get(result.id)?.cancel();
+          }
+        },
+        onCompletion: () => attempt.onCompletion(),
+        onFailure: () => attempt.onFailure(),
+      };
     },
   });
   const simulation = factory.createSimulation(runInputs(scenario, catalog, assessment), setup => {
@@ -240,7 +253,9 @@ function compose(scenario: ScenarioDefinition, catalog: ScenarioCatalog, assessm
     }
     for (const assertion of scenario.assertions) {
       if (assertion.mode === "at" && assertion.at !== undefined) setup.schedule({ time: assertion.at, type: assertionType, payload: { assertionId: assertion.id } });
-      if (assertion.mode === "eventually" && assertion.deadline !== undefined) setup.schedule({ time: assertion.deadline, type: assertionType, payload: { assertionId: assertion.id } });
+      if (assertion.mode === "eventually" && assertion.deadline !== undefined) {
+        deadlineHandles.set(assertion.id, setup.schedule({ time: assertion.deadline, type: assertionType, payload: { assertionId: assertion.id } }));
+      }
     }
   });
   live.simulation = simulation;

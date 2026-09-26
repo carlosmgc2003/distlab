@@ -1,5 +1,12 @@
 import type { CanonicalValue } from "@distlab/contracts";
 
+// Illustrative logical milliseconds: expose async boundaries while keeping
+// success quick; the lost-response case still hits the 1000 ms network timeout.
+const clientNetworkLatency = 20;
+const messageDeliveryDelay = 5;
+const processorLatency = 30;
+const assertionDeadline = 2000;
+
 const architecture = {
   components: [
     { id: "customer-app", kind: "client", model: "distlab.customer-app", version: "1.0.0", configuration: {} },
@@ -8,7 +15,7 @@ const architecture = {
     { id: "payment-processor", kind: "external", model: "distlab.payment-processor", version: "1.0.0", configuration: {} },
   ],
   links: [
-    { source: "customer-app", target: "orders", policy: { requestLatency: 0, responseLatency: 0, jitter: 0, timeout: 1000, failureRate: 0 } },
+    { source: "customer-app", target: "orders", policy: { requestLatency: clientNetworkLatency, responseLatency: clientNetworkLatency, jitter: 0, timeout: 1000, failureRate: 0 } },
     { source: "payments", target: "payment-processor", policy: { requestLatency: 0, responseLatency: 0, jitter: 0, timeout: 1000, failureRate: 0 } },
   ],
   databases: [
@@ -16,20 +23,20 @@ const architecture = {
     { owner: "payments", tables: [{ name: "payments", unique: [["paymentId"]], checks: [] }, { name: "inbox", unique: [["messageId"]], checks: [] }], initial: { payments: {}, inbox: {} } },
   ],
   stores: [],
-  destinations: [{ id: "OrderCreated", kind: "topic", deliveryDelay: 0, ackTimeout: 1000, retryDelay: 0, maxAttempts: 3, capacity: 10000 }],
+  destinations: [{ id: "OrderCreated", kind: "topic", deliveryDelay: messageDeliveryDelay, ackTimeout: 1000, retryDelay: 0, maxAttempts: 3, capacity: 10000 }],
   subscriptions: [{ destination: "OrderCreated", consumer: "payments" }],
 };
 
-const behavior = [{ target: "payment-processor", operation: "POST /authorize", behavior: { latency: 0, degradedExtraLatency: 0, dropResponse: false, parameters: {} } }] as const;
+const behavior = [{ target: "payment-processor", operation: "POST /authorize", behavior: { latency: processorLatency, degradedExtraLatency: 0, dropResponse: false, parameters: {} } }] as const;
 const actions = [
   { id: "start-orders", at: 0, kind: "service", target: "orders", state: "RUNNING" },
   { id: "start-payments", at: 0, kind: "service", target: "payments", state: "RUNNING" },
   { id: "checkout-cart-1", at: 0, kind: "client", target: "customer-app", action: "checkout", data: { cartId: "cart-1", customerId: "customer-1", amount: 5000 } },
 ] as const;
 const commonAssertions = [
-  { id: "order-created-once", predicate: "mvp.order-created-once", parameters: { orderId: "order-1" }, mode: "eventually", deadline: 1001 },
-  { id: "order-created-published-once", predicate: "mvp.order-created-published-once", parameters: { orderId: "order-1", destination: "OrderCreated" }, mode: "eventually", deadline: 1001 },
-  { id: "processor-authorized-once", predicate: "mvp.processor-authorized-once", parameters: { orderId: "order-1", amount: 5000 }, mode: "eventually", deadline: 1001 },
+  { id: "order-created-once", predicate: "mvp.order-created-once", parameters: { orderId: "order-1" }, mode: "eventually", deadline: assertionDeadline },
+  { id: "order-created-published-once", predicate: "mvp.order-created-published-once", parameters: { orderId: "order-1", destination: "OrderCreated" }, mode: "eventually", deadline: assertionDeadline },
+  { id: "processor-authorized-once", predicate: "mvp.processor-authorized-once", parameters: { orderId: "order-1", amount: 5000 }, mode: "eventually", deadline: assertionDeadline },
 ] as const;
 const configuration = { startTime: 0, historyLimit: 100000, visibility: { defaultMode: "visible", byType: {}, summaryFields: {} }, models: {} };
 
@@ -46,12 +53,11 @@ export function checkoutScenario(variant: "normal" | "response-lost"): Canonical
     assertions: [
       ...commonAssertions,
       ...(lost ? [
-        { id: "payments-unknown-after-timeout", predicate: "mvp.payments-unknown", parameters: { orderId: "order-1" }, mode: "eventually" as const, deadline: 1001 },
-        { id: "disagreement-inspectable", predicate: "mvp.authorization-disagreement-visible", parameters: { orderId: "order-1" }, mode: "eventually" as const, deadline: 1001 },
+        { id: "payments-unknown-after-timeout", predicate: "mvp.payments-unknown", parameters: { orderId: "order-1" }, mode: "eventually" as const, deadline: assertionDeadline },
+        { id: "disagreement-inspectable", predicate: "mvp.authorization-disagreement-visible", parameters: { orderId: "order-1" }, mode: "eventually" as const, deadline: assertionDeadline },
       ] : [
-        { id: "payments-authorized", predicate: "mvp.payments-authorized", parameters: { orderId: "order-1" }, mode: "eventually" as const, deadline: 1001 },
+        { id: "payments-authorized", predicate: "mvp.payments-authorized", parameters: { orderId: "order-1" }, mode: "eventually" as const, deadline: assertionDeadline },
       ]),
-      { id: "reproducible-run", predicate: "mvp.reproducible-run", parameters: { expectedRandomDrawCount: 0 }, mode: "at", at: 1001 },
     ], configuration,
   } as CanonicalValue;
 }

@@ -26,6 +26,9 @@ for (const variant of ["normal", "response-lost"] as const) {
     await first.run();
     const exportOne = first.inspect();
     assert.equal(exportOne.status, "COMPLETED");
+    assert.ok(exportOne.time > 0, `checkout should demonstrate virtual-time progression; got ${exportOne.time}`);
+    assert.ok(exportOne.time < 2000, `checkout should finish before its assertion deadline; got ${exportOne.time}`);
+    if (variant === "response-lost") assert.ok(exportOne.time > 1000, `lost response should reach the 1000 ms network timeout; got ${exportOne.time}`);
     assert.equal(exportOne.results.every(result => result.status === "PASS"), true, JSON.stringify(exportOne.results));
     const second = openHarness(engine.create(scenario));
     await second.run();
