@@ -401,8 +401,11 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     </div>
     <p className="timeline-count">{view === "learning"
       ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
-        : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized inside expandable groups.`
+        : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized in expandable groups. Select a row to inspect its details.`
       : `${filtered.length} of ${observations.length} observations in virtual-time order.`}</p>
+    {view === "learning" ? <>
+      <div className="learning-column-headings" aria-hidden="true"><span>Summary</span><span>Virtual time · sequence</span><span>Component / destination</span></div>
+    </> : null}
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
       aria-label={view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
@@ -449,7 +452,7 @@ function LearningRows({ items, selectedId, expandedGroups, onToggle, onChoose }:
   return <div className="learning-rows">{items.map(item => {
     if (item.kind === "observation") return <button key={item.observation.id} type="button" data-observation-id={item.observation.id}
       aria-pressed={item.observation.id === selectedId} onClick={() => onChoose(item.observation.id)}>
-      <span>{item.summary}{item.summary !== item.observation.type ? <small>{item.observation.type}</small> : null}</span><span>t={item.observation.time} · #{item.observation.sequence}</span><span>{item.observation.source}{item.observation.target ? ` → ${item.observation.target}` : ""}</span>
+      <span className="learning-summary" title={`${item.summary} — ${item.observation.type}`}>{item.summary}{item.summary !== item.observation.type ? <small>{item.observation.type}</small> : null}</span><span>t={item.observation.time} · #{item.observation.sequence}</span><span className="learning-component" title={`${item.observation.source}${item.observation.target ? ` → ${item.observation.target}` : ""}`}>{item.observation.source}{item.observation.target ? ` → ${item.observation.target}` : ""}</span>
     </button>;
     const open = expandedGroups.has(item.id) || item.observations.some(observation => observation.id === selectedId);
     const first = item.observations[0]!;
