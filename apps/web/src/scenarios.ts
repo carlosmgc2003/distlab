@@ -22,6 +22,5 @@ export function packagedMetadata(choice: PackagedScenario): ScenarioDefinition {
 
 /** Labels name the recorded fault input. They do not choose a hidden runtime branch. */
 export function experimentLabel(choice: PackagedScenario): string {
-  const fault = packagedMetadata(choice).faults[0];
-  return fault ? `${choice.title} — fault ${fault.id}` : `${choice.title} — no fault rule`;
+  return choice.id === "response-lost" ? "Lost processor response" : "Normal checkout";
 }

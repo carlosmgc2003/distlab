@@ -106,9 +106,21 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <h2 id="lesson-heading" className="sr-only">Checkout lesson</h2>
           <p id="scenario-help" className="sr-only">Choose the normal checkout or the recorded response-lost rule. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
           <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
+          {projection && report ? <details className="execution-overview">
+            <summary>Run overview</summary>
+            <div className="execution-overview-body">
+            <p><strong>{loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {projection.simulation.status === "COMPLETED" ? "Execution completed; business outcome is shown from recorded state." : projection.simulation.status === "FAILED" ? "Execution failed." : projection.simulation.status === "RUNNING" ? "Execution in progress." : "Execution partial or ready."}</p>
+            <p>{report.knowledge}</p>
+            <p>Recorded delivery attempts: {report.deliveries.length ? report.deliveries.map(item => `${item.destination}: attempt ${item.attempt} (${item.state})`).join("; ") : "Unavailable — no student-visible delivery records."}</p>
+            <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p>
+            <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => { setEvidenceFocus(current => ({ id: item.observationId, token: (current?.token ?? 0) + 1 })); showPanel("timeline"); }}>{item.label}</button>)}</div>
+            <p>Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.</p>
+            </div>
+          </details> : null}
           <details>
             <summary>Lesson guide</summary>
-            <p>Choose the normal checkout or the recorded response-lost rule. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+            <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+            {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
             <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
             <p>For the response-lost experiment, find the processor authorization, the dropped response, and the Payments timeout. What does Payments know, and what does the processor know? Does the timeout prove that payment failed?</p>
             <p>Reset and run again to compare the same virtual-time history.</p>
