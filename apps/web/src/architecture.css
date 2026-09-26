@@ -102,6 +102,15 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .state-inspection { margin: 8px 0; padding: 12px; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow-wrap: anywhere; }
 .state-inspection h3, .state-inspection h4 { margin-bottom: 8px; }
 .knowledge-boundary { border-left: 4px solid #0f766e; background: #f0fdfa; padding: 12px; max-width: 85ch; }
+.comparison-note { margin: 0 0 8px; color: var(--text-secondary); }
+.outcome-comparison { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 8px; }
+.outcome-comparison section { min-width: 0; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-subtle); }
+.outcome-comparison h5 { margin: 0 0 6px; font-size: 1rem; }
+.outcome-comparison p { margin: 4px 0; overflow-wrap: anywhere; }
+.raw-state { margin: 8px 0; }
+.raw-state summary, .inspector-metadata summary { cursor: pointer; min-height: 44px; padding: 8px 2px; font-weight: 650; }
+.inspector-metadata { margin-top: 8px; }
+.inspector-metadata[open] { padding-top: 4px; }
 .evidence-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .evidence-links button { max-width: 100%; }
 .fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
