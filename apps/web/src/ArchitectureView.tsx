@@ -26,7 +26,7 @@ const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
   "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
 };
-const fitViewOptions = { padding: 0.18, maxZoom: 1 };
+const fitViewOptions = { padding: 0.22, maxZoom: 0.9 };
 
 function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined): ArchitectureEdge {
   if (!emphasis?.edgeId || edge.id !== emphasis.edgeId) return edge;
@@ -110,7 +110,11 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}
-          fitView fitViewOptions={fitViewOptions} minZoom={0.3} maxZoom={1.8}
+          fitView fitViewOptions={fitViewOptions} onInit={instance => {
+            // Wait for the canvas layout and node measurements before fitting; the workspace
+            // can still be sizing its two columns when React Flow first initializes.
+            requestAnimationFrame(() => { void instance.fitView(fitViewOptions); });
+          }} minZoom={0.3} maxZoom={1.8}
           ariaLabelConfig={ariaLabelConfig}>
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} />
