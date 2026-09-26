@@ -191,7 +191,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .learning-entries { min-height: 100%; }
 .learning-row, .learning-group summary { display: grid; grid-template-columns: 64px 64px minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 4px; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-bottom: 1px solid #e2e8f0; background: #fff; text-align: left; }
 .learning-row > *, .learning-group summary > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.learning-group summary { display: block; width: 100%; cursor: pointer; overflow: visible; overflow-wrap: anywhere; white-space: normal; }
+.learning-group { min-width: 0; }
+.learning-group summary { display: list-item; width: 100%; cursor: pointer; overflow-wrap: break-word; white-space: normal; }
 .learning-group ol { margin: 0; padding: 8px 8px 8px 36px; }
 .learning-group li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0; }
 .learning-row[aria-pressed="true"] { background: #dbeafe; box-shadow: inset 4px 0 0 #1d4ed8; }
