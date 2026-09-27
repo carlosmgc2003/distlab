@@ -154,7 +154,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {projection ? <div className="investigation-workspace" data-panel={panel}>
       <section id="architecture-panel" className="panel-architecture" tabIndex={-1} aria-labelledby="architecture-heading">
         <h2 id="architecture-heading">Architecture</h2>
-        <ArchitectureView architecture={projection.architecture}
+        <ArchitectureView architecture={projection.architecture} sessionKey={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`}
           {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
           {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
           {...(report ? { inspectorFacts: componentId => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />

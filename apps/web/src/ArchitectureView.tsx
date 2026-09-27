@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Background, Controls, Handle, Panel, Position, ReactFlow, useReactFlow } from "@xyflow/react";
 import type { NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
@@ -26,7 +26,43 @@ const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
   "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
 };
-const fitViewOptions = { padding: 0.18, maxZoom: 1 };
+// No maxZoom: a fit must be able to scale down far enough to show every node, however the workspace is sized.
+const fitViewOptions = { padding: 0.18 };
+/** Small enough that the default fit never has to clip the checkout graph on a narrow canvas. */
+const minZoom = 0.15;
+
+/** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
+function FitToCanvas({ container, sessionKey }: {
+  readonly container: RefObject<HTMLDivElement | null>;
+  readonly sessionKey: string;
+}) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    let measured = "";
+    let queued = 0;
+    const apply = () => {
+      queued = 0;
+      const { width, height } = element.getBoundingClientRect();
+      const current = `${Math.round(width)}x${Math.round(height)}`;
+      if (current === measured || width < 1 || height < 1) return;
+      measured = current;
+      void fitView(fitViewOptions);
+    };
+    // A ResizeObserver sees every layout-driven canvas change: window resizes, panel switches, and the two-column inspector.
+    const observer = new ResizeObserver(() => {
+      if (queued) return;
+      queued = requestAnimationFrame(apply);
+    });
+    observer.observe(element);
+    apply();
+    return () => { if (queued) cancelAnimationFrame(queued); observer.disconnect(); };
+  }, [container, fitView]);
+  // Loading a scenario or resetting the simulation returns the view to the fitted default for the current canvas.
+  useEffect(() => { void fitView(fitViewOptions); }, [fitView, sessionKey]);
+  return null;
+}
 
 function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined): ArchitectureEdge {
   if (!emphasis?.edgeId || edge.id !== emphasis.edgeId) return edge;
@@ -53,13 +89,15 @@ function PanControls() {
   </Panel>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts }: {
+export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts, sessionKey }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
   readonly emphasis?: GraphEmphasis;
   readonly movementText?: string;
   readonly inspectorFacts?: (componentId: string) => ReactNode;
+  /** Changes when a scenario is loaded or reset; restores the fitted default view. */
+  readonly sessionKey: string;
 }) {
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
@@ -90,15 +128,16 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     });
   }, []);
   const clearSelection = useCallback(() => setSelectedId(null), []);
+  const canvas = useRef<HTMLDivElement | null>(null);
 
   if (graph.error) return <p role="alert">{graph.error}</p>;
   if (!nodes.length) return <p>No architecture components to display.</p>;
   return <>
-    <p className="graph-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom buttons to change the view.</p>
+    <p className="graph-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom and fit buttons to change the view.</p>
     <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>
     {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
     <div className={`architecture-layout${selectedId ? " has-selection" : ""}`}>
-      <div className="graph-canvas" aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
+      <div className="graph-canvas" ref={canvas} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
         if (event.key === "Escape") {
@@ -110,10 +149,11 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}
-          fitView fitViewOptions={fitViewOptions} minZoom={0.3} maxZoom={1.8}
+          fitView fitViewOptions={fitViewOptions} minZoom={minZoom} maxZoom={1.8}
           ariaLabelConfig={ariaLabelConfig}>
+          <FitToCanvas container={canvas} sessionKey={sessionKey} />
           <Background gap={24} color="#cbd5e1" />
-          <Controls showInteractive={false} />
+          <Controls showInteractive={false} fitViewOptions={fitViewOptions} />
           <PanControls />
         </ReactFlow>
       </div>
