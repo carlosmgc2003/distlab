@@ -80,14 +80,13 @@ async function loadScenario(page: Page, scenario: string) {
   await expect(page.locator(".react-flow__node")).toHaveCount(5);
 }
 
-test("the default view shows the whole checkout graph at desktop and narrow viewports", async ({ page }) => {
+test("the default view shows the whole checkout graph at the supported desktop baselines", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
   const viewports = [
     { name: "1534x897", width: 1534, height: 897 },
     { name: "1366x768", width: 1366, height: 768 },
     { name: "1024x768", width: 1024, height: 768 },
-    { name: "390x844", width: 390, height: 844 },
   ];
   for (const scenario of ["normal", "response-lost"]) {
     for (const viewport of viewports) {
@@ -99,7 +98,7 @@ test("the default view shows the whole checkout graph at desktop and narrow view
   }
 });
 
-test("the inspector, panel switches, and window resizes refit the graph", async ({ page }) => {
+test("the inspector, tab switches, and window resizes refit the graph", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
   await page.setViewportSize({ width: 1534, height: 897 });
@@ -131,15 +130,12 @@ test("the inspector, panel switches, and window resizes refit the graph", async 
   const fitted = await expectGraphFits(page, "1534x897 after the Fit View control");
   expect(fitted.transform).toBe(defaultView.transform);
 
-  // A narrow viewport shows one panel at a time; each panel switch refits the graph.
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Architecture", exact: true }).click();
-  await expectGraphFits(page, "390x844 architecture panel");
-  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  // The desktop workspace shows one tab at a time; each tab switch refits the graph.
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(page.locator(".graph-canvas")).toBeHidden();
-  await page.getByRole("button", { name: "Architecture", exact: true }).click();
-  await expectGraphFits(page, "390x844 after returning to the architecture panel");
-  await page.screenshot({ path: path.join(evidenceDir, "390x844-after-panel-switch.png") });
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
+  await expectGraphFits(page, "1534x897 after returning to the architecture tab");
+  await page.screenshot({ path: path.join(evidenceDir, "1534x897-after-tab-switch.png") });
 });
 
 test("Reset and a new scenario return to the fitted default view", async ({ page }) => {

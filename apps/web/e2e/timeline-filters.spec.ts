@@ -40,6 +40,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(status).toHaveText("READY");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // These assertions read canonical rows; the teaching Story view has its own spec.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.locator(".timeline-filter-disclosure summary").click();
@@ -95,7 +96,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.getByRole("button", { name: "Use source as component filter" }).click();
   await expect(page.getByLabel("Component", { exact: true })).toHaveValue("payment-processor");
   await expect(page.getByRole("list", { name: "Active filters" })).toContainText("Payment Processor (payment-processor)");
-  const observationId = await page.locator(".timeline-detail dd span").first().innerText();
+  const observationId = await page.locator("#timeline-rows button[aria-pressed='true']").getAttribute("data-observation-id");
   await page.getByRole("button", { name: "Copy observation id" }).click();
   await expect(page.getByRole("button", { name: "Copied observation id" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(observationId);
@@ -152,8 +153,8 @@ test("discoverable filters suggest the current run and keep partial matching exp
     const active = document.activeElement;
     if (active instanceof HTMLElement) active.blur();
   });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  await page.setViewportSize({ width: 683, height: 384 });
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await typeInput.click();
   await expect(page.getByRole("listbox", { name: "Type choices" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

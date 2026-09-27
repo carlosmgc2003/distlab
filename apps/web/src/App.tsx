@@ -11,26 +11,12 @@ import { experimentLabel, packagedMetadata, scenarios } from "./scenarios.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 
-type PanelId = "architecture" | "timeline" | "inspection";
+type WorkspaceTab = "architecture" | "history";
 
-const panels = [
+const tabs = [
   ["architecture", "Architecture"],
-  ["timeline", "Timeline"],
-  ["inspection", "Inspection"],
-] as const satisfies readonly (readonly [PanelId, string])[];
-
-function useNarrowViewport(): boolean {
-  const query = "(max-width: 959px)";
-  return useSyncExternalStore(
-    onStoreChange => {
-      const media = window.matchMedia(query);
-      media.addEventListener("change", onStoreChange);
-      return () => media.removeEventListener("change", onStoreChange);
-    },
-    () => window.matchMedia(query).matches,
-    () => false,
-  );
-}
+  ["history", "Recorded history"],
+] as const satisfies readonly (readonly [WorkspaceTab, string])[];
 
 export function App({ host }: { readonly host: SimulationHost }) {
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
@@ -40,9 +26,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
-  const [panel, setPanel] = useState<PanelId>("architecture");
-  const panelRequest = useRef<PanelId | null>(null);
-  const narrow = useNarrowViewport();
+  const [tab, setTab] = useState<WorkspaceTab>("architecture");
+  const tabRequest = useRef<{ tab: WorkspaceTab; focusPanel: boolean } | null>(null);
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
   const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
   const report = useMemo(() => projection && lesson ? inspectFaults(projection, lesson) : null, [projection, lesson]);
@@ -63,15 +48,38 @@ export function App({ host }: { readonly host: SimulationHost }) {
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
   useEffect(() => { setEvidenceFocus(null); }, [sessionKey]);
   useEffect(() => {
-    const requested = panelRequest.current;
+    const requested = tabRequest.current;
     if (!requested) return;
-    panelRequest.current = null;
-    document.getElementById(`${requested}-panel`)?.focus();
-  }, [panel]);
+    tabRequest.current = null;
+    if (!requested.focusPanel) return;
+    document.getElementById(requested.tab === "architecture" ? "architecture-panel" : "history-panel")?.focus();
+  }, [tab]);
 
-  const showPanel = (next: PanelId) => {
-    panelRequest.current = next;
-    setPanel(next);
+  const showTab = (next: WorkspaceTab, focusPanel = true) => {
+    tabRequest.current = { tab: next, focusPanel };
+    setTab(next);
+  };
+  const showEvidence = (id: string) => {
+    // Evidence links target a record: activate the Recorded history tab, select the
+    // target record, and let the timeline move focus to the selected row.
+    tabRequest.current = { tab: "history", focusPanel: false };
+    setTab("history");
+    setEvidenceFocus(current => ({ id, token: (current?.token ?? 0) + 1 }));
+  };
+  const onTabKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const order: WorkspaceTab[] = ["architecture", "history"];
+    const current = order.indexOf(tab);
+    let next: WorkspaceTab = tab;
+    if (event.key === "ArrowRight") next = order[(current + 1) % order.length]!;
+    else if (event.key === "ArrowLeft") next = order[(current - 1 + order.length) % order.length]!;
+    else if (event.key === "Home") next = "architecture";
+    else if (event.key === "End") next = "history";
+    // Arrow navigation activates the tab but keeps focus on the tab itself;
+    // only direct activation moves focus into the panel.
+    showTab(next, false);
+    document.getElementById(next === "architecture" ? "tab-architecture" : "tab-history")?.focus();
   };
   const replaceSession = (id: string) => {
     if (busy) return;
@@ -115,7 +123,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
             <p>{report.knowledge}</p>
             <p>Recorded delivery attempts: {report.deliveries.length ? report.deliveries.map(item => `${item.destination}: attempt ${item.attempt} (${item.state})`).join("; ") : "Unavailable — no student-visible delivery records."}</p>
             <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p>
-            <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => { setEvidenceFocus(current => ({ id: item.observationId, token: (current?.token ?? 0) + 1 })); showPanel("timeline"); }}>{item.label}</button>)}</div>
+            <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
             <p>Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.</p>
             </div>
           </details> : null}
@@ -137,31 +145,37 @@ export function App({ host }: { readonly host: SimulationHost }) {
               <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
               <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
             </dl>
-            <DistributedState report={report} onShowEvidence={id => setEvidenceFocus(current => ({ id, token: (current?.token ?? 0) + 1 }))} />
+            <DistributedState report={report} onShowEvidence={showEvidence} />
           </div>
         </details> : null}
         </div>
       </>}>
-        {/* Narrow layouts show one region at a time, so the panel switcher is a real view control there. */}
-        {narrow && projection ? <nav className="panel-nav" aria-label="Investigation panels">
-          {panels.map(([id, label]) => <button key={id} type="button" aria-controls={`${id}-panel`} aria-pressed={panel === id} onClick={() => showPanel(id)}>{label}</button>)}
-        </nav> : null}
       </SimulationControls>
     </header>
-    {projection ? <div className="investigation-workspace" data-panel={panel}>
-      <section id="architecture-panel" className="panel-architecture" tabIndex={-1} aria-labelledby="architecture-heading">
+    {projection ? <div className="investigation-workspace">
+      <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
+        {tabs.map(([id, label]) => <button key={id} type="button" role="tab"
+          id={id === "architecture" ? "tab-architecture" : "tab-history"}
+          aria-selected={tab === id} aria-controls={id === "architecture" ? "architecture-panel" : "history-panel"}
+          tabIndex={tab === id ? 0 : -1}
+          className={tab === id ? "is-active" : undefined}
+          onClick={() => showTab(id)}>{label}</button>)}
+      </div>
+      <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
+        aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
         <h2 id="architecture-heading">Architecture</h2>
         <ArchitectureView architecture={projection.architecture} sessionKey={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`}
           {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
           {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
           {...(report ? { inspectorFacts: componentId => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
       </section>
-      <div className="timeline-layout">
+      <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
+        aria-labelledby="tab-history" hidden={tab !== "history"}>
         <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
           {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
       </div>
-    </div> : <div className="investigation-workspace" data-panel={panel}>
-      <p id="architecture-panel" className="workspace-empty" tabIndex={-1}>Load a checkout scenario to inspect the architecture and timeline.</p>
+    </div> : <div className="investigation-workspace">
+      <p className="workspace-empty" tabIndex={-1}>Load a checkout scenario to inspect the architecture and timeline.</p>
     </div>}
   </main>;
 }

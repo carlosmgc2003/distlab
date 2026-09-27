@@ -60,6 +60,7 @@ async function runScenario(page: Page, scenario: string) {
   await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
 }
@@ -112,13 +113,17 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   // A visual milestone and its accessible row produce the same detail and emphasis.
   await stripMilestone.click();
   const fromStrip = await page.getByRole("region", { name: "Observation detail" }).innerText();
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   const cueFromStrip = await page.locator("#movement-cue").innerText();
   expect(fromStrip).toContain(sent.id);
   expect(cueFromStrip).toContain("Request sent");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Story", exact: true }).click();
   await tableRow.click();
   expect(await page.getByRole("region", { name: "Observation detail" }).innerText()).toBe(fromStrip);
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   expect(await page.locator("#movement-cue").innerText()).toBe(cueFromStrip);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(tableRow).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".story-table tr[data-selected='true']")).toHaveCount(1);
   await expect(page.locator(".story-milestone[data-selected='true']")).toHaveCount(1);
@@ -165,14 +170,18 @@ test("response-lost Story milestones stay linked to their records without new co
   const dropRow = page.locator(rowSelector(dropped));
   await page.locator(".story-strip .story-milestone").filter({ hasText: "Response dropped" }).first().click();
   const stripDetail = await page.getByRole("region", { name: "Observation detail" }).innerText();
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   const stripCue = await page.locator("#movement-cue").innerText();
   expect(stripDetail).toContain(dropped.id);
   expect(stripCue).toContain("Response dropped");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Story", exact: true }).click();
   await dropRow.click();
   expect(await page.getByRole("region", { name: "Observation detail" }).innerText()).toBe(stripDetail);
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   expect(await page.locator("#movement-cue").innerText()).toBe(stripCue);
   await expect(page.locator(".react-flow__node.is-involved")).toHaveCount(2);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   await dropRow.click();
   await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${dropped.sequence}`);

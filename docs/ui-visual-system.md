@@ -20,8 +20,17 @@ should never have to reconcile two statements about the same fact.
 | Level | Region | Carries |
 | --- | --- | --- |
 | Summary | `Committed simulation state` in the command toolbar | Run status, virtual time, processed events, pending events |
-| Investigation | `Architecture`, `Recorded history`, `Observation detail` | Graph and component state, recorded rows with their filters, one observation's stored detail |
-| Detail | The observation detail inside `Recorded history` | Trace, causation, and stored data for the selected record |
+| Investigation | `Architecture` tab, `Recorded history` tab | System structure with component inspector, or recorded evidence with observation detail |
+| Detail | The observation detail inside `Recorded history` | Summary, effect evidence, related evidence, and technical record for the selected observation |
+
+DistLab is a desktop learning application. The supported desktop viewport
+baseline is 1366×768 and 1534×897, covered by browser tests. Mobile screen
+resolutions are explicitly unsupported: there is no mobile layout and no
+mobile-resolution browser coverage. Desktop browser zoom, keyboard access,
+screen-reader semantics, and reduced-motion behavior remain accessibility
+requirements. The desktop tabbed layout remains usable at 200% browser zoom
+(683×384 CSS pixels for the 1366 baseline) with vertical scrolling and no
+horizontal overflow; zoom support is not mobile support.
 
 Rules that keep the levels distinct:
 
@@ -39,13 +48,34 @@ Rules that keep the levels distinct:
 - Only the first group changes the run. The history group states its boundary
   in one sentence: reviewing history does not change the simulation or its
   virtual time.
-- Panel navigation exists only where the layout shows one region at a time. On
-  wide layouts all three regions are visible, so no switcher is rendered: a
-  switcher there would imply a hidden panel. Where it is rendered it is a
-  segmented control with a pressed state, it is operable from the keyboard, and
-  it preserves each region's own selection.
-- The three regions are siblings at one heading level, so `Recorded history` is
-  never read as a child of `Architecture`.
+- The loaded investigation workspace exposes exactly two top-level tabs:
+  **Architecture** (architecture graph and Component inspector) and
+  **Recorded history** (history navigation/filtering and Observation detail
+  together). The former narrow/mobile Architecture, Timeline, and Inspection
+  view switcher is removed.
+- The tab set uses standard tab semantics (`tablist`, `tab`, `tabpanel`),
+  has a clear active state (`aria-selected`), is keyboard operable (including
+  Left/Right/Home/End within the tablist), and moves focus predictably:
+  direct tab changes focus the activated panel, while evidence links activate
+  the Recorded history tab, select the target record, and move focus to the
+  selected row.
+- Switching tabs preserves component selection, observation selection, history
+  mode, filters, and other investigation state; both tab panels stay mounted
+  and the inactive panel is hidden. Only a scenario load or reset clears the
+  state that load/reset already resets.
+- Simulation controls and committed simulation state stay outside the tabs.
+  Selecting evidence, changing history views, or switching tabs sends no
+  worker commands and does not change simulation state or virtual time.
+- Observation detail is summary-first inside the Recorded history tab, in
+  this order: **Event summary** (plain-language stored event label,
+  sequence, virtual time, source, target, payload visibility), **Effect and
+  evidence** (before/after changes when stored, otherwise an explicit
+  statement that none were stored), **Related evidence** (causing
+  observation, effects, current trace, event/entity filters), **Technical
+  record** (canonical IDs, trace/span/event IDs, visibility statement, stored
+  JSON). Headings for requests, commits, faults, dropped responses, timeouts,
+  and external effects are pure presentation mappings over stored fields;
+  redacted payloads are never reconstructed or summarized as if visible.
 
 ## Explanations on demand
 

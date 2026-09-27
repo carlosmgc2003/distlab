@@ -53,6 +53,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await page.getByRole("button", { name: "Load scenario" }).click();
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // This test reads canonical rows; the teaching Story view has its own spec.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recorded history", exact: true })).toBeVisible();
@@ -77,17 +78,21 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(requestRows).toHaveCount(1);
   const requestText = await requestRows.first().innerText();
   await requestRows.first().click();
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders at virtual time");
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(1);
   await expect(page.locator(".react-flow__node.is-involved")).toHaveCount(2);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   await stepUntil(page, "message.delivered");
   await page.getByLabel("Type", { exact: true }).fill("message.delivered");
   await expect(page.locator("#timeline-rows button").first()).toContainText("message.delivered");
   await page.locator("#timeline-rows button").first().click();
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Message delivered from OrderCreated to payments at virtual time");
   await expect(page.locator(".react-flow__edge.movement-message")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   await page.getByLabel("Type", { exact: true }).fill("database.write.staged");
   await page.locator("#timeline-rows button").first().click();
@@ -125,7 +130,9 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
@@ -138,6 +145,7 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   await page.getByRole("button", { name: "Load scenario" }).click();
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   const observations = (await latestProjection(page)).history.observations;
@@ -153,7 +161,7 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   const group = page.locator(".learning-group").first();
   await group.locator("summary").click();
   const rawMembers = group.locator("li");
-  await expect(rawMembers).toHaveCount(10);
+  await expect(rawMembers).toHaveCount(9);
   const exactId = observations.find(item => item.type === "scheduler.event.scheduled")!.id;
   await rawMembers.filter({ hasText: exactId }).getByRole("button", { name: "Open raw observation" }).click();
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText(exactId);
@@ -172,12 +180,14 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await page.goto("/");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
   await page.locator("#timeline-rows button").first().click();
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders");
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(1);
   const animation = await page.locator(".react-flow__edge.movement-request .react-flow__edge-path").evaluate(element => getComputedStyle(element).animationName);
@@ -220,6 +230,7 @@ test("redacted and omitted payloads stay unmarked and incomplete history is labe
       },
     });
   });
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.locator(".timeline-count")).toContainText("3 of 3");
   const rows = page.locator("#timeline-rows button");

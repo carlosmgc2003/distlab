@@ -29,6 +29,7 @@ async function completed(page: Page) {
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(status).toHaveText("READY");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
 }
@@ -137,7 +138,7 @@ test("an empty result names the active quick view and the canonical filters, and
   expect(await commands(page)).toEqual(afterRun);
 });
 
-test("quick views are keyboard operable and stay reachable at 390x844", async ({ page }) => {
+test("quick views are keyboard operable and stay reachable at 200% zoom", async ({ page }) => {
   test.setTimeout(90_000);
   await observeCommands(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -160,8 +161,8 @@ test("quick views are keyboard operable and stay reachable at 390x844", async ({
   expect(await commands(page)).toEqual(afterRun);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  await page.setViewportSize({ width: 683, height: 384 });
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const mobileFaults = page.getByRole("button", { name: /^Faults & timeouts/ });
   await expect(mobileFaults).toBeVisible();
   await expect(page.locator("#timeline-quick-count")).toContainText("shows 4 of 267 recorded observations");

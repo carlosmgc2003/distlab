@@ -41,12 +41,14 @@ test("response-lost selection shows remote authorization and local timeout as di
   await expect(page.locator("body")).not.toContainText("effectCount");
 
   await page.getByRole("button", { name: "Show Payments timeout", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("network.request.timedout");
   await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
   await page.getByRole("button", { name: "Show fault selection", exact: true }).click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");
 
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await page.getByRole("button", { name: "Orders, Internal service", exact: true }).click();
   await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("CREATED");
   await page.getByRole("button", { name: "Payments, Internal service", exact: true }).click();
@@ -84,8 +86,9 @@ test("response-lost selection shows remote authorization and local timeout as di
   await expect(panel).not.toContainText("NETWORK_TIMEOUT");
   await expect(panel).not.toContainText("payment failed");
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(panel).toBeVisible();
+  await page.setViewportSize({ width: 683, height: 384 });
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
+  await expect(page.locator(".graph-canvas")).toBeVisible();
   await page.getByRole("button", { name: "Payments, Internal service", exact: true }).click();
   await expect(inspector).toContainText("AUTHORIZED");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

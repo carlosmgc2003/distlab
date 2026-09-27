@@ -42,6 +42,7 @@ import {
   learningTimeline,
   movementCue,
   movementMessage,
+  observationHeading,
   payloadCopy,
   payloadVisibility,
   playbackAdvance,
@@ -308,6 +309,16 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     const index = filtered.findIndex(item => item.id === id);
     if (index < 0) return;
     const row = node.querySelector<HTMLButtonElement>(`[data-observation-id="${CSS.escape(id)}"]`);
+    if (!row && view === "raw") {
+      // Virtualized Raw rows outside the current window are not in the DOM.
+      // Move the window to the selected index so the next render includes it,
+      // then retry focusing. This covers evidence navigation that activates
+      // the Recorded history tab while it was hidden.
+      const top = index * TIMELINE_ROW_HEIGHT;
+      node.scrollTop = top;
+      setScrollTop(top);
+      return;
+    }
     if (!row) return;
     // Learning groups have variable height; scroll the actual member rather than
     // assuming the fixed raw-row geometry used by the virtualized Raw view.
@@ -437,13 +448,25 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const useEntity = (kind: string, id: string) => applyDraft(withExactValue(withExactValue(draft, "entityKind", kind), "entityId", id));
   const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
+  // The selected Raw row stays in the DOM even when virtualized out, so evidence
+  // navigation that activates the tab always has a focus target and a pressed state.
+  // It is merged in index order so DOM order still follows observation sequence.
+  const rawRows = (() => {
+    if (selectedId === null || view !== "raw") return windowRows.map((observation, offset) => ({ observation, index: range.start + offset }));
+    const selectedIdx = filtered.findIndex(item => item.id === selectedId);
+    const rows = windowRows.map((observation, offset) => ({ observation, index: range.start + offset }));
+    if (selectedIdx < 0 || (selectedIdx >= range.start && selectedIdx < range.end)) return rows;
+    const observation = filtered[selectedIdx];
+    if (observation === undefined) return rows;
+    return [...rows, { observation, index: selectedIdx }].sort((a, b) => a.index - b.index);
+  })();
   const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null || quickView !== null;
   const otherRecords = filtered.length - milestones.length;
   const storyCount = `${reduction} ${observations.length === filtered.length ? "" : `Filters show ${filtered.length} of ${observations.length} observations; `}`
     + `${otherRecords === 0
       ? filtered.length === 0 ? "No visible records to reduce. " : "Every visible record is a milestone. "
       : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`;
-  return <>
+  return <div className="history-layout">
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
     <h2 id="timeline-heading">Recorded history</h2>
     {/* The review position only. Run status and virtual time have one home, the committed-state summary. */}
@@ -555,14 +578,14 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         reduction={reduction} selectedId={selectedId} componentLabels={componentLabels} hasRecords={filtered.length > 0} onChoose={choose} /> : null}
       {view === "learning" ? <LearningRows items={learningItems} selectedId={selectedId} expandedGroups={expandedGroups}
         onToggle={id => setExpandedGroups(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onChoose={choose} /> : view === "raw" ? <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
-        {windowRows.map((observation, offset) => <RawRow key={observation.id} observation={observation} index={range.start + offset} selectedId={selectedId} onChoose={choose} />)}
+        {rawRows.map(item => <RawRow key={item.observation.id} observation={item.observation} index={item.index} selectedId={selectedId} onChoose={choose} />)}
       </div> : null}
     </div>
     </section>
     <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
       hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
-  </>;
+  </div>;
 }
 
 function StoryView({ milestones, lanes, legend, summary, detail, reduction, selectedId, componentLabels, hasRecords, onChoose }: {
@@ -842,13 +865,14 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
   const traceId = observation.traceId;
   const target = observation.target;
   const entities = observation.entityRefs ?? [];
+  const heading = observationHeading(observation);
   return <>
     {hidden ? <p>This observation is hidden by the current filters.</p> : null}
+    <h3>Event summary</h3>
+    <h4>{heading}</h4>
     <dl>
-      <dt>Observation</dt><dd><span>{observation.id}</span><CopyButton label="Copy observation id" value={observation.id} /></dd>
-      <dt>Virtual time</dt><dd>{observation.time}</dd>
-      <dt>Sequence</dt><dd>{observation.sequence}</dd>
-      <dt>Type</dt><dd>{observation.type}</dd>
+      <dt>Sequence</dt><dd>#{observation.sequence}</dd>
+      <dt>Virtual time</dt><dd>t={observation.time}</dd>
       <dt>Source</dt><dd>
         <span>{componentLabel(observation.source, componentTitles)}</span>
         <button type="button" onClick={() => onUseText("component", observation.source)}>Use source as component filter</button>
@@ -859,22 +883,9 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
         <button type="button" onClick={() => onUseText("component", target)}>Use target as component filter</button>
         <CopyButton label="Copy target id" value={target} />
       </dd></> : null}
-      {traceId !== undefined ? <><dt>Trace</dt><dd><span>{traceId}</span><CopyButton label="Copy trace id" value={traceId} /></dd></> : null}
-      {observation.spanId !== undefined ? <><dt>Span</dt><dd>{observation.spanId}</dd></> : null}
-      {observation.parentSpanId !== undefined ? <><dt>Parent span</dt><dd>{observation.parentSpanId}</dd></> : null}
-      {observation.causationId !== undefined ? <><dt>Causation</dt><dd>{observation.causationId}</dd></> : null}
-      {eventId !== undefined ? <><dt>Event</dt><dd><span>{eventId}</span><CopyButton label="Copy event id" value={eventId} /></dd></> : null}
-      {entities.length > 0 ? <><dt>Entities</dt><dd>{entities.map(entity => `${entity.kind} ${entity.id}`).join(", ")}</dd></> : null}
+      <dt>Payload</dt><dd>{payloadCopy(observation)}</dd>
     </dl>
-    {eventId !== undefined || entities.length > 0 ? <div className="timeline-actions" role="group" aria-label="Filter from this observation">
-      {eventId !== undefined ? <button type="button" onClick={() => onUseText("eventId", eventId)}>Use this event</button> : null}
-      {entities.map((entity, index) => <button key={`${entity.kind}:${entity.id}:${index}`} type="button" onClick={() => onUseEntity(entity.kind, entity.id)}>Use entity {entity.kind} {entity.id}</button>)}
-    </div> : null}
-    <h3>Stored data</h3>
-    <p>{payloadCopy(observation)}</p>
-    {visibility === "redacted" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
-    {visibility === "visible" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
-    <h3>Before and after</h3>
+    <h3>Effect and evidence</h3>
     {evidence.length === 0 ? <p>No before or after values were stored.</p> : <ul className="change-evidence">
       {evidence.map((item, index) => <li key={`${item.label}:${index}`}>
         <p>{item.label}</p>
@@ -882,15 +893,35 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
         {Object.hasOwn(item, "after") ? <><h4>After</h4><pre>{JSON.stringify(item.after, null, 2)}</pre></> : <p>After was not stored.</p>}
       </li>)}
     </ul>}
-    <h3>Causation</h3>
+    <h3>Related evidence</h3>
+    <h4>Causation</h4>
     {links.cause ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onSelect(links.cause!.id)}>Select causing observation {links.cause.type} at virtual time {links.cause.time}</button></p> : null}
     {links.unresolvedCauseId ? <p>Causation {links.unresolvedCauseId} is not in this history.</p> : null}
     {!links.cause && !links.unresolvedCauseId ? <p>No causation reference was stored.</p> : null}
     {links.effects.length > 0 ? <ul>{links.effects.slice(0, SPAN_PREVIEW).map(effect => <li key={effect.id}>
       <button type="button" aria-controls="timeline-rows" onClick={() => onSelect(effect.id)}>Select effect {effect.type} at virtual time {effect.time}</button>
     </li>)}{links.effects.length > SPAN_PREVIEW ? <li>{links.effects.length - SPAN_PREVIEW} more effects. Show this trace to read them in order.</li> : null}</ul> : <p>No later observation points at this record.</p>}
-    <h3>Trace</h3>
+    <h4>Trace</h4>
     {traceId !== undefined ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onShowTrace(traceId)}>Show this trace</button></p> : <p>This observation has no trace.</p>}
+    {eventId !== undefined || entities.length > 0 ? <div className="timeline-actions" role="group" aria-label="Filter from this observation">
+      {eventId !== undefined ? <button type="button" onClick={() => onUseText("eventId", eventId)}>Use this event</button> : null}
+      {entities.map((entity, index) => <button key={`${entity.kind}:${entity.id}:${index}`} type="button" onClick={() => onUseEntity(entity.kind, entity.id)}>Use entity {entity.kind} {entity.id}</button>)}
+    </div> : null}
+    <h3>Technical record</h3>
+    <dl>
+      <dt>Observation</dt><dd><span>{observation.id}</span><CopyButton label="Copy observation id" value={observation.id} /></dd>
+      <dt>Type</dt><dd>{observation.type}</dd>
+      {traceId !== undefined ? <><dt>Trace</dt><dd><span>{traceId}</span><CopyButton label="Copy trace id" value={traceId} /></dd></> : null}
+      {observation.spanId !== undefined ? <><dt>Span</dt><dd>{observation.spanId}</dd></> : null}
+      {observation.parentSpanId !== undefined ? <><dt>Parent span</dt><dd>{observation.parentSpanId}</dd></> : null}
+      {observation.causationId !== undefined ? <><dt>Causation</dt><dd>{observation.causationId}</dd></> : null}
+      {eventId !== undefined ? <><dt>Event</dt><dd><span>{eventId}</span><CopyButton label="Copy event id" value={eventId} /></dd></> : null}
+      {entities.length > 0 ? <><dt>Entities</dt><dd>{entities.map(entity => `${entity.kind} ${entity.id}`).join(", ")}</dd></> : null}
+    </dl>
+    <h4>Stored data</h4>
+    <p>{payloadCopy(observation)}</p>
+    {visibility === "redacted" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
+    {visibility === "visible" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
     {trace ? <>
       <SpanList nodes={trace.roots} selectedId={observation.id} onSelect={onSelect} />
       {trace.unspanned.length > 0 ? <div>

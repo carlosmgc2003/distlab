@@ -47,7 +47,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByRole("button", { name: "Load scenario" }).click();
     expect((await started).url()).toMatch(/entry-.*\.js$/);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-    const architecture = page.getByRole("region", { name: "Architecture", exact: true });
+    const architecture = page.getByRole("tabpanel", { name: "Architecture", exact: true });
     const inspector = page.getByRole("complementary", { name: "Component inspector" });
     await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
     await expect(inspector).toHaveCount(0);
@@ -115,6 +115,8 @@ for (const scenario of ["normal", "response-lost"]) {
     const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
     if ((await raw.getAttribute("open")) === null) await rawToggle.click();
     await expect(page.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1");
+    await rawToggle.click();
+    await page.getByRole("button", { name: "Fit View", exact: true }).click();
     await orders.click();
     await expect(inspector).toContainText("Database owned by orders: orders, outbox");
     await expect(orders).toHaveAttribute("aria-controls", "component-inspector");
@@ -135,7 +137,8 @@ for (const scenario of ["normal", "response-lost"]) {
     expect(after.projection.components).toEqual(switched.projection.components);
     expect(after.projection.simulation.processedEvents).toBe(0);
     await page.screenshot({ path: testInfo.outputPath("architecture.png"), fullPage: true });
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 683, height: 384 });
+    await page.getByRole("tab", { name: "Architecture", exact: true }).click();
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     await orders.focus(); await orders.press("Enter");
     await expect(inspector).toContainText("Database owned by orders: orders, outbox");
