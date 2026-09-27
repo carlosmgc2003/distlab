@@ -20,6 +20,27 @@ types with semantic emphasis. Unknown local outcomes use a dashed uncertainty
 badge and explanatory text; they do not imply denial. Authorization statuses
 are labeled independently from the local client outcome.
 
+The Story timeline strip gives each milestone category a glyph, a shape class,
+and a text label, and the legend names all of them:
+
+| Category | Shape | Outline |
+| --- | --- | --- |
+| Request | `→` | solid |
+| Response | `←` | solid |
+| Message | `⇢` | dashed |
+| Retry | `↻` | double |
+| Transaction commit | `✓` | solid |
+| Transaction rollback | `↶` | double |
+| External effect | `◆` | rounded |
+| Fault | `⚠` | dotted |
+| Dropped message | `⊘` | dotted |
+| Timeout | `◷` | rounded |
+
+A milestone also carries its stored label text, and a recorded virtual-time
+boundary is drawn as a dashed rule with a `t=` label. A rule marks a recorded
+boundary only; its length and spacing never encode elapsed time, and the view
+states that no duration is stored.
+
 Run is the primary simulation command. Disabled commands remain visibly muted;
 selected panels and observations use a strong blue boundary and background.
 Focus uses a 3px outline with offset. Movement animation is removed when the

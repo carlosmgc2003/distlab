@@ -49,6 +49,8 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   const commands = await commandTypes(page);
+  // This test walks canonical rows; the Story view is covered in story-timeline.spec.ts.
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.locator(".timeline-filter-disclosure summary").click();
 
   await page.getByLabel("Type", { exact: true }).fill("not.a.real.type");
@@ -204,6 +206,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(button("Pause")).toBeDisabled();
 
   await emit("READY", history, "projection.updated", false);
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.locator(".timeline-count")).toContainText("3 of 3");
   await expect(button("Next observation")).toBeEnabled();
   await expect(button("Previous observation")).toBeEnabled();
