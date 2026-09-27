@@ -26,7 +26,7 @@ const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
   "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
 };
-// No maxZoom: a fit must be able to scale down far enough to show every node, however the workspace is sized.
+// Let fitView choose a scale for each measured canvas, including narrow workspaces.
 const fitViewOptions = { padding: 0.18 };
 /** Small enough that the default fit never has to clip the checkout graph on a narrow canvas. */
 const minZoom = 0.15;
