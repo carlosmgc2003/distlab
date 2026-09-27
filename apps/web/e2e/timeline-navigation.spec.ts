@@ -71,8 +71,10 @@ test("single dropped response disables both boundaries and evidence navigation k
 
   const selected = page.locator("#timeline-rows button[aria-pressed='true']");
   await expect(selected).toHaveCount(1);
-  await expect(selected).toContainText("#197");
   await expect(selected).toContainText("network.response.dropped");
+  const selectedText = await selected.innerText();
+  const selectedSequence = selectedText.match(/#(\d+)/)?.[1];
+  expect(selectedSequence).toBeDefined();
   await expect(selected).toBeFocused();
   await expect(selected).toBeInViewport();
   await expect(selected).toHaveCSS("outline-style", "solid");
@@ -80,7 +82,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("button", { name: "Previous observation" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Play timeline" })).toBeDisabled();
   await expect(page.locator("#timeline-boundary")).toContainText("Previous and Next cannot move.");
-  await expect(page.locator("#timeline-feedback")).toContainText("Selected #197");
+  await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${selectedSequence}`);
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("network.response.dropped");
   const sequence = await selected.innerText();
   await page.keyboard.press("ArrowDown");

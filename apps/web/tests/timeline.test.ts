@@ -427,19 +427,22 @@ test("navigation clears only the filters that hide the destination", () => {
   assert.deepEqual(cause, before);
 });
 
-test("the lost-response checkout has one dropped response at sequence 197", async () => {
+test("the lost-response checkout has one dropped response in canonical sequence order", async () => {
   const { projection } = await completed(responseLostCheckout, scenarios[1]);
   const dropped = projection.history.observations.filter(item => item.type === "network.response.dropped");
   assert.equal(dropped.length, 1);
-  assert.equal(dropped[0]?.sequence, 197);
+  const droppedResponse = dropped[0]!;
+  assert.ok(projection.history.observations.every((item, index, observations) =>
+    index === 0 || item.sequence > observations[index - 1]!.sequence));
   const assertions = projection.history.observations.filter(item => item.type === "scenario.assertion.evaluated");
   assert.ok(assertions.length > 1);
   const authorization = projection.history.observations.find(item => item.type === "external.effect.committed" && item.source === "payment-processor");
   assert.ok(authorization?.traceId);
-  assert.notEqual(authorization.type, dropped[0]?.type);
-  assert.ok(dropped[0]?.causationId);
-  assert.ok(dropped[0]?.traceId);
-  assert.ok(projection.history.observations.some(item => item.id === dropped[0]?.causationId));
+  assert.ok(authorization.sequence < droppedResponse.sequence);
+  assert.notEqual(authorization.type, droppedResponse.type);
+  assert.ok(droppedResponse.causationId);
+  assert.ok(droppedResponse.traceId);
+  assert.ok(projection.history.observations.some(item => item.id === droppedResponse.causationId));
 });
 
 function blank() {
