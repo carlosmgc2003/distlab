@@ -2,7 +2,8 @@
 
 The timeline has three read-only views over the same canonical execution
 history. Story is the initial teaching view; Learning and Raw keep every
-record.
+record. Explanations about how to read a view are shown on demand from a hint
+pill rather than as permanent paragraphs.
 
 ## Story view
 
@@ -67,6 +68,70 @@ recorded boundaries, the shapes, and the category counts. Category meaning is
 carried by text and shape, not by color alone. Both representations are
 announced by the same milestone label, and the shape legend names every shape
 present in the current results.
+
+## Quick views and advanced filters
+
+Quick views are read-only UI predicates over the visible history snapshot. They
+narrow which recorded observations the timeline displays; they are not
+`ExecutionHistoryReader` filters, and they never send a worker command, advance
+virtual time, or change randomness, component state, or history. Each label
+names the stored records it keeps, and each view uses the same teaching
+categories as the Story milestones:
+
+- **Key events** — every Story milestone category.
+- **Faults & timeouts** — `fault.*` records, dropped messages, and timeouts.
+- **Requests & responses** — recorded network requests and responses, including
+  dropped and timed out ones.
+- **Messages** — published, delivered, acknowledged, and retried messages.
+- **State changes** — committed and rolled back transactions and committed
+  external effects.
+- **Assertions** — `scenario.assertion.evaluated` records and their stored
+  verdicts.
+
+The recorded components and the selected trace are offered as the same kind of
+chip. A component chip and a trace chip are canonical exact filters, so they
+compose with the quick view and with the advanced fields instead of replacing
+them.
+
+A quick view is applied before the advanced fields, so the two compose by
+intersection: the timeline shows records kept by the quick view that also match
+every active canonical filter. The result count, the selected position, and the
+empty-state explanation stay next to the rows they describe, and each quick
+view states how many observations it shows out of the recorded total.
+
+The canonical fields, their match modes, and their suggestions stay under the
+**Advanced filters** disclosure with unchanged semantics. Active quick views
+and active fields appear as removable chips, and **Clear all filters** removes
+both. An empty result names the active quick view and the active fields and
+offers the same reset. Revealing an observation from evidence, causation, or a
+trace clears the quick view when that view would hide it, exactly as it clears
+the fields that would hide it.
+
+### Non-inference rules
+
+- A quick view keeps or drops whole stored observations. It never merges,
+  reorders, or rewrites a record, and it never reads redacted payload fields.
+- The counts on a quick view are the number of stored records the predicate
+  keeps in the current run, not a rate, a severity, or a health measure.
+- Quick views are UI state owned by the browser, like the filter draft, the
+  selected observation, and the playback cursor.
+
+### Accessibility
+
+Quick views are toggle buttons with `aria-pressed` in a labelled group. Each
+button's accessible name repeats its record count over the recorded total and
+the records it keeps; the count badge beside the label is decorative. The
+summary line is plain text, so the shown-of-recorded counts are available
+without relying on the badge. The advanced fields keep their own combobox and
+select semantics. The row-order and matching-rules explanations are hint pills
+rather than permanent paragraphs.
+
+Panel space is bounded rather than allowed to overflow. The quick views and the
+advanced form share one scrolling region that yields first when the active
+filter chips grow, the chip row scrolls on its own once several filters are
+active, and the rows keep a minimum height. Playback, the active filter chips,
+the result count, and the rows stay outside that region, so the panel never
+clips a control or the event list.
 
 ## Learning view
 

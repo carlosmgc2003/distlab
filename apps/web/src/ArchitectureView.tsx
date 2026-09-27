@@ -6,6 +6,7 @@ import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/co
 import { categoryLabels, mapArchitecture } from "./architecture-view.ts";
 import type { ArchitectureEdge, ArchitectureNode } from "./architecture-view.ts";
 import { ComponentInspector } from "./ComponentInspector.tsx";
+import { HelpHint } from "./ui-hint.tsx";
 import { movementPulseClass } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 import "@xyflow/react/dist/style.css";
@@ -133,7 +134,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   if (graph.error) return <p role="alert">{graph.error}</p>;
   if (!nodes.length) return <p>No architecture components to display.</p>;
   return <>
-    <p className="graph-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom and fit buttons to change the view.</p>
+    <HelpHint label="Graph controls" bodyId="graph-controls-help" className="graph-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom and fit buttons to change the view.</HelpHint>
     <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>
     {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
     <div className={`architecture-layout${selectedId ? " has-selection" : ""}`}>

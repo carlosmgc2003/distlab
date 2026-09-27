@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { HelpHint } from "./ui-hint.tsx";
 import type { DeliveryFact, FaultReport, RowFact, ServiceSnapshot } from "./fault-inspection.ts";
 
 function Rows({ rows }: { readonly rows: readonly RowFact[] }) {
@@ -53,7 +54,7 @@ export function DistributedState({ report, onShowEvidence }: {
 }) {
   return <section className="state-inspection" aria-labelledby="distributed-state-heading">
     <h3 id="distributed-state-heading">Distributed state</h3>
-    <p>This session was constructed from the recorded scenario input. Changing the experiment loads a new session.</p>
+    <HelpHint label="About this session">This session was constructed from the recorded scenario input. Changing the experiment loads a new session.</HelpHint>
     <dl>
       <dt>Scenario</dt><dd>{report.scenarioName}</dd>
       <dt>Seed</dt><dd>{report.seed}</dd>

@@ -226,12 +226,16 @@ The checkout architecture uses a fixed React Flow layout with labeled category
 and relationship cues. Select a node with a click, Enter, or Space to inspect
 static model/version/configuration and resource ownership; Escape clears the
 selection. Pan by dragging or using the arrow buttons, and use the zoom and fit
-buttons to adjust the viewport. The inspector skip link moves keyboard focus
-directly to the metadata panel. These interactions remain local to the UI and
-send no worker commands.
+buttons to adjust the viewport. The graph controls explanation sits behind a
+hint pill rather than as permanent text. The inspector skip link moves keyboard
+focus directly to the metadata panel. These interactions remain local to the UI
+and send no worker commands.
 
 The execution timeline has three read-only views over the same canonical
-history. Story is the initial teaching view: it reduces a completed run to a
+history. Explanatory prose stays out of the layout: a compact hint pill opens
+the row-order, matching-rules, and strip-reading explanations on hover, focus,
+or click, and Escape closes them. Status lines, counts, active filter chips,
+and playback stay visible. Story is the initial teaching view: it reduces a completed run to a
 small set of evidence-linked milestones, draws them as a component swimlane
 strip whose columns are the canonical observation sequence, and repeats them in
 a keyboard-operable table. Both representations select the same observation.
@@ -248,10 +252,19 @@ visible history. Component choices show a readable name and the canonical id.
 Trace, event, component, and entity values can be copied or applied from the
 selected observation. Exact, Prefix, and Contains are explicit: Exact follows
 the history query, and Prefix and Contains are case-sensitive read-only
-projections. Choosing a suggestion uses Exact. Active chips show the applied
-filters and can be removed one at a time or cleared together. Malformed or
+projections. Choosing a suggestion uses Exact. Quick views narrow the same
+recorded history before those fields are applied: Key events, Faults &
+timeouts, Requests & responses, Messages, State changes, and Assertions, plus
+the recorded components and the selected trace as chips. A quick view states
+how many observations it shows out of the recorded total, and its label says it
+narrows the display rather than the run. Active chips show the applied quick
+view and filters and can be removed one at a time or cleared together. The
+canonical fields stay under an **Advanced filters** disclosure, so they keep
+their exact, prefix, and contains semantics and suggestions without competing
+with the quick views. Malformed or
 reversed virtual times stay on screen with an explanation, and an empty result
-names the recorded values and how to clear the filters. These controls do not
+names the active quick view and filters, the recorded values, and how to clear
+them. These controls do not
 change canonical history or `ExecutionHistoryReader` semantics. Previous and
 Next are available only when that direction selects a different visible row:
 both are unavailable for an empty list, Previous is unavailable on the first
