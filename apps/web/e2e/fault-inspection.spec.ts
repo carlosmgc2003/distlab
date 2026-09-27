@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 async function revealRawState(page: Page) {
-  const raw = page.locator("details.raw-state");
+  // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
+  const raw = page.locator(".shell-notices > details.raw-state");
+  const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
   await expect(raw).toBeVisible();
-  if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
+  if ((await raw.getAttribute("open")) === null) await rawToggle.click();
 }
 
 test("response-lost selection shows remote authorization and local timeout as distinct facts", async ({ page }) => {

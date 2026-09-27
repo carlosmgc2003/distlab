@@ -103,7 +103,10 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   expect((await latestProjection(page)).simulation.processedEvents).toBe(paused.simulation.processedEvents + 1);
   await button("Run").click();
   await expect(status).toHaveText("COMPLETED");
-  await expect(lesson).toContainText("Run complete");
+  // The committed-state summary is the single visible presentation of the run.
+  await expect(page.locator(".run-summary")).toContainText("COMPLETED");
+  await expect(lesson).toContainText("Lesson ready: Lost processor response.");
+  await expect(lesson).not.toContainText("Run complete");
   const first = await latestProjection(page);
   expect(first.simulation.time).toBe(fixture.time);
   expect(first.history.observations).toEqual(fixture.history.observations);
@@ -120,8 +123,10 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   });
   expect(verdicts).toEqual(fixture.results);
 
-  const raw = page.locator("details.raw-state");
-  if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
+  // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
+  const raw = page.locator(".shell-notices > details.raw-state");
+  const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
+  if ((await raw.getAttribute("open")) === null) await rawToggle.click();
   const panel = page.getByRole("region", { name: "Distributed state" });
   await expect(panel).toContainText("Status: selected");
   await expect(panel).toContainText("NETWORK_TIMEOUT");

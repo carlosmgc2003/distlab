@@ -12,6 +12,41 @@ Components should use these tokens rather than adding isolated color values.
 | `--status-error*`, `--status-warning*`, `--status-uncertain*`, `--status-approved*` | Errors, faults/timeouts, unknown outcomes, and committed approval |
 | `--category-*` | Client, internal service, external service, and infrastructure labels |
 
+## Workspace hierarchy
+
+The shell has three levels, and each level owns its own information. A reader
+should never have to reconcile two statements about the same fact.
+
+| Level | Region | Carries |
+| --- | --- | --- |
+| Summary | `Committed simulation state` in the command toolbar | Run status, virtual time, processed events, pending events |
+| Investigation | `Architecture`, `Recorded history`, `Observation detail` | Graph and component state, recorded rows with their filters, one observation's stored detail |
+| Detail | The observation detail inside `Recorded history` | Trace, causation, and stored data for the selected record |
+
+Rules that keep the levels distinct:
+
+- The committed run is stated once. Status, virtual time, and the two event
+  counts share one region and one line; no second line restates completion,
+  and no region repeats the run's virtual time. Engine counters such as random
+  draws and the observation count stay under the **Advanced diagnostics**
+  disclosure.
+- Simulation commands and recorded-history navigation are never one group and
+  never one row. `Run`, `Pause`, `Step`, and `Reset` carry the visible label
+  **Simulation execution**; `Play timeline`, `Pause timeline`,
+  `Previous observation`, and `Next observation` carry **Recorded history
+  navigation**. Both labels are the accessible name of their group, so the
+  distinction survives without the styling.
+- Only the first group changes the run. The history group states its boundary
+  in one sentence: reviewing history does not change the simulation or its
+  virtual time.
+- Panel navigation exists only where the layout shows one region at a time. On
+  wide layouts all three regions are visible, so no switcher is rendered: a
+  switcher there would imply a hidden panel. Where it is rendered it is a
+  segmented control with a pressed state, it is operable from the keyboard, and
+  it preserves each region's own selection.
+- The three regions are siblings at one heading level, so `Recorded history` is
+  never read as a child of `Architecture`.
+
 ## Explanations on demand
 
 Explanatory prose is not part of the permanent layout. Every panel uses one

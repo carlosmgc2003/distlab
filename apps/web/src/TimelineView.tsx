@@ -64,12 +64,10 @@ import { HelpHint } from "./ui-hint.tsx";
 const PLAYBACK_INTERVAL_MS = 1000;
 const SPAN_PREVIEW = 12;
 
-export function TimelineView({ observations, edges, componentTitles = [], simulationTime, simulationStatus, onEmphasis, focusedObservationId, focusToken = 0 }: {
+export function TimelineView({ observations, edges, componentTitles = [], onEmphasis, focusedObservationId, focusToken = 0 }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
   readonly componentTitles?: readonly ComponentTitle[];
-  readonly simulationTime?: number;
-  readonly simulationStatus?: string;
   readonly onEmphasis: (emphasis: GraphEmphasis | undefined) => void;
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
@@ -427,8 +425,8 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
     setSelectedId(row.id);
     setPhase("playing");
     setFeedback(transport.action === "restart"
-      ? "Restarting the visible timeline from the first observation. Virtual time does not change."
-      : "Playing the visible timeline. Pause stops the cursor. Virtual time does not change.");
+      ? "Restarting the visible timeline from the first visible observation."
+      : "Playing the visible timeline. Pause stops the cursor.");
   };
   const pause = () => {
     if (!playing) return;
@@ -447,12 +445,11 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
       : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`;
   return <>
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
-    <h3 id="timeline-heading">Recorded history</h3>
+    <h2 id="timeline-heading">Recorded history</h2>
+    {/* The review position only. Run status and virtual time have one home, the committed-state summary. */}
     <p className="timeline-cursor" role="status" aria-live="polite">{selected
-      ? `Reviewing observation ${selected.sequence} at virtual t=${selected.time}. `
-      : "Nothing selected. "}{simulationTime !== undefined
-      ? `Simulation state${simulationStatus === "COMPLETED" ? " (completed)" : ""} is at virtual t=${simulationTime}.`
-      : "History reading changes no state."}</p>
+      ? `Reviewing observation ${selected.sequence} at virtual t=${selected.time}.`
+      : "No observation selected."}</p>
     <p id="timeline-quick-count" className="timeline-quick-count">{quickCopy}</p>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline quick views and advanced filters">
     <div className="timeline-quick-views">
@@ -501,7 +498,7 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
     </details>
     <HelpHint label="Row order" bodyId="timeline-order" className="timeline-help">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</HelpHint>
 
-    <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)} Presentation speed: one observation per second; virtual time is unchanged.</p>
+    <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)}</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     </div>
     {/* Focusable because the row scrolls once several filters are active. */}
@@ -520,11 +517,15 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
         </li>)}</ul> : null}
       <button type="button" disabled={!filtersActive} onClick={clearAllFilters}>Clear all filters</button>
     </div>
-    <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
-      <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
-      <button ref={pauseButtonRef} type="button" aria-label="Pause timeline" disabled={!playing} aria-describedby="timeline-playback" onClick={pause}>Pause</button>
-      <button type="button" aria-label="Previous observation" disabled={!availability.previous} aria-describedby="timeline-boundary" onClick={() => move(-1)}>Previous</button>
-      <button type="button" aria-label="Next observation" disabled={!availability.next} aria-describedby="timeline-boundary" onClick={() => move(1)}>Next</button>
+    <div className="timeline-transport-row">
+      <h3 id="timeline-transport-label" className="control-group-label">Recorded history navigation</h3>
+      <div className="control-buttons timeline-transport" role="group" aria-labelledby="timeline-transport-label" aria-describedby="timeline-transport-note">
+        <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-transport-note timeline-playback" onClick={play}>{transport.label}</button>
+        <button ref={pauseButtonRef} type="button" aria-label="Pause timeline" disabled={!playing} aria-describedby="timeline-transport-note timeline-playback" onClick={pause}>Pause</button>
+        <button type="button" aria-label="Previous observation" disabled={!availability.previous} aria-describedby="timeline-boundary" onClick={() => move(-1)}>Previous</button>
+        <button type="button" aria-label="Next observation" disabled={!availability.next} aria-describedby="timeline-boundary" onClick={() => move(1)}>Next</button>
+      </div>
+      <p id="timeline-transport-note" className="control-group-note">Reviewing history does not change the simulation or its virtual time.</p>
     </div>
     <div className="timeline-view-switch" role="group" aria-label="Timeline view">
       <button type="button" aria-pressed={view === "story"} onClick={() => setView("story")}>Story</button>
@@ -735,6 +736,18 @@ function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onC
     setActiveIndex(-1);
   };
   useEffect(() => {
+    if (!open) return;
+    // Same dismissal as HelpHint: the popup is removed on pointerdown, so a click
+    // that lands on a control it covers still reaches that control.
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(".filter-field") !== null) return;
+      setOpen(false);
+      setActiveIndex(-1);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [open]);
+  useEffect(() => {
     const anchor = anchorRef.current;
     if (!open || !anchor) return;
     const place = () => setBox(suggestionBox(anchor, Math.max(shown.length, 1)));
@@ -804,7 +817,7 @@ function ObservationDetail({ observation, observations, componentTitles, hidden,
   readonly onUseEntity: (kind: string, id: string) => void;
 }) {
   return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
-    <h3 id="observation-detail-heading">Observation detail</h3>
+    <h2 id="observation-detail-heading">Observation detail</h2>
     {!observation ? <p>Select an observation to inspect its trace, causation, and stored data.</p> : <DetailBody
       observation={observation} observations={observations} componentTitles={componentTitles} hidden={hidden}
       onSelect={onSelect} onShowTrace={onShowTrace} onUseText={onUseText} onUseEntity={onUseEntity} />}
@@ -857,31 +870,31 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
       {eventId !== undefined ? <button type="button" onClick={() => onUseText("eventId", eventId)}>Use this event</button> : null}
       {entities.map((entity, index) => <button key={`${entity.kind}:${entity.id}:${index}`} type="button" onClick={() => onUseEntity(entity.kind, entity.id)}>Use entity {entity.kind} {entity.id}</button>)}
     </div> : null}
-    <h4>Stored data</h4>
+    <h3>Stored data</h3>
     <p>{payloadCopy(observation)}</p>
     {visibility === "redacted" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
     {visibility === "visible" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
-    <h4>Before and after</h4>
+    <h3>Before and after</h3>
     {evidence.length === 0 ? <p>No before or after values were stored.</p> : <ul className="change-evidence">
       {evidence.map((item, index) => <li key={`${item.label}:${index}`}>
         <p>{item.label}</p>
-        {Object.hasOwn(item, "before") ? <><h5>Before</h5><pre>{JSON.stringify(item.before, null, 2)}</pre></> : <p>Before was not stored.</p>}
-        {Object.hasOwn(item, "after") ? <><h5>After</h5><pre>{JSON.stringify(item.after, null, 2)}</pre></> : <p>After was not stored.</p>}
+        {Object.hasOwn(item, "before") ? <><h4>Before</h4><pre>{JSON.stringify(item.before, null, 2)}</pre></> : <p>Before was not stored.</p>}
+        {Object.hasOwn(item, "after") ? <><h4>After</h4><pre>{JSON.stringify(item.after, null, 2)}</pre></> : <p>After was not stored.</p>}
       </li>)}
     </ul>}
-    <h4>Causation</h4>
+    <h3>Causation</h3>
     {links.cause ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onSelect(links.cause!.id)}>Select causing observation {links.cause.type} at virtual time {links.cause.time}</button></p> : null}
     {links.unresolvedCauseId ? <p>Causation {links.unresolvedCauseId} is not in this history.</p> : null}
     {!links.cause && !links.unresolvedCauseId ? <p>No causation reference was stored.</p> : null}
     {links.effects.length > 0 ? <ul>{links.effects.slice(0, SPAN_PREVIEW).map(effect => <li key={effect.id}>
       <button type="button" aria-controls="timeline-rows" onClick={() => onSelect(effect.id)}>Select effect {effect.type} at virtual time {effect.time}</button>
     </li>)}{links.effects.length > SPAN_PREVIEW ? <li>{links.effects.length - SPAN_PREVIEW} more effects. Show this trace to read them in order.</li> : null}</ul> : <p>No later observation points at this record.</p>}
-    <h4>Trace</h4>
+    <h3>Trace</h3>
     {traceId !== undefined ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onShowTrace(traceId)}>Show this trace</button></p> : <p>This observation has no trace.</p>}
     {trace ? <>
       <SpanList nodes={trace.roots} selectedId={observation.id} onSelect={onSelect} />
       {trace.unspanned.length > 0 ? <div>
-        <h5>Observations without a span</h5>
+        <h4>Observations without a span</h4>
         <ul>{trace.unspanned.slice(0, SPAN_PREVIEW).map(item => <li key={item.id}>
           <button type="button" aria-controls="timeline-rows" onClick={() => onSelect(item.id)}>{item.type} at virtual time {item.time}</button>
         </li>)}{trace.unspanned.length > SPAN_PREVIEW ? <li>{trace.unspanned.length - SPAN_PREVIEW} more observations have no span.</li> : null}</ul>

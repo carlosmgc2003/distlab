@@ -110,8 +110,10 @@ for (const scenario of ["normal", "response-lost"]) {
     const other = scenario === "normal" ? "response-lost" : "normal";
     await page.getByLabel("Scenario").selectOption(other);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-    const raw = page.locator("details.raw-state");
-    if ((await raw.getAttribute("open")) === null) await raw.locator("summary").click();
+    // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
+    const raw = page.locator(".shell-notices > details.raw-state");
+    const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
+    if ((await raw.getAttribute("open")) === null) await rawToggle.click();
     await expect(page.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1");
     await orders.click();
     await expect(inspector).toContainText("Database owned by orders: orders, outbox");

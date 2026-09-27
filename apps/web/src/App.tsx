@@ -51,12 +51,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
+  // The lesson line names the loaded experiment. The run status itself is announced once, by the
+  // committed-state summary, so this region never restates it.
   const lessonState = loading ? "Loading the checkout lesson…"
     : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
     : snapshot.error ? "The lesson could not be opened. Choose a scenario and load it again."
     : !projection ? "No lesson is loaded."
-    : projection.simulation.status === "COMPLETED" ? "Run complete."
-    : "Lesson ready.";
+    : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice) : "checkout"}.`;
   const sessionKey = `${loadedChoice?.id ?? ""}:${snapshot.attempt}:${projection?.simulation.runId ?? ""}`;
 
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
@@ -102,6 +103,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </div>
       <SimulationControls host={host} snapshot={snapshot} notices={<>
         {mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
+        <div className="shell-notices">
         <section className="lesson-guide" aria-labelledby="lesson-heading">
           <h2 id="lesson-heading" className="sr-only">Checkout lesson</h2>
           <p id="scenario-help" className="sr-only">Choose the normal checkout or the recorded response-lost rule. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
@@ -127,28 +129,23 @@ export function App({ host }: { readonly host: SimulationHost }) {
             <p>Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
           </details>
         </section>
+        {/* Engine counters stay here; the committed run summary above carries status and virtual time. */}
         {projection && report ? <details className="raw-state">
-          <summary>Raw state</summary>
+          <summary>Advanced diagnostics</summary>
           <div className="raw-state-body" tabIndex={0} aria-label="Distributed state details">
-            <section className="execution" aria-labelledby="execution-heading">
-              <h2 id="execution-heading" className="sr-only">Execution</h2>
-              <dl>
-                <dt>Virtual time</dt><dd>{projection.simulation.time}</dd>
-                <dt>Pending events</dt><dd>{projection.simulation.pendingEvents}</dd>
-                <dt>Processed events (boundary)</dt><dd>{projection.simulation.processedEvents}</dd>
-                <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
-                <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
-              </dl>
-              <DistributedState report={report} onShowEvidence={id => setEvidenceFocus(current => ({ id, token: (current?.token ?? 0) + 1 }))} />
-            </section>
+            <dl className="diagnostics">
+              <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
+              <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
+            </dl>
+            <DistributedState report={report} onShowEvidence={id => setEvidenceFocus(current => ({ id, token: (current?.token ?? 0) + 1 }))} />
           </div>
         </details> : null}
+        </div>
       </>}>
-        <p className="virtual-time">Latest committed simulation state · {projection?.simulation.status === "COMPLETED" ? "completed" : projection?.simulation.status === "RUNNING" ? "executing" : "paused/ready"} at virtual t={projection ? projection.simulation.time : "—"}</p>
-        <nav className="panel-nav" aria-label="Investigation panels">
-          {panels.map(([id, label]) => <button key={id} type="button" {...(projection ? { "aria-controls": `${id}-panel` } : {})}
-            {...(narrow ? { "aria-pressed": panel === id } : {})} onClick={() => showPanel(id)}>{label}</button>)}
-        </nav>
+        {/* Narrow layouts show one region at a time, so the panel switcher is a real view control there. */}
+        {narrow && projection ? <nav className="panel-nav" aria-label="Investigation panels">
+          {panels.map(([id, label]) => <button key={id} type="button" aria-controls={`${id}-panel`} aria-pressed={panel === id} onClick={() => showPanel(id)}>{label}</button>)}
+        </nav> : null}
       </SimulationControls>
     </header>
     {projection ? <div className="investigation-workspace" data-panel={panel}>
@@ -160,7 +157,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
           {...(report ? { inspectorFacts: componentId => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
       </section>
       <div className="timeline-layout">
-        <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} simulationTime={projection.simulation.time} simulationStatus={projection.simulation.status} onEmphasis={onEmphasis}
+        <TimelineView key={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
           {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
       </div>
     </div> : <div className="investigation-workspace" data-panel={panel}>

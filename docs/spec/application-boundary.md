@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-09-24 |
-| Related issues | #3, #46, #47 |
+| Last updated | 2026-09-27 |
+| Related issues | #3, #46, #47, #69 |
 
 ## Responsibility
 
@@ -155,6 +155,17 @@ Timeline filters, the selected observation, evidence and trace navigation, graph
 gestures, and playback stay in the UI. They do not advance virtual time, record
 observations, or send worker commands. Restart timeline moves the playback
 cursor to the first visible observation and leaves the simulation where it is.
+
+Presentation is layered, and the layering is not a boundary of its own. The
+shell states the committed run once, as status, virtual time, processed events,
+and pending events; engine counters stay behind a disclosure. Simulation
+commands and recorded-history navigation are separate control groups, and only
+the first one sends worker commands. Switching between the architecture,
+recorded history, and observation detail regions is a view control: it changes
+no projection, sends no command, preserves each region's local selection, and is
+offered only in a layout that shows one region at a time. Adding a control to
+express a new fact, or a new status to restate an existing one, is not a
+solution to a presentation problem.
 
 While a command is outstanding, scenario choice, Load, Run, Step, and Reset are
 unavailable. Pause stays available only when Run is the sole outstanding command,

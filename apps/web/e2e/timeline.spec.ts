@@ -55,8 +55,8 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(status).toHaveText("READY");
   // This test reads canonical rows; the teaching Story view has its own spec.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Timeline" })).toBeVisible();
-  await expect(page.locator("#timeline-order")).toContainText("Virtual time is the simulation clock");
+  await expect(page.getByRole("heading", { name: "Recorded history", exact: true })).toBeVisible();
+  await expect(page.locator("#timeline-order")).toContainText("it does not execute an event");
   const ready = await latestProjection(page);
   await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
@@ -64,6 +64,8 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
+  // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
@@ -97,7 +99,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(detail.getByRole("heading", { name: "Causation" })).toBeVisible();
   await page.getByRole("button", { name: "Show this trace" }).click();
   await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
-  await expect(page.locator(".timeline-count")).not.toContainText("0 of");
+  await expect(page.locator(".timeline-count")).not.toContainText(/^0 of /);
 
   await page.getByLabel("Type", { exact: true }).fill("scenario.assertion.evaluated");
   await page.getByLabel("Trace", { exact: true }).fill("");
@@ -118,6 +120,8 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
 
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
+  // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
