@@ -247,7 +247,8 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(status).toHaveText("COMPLETED");
   await expect(button("Reset")).toBeEnabled();
   for (const name of ["Run", "Pause", "Step"]) await expect(button(name)).toBeDisabled();
-  await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toBeVisible();
+  await expect(page.locator(".run-summary")).toContainText("COMPLETED");
+  await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toHaveCount(0);
   await page.locator("#timeline-rows").focus();
   await page.keyboard.press("End");
   await button("Restart timeline").click();

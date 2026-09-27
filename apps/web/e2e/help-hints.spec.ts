@@ -118,7 +118,7 @@ test("a pinned explanation closes on Escape or an outside click and fits a phone
   const strip = page.getByRole("button", { name: "About this strip" });
   await strip.click();
   await expect(page.locator("#story-summary")).toBeVisible();
-  await page.getByRole("heading", { name: "Recorded history" }).click();
+  await page.getByRole("heading", { name: "Recorded history", exact: true }).click();
   await expect(page.locator("#story-summary")).toBeHidden();
 
   await page.setViewportSize({ width: 390, height: 844 });

@@ -394,7 +394,7 @@ export function playbackControl(index: number, count: number, playing: boolean):
     return {
       action: "unavailable",
       label: "Play timeline",
-      reason: "Playing the visible timeline. Pause stops the cursor. Virtual time does not change.",
+      reason: "Playing the visible timeline. Pause stops the cursor.",
     };
   }
   if (count <= 0) return { action: "unavailable", label: "Play timeline", reason: "No visible observations to play." };
@@ -411,7 +411,7 @@ export function playbackControl(index: number, count: number, playing: boolean):
 }
 
 export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): string {
-  if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor. Virtual time does not change.";
+  if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor.";
   if (phase === "paused") return "Playback is paused.";
   if (phase === "ended") return "Playback reached the end of the visible results. Restart timeline plays from the first visible observation.";
   return control.reason;

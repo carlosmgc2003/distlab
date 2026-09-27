@@ -71,7 +71,7 @@ async function loadScenario(page: Page, scenario: string) {
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
 }
 
-test("desktop baselines keep controls, architecture, and timeline in one viewport", async ({ page }) => {
+test("desktop baselines keep one committed-state summary, both control groups, and every panel in one viewport", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
   const viewports = [
@@ -96,37 +96,60 @@ test("desktop baselines keep controls, architecture, and timeline in one viewpor
         page.getByRole("button", { name: "Step", exact: true }),
         page.getByRole("button", { name: "Reset", exact: true }),
         page.getByRole("status", { name: "Simulation status" }),
-        page.locator(".virtual-time"),
-        page.getByRole("button", { name: "Architecture", exact: true }),
-        page.getByRole("button", { name: "Timeline", exact: true }),
-        page.getByRole("button", { name: "Inspection", exact: true }),
+        page.locator(".run-summary"),
       ]) await boxInViewport(page, target, 16);
+      // Execution commands and recorded-history navigation never share a row of same-shaped buttons.
+      await expect(page.getByRole("group", { name: "Simulation execution" })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Recorded history navigation" })).toBeVisible();
+      // The one-line boundary between reading history and changing the run.
+      const boundary = page.locator("#timeline-transport-note");
+      await expect(boundary).toBeVisible();
+      await expect(boundary).toHaveText("Reviewing history does not change the simulation or its virtual time.");
+      // Every target panel is already on screen, so a panel switcher would imply a hidden panel.
+      await expect(page.getByRole("navigation", { name: "Investigation panels" })).toHaveCount(0);
+      for (const target of [
+        page.getByRole("region", { name: "Architecture", exact: true }),
+        page.getByRole("region", { name: "Recorded history", exact: true }),
+        page.getByRole("region", { name: "Observation detail", exact: true }),
+      ]) await expect(target).toBeVisible();
       const graph = await boxInViewport(page, page.locator(".graph-canvas"), 120);
       const timeline = await boxInViewport(page, page.locator("#timeline-rows"), 80);
       expect(graph.y).toBeLessThan(viewport.height);
       expect(timeline.height).toBeGreaterThanOrEqual(88);
-      await expect(page.locator(".lesson-guide details")).not.toHaveAttribute("open", "");
-      await expect(page.locator("details.raw-state")).not.toHaveAttribute("open", "");
+      // Explanatory prose stays collapsed; the summary and both control groups stay out of it.
+      for (const disclosure of await page.locator(".shell-notices details").all()) {
+        await expect(disclosure).not.toHaveAttribute("open", "");
+      }
       await expect(page.getByRole("region", { name: "Distributed state" })).toHaveCount(0);
       await page.getByRole("button", { name: "Raw", exact: true }).click();
       await page.locator("#timeline-rows button").first().click();
       const detail = page.getByRole("region", { name: "Observation detail" });
       await expect(detail).not.toContainText("Select an observation to inspect");
       const detailBox = await boxInViewport(page, detail, 80);
-      const rawBox = await page.locator("details.raw-state").boundingBox();
+      const rawBox = await page.locator(".shell-notices > details.raw-state").boundingBox();
       expect(detailBox.y).toBeGreaterThan((rawBox?.y ?? 0) + (rawBox?.height ?? 0) - 1);
       await page.getByRole("button", { name: "Run", exact: true }).click();
       await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+      // One primary presentation: the summary carries the run status, virtual time, and boundary counts.
+      const summary = page.locator(".run-summary");
+      await expect(summary).toContainText("COMPLETED");
+      await expect(summary).toContainText("Virtual time");
+      await expect(summary).toContainText("Processed events");
+      await expect(summary).toContainText("Pending events");
+      await expect(page.getByText("Latest committed simulation state")).toHaveCount(0);
+      await expect(page.getByText("Run complete")).toHaveCount(0);
+      await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toHaveCount(0);
+      await expect(page.locator(".shell-notices > details.raw-state > summary")).toHaveText("Advanced diagnostics");
       await pageFits(page);
       await boxInViewport(page, page.locator(".graph-canvas"), 80);
       await boxInViewport(page, page.locator("#timeline-rows"), 80);
-      await boxInViewport(page, page.locator(".virtual-time"), 16);
+      await boxInViewport(page, summary, 16);
       await page.screenshot({ path: path.join(evidenceDir, `${viewport.width}x${viewport.height}-${scenario}.png`) });
     }
   }
 });
 
-test("selection and filters survive panel changes and reset or session replacement clears them", async ({ page }) => {
+test("selection and filters survive scrolling between panels and reset or session replacement clears them", async ({ page }) => {
   test.setTimeout(90_000);
   await observeWorker(page);
   await page.setViewportSize({ width: 1366, height: 768 });
@@ -140,12 +163,13 @@ test("selection and filters survive panel changes and reset or session replaceme
   await page.getByLabel("Type", { exact: true }).fill("simulation.created");
   await page.locator("#timeline-rows button").first().click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("simulation.created");
-  await page.getByRole("button", { name: "Architecture", exact: true }).click();
-  await page.getByRole("button", { name: "Inspection", exact: true }).click();
+  // Desktop keeps all three regions visible, so the reader scrolls rather than switching panels.
+  await expect(page.getByRole("navigation", { name: "Investigation panels" })).toHaveCount(0);
+  for (const heading of ["Architecture", "Recorded history", "Observation detail"]) {
+    await page.getByRole("heading", { name: heading, exact: true }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeInViewport();
+  }
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("simulation.created");
-  await page.getByRole("button", { name: "Timeline", exact: true }).click();
-  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("simulation.created");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("simulation.created");
   expect(await latestProjection(page)).toEqual(before);
   expect(await commands()).toEqual(beforeCommands);
 
@@ -178,6 +202,46 @@ test("selection and filters survive panel changes and reset or session replaceme
   expect(await commands()).toEqual([...beforeCommands, "reset", "load"]);
 });
 
+test("narrow layouts expose Architecture, Timeline, and Inspection as keyboard-operable views with an active state", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loadScenario(page, "response-lost");
+  const nav = page.getByRole("navigation", { name: "Investigation panels" });
+  const view = (name: string) => page.getByRole("button", { name, exact: true });
+  await expect(nav).toBeVisible();
+  await expect(view("Architecture")).toHaveAttribute("aria-pressed", "true");
+  await expect(view("Timeline")).toHaveAttribute("aria-pressed", "false");
+  await expect(view("Inspection")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".graph-canvas")).toBeVisible();
+  await expect(page.locator("#timeline-rows")).toBeHidden();
+  await expect(page.getByRole("region", { name: "Observation detail" })).toBeHidden();
+
+  // The switcher is a real control: keyboard operable, and it moves focus into the revealed view.
+  await view("Timeline").focus();
+  await page.keyboard.press("Enter");
+  await expect(view("Timeline")).toHaveAttribute("aria-pressed", "true");
+  await expect(view("Architecture")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#timeline-rows")).toBeVisible();
+  await expect(page.locator("#timeline-panel")).toBeFocused();
+  await expect(page.getByRole("region", { name: "Observation detail" })).toBeHidden();
+
+  await view("Inspection").focus();
+  await page.keyboard.press("Enter");
+  await expect(view("Inspection")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("region", { name: "Observation detail" })).toBeVisible();
+  await expect(page.locator("#timeline-rows")).toBeHidden();
+
+  // Selections made before switching views are preserved.
+  await view("Timeline").click();
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await page.locator("#timeline-rows button").first().click();
+  const selected = await page.locator("#timeline-rows button[aria-pressed='true']").getAttribute("data-observation-id");
+  await view("Architecture").click();
+  await view("Timeline").click();
+  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveAttribute("data-observation-id", selected!);
+  await expect(page.locator("#timeline-panel")).toBeFocused();
+});
+
 test("390×844 and 200% zoom keep controls keyboard reachable without overflow", async ({ page }) => {
   test.setTimeout(120_000);
   mkdirSync(evidenceDir, { recursive: true });
@@ -200,6 +264,8 @@ test("390×844 and 200% zoom keep controls keyboard reachable without overflow",
     const controls = page.locator(".command-toolbar button, .command-toolbar select, .command-toolbar summary");
     for (let index = 0; index < await controls.count(); index += 1) {
       const control = controls.nth(index);
+      // Content inside a collapsed disclosure is not reachable, so it is not part of the toolbar.
+      if (!(await control.isVisible())) continue;
       await control.scrollIntoViewIfNeeded();
       const box = await control.boundingBox();
       const size = page.viewportSize()!;
