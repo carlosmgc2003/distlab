@@ -230,7 +230,19 @@ buttons to adjust the viewport. The inspector skip link moves keyboard focus
 directly to the metadata panel. These interactions remain local to the UI and
 send no worker commands.
 
-The execution timeline lists canonical observations in sequence and labels time
+The execution timeline has three read-only views over the same canonical
+history. Story is the initial teaching view: it reduces a completed run to a
+small set of evidence-linked milestones, draws them as a component swimlane
+strip whose columns are the canonical observation sequence, and repeats them in
+a keyboard-operable table. Both representations select the same observation.
+The reduction is stated explicitly, for example `22 teaching milestones from
+267 recorded observations.`, and milestone labels, shapes, and virtual-time
+boundary markers describe stored records only; the view never implies an
+elapsed duration or a causal link that is not stored. Learning keeps labeled
+types and collapsed engine bookkeeping, and Raw lists every filtered canonical
+observation. All three share the same filters, selection, and Observation
+detail, and none of them modifies history, exports, or virtual time. The
+timeline lists canonical observations in sequence and labels time
 as virtual time. Each text filter lists the values present in the current
 visible history. Component choices show a readable name and the canonical id.
 Trace, event, component, and entity values can be copied or applied from the

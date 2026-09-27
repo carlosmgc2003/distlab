@@ -61,7 +61,15 @@ test("inspector metadata comes from matching static definitions and omits busine
   assert.deepEqual(node("payments").data.resources, ["Database owned by payments: payments, inbox"]);
   assert.deepEqual(node("customer-app").data.resources, ["Model-owned checkout request and outcome"]);
   assert.deepEqual(node("payment-processor").data.resources, ["Model-owned provider authorization ledger"]);
-  assert.deepEqual(node("OrderCreated").data.configuration, { deliveryDelay: 0, ackTimeout: 1000, retryDelay: 0, maxAttempts: 3, capacity: 10000 });
+  const destination = metadata.architecture.destinations.find(item => item.id === "OrderCreated");
+  assert.ok(destination);
+  assert.deepEqual(node("OrderCreated").data.configuration, {
+    deliveryDelay: destination.deliveryDelay,
+    ackTimeout: destination.ackTimeout,
+    retryDelay: destination.retryDelay,
+    maxAttempts: destination.maxAttempts,
+    capacity: destination.capacity,
+  });
   assert.equal(node("OrderCreated").data.component.model, undefined);
   assert.equal(node("OrderCreated").data.component.version, undefined);
   assert.ok(!JSON.stringify(graph).includes('"authorizations"'));

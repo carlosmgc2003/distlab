@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { Observation } from "@distlab/contracts";
 import {
   TIMELINE_FILTER_HELP,
@@ -42,6 +42,8 @@ import {
   visibleRowRange,
 } from "./timeline.ts";
 import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode } from "./timeline.ts";
+import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, storySummary } from "./story-timeline.ts";
+import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
 
 /** Host interval for the playback cursor only. It never calls the simulation host. */
 const PLAYBACK_INTERVAL_MS = 1000;
@@ -60,7 +62,7 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const [draft, setDraft] = useState<TimelineDraft>(emptyTimelineDraft);
   const [query, setQuery] = useState<TimelineQuery>({});
   const [filterError, setFilterError] = useState<string | null>(null);
-  const [view, setView] = useState<"learning" | "raw">("learning");
+  const [view, setView] = useState<"story" | "learning" | "raw">("story");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phase, setPhase] = useState<PlaybackPhase>("idle");
@@ -81,6 +83,16 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const filtered = useMemo(() => queryTimeline(observations, query), [observations, query]);
   const learningItems = useMemo(() => learningTimeline(filtered), [filtered]);
   const hiddenLearningRecords = filtered.length - learningItems.length;
+  const milestones = useMemo(() => storyMilestones(filtered), [filtered]);
+  const lanes = useMemo(() => storyLanes(milestones), [milestones]);
+  const legend = useMemo(() => storyLegend(milestones), [milestones]);
+  const reduction = storyReduction(milestones, filtered.length);
+  const componentLabels = useMemo(
+    () => new Map(componentTitles.map(item => [item.id, componentLabel(item.id, componentTitles)])),
+    [componentTitles],
+  );
+  const storyCopy = useMemo(() => storySummary(milestones, filtered.length, componentLabels), [milestones, filtered.length, componentLabels]);
+  const storyDetailCopy = useMemo(() => storyDetail(milestones), [milestones]);
   const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
   const explanation = useMemo(
     () => filtered.length === 0 && observations.length > 0 ? emptyFilterExplanation(query, observations, componentTitles) : "",
@@ -245,9 +257,16 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
     if (!node || selectedId === null) return;
     const index = filtered.findIndex(item => item.id === selectedId);
     if (index < 0) return;
-    const top = index * TIMELINE_ROW_HEIGHT;
-    if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) node.scrollTop = top;
-  }, [selectedId, filtered]);
+    if (view === "raw") {
+      const top = index * TIMELINE_ROW_HEIGHT;
+      if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) node.scrollTop = top;
+      return;
+    }
+    // Story and Learning rows have variable height; scroll the actual member.
+    const scope = view === "story" ? node.querySelector(".story-table") ?? node : node;
+    const row = scope.querySelector<HTMLElement>(`[data-observation-id="${CSS.escape(selectedId)}"]`);
+    row?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedId, filtered, view]);
 
   useEffect(() => {
     const id = pendingFocusId.current;
@@ -269,6 +288,13 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
     node.scrollIntoView({ block: "nearest", inline: "nearest" });
     document.getElementById("inspection-panel")?.scrollTo(0, 0);
   }, [filtered, focusNonce, scrollTop, view]);
+
+  useEffect(() => {
+    // Switching views replaces the scroller content; a stale offset would open on empty space.
+    const node = scrollerRef.current;
+    if (node) node.scrollTop = 0;
+    setScrollTop(0);
+  }, [view]);
 
   const applyDraft = (next: TimelineDraft) => {
     setDraft(next);
@@ -347,6 +373,12 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
   const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null;
+  const otherRecords = filtered.length - milestones.length;
+  const storyCount = `${reduction} ${observations.length === filtered.length ? "" : `Filters show ${filtered.length} of ${observations.length} observations; `}`
+    + `${otherRecords === 0
+      ? filtered.length === 0 ? "No visible records to reduce. " : "Every visible record is a milestone. "
+      : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`
+    + "Select a milestone to inspect its recorded detail.";
 
   return <>
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
@@ -403,10 +435,12 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     </div>
     <div className="timeline-view-switch" role="group" aria-label="Timeline view">
+      <button type="button" aria-pressed={view === "story"} onClick={() => setView("story")}>Story</button>
       <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning</button>
       <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw</button>
     </div>
-    <p className="timeline-count">{view === "learning"
+    <p className="timeline-count">{view === "story" ? storyCount
+      : view === "learning"
       ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
         : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized in expandable groups. Select a row to inspect its details.`
       : `${filtered.length} of ${observations.length} observations in virtual-time order.`}</p>
@@ -414,24 +448,115 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
       <div className="learning-column-headings" aria-hidden="true"><span>Summary</span><span>Virtual time · sequence</span><span>Component / destination</span></div>
     </> : null}
     <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
-      aria-label={view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+      aria-label={view === "story" ? "Story milestone strip and table" : view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
+        // The Story view is read by its own milestone table, so arrow keys stay with that table.
+        if (view === "story") return;
         if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
         else if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
         else if (event.key === "Home") { event.preventDefault(); if (filtered.length === 0) setFeedback(boundaryCopy(-1, 0)); else selectIndex(0); }
         else if (event.key === "End") { event.preventDefault(); const last = filtered.length - 1; if (last < 0) setFeedback(boundaryCopy(-1, 0)); else selectIndex(last); }
       }}>
       {filtered.length === 0 ? <p className="timeline-empty">{observations.length === 0 ? "No observations have been recorded for this run." : explanation}</p> : null}
+      {view === "story" ? <StoryView milestones={milestones} lanes={lanes} legend={legend} summary={storyCopy} detail={storyDetailCopy}
+        reduction={reduction} selectedId={selectedId} componentLabels={componentLabels} hasRecords={filtered.length > 0} onChoose={choose} /> : null}
       {view === "learning" ? <LearningRows items={learningItems} selectedId={selectedId} expandedGroups={expandedGroups}
-        onToggle={id => setExpandedGroups(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onChoose={choose} /> : <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
+        onToggle={id => setExpandedGroups(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onChoose={choose} /> : view === "raw" ? <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
         {windowRows.map((observation, offset) => <RawRow key={observation.id} observation={observation} index={range.start + offset} selectedId={selectedId} onChoose={choose} />)}
-      </div>}
+      </div> : null}
     </div>
     </section>
     <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
       hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
   </>;
+}
+
+function StoryView({ milestones, lanes, legend, summary, detail, reduction, selectedId, componentLabels, hasRecords, onChoose }: {
+  readonly milestones: readonly StoryMilestone[];
+  readonly lanes: readonly string[];
+  readonly legend: readonly StoryLegendEntry[];
+  readonly summary: string;
+  readonly detail: string;
+  readonly reduction: string;
+  readonly selectedId: string | null;
+  readonly componentLabels: ReadonlyMap<string, string>;
+  readonly hasRecords: boolean;
+  readonly onChoose: (id: string) => void;
+}) {
+  const cells = new Map(milestones.map(milestone => [`${milestone.lane}:${milestone.column}`, milestone]));
+  const columns = milestones.length;
+  const gridColumns = `minmax(7rem, auto) repeat(${Math.max(columns, 1)}, 6.5rem)`;
+  return <div className="story-view">
+    <p id="story-summary" className="story-summary">{summary}</p>
+    <p className="sr-only">{detail}</p>
+    {milestones.length === 0 ? hasRecords
+      ? <p className="story-empty">None of the visible records is a teaching milestone. Use Learning or Raw to read them.</p>
+      : null : <>
+      <ul className="story-legend" aria-label="Milestone categories, shapes, and counts">
+        {legend.map(entry => <li key={entry.kind}>
+          <span className={`story-shape story-shape-${entry.kind}`} aria-hidden="true">{entry.shape}</span>
+          <span>{entry.label}</span>
+          <span className="story-legend-count">{entry.count}</span>
+        </li>)}
+      </ul>
+      <p className="story-note">Columns follow recorded observation sequence. A dashed rule marks a recorded virtual-time boundary.</p>
+      <div className="story-strip" aria-hidden="true">
+        <div className="story-grid" style={{ gridTemplateColumns: gridColumns }}>
+          <div className="story-corner">Component</div>
+          {milestones.map(milestone => <div key={`time-${milestone.observation.id}`} className="story-time"
+            data-boundary={milestone.timeBoundary ? "true" : "false"}>
+            {milestone.timeBoundary ? `t=${milestone.observation.time}` : ""}
+          </div>)}
+          {lanes.map(lane => <Fragment key={lane}>
+            <div className="story-lane-label">{componentLabels.get(lane) ?? lane}</div>
+            {milestones.map(milestone => {
+              const cell = cells.get(`${lane}:${milestone.column}`);
+              return <div key={cell?.observation.id ?? `empty-${milestone.column}`} className="story-cell"
+                data-boundary={milestone.timeBoundary ? "true" : "false"}>
+                {cell ? <span className={`story-milestone story-milestone-${cell.kind}`}
+                  data-observation-id={cell.observation.id}
+                  data-selected={cell.observation.id === selectedId ? "true" : "false"}
+                  onClick={() => onChoose(cell.observation.id)}>
+                  <span className={`story-shape story-shape-${cell.kind}`}>{cell.shape}</span>
+                  <span className="story-milestone-label">{cell.label}</span>
+                </span> : null}
+              </div>;
+            })}
+          </Fragment>)}
+        </div>
+      </div>
+      <table className="story-table">
+        <caption>{reduction} Each row selects the same recorded observation as the strip.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Milestone</th>
+            <th scope="col">Category</th>
+            <th scope="col">Virtual time</th>
+            <th scope="col">Sequence</th>
+            <th scope="col">Component / destination</th>
+          </tr>
+        </thead>
+        <tbody>
+          {milestones.map(milestone => {
+            const observation = milestone.observation;
+            const where = observation.target !== undefined ? `${observation.source} → ${observation.target}` : observation.source;
+            const category = legend.find(entry => entry.kind === milestone.kind);
+            return <tr key={observation.id} data-selected={observation.id === selectedId ? "true" : "false"}>
+              <th scope="row">
+                <button type="button" data-observation-id={observation.id} aria-pressed={observation.id === selectedId}
+                  onClick={() => onChoose(observation.id)}>{milestone.label}</button>
+              </th>
+              <td><span className={`story-shape story-shape-${milestone.kind}`} aria-hidden="true">{milestone.shape}</span>{category?.label ?? milestone.kind}</td>
+              <td>t={observation.time}{milestone.timeBoundary ? "" : " (unchanged)"}</td>
+              <td>#{observation.sequence}</td>
+              <td>{where}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </>}
+  </div>;
 }
 
 function RawRow({ observation, index, selectedId, onChoose }: {
