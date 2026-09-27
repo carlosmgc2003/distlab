@@ -66,6 +66,14 @@ const KIND_LABELS: Readonly<Record<StoryKind, string>> = {
   timeout: "Timeout",
 };
 
+/** Every teaching category, in legend order. */
+export const storyKinds: readonly StoryKind[] = Object.keys(SHAPES) as readonly StoryKind[];
+
+/** The teaching category of one stored record, or undefined when the record is not a milestone. */
+export function storyKind(observation: Observation): StoryKind | undefined {
+  return milestoneCopy(observation)?.kind;
+}
+
 interface MilestoneCopy {
   readonly kind: StoryKind;
   readonly label: string;
@@ -111,7 +119,7 @@ export function storyReduction(milestones: readonly StoryMilestone[], recorded: 
 }
 
 export function storyLegend(milestones: readonly StoryMilestone[]): readonly StoryLegendEntry[] {
-  return (Object.keys(SHAPES) as readonly StoryKind[])
+  return storyKinds
     .map(kind => ({
       kind,
       label: KIND_LABELS[kind],

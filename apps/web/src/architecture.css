@@ -26,6 +26,24 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .timeline-tools:focus-visible, .story-table button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
+/* One explanation pattern for every panel: a compact trigger, a popover that the
+   reader opens, and no permanent wall of text. The popover is positioned against the
+   viewport so a scrolling ancestor cannot clip it. */
+.help-hint { position: relative; display: inline-flex; align-self: flex-start; max-width: 100%; }
+.help-hint-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--surface-subtle); color: var(--text-secondary); font-size: .75rem; }
+.help-hint-trigger:hover { background: #e2e8f0; }
+.help-hint-trigger[aria-expanded="true"] { background: var(--selection-bg); border-color: var(--selection-border); color: var(--text-primary); }
+.help-hint-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border: 1px solid currentColor; border-radius: 50%; font-size: .65rem; font-style: italic; font-weight: 700; line-height: 1; }
+.help-hint-label { overflow-wrap: anywhere; }
+.help-hint-body { position: fixed; z-index: 40; overflow: auto; padding: 10px 12px; border: 1px solid var(--border-default); border-radius: 8px; background: #fff; color: var(--text-primary); box-shadow: 0 10px 24px rgba(23, 32, 51, .18); font-size: .8rem; font-weight: 400; line-height: 1.45; }
+.help-hint-body p { margin: 0 0 6px; }
+.help-hint-body p:last-child { margin-bottom: 0; }
+.help-hint-body .timeline-help, .help-hint-body .graph-help { max-width: none; margin: 0; color: inherit; }
+/* Row and grid rules for the timeline and lesson lists must not reshape a hint trigger. */
+.timeline-rows .help-hint, .timeline-rows button.help-hint-trigger, .fact-list .help-hint { width: auto; }
+.timeline-rows button.help-hint-trigger { display: inline-flex; grid-template-columns: none; min-height: 28px; padding: 2px 8px; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--surface-subtle); font-size: .75rem; }
+.timeline-rows button.help-hint-trigger span { overflow: visible; white-space: nowrap; text-overflow: clip; }
+
 .app-shell { height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 8px 12px 12px; overflow: hidden; }
 .command-toolbar { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .toolbar-row, .scenario-picker, .control-buttons, .panel-nav, .status-line, .lesson-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
@@ -65,14 +83,27 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .investigation-workspace { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.9fr); gap: 12px; overflow: hidden; }
 .panel-architecture, .timeline-layout { min-width: 0; min-height: 0; height: 100%; }
 .panel-architecture { display: flex; flex-direction: column; overflow: hidden; }
-.timeline-layout { display: grid; grid-template-rows: minmax(0, 1.6fr) minmax(8rem, 0.75fr); gap: 8px; }
+/* The recorded history panel carries the quick views, so it takes the larger share. */
+.timeline-layout { display: grid; grid-template-rows: minmax(0, 2.4fr) minmax(6.5rem, 0.55fr); gap: 8px; }
 .timeline-panel, .observation-panel { min-width: 0; min-height: 0; }
 .timeline-panel { display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; padding: 8px 10px; }
 .timeline-panel h3 { margin: 0 0 4px; }
-.timeline-tools { position: relative; flex: 0 1 auto; min-height: 0; max-height: 46%; overflow: auto; }
-.timeline-count { margin: 4px 0; }
-.graph-help, .movement-cue, .inspector-link, .graph-legend, .connections { flex: 0 0 auto; }
+/* The tools region keeps a share of the panel and scrolls its own content, so the quick
+   views, active filters, playback, and rows stay visible together. It yields first when
+   the active filter chips grow. */
+.timeline-tools { position: relative; flex: 0 1 auto; min-height: 4.5rem; max-height: 33%; overflow: auto; }
+.timeline-quick-views { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+.timeline-quick-views .timeline-help { margin: 0; font-size: .8rem; }
+.timeline-quick-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.timeline-quick-row button { min-height: 36px; padding: 4px 8px; font-size: .85rem; }
+.timeline-quick-row button[aria-pressed="true"] { background: var(--selection-bg); border-color: var(--selection-border); font-weight: 700; }
+.quick-view-count { display: inline-block; min-width: 1.4rem; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: .75rem; font-variant-numeric: tabular-nums; text-align: center; }
+/* Many active filters scroll inside their own row instead of pushing the panel over. */
+.timeline-chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-height: 4.5rem; overflow: auto; }
+.timeline-count { margin: 4px 0; font-size: .85rem; }
+.graph-help, .movement-cue, .inspector-link, .graph-legend, .connections, .help-hint { flex: 0 0 auto; }
 .graph-help, .movement-cue { margin: 0 0 4px; max-width: 85ch; color: #475569; }
+.graph-help { margin-bottom: 6px; }
 .inspector-link { display: inline-block; margin: 0 0 4px; color: #1d4ed8; }
 .inspector-link:hover { color: #172033; }
 .panel-architecture > .architecture-layout { flex: 1 1 auto; min-height: 0; }
@@ -137,11 +168,15 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .semantic-state.is-approved { color: var(--status-approved); background: var(--status-approved-bg); border-width: 2px; }
 .timeline-rows button .is-error { color: var(--status-error); background: var(--status-error-bg); font-weight: 700; }
 .state-explanation { display: inline-block; color: var(--status-uncertain); font-weight: 600; }
-.timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-playback { max-width: 85ch; color: #475569; }
+.timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-playback, .timeline-quick-count { max-width: 85ch; color: #475569; }
+.timeline-quick-count { margin: 0; font-size: .8rem; }
 .timeline-count, #timeline-order { margin: 4px 0; }
-.timeline-cursor { margin: 4px 0; padding: 8px; border-left: 4px solid #1d4ed8; background: #eff6ff; font-weight: 650; }
+.timeline-cursor { margin: 4px 0; padding: 5px 8px; border-left: 4px solid #1d4ed8; background: #eff6ff; font-size: .8rem; font-weight: 650; }
 .timeline-mode { display: flex; gap: 8px; margin: 0; }
 .timeline-filter-disclosure summary { cursor: pointer; min-height: 44px; padding: 8px 2px; font-weight: 650; }
+.timeline-filter-disclosure summary[aria-expanded="true"] { color: #172033; }
+/* The advanced form scrolls inside the tools region; the quick views, active filters,
+   playback, and the result count stay outside it. */
 .timeline-filter-disclosure .timeline-help { margin: 4px 0 8px; }
 .timeline-mode button[aria-pressed="true"] { background: #dbeafe; border-color: #1d4ed8; }
 .timeline-boundary, .timeline-playback { margin: 4px 0; }
@@ -159,10 +194,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0; }
 .timeline-chips li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: 100%; padding: 4px 8px; background: #e2e8f0; border-radius: 999px; }
 .timeline-chips li span { overflow-wrap: anywhere; }
+.timeline-chips li button { min-height: 32px; padding: 2px 8px; }
 .timeline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
 .timeline-detail dd { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .copy-control { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: 100%; }
 .copy-control input { min-width: 0; max-width: 100%; font: inherit; padding: 8px; border: 1px solid #64748b; border-radius: 6px; }
+.timeline-transport button { min-width: 0; min-height: 40px; padding: 4px 8px; font-size: .8rem; }
 .timeline-transport button[aria-pressed="true"], .timeline-view-switch button[aria-pressed="true"] { background: #dbeafe; border-color: #1d4ed8; }
 .timeline-view-switch { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
 .learning-rows > button, .learning-members button { width: 100%; border: 0; border-bottom: 1px solid #e2e8f0; border-radius: 0; padding: 8px; background: transparent; text-align: left; }
@@ -172,7 +209,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .learning-rows button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: -3px; position: relative; z-index: 1; }
 /* Story view: an explicit sequence strip plus its keyboard table. */
 .story-view { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 8px; }
-.story-summary, .story-note { margin: 0; max-width: 95ch; color: var(--text-secondary); }
+.story-summary { margin: 0 0 4px; }
+.story-note { margin: 0 0 4px; max-width: 95ch; color: var(--text-secondary); }
 .story-empty { margin: 0; padding: 8px; border-left: 4px solid var(--border-subtle); background: var(--surface-subtle); }
 .story-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: .85rem; }
 .story-legend li { display: flex; align-items: center; gap: 6px; }
@@ -203,7 +241,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-rows .story-table button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: -3px; }
 .timeline-feedback:empty { position: absolute; inset: 0 auto auto 0; width: 1px; height: 1px; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .timeline-feedback:not(:empty) { max-width: 85ch; margin: 8px 0; border-left: 4px solid #1d4ed8; background: #eff6ff; padding: 10px 12px; }
-.timeline-rows { flex: 1 1 auto; min-height: 0; height: auto; overflow: auto; margin: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; }
+/* The rows take only the leftover space, so the tools region keeps its share of the
+   panel and scrolls its own content instead of pushing the rows out. */
+.timeline-rows { flex: 1 1 0; min-height: 5rem; height: auto; overflow: auto; margin: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; }
 .timeline-rows button { display: grid; grid-template-columns: 72px 72px minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; width: 100%; min-height: 0; padding: 4px 8px; border: 0; border-bottom: 1px solid #e2e8f0; border-radius: 0; background: transparent; text-align: left; }
 .timeline-rows button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-rows { scroll-margin-top: 12px; }
@@ -264,5 +304,5 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .graph-canvas { height: min(48dvh, 420px); min-height: 220px; }
   .inspector { max-height: none; }
   .timeline-panel, .observation-panel { min-height: 16rem; }
-  .timeline-tools { max-height: 14rem; }
+  .timeline-tools { min-height: 5rem; max-height: 14rem; }
 }

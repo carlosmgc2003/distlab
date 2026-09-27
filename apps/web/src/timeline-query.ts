@@ -220,7 +220,12 @@ export function activeFilterChips(query: TimelineQuery, titles: readonly Compone
   return chips;
 }
 
-export function emptyFilterExplanation(query: TimelineQuery, observations: readonly Observation[], titles: readonly ComponentTitle[] = []): string {
+export function emptyFilterExplanation(
+  query: TimelineQuery,
+  observations: readonly Observation[],
+  titles: readonly ComponentTitle[] = [],
+  reset = "Remove a filter chip or clear all filters to see observations again.",
+): string {
   const suggestions = timelineSuggestions(observations, titles);
   const sentences = ["No observations match every active filter. Filters combine with AND."];
   explain(sentences, "Type", query.type, observations, suggestions.types, observation => [observation.type]);
@@ -234,7 +239,7 @@ export function emptyFilterExplanation(query: TimelineQuery, observations: reado
     const to = query.toTime !== undefined ? `to ${query.toTime}` : "onward";
     sentences.push(`Virtual time is inclusive ${from} ${to}.`);
   }
-  sentences.push("Remove a filter chip or clear all filters to see observations again.");
+  sentences.push(reset);
   return sentences.join(" ");
 }
 

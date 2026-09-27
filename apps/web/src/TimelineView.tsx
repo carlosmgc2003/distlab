@@ -18,6 +18,20 @@ import {
 } from "./timeline-query.ts";
 import type { ComponentTitle, FilterChoice, TextFilterField, TextMatchMode, TimelineDraft, TimelineQuery } from "./timeline-query.ts";
 import {
+  QUICK_VIEWS,
+  QUICK_VIEW_HELP,
+  emptyQuickViewExplanation,
+  quickViewChip,
+  quickViewCounts,
+  quickViewFeedback,
+  quickViewLabel,
+  quickViewObservations,
+  quickViewSummary,
+  recordedComponentChips,
+  revealQuickView,
+} from "./timeline-quick-views.ts";
+import type { QuickViewChip, QuickViewId } from "./timeline-quick-views.ts";
+import {
   TIMELINE_ROW_HEIGHT,
   TIMELINE_VIEWPORT,
   boundaryCopy,
@@ -44,6 +58,7 @@ import {
 import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode } from "./timeline.ts";
 import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, storySummary } from "./story-timeline.ts";
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
+import { HelpHint } from "./ui-hint.tsx";
 
 /** Host interval for the playback cursor only. It never calls the simulation host. */
 const PLAYBACK_INTERVAL_MS = 1000;
@@ -62,6 +77,7 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const [draft, setDraft] = useState<TimelineDraft>(emptyTimelineDraft);
   const [query, setQuery] = useState<TimelineQuery>({});
   const [filterError, setFilterError] = useState<string | null>(null);
+  const [quickView, setQuickView] = useState<QuickViewId | null>(null);
   const [view, setView] = useState<"story" | "learning" | "raw">("story");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -80,7 +96,11 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const playHadFocus = useRef(false);
   const returnFocusToPlay = useRef(false);
   const suggestions = useMemo(() => timelineSuggestions(observations, componentTitles), [observations, componentTitles]);
-  const filtered = useMemo(() => queryTimeline(observations, query), [observations, query]);
+  // The quick view narrows the snapshot first; the canonical fields then narrow that result.
+  const scoped = useMemo(() => quickViewObservations(observations, quickView), [observations, quickView]);
+  const filtered = useMemo(() => queryTimeline(scoped, query), [scoped, query]);
+  const quickCounts = useMemo(() => quickViewCounts(observations), [observations]);
+  const componentChips = useMemo(() => recordedComponentChips(observations, componentTitles), [observations, componentTitles]);
   const learningItems = useMemo(() => learningTimeline(filtered), [filtered]);
   const hiddenLearningRecords = filtered.length - learningItems.length;
   const milestones = useMemo(() => storyMilestones(filtered), [filtered]);
@@ -94,19 +114,30 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const storyCopy = useMemo(() => storySummary(milestones, filtered.length, componentLabels), [milestones, filtered.length, componentLabels]);
   const storyDetailCopy = useMemo(() => storyDetail(milestones), [milestones]);
   const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
-  const explanation = useMemo(
-    () => filtered.length === 0 && observations.length > 0 ? emptyFilterExplanation(query, observations, componentTitles) : "",
-    [filtered.length, observations, query, componentTitles],
-  );
+  const viewChip: QuickViewChip | null = quickView === null ? null : quickViewChip(quickView);
+  const quickCopy = quickViewSummary(quickView, filtered.length, observations.length);
+  const explanation = useMemo(() => {
+    if (filtered.length > 0 || observations.length === 0) return "";
+    const reset = quickView === null
+      ? undefined
+      : `Remove the ${quickViewLabel(quickView).toLowerCase()} quick view chip or clear all filters to see recorded observations again.`;
+    const parts: string[] = [];
+    if (quickView !== null) parts.push(emptyQuickViewExplanation(quickView, observations.length));
+    parts.push(emptyFilterExplanation(query, scoped, componentTitles, reset));
+    return parts.join(" ");
+  }, [filtered.length, observations.length, quickView, query, scoped, componentTitles]);
   const filteredRef = useRef(filtered);
   const selectedRef = useRef(selectedId);
   const draftRef = useRef(draft);
+  const quickViewRef = useRef(quickView);
   const observationsRef = useRef(observations);
   filteredRef.current = filtered;
   selectedRef.current = selectedId;
   draftRef.current = draft;
+  quickViewRef.current = quickView;
   observationsRef.current = observations;
   const selected = observations.find(item => item.id === selectedId);
+  const selectedTrace = selected?.traceId;
   const selectedIndex = filtered.findIndex(item => item.id === selectedId);
   const playing = phase === "playing";
   const transport = playbackControl(selectedIndex, filtered.length, playing);
@@ -165,8 +196,10 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
       setQuery(revealed.query);
       setFilterError(null);
     }
+    const unhidden = revealQuickView(quickViewRef.current, observation);
+    if (unhidden.id !== quickViewRef.current) setQuickView(unhidden.id);
     setSelectedId(observation.id);
-    setFeedback(revealMessage(revealed.cleared, observation));
+    setFeedback(revealMessage([...revealed.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])], observation));
     requestFocus(observation.id);
   }, [focusedObservationId, focusToken]);
 
@@ -186,6 +219,8 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
       setDraft(emptyTimelineDraft);
       setQuery({});
       setFilterError(null);
+      setQuickView(null);
+      setFeedback("");
       seenRef.current = observations.at(-1)?.sequence ?? -1;
       return;
     }
@@ -244,7 +279,7 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
     }
   }, [phase]);
 
-  const filterKey = JSON.stringify(query);
+  const filterKey = JSON.stringify([query, quickView]);
   useEffect(() => {
     if (pendingFocusId.current) return;
     const node = scrollerRef.current;
@@ -322,15 +357,47 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
       setQuery(revealed.query);
       setFilterError(null);
     }
+    const unhidden = revealQuickView(quickView, observation);
+    if (unhidden.id !== quickView) setQuickView(unhidden.id);
     setSelectedId(observation.id);
-    setFeedback(revealMessage(revealed.cleared, observation));
+    setFeedback(revealMessage([...revealed.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])], observation));
     requestFocus(observation.id);
+  };
+  const toggleQuickView = (id: QuickViewId) => {
+    const next = quickView === id ? null : id;
+    setQuickView(next);
+    setFeedback(quickViewFeedback(next, quickViewObservations(observations, next).length, observations.length));
+  };
+  const toggleComponentChip = (value: string) => {
+    const active = draft.component.trim() === value && draft.componentMode === "exact";
+    applyDraft(active ? clearTimelineField(draft, "component") : withExactValue(draft, "component", value));
+    setFeedback(active
+      ? `Component filter for ${componentLabel(value, componentTitles)} was removed.`
+      : `Component filter is now ${componentLabel(value, componentTitles)}. It narrows the display and changes nothing in the run.`);
+  };
+  const toggleTraceChip = (traceId: string) => {
+    const active = draft.traceId.trim() === traceId && draft.traceMode === "exact";
+    applyDraft(active ? clearTimelineField(draft, "traceId") : withExactValue(draft, "traceId", traceId));
+    setFeedback(active
+      ? `Trace filter for ${traceId} was removed.`
+      : `Trace filter is now ${traceId}. It narrows the display and changes nothing in the run.`);
+  };
+  const clearAllFilters = () => {
+    applyDraft(emptyTimelineDraft);
+    setQuickView(null);
+    setFeedback(`All filters and quick views were cleared. ${observations.length} recorded observations are available again.`);
   };
   const showTrace = (traceId: string) => {
     const change = narrowToTrace(draft, traceId);
     haltPlayback();
     applyDraft(change.draft);
-    setFeedback(traceFilterMessage(traceId, change));
+    const member = observations.find(item => item.traceId === traceId);
+    const unhidden = member === undefined ? { id: quickView, cleared: "" } : revealQuickView(quickView, member);
+    if (unhidden.id !== quickView) setQuickView(unhidden.id);
+    setFeedback(traceFilterMessage(traceId, {
+      changed: change.changed || unhidden.cleared !== "",
+      cleared: [...change.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])],
+    }));
     if (selectedId) requestFocus(selectedId);
   };
   const selectIndex = (index: number) => {
@@ -372,27 +439,42 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
   const useEntity = (kind: string, id: string) => applyDraft(withExactValue(withExactValue(draft, "entityKind", kind), "entityId", id));
   const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
   const windowRows = filtered.slice(range.start, range.end);
-  const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null;
+  const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null || quickView !== null;
   const otherRecords = filtered.length - milestones.length;
   const storyCount = `${reduction} ${observations.length === filtered.length ? "" : `Filters show ${filtered.length} of ${observations.length} observations; `}`
     + `${otherRecords === 0
       ? filtered.length === 0 ? "No visible records to reduce. " : "Every visible record is a milestone. "
-      : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`
-    + "Select a milestone to inspect its recorded detail.";
-
+      : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`;
   return <>
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
     <h3 id="timeline-heading">Recorded history</h3>
     <p className="timeline-cursor" role="status" aria-live="polite">{selected
       ? `Reviewing observation ${selected.sequence} at virtual t=${selected.time}. `
-      : "Not reviewing a selected observation. "}{simulationTime !== undefined
-      ? `Latest simulation state${simulationStatus === "COMPLETED" ? " (completed)" : ""} is at virtual t=${simulationTime}; history navigation does not change it.`
-      : "History navigation does not change simulation state."}</p>
-    <div className="timeline-tools" tabIndex={0} aria-label="Timeline filters and playback">
-    <p id="timeline-order">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</p>
+      : "Nothing selected. "}{simulationTime !== undefined
+      ? `Simulation state${simulationStatus === "COMPLETED" ? " (completed)" : ""} is at virtual t=${simulationTime}.`
+      : "History reading changes no state."}</p>
+    <p id="timeline-quick-count" className="timeline-quick-count">{quickCopy}</p>
+    <div className="timeline-tools" tabIndex={0} aria-label="Timeline quick views and advanced filters">
+    <div className="timeline-quick-views">
+    <p id="timeline-quick-help" className="timeline-help">{QUICK_VIEW_HELP}</p>
+    <div className="timeline-quick-row" role="group" aria-label="Quick views" aria-describedby="timeline-quick-help">
+      {QUICK_VIEWS.map(item => <button key={item.id} type="button" aria-pressed={quickView === item.id}
+        aria-describedby="timeline-quick-help" onClick={() => toggleQuickView(item.id)}>
+        {item.label} <span className="quick-view-count" aria-hidden="true">{quickCounts[item.id]}</span>
+        <span className="sr-only">, {quickCounts[item.id]} of {observations.length} recorded observations. It keeps {item.keeps}.</span>
+      </button>)}
+    </div>
+    <div className="timeline-quick-row" role="group" aria-label="Recorded components and selected trace">
+      {componentChips.map(chip => <button key={chip.value} type="button" aria-pressed={draft.component.trim() === chip.value && draft.componentMode === "exact"}
+        onClick={() => toggleComponentChip(chip.value)}>{chip.label}<span className="sr-only"> ({chip.value})</span></button>)}
+      {selectedTrace !== undefined ? <button type="button" aria-pressed={draft.traceId.trim() === selectedTrace && draft.traceMode === "exact"}
+        onClick={() => toggleTraceChip(selectedTrace)}>Selected trace {selectedTrace}</button> : null}
+    </div>
+    </div>
+    <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
     <details className="timeline-filter-disclosure">
-    <summary>Filters{chips.length > 0 ? ` (${chips.length} active)` : ""}</summary>
-    <p id="timeline-filter-help" className="timeline-help">{TIMELINE_FILTER_HELP}</p>
+    <summary>Advanced filters{chips.length > 0 ? ` (${chips.length} active)` : ""}</summary>
+    <HelpHint label="How matching works" bodyId="timeline-filter-help">{TIMELINE_FILTER_HELP}</HelpHint>
     <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => event.preventDefault()}>
       <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.fromTime} onChange={event => applyDraft({ ...draft, fromTime: event.target.value })} /></label>
       <label>Virtual time to<input id="timeline-to" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.toTime} onChange={event => applyDraft({ ...draft, toTime: event.target.value })} /></label>
@@ -414,25 +496,35 @@ export function TimelineView({ observations, edges, componentTitles = [], simula
       <SuggestionField id="timeline-entity-id" label="Entity id" value={draft.entityId} mode={draft.entityIdMode} choices={suggestions.entityIds}
         onValue={value => applyDraft({ ...draft, entityId: value })} onMode={entityIdMode => applyDraft({ ...draft, entityIdMode })}
         onChoose={value => applyDraft({ ...draft, entityId: value, entityIdMode: "exact" })} />
-      <div className="timeline-chip-row">
-        {chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">{chips.map(chip => <li key={chip.field}>
-          <span>{chip.label}</span>
-          <button type="button" aria-label={chip.removeLabel} onClick={() => applyDraft(clearTimelineField(draft, chip.field))}>Remove</button>
-        </li>)}</ul> : null}
-        <button type="button" disabled={!filtersActive} onClick={() => applyDraft(emptyTimelineDraft)}>Clear all filters</button>
-      </div>
     </form>
     {filterError ? <p id="timeline-filter-error" role="alert">{filterError}</p> : null}
     </details>
-    <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
-    <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
-      <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
-      <button ref={pauseButtonRef} type="button" disabled={!playing} aria-describedby="timeline-playback" onClick={pause}>Pause timeline</button>
-      <button type="button" disabled={!availability.previous} aria-describedby="timeline-boundary" onClick={() => move(-1)}>Previous observation</button>
-      <button type="button" disabled={!availability.next} aria-describedby="timeline-boundary" onClick={() => move(1)}>Next observation</button>
-    </div>
+    <HelpHint label="Row order" bodyId="timeline-order" className="timeline-help">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</HelpHint>
+
     <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)} Presentation speed: one observation per second; virtual time is unchanged.</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+    </div>
+    {/* Focusable because the row scrolls once several filters are active. */}
+    <div className="timeline-chip-row" tabIndex={0} role="group" aria-label="Active filters and reset">
+      {viewChip !== null || chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">
+        {viewChip !== null ? <li>
+          <span>{viewChip.label}</span>
+          <button type="button" aria-label={viewChip.removeLabel} onClick={() => {
+            setQuickView(null);
+            setFeedback(quickViewFeedback(null, observations.length, observations.length));
+          }}>Remove</button>
+        </li> : null}
+        {chips.map(chip => <li key={chip.field}>
+          <span>{chip.label}</span>
+          <button type="button" aria-label={chip.removeLabel} onClick={() => applyDraft(clearTimelineField(draft, chip.field))}>Remove</button>
+        </li>)}</ul> : null}
+      <button type="button" disabled={!filtersActive} onClick={clearAllFilters}>Clear all filters</button>
+    </div>
+    <div className="control-buttons timeline-transport" role="group" aria-label="Timeline playback">
+      <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-playback" onClick={play}>{transport.label}</button>
+      <button ref={pauseButtonRef} type="button" aria-label="Pause timeline" disabled={!playing} aria-describedby="timeline-playback" onClick={pause}>Pause</button>
+      <button type="button" aria-label="Previous observation" disabled={!availability.previous} aria-describedby="timeline-boundary" onClick={() => move(-1)}>Previous</button>
+      <button type="button" aria-label="Next observation" disabled={!availability.next} aria-describedby="timeline-boundary" onClick={() => move(1)}>Next</button>
     </div>
     <div className="timeline-view-switch" role="group" aria-label="Timeline view">
       <button type="button" aria-pressed={view === "story"} onClick={() => setView("story")}>Story</button>
@@ -488,7 +580,7 @@ function StoryView({ milestones, lanes, legend, summary, detail, reduction, sele
   const columns = milestones.length;
   const gridColumns = `minmax(7rem, auto) repeat(${Math.max(columns, 1)}, 6.5rem)`;
   return <div className="story-view">
-    <p id="story-summary" className="story-summary">{summary}</p>
+    <HelpHint label="About this strip" className="story-summary" bodyId="story-summary">{summary}</HelpHint>
     <p className="sr-only">{detail}</p>
     {milestones.length === 0 ? hasRecords
       ? <p className="story-empty">None of the visible records is a teaching milestone. Use Learning or Raw to read them.</p>
@@ -500,7 +592,7 @@ function StoryView({ milestones, lanes, legend, summary, detail, reduction, sele
           <span className="story-legend-count">{entry.count}</span>
         </li>)}
       </ul>
-      <p className="story-note">Columns follow recorded observation sequence. A dashed rule marks a recorded virtual-time boundary.</p>
+      <HelpHint label="Reading this strip">Columns follow recorded observation sequence. A dashed rule marks a recorded virtual-time boundary.</HelpHint>
       <div className="story-strip" aria-hidden="true">
         <div className="story-grid" style={{ gridTemplateColumns: gridColumns }}>
           <div className="story-corner">Component</div>
