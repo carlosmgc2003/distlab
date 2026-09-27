@@ -81,6 +81,7 @@ test("the filter, row order, and strip explanations keep their text and stay out
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await completed(page);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const afterRun = await commands(page);
 
   const before = await page.locator(".timeline-tools").evaluate(node => node.clientHeight);
@@ -108,12 +109,13 @@ test("the filter, row order, and strip explanations keep their text and stay out
   expect(await commands(page)).toEqual(afterRun);
 });
 
-test("a pinned explanation closes on Escape or an outside click and fits a phone viewport", async ({ page }) => {
+test("a pinned explanation closes on Escape or an outside click and fits 200% zoom", async ({ page }) => {
   test.setTimeout(90_000);
   await observeCommands(page);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await completed(page);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   const strip = page.getByRole("button", { name: "About this strip" });
   await strip.click();
@@ -121,15 +123,15 @@ test("a pinned explanation closes on Escape or an outside click and fits a phone
   await page.getByRole("heading", { name: "Recorded history", exact: true }).click();
   await expect(page.locator("#story-summary")).toBeHidden();
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "Timeline", exact: true }).click();
+  await page.setViewportSize({ width: 683, height: 384 });
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const mobileStrip = page.getByRole("button", { name: "About this strip" });
   await expect(mobileStrip).toBeVisible();
   await mobileStrip.click();
   await expect(page.locator("#story-summary")).toBeVisible();
   const box = await page.locator("#story-summary").boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(683);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.keyboard.press("Escape");
   await expect(page.locator("#story-summary")).toBeHidden();

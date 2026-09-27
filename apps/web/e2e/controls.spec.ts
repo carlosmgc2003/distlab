@@ -71,16 +71,17 @@ for (const scenario of ["normal", "response-lost"]) {
       if (boundary === 1) {
         await button("Orders, Internal service").click();
         await button("Zoom In").click();
-        await page.setViewportSize({ width: 390, height: 844 });
+        await page.setViewportSize({ width: 683, height: 384 });
       }
     }
     expect(await latestProjection(page)).toEqual(run);
     await button("Reset").click();
     await expect(status).toHaveText("READY");
     expect(await latestProjection(page)).toEqual(initial);
+    await page.getByRole("tab", { name: "Architecture", exact: true }).click();
     await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("Database owned by orders");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath("simulation-controls-mobile.png"), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("simulation-controls-zoom.png"), fullPage: true });
   });
 }
 

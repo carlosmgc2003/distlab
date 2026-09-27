@@ -72,6 +72,41 @@ export function learningTimeline(observations: readonly Observation[]): readonly
   return items;
 }
 
+/**
+ * Plain-language event heading derived only from stored observation fields.
+ * It maps the stored type (and a stored delivery attempt when visible) to text;
+ * it never infers outcomes, durations, causality, or hidden payload values.
+ * Redacted or omitted payloads contribute no attempt suffix or field summary.
+ */
+export function observationHeading(observation: Observation): string {
+  const type = observation.type;
+  switch (type) {
+    case "network.request.sent": return "Request sent";
+    case "network.request.delivered": return "Request delivered";
+    case "network.request.dropped": return "Request dropped";
+    case "network.request.timedout": return "Request timed out";
+    case "network.response.sent": return "Response sent";
+    case "network.response.received": return "Response received";
+    case "network.response.dropped": return "Response dropped";
+    case "message.published": return "Message published";
+    case "message.delivered": return payloadVisibility(observation) === "visible"
+      ? `Message delivered${attemptLabel(observation)}`
+      : "Message delivered";
+    case "message.acknowledged": return "Message acknowledged";
+    case "message.ack.stale": return "Stale message acknowledgement";
+    case "message.retry.scheduled": return "Message retry scheduled";
+    case "database.transaction.committed": return "Database transaction committed";
+    case "database.transaction.rolled_back":
+    case "database.transaction.rolledback": return "Database transaction rolled back";
+    case "external.effect.committed": return "External side effect committed";
+    case "fault.effect.selected": return "Fault effect selected";
+    case "fault.rule.matched": return "Fault rule matched";
+    default: break;
+  }
+  if (type.startsWith("fault.")) return "Fault recorded";
+  return type;
+}
+
 /** Human-readable labels describe only the stored observation type, never inferred elapsed time or causation. */
 export function learningSummary(observation: Observation): string {
   const type = observation.type;

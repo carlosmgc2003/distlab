@@ -22,7 +22,8 @@ button { cursor: pointer; min-height: 44px; }
 button:hover { background: #e2e8f0; }
 button:disabled, button[aria-disabled="true"] { cursor: not-allowed; color: var(--text-disabled); background: var(--surface-subtle); border-color: var(--border-subtle); }
 button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible, .inspector:focus-visible,
-.timeline-panel:focus-visible, .panel-architecture:focus-visible, .observation-panel:focus-visible,
+.timeline-panel:focus-visible, .panel-architecture:focus-visible, .panel-history:focus-visible, .observation-panel:focus-visible,
+.workspace-tabs [role="tab"]:focus-visible,
 .timeline-tools:focus-visible, .story-table button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
@@ -46,7 +47,7 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 
 .app-shell { height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 8px 12px 12px; overflow: hidden; }
 .command-toolbar { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.toolbar-row, .scenario-picker, .control-buttons, .panel-nav, .status-line, .shell-notices, .lesson-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.toolbar-row, .scenario-picker, .control-buttons, .status-line, .shell-notices, .lesson-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 h1 { margin: 0; font-size: 1.15rem; line-height: 1.2; letter-spacing: -.04em; }
 h2 { font-size: 1.05rem; margin: 0 0 4px; }
 #scenario { max-width: 100%; min-width: 0; flex: 1 1 12rem; min-height: 44px; }
@@ -60,9 +61,11 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
    share a row of same-shaped buttons. */
 .control-group-label { flex: 0 0 auto; margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .01em; color: var(--text-secondary); }
 .control-group-note { flex: 1 1 100%; margin: 0; max-width: 70ch; color: var(--text-secondary); font-size: .78rem; }
-.panel-nav button[aria-pressed="true"] { background: var(--selection-bg); border-color: var(--selection-border); box-shadow: inset 0 -3px var(--selection-border); font-weight: 700; }
-.panel-nav { flex: 1 1 100%; gap: 6px; }
-.panel-nav button { flex: 1 1 6rem; min-width: 0; }
+/* Desktop-only investigation tabs: Architecture holds the graph and inspector;
+   Recorded history holds history navigation/filtering and Observation detail. */
+.workspace-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
+.workspace-tabs [role="tab"] { flex: 0 1 auto; min-width: 10rem; border-bottom-width: 3px; }
+.workspace-tabs [role="tab"][aria-selected="true"] { background: var(--selection-bg); border-color: var(--selection-border); box-shadow: inset 0 -3px var(--selection-border); font-weight: 700; }
 .status-line { align-items: flex-start; }
 .status-line p { margin: 0; }
 .status-line [role="alert"], .terminal-history, .lesson-guide:has(details[open]), .raw-state[open] { flex: 1 1 100%; min-width: 0; }
@@ -93,11 +96,13 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .terminal-history { border-left: 4px solid #b45309; background: #fff7ed; padding: 8px 12px; }
 .workspace-empty { margin: 0; }
 
-.investigation-workspace { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.9fr); gap: 12px; overflow: hidden; }
-.panel-architecture, .timeline-layout { min-width: 0; min-height: 0; height: 100%; }
+.investigation-workspace { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.panel-architecture, .panel-history { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+.panel-architecture[hidden], .panel-history[hidden] { display: none; }
 .panel-architecture { display: flex; flex-direction: column; overflow: hidden; }
-/* The recorded history panel carries the quick views, so it takes the larger share. */
-.timeline-layout { display: grid; grid-template-rows: minmax(0, 2.4fr) minmax(6.5rem, 0.55fr); gap: 8px; }
+/* The Recorded history tab keeps navigation/filtering adjacent to the selected record's detail. */
+.panel-history { display: flex; flex-direction: column; min-height: 0; }
+.history-layout { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr); gap: 12px; overflow: hidden; }
 .timeline-panel, .observation-panel { min-width: 0; min-height: 0; }
 .timeline-panel { display: flex; flex-direction: column; overflow: hidden; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; padding: 8px 10px; }
 .timeline-panel h2 { margin: 0; }
@@ -295,26 +300,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 }
 [role="alert"] { border-left: 4px solid #b91c1c; padding: 8px 12px; background: #fef2f2; }
 
-/* 1366 and 1534 keep architecture and timeline together. Narrower viewports show one panel. */
-@media (max-height: 700px) and (min-width: 960px) {
+/* Supported desktop baseline is 1366x768 and 1534x897. Mobile resolutions are
+   explicitly unsupported: there is no narrow/mobile information architecture.
+   At 200% browser zoom (683x384 CSS pixels for the 1366 baseline) the tabbed
+   desktop layout stays usable with vertical scrolling and no horizontal overflow. */
+@media (max-height: 700px) {
   body { overflow: auto; }
   .app-shell { height: auto; min-height: 100dvh; overflow: visible; }
   .investigation-workspace { flex: none; min-height: 36rem; overflow: visible; }
-  .timeline-layout { min-height: 36rem; }
-}
-@media (max-width: 959px) {
-  .app-shell { overflow: auto; }
-  .command-toolbar button, .command-toolbar select, .command-toolbar summary { scroll-margin: 8px; }
-  .investigation-workspace { display: block; flex: 1 0 18rem; min-height: 18rem; overflow: visible; }
-  .panel-architecture, .timeline-layout { display: none; height: auto; }
-  .investigation-workspace[data-panel="architecture"] .panel-architecture { display: flex; min-height: 100%; }
-  .investigation-workspace[data-panel="timeline"] .timeline-layout,
-  .investigation-workspace[data-panel="inspection"] .timeline-layout { display: flex; flex-direction: column; min-height: 100%; }
-  .investigation-workspace[data-panel="timeline"] .observation-panel { display: none; }
-  .investigation-workspace[data-panel="inspection"] .timeline-panel { display: none; }
-  .architecture-layout, .architecture-layout.has-selection { grid-template-columns: 1fr; grid-template-rows: auto; flex: none; }
-  .graph-canvas { height: min(48dvh, 420px); min-height: 220px; }
-  .inspector { max-height: none; }
-  .timeline-panel, .observation-panel { min-height: 16rem; }
-  .timeline-tools { min-height: 5rem; max-height: 14rem; }
+  .panel-history { min-height: 36rem; }
+  .history-layout { min-height: 36rem; }
 }

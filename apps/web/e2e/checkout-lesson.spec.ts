@@ -133,11 +133,13 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await expect(panel).toContainText("authorization-1 APPROVED");
   await expect(panel).toContainText("not proof of denial or rollback");
   await button("Show fault selection").click();
+  await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");
   await button("Show processor authorization").click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
   await button("Show Payments timeout").click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("network.request.timedout");
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.getByRole("status", { name: "Request and message movement" })).not.toContainText("No request or message movement");
   await button("Fit View").click();
   await expect(page.locator(".react-flow__node")).toHaveCount(5);
@@ -149,7 +151,7 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(page.locator(".react-flow__edge.is-movement .react-flow__edge-path")).toHaveCSS("animation-name", "none");
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 683, height: 384 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 

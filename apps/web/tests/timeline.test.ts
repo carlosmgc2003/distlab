@@ -20,6 +20,7 @@ import {
   movementCue,
   movementMessage,
   movementPulseClass,
+  observationHeading,
   orderObservations,
   parseTimelineFilter,
   payloadCopy,
@@ -443,6 +444,40 @@ test("the lost-response checkout has one dropped response in canonical sequence 
   assert.ok(droppedResponse.causationId);
   assert.ok(droppedResponse.traceId);
   assert.ok(projection.history.observations.some(item => item.id === droppedResponse.causationId));
+});
+
+test("observation headings describe only stored fields and never reconstruct redacted payloads", () => {
+  const headings: Record<string, string> = {
+    "network.request.sent": "Request sent",
+    "network.request.delivered": "Request delivered",
+    "network.request.dropped": "Request dropped",
+    "network.request.timedout": "Request timed out",
+    "network.response.sent": "Response sent",
+    "network.response.received": "Response received",
+    "network.response.dropped": "Response dropped",
+    "message.published": "Message published",
+    "message.acknowledged": "Message acknowledged",
+    "message.ack.stale": "Stale message acknowledgement",
+    "message.retry.scheduled": "Message retry scheduled",
+    "database.transaction.committed": "Database transaction committed",
+    "database.transaction.rolled_back": "Database transaction rolled back",
+    "database.transaction.rolledback": "Database transaction rolled back",
+    "external.effect.committed": "External side effect committed",
+    "fault.effect.selected": "Fault effect selected",
+    "fault.rule.matched": "Fault rule matched",
+    "fault.custom.rule": "Fault recorded",
+  };
+  for (const [type, heading] of Object.entries(headings)) {
+    assert.equal(observationHeading(observation({ id: type, time: 1, sequence: 1, type, source: "orders" })), heading);
+  }
+  const delivered = observation({ id: "delivered", time: 1, sequence: 2, type: "message.delivered", source: "payments", data: { attempt: 2 } });
+  assert.equal(observationHeading(delivered), "Message delivered (attempt 2)");
+  const redactedDelivered = observation({ id: "redacted", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { redacted: true } });
+  assert.equal(observationHeading(redactedDelivered), "Message delivered");
+  assert.equal(JSON.stringify(redactedDelivered).includes("invented-secret"), false);
+  const before = structuredClone(delivered);
+  observationHeading(delivered);
+  assert.deepEqual(delivered, before);
 });
 
 function blank() {
