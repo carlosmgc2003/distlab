@@ -45,11 +45,9 @@ import {
   observationHeading,
   payloadCopy,
   payloadVisibility,
-  playbackAdvance,
   playbackControl,
   playbackStatus,
   revealMessage,
-  selectionAvailability,
   selectionMessage,
   selectionStep,
   traceFilterMessage,
@@ -61,8 +59,6 @@ import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, 
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
 import { HelpHint } from "./ui-hint.tsx";
 
-/** Host interval for the playback cursor only. It never calls the simulation host. */
-const PLAYBACK_INTERVAL_MS = 1000;
 const SPAN_PREVIEW = 12;
 
 export function TimelineView({ observations, edges, componentTitles = [], onEmphasis, focusedObservationId, focusToken = 0 }: {
@@ -74,6 +70,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   readonly focusToken?: number;
 }) {
   const [draft, setDraft] = useState<TimelineDraft>(emptyTimelineDraft);
+  const [filterField, setFilterField] = useState<TextFilterField>("type");
   const [query, setQuery] = useState<TimelineQuery>({});
   const [filterError, setFilterError] = useState<string | null>(null);
   const [quickView, setQuickView] = useState<QuickViewId | null>(null);
@@ -87,13 +84,9 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const [rowViewport, setRowViewport] = useState(TIMELINE_VIEWPORT);
   const [focusNonce, setFocusNonce] = useState(0);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const playButtonRef = useRef<HTMLButtonElement>(null);
-  const pauseButtonRef = useRef<HTMLButtonElement>(null);
   const previousRef = useRef<readonly Observation[] | null>(null);
   const seenRef = useRef(-1);
   const pendingFocusId = useRef<string | null>(null);
-  const playHadFocus = useRef(false);
-  const returnFocusToPlay = useRef(false);
   const suggestions = useMemo(() => timelineSuggestions(observations, componentTitles), [observations, componentTitles]);
   // The quick view narrows the snapshot first; the canonical fields then narrow that result.
   const scoped = useMemo(() => quickViewObservations(observations, quickView), [observations, quickView]);
@@ -125,13 +118,9 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     parts.push(emptyFilterExplanation(query, scoped, componentTitles, reset));
     return parts.join(" ");
   }, [filtered.length, observations.length, quickView, query, scoped, componentTitles]);
-  const filteredRef = useRef(filtered);
-  const selectedRef = useRef(selectedId);
   const draftRef = useRef(draft);
   const quickViewRef = useRef(quickView);
   const observationsRef = useRef(observations);
-  filteredRef.current = filtered;
-  selectedRef.current = selectedId;
   draftRef.current = draft;
   quickViewRef.current = quickView;
   observationsRef.current = observations;
@@ -140,7 +129,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const selectedIndex = filtered.findIndex(item => item.id === selectedId);
   const playing = phase === "playing";
   const transport = playbackControl(selectedIndex, filtered.length, playing);
-  const availability = selectionAvailability(selectedIndex, filtered.length);
   const liveCue = useMemo(() => {
     if (selected || liveCueId === null) return null;
     const observation = observations.find(item => item.id === liveCueId);
@@ -240,43 +228,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [liveCueId, playing, selectedId]);
-
-  useEffect(() => {
-    if (!playing) return;
-    const timer = window.setInterval(() => {
-      const list = filteredRef.current;
-      if (list.length <= 1) {
-        setPhase("paused");
-        setFeedback(list.length === 0 ? "No visible observations to play." : "Only one visible observation. Playback cannot advance.");
-        return;
-      }
-      const index = list.findIndex(item => item.id === selectedRef.current);
-      const step = playbackAdvance(index, list.length);
-      const next = list[step.cursor];
-      const reachedEnd = !step.playing || step.cursor >= list.length - 1;
-      if (next) setSelectedId(next.id);
-      if (reachedEnd) {
-        if (document.activeElement === pauseButtonRef.current) returnFocusToPlay.current = true;
-        setPhase("ended");
-        setFeedback("Playback reached the end of the visible results. Restart timeline plays from the first visible observation.");
-      }
-    }, PLAYBACK_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [playing]);
-
-  useEffect(() => {
-    if (playing && playHadFocus.current) {
-      playHadFocus.current = false;
-      pauseButtonRef.current?.focus();
-    }
-  }, [playing]);
-
-  useEffect(() => {
-    if (phase === "ended" && returnFocusToPlay.current) {
-      returnFocusToPlay.current = false;
-      playButtonRef.current?.focus();
-    }
-  }, [phase]);
 
   const filterKey = JSON.stringify([query, quickView]);
   useEffect(() => {
@@ -426,24 +377,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     }
     selectIndex(next);
   };
-  const play = () => {
-    if (transport.action === "unavailable") return;
-    const start = transport.action === "restart" || selectedIndex < 0 ? 0 : selectedIndex;
-    const row = filtered[start];
-    if (!row) return;
-    setView("raw");
-    playHadFocus.current = document.activeElement === playButtonRef.current;
-    setSelectedId(row.id);
-    setPhase("playing");
-    setFeedback(transport.action === "restart"
-      ? "Restarting the visible timeline from the first visible observation."
-      : "Playing the visible timeline. Pause stops the cursor.");
-  };
-  const pause = () => {
-    if (!playing) return;
-    setPhase("paused");
-    setFeedback("Playback is paused.");
-  };
   const useText = (field: TextFilterField, value: string) => applyDraft(withExactValue(draft, field, value));
   const useEntity = (kind: string, id: string) => applyDraft(withExactValue(withExactValue(draft, "entityKind", kind), "entityId", id));
   const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
@@ -468,12 +401,37 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`;
   return <div className="history-layout">
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
-    <h2 id="timeline-heading">Recorded history</h2>
+    <div className="history-heading"><h2 id="timeline-heading">Recorded history</h2>
+      <div className="timeline-view-switch" role="group" aria-label="Timeline view">
+        <button type="button" aria-pressed={view === "story"} onClick={() => setView("story")}>Story</button>
+        <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning</button>
+        <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw</button>
+      </div>
+    </div>
     {/* The review position only. Run status and virtual time have one home, the committed-state summary. */}
-    <p className="timeline-cursor" role="status" aria-live="polite">{selected
+    <p className={selected ? "timeline-cursor" : "sr-only"} role="status" aria-live="polite">{selected
       ? `Reviewing observation ${selected.sequence} at virtual t=${selected.time}.`
       : "No observation selected."}</p>
-    <p id="timeline-quick-count" className="timeline-quick-count">{quickCopy}</p>
+    <p id="timeline-quick-count" className={filtersActive ? "timeline-quick-count" : "sr-only"}>{quickCopy}</p>
+    <div className="story-filter-bar">
+      <label htmlFor="story-quick-view">Show</label>
+      <select id="story-quick-view" value={quickView ?? "all"} onChange={event => {
+        const next = QUICK_VIEWS.find(item => item.id === event.target.value);
+        if (next) { if (next.id !== quickView) toggleQuickView(next.id); }
+        else setQuickView(null);
+      }}>
+        <option value="all">All categories</option>
+        {QUICK_VIEWS.map(item => <option key={item.id} value={item.id}>{item.label} ({quickCounts[item.id]})</option>)}
+      </select>
+      <label htmlFor="story-component">Focus component</label>
+      <select id="story-component" value={componentChips.some(chip => chip.value === draft.component) && draft.componentMode === "exact" ? draft.component : ""}
+        onChange={event => applyDraft(event.target.value ? withExactValue(draft, "component", event.target.value) : clearTimelineField(draft, "component"))}>
+        <option value="">All components</option>
+        {componentChips.map(chip => <option key={chip.value} value={chip.value}>{chip.label}</option>)}
+      </select>
+    </div>
+    <details className="history-filter-drawer">
+    <summary>Filter history{filtersActive ? ` · ${chips.length + (quickView ? 1 : 0)} active` : ""}</summary>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline quick views and advanced filters">
     <div className="timeline-quick-views">
     <p id="timeline-quick-help" className="timeline-help">{QUICK_VIEW_HELP}</p>
@@ -498,34 +456,35 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => event.preventDefault()}>
       <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.fromTime} onChange={event => applyDraft({ ...draft, fromTime: event.target.value })} /></label>
       <label>Virtual time to<input id="timeline-to" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.toTime} onChange={event => applyDraft({ ...draft, toTime: event.target.value })} /></label>
-      <SuggestionField id="timeline-type" label="Type" value={draft.type} mode={draft.typeMode} choices={suggestions.types}
-        onValue={value => applyDraft({ ...draft, type: value })} onMode={typeMode => applyDraft({ ...draft, typeMode })}
-        onChoose={value => applyDraft({ ...draft, type: value, typeMode: "exact" })} />
-      <SuggestionField id="timeline-component" label="Component" value={draft.component} mode={draft.componentMode} choices={suggestions.components}
-        onValue={value => applyDraft({ ...draft, component: value })} onMode={componentMode => applyDraft({ ...draft, componentMode })}
-        onChoose={value => applyDraft({ ...draft, component: value, componentMode: "exact" })} />
-      <SuggestionField id="timeline-trace" label="Trace" value={draft.traceId} mode={draft.traceMode} choices={suggestions.traces}
-        onValue={value => applyDraft({ ...draft, traceId: value })} onMode={traceMode => applyDraft({ ...draft, traceMode })}
-        onChoose={value => applyDraft({ ...draft, traceId: value, traceMode: "exact" })} />
-      <SuggestionField id="timeline-event" label="Event" value={draft.eventId} mode={draft.eventMode} choices={suggestions.events}
-        onValue={value => applyDraft({ ...draft, eventId: value })} onMode={eventMode => applyDraft({ ...draft, eventMode })}
-        onChoose={value => applyDraft({ ...draft, eventId: value, eventMode: "exact" })} />
-      <SuggestionField id="timeline-entity-kind" label="Entity kind" value={draft.entityKind} mode={draft.entityKindMode} choices={suggestions.entityKinds}
-        onValue={value => applyDraft({ ...draft, entityKind: value })} onMode={entityKindMode => applyDraft({ ...draft, entityKindMode })}
-        onChoose={value => applyDraft({ ...draft, entityKind: value, entityKindMode: "exact" })} />
-      <SuggestionField id="timeline-entity-id" label="Entity id" value={draft.entityId} mode={draft.entityIdMode} choices={suggestions.entityIds}
-        onValue={value => applyDraft({ ...draft, entityId: value })} onMode={entityIdMode => applyDraft({ ...draft, entityIdMode })}
-        onChoose={value => applyDraft({ ...draft, entityId: value, entityIdMode: "exact" })} />
+      <div className="filter-field"><label htmlFor="filter-field-choice">Filter by</label><select id="filter-field-choice" value={filterField} onChange={event => setFilterField(event.target.value as TextFilterField)}>
+        <option value="type">Type</option><option value="component">Component</option>
+        <option value="traceId">Trace</option><option value="eventId">Event</option>
+        <option value="entityKind">Entity kind</option><option value="entityId">Entity id</option>
+      </select></div>
+      {([
+        { field: "type", label: "Type", id: "type", mode: "typeMode", choices: suggestions.types },
+        { field: "component", label: "Component", id: "component", mode: "componentMode", choices: suggestions.components },
+        { field: "traceId", label: "Trace", id: "trace", mode: "traceMode", choices: suggestions.traces },
+        { field: "eventId", label: "Event", id: "event", mode: "eventMode", choices: suggestions.events },
+        { field: "entityKind", label: "Entity kind", id: "entity-kind", mode: "entityKindMode", choices: suggestions.entityKinds },
+        { field: "entityId", label: "Entity id", id: "entity-id", mode: "entityIdMode", choices: suggestions.entityIds },
+      ] as const).filter(item => item.field === filterField).map(item => <SuggestionField key={item.field}
+        id={`timeline-${item.id}`} label={item.label} value={draft[item.field]} mode={draft[item.mode]} choices={item.choices}
+        onValue={value => applyDraft({ ...draft, [item.field]: value })}
+        onMode={mode => applyDraft({ ...draft, [item.mode]: mode })}
+        onChoose={value => applyDraft(withExactValue(draft, item.field, value))} />)}
+      <p className="filter-composer-note">Filters combine. Choose another field to narrow further; remove any condition using its chip below.</p>
     </form>
     {filterError ? <p id="timeline-filter-error" role="alert">{filterError}</p> : null}
     </details>
     <HelpHint label="Row order" bodyId="timeline-order" className="timeline-help">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</HelpHint>
 
-    <p id="timeline-playback" className="timeline-playback">{playbackStatus(phase, transport)}</p>
-    <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     </div>
-    {/* Focusable because the row scrolls once several filters are active. */}
-    <div className="timeline-chip-row" tabIndex={0} role="group" aria-label="Active filters and reset">
+    </details>
+    <p id="timeline-playback" className="sr-only">{playbackStatus(phase, transport)}</p>
+    <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+    {/* Active constraints remain visible even when the filter drawer is closed. */}
+    <div className="timeline-chip-row" hidden={!filtersActive} tabIndex={0} role="group" aria-label="Active filters and reset">
       {viewChip !== null || chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">
         {viewChip !== null ? <li>
           <span>{viewChip.label}</span>
@@ -540,22 +499,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         </li>)}</ul> : null}
       <button type="button" disabled={!filtersActive} onClick={clearAllFilters}>Clear all filters</button>
     </div>
-    <div className="timeline-transport-row">
-      <h3 id="timeline-transport-label" className="control-group-label">Recorded history navigation</h3>
-      <div className="control-buttons timeline-transport" role="group" aria-labelledby="timeline-transport-label" aria-describedby="timeline-transport-note">
-        <button ref={playButtonRef} type="button" aria-pressed={playing} disabled={transport.action === "unavailable"} aria-describedby="timeline-transport-note timeline-playback" onClick={play}>{transport.label}</button>
-        <button ref={pauseButtonRef} type="button" aria-label="Pause timeline" disabled={!playing} aria-describedby="timeline-transport-note timeline-playback" onClick={pause}>Pause</button>
-        <button type="button" aria-label="Previous observation" disabled={!availability.previous} aria-describedby="timeline-boundary" onClick={() => move(-1)}>Previous</button>
-        <button type="button" aria-label="Next observation" disabled={!availability.next} aria-describedby="timeline-boundary" onClick={() => move(1)}>Next</button>
-      </div>
-      <p id="timeline-transport-note" className="control-group-note">Reviewing history does not change the simulation or its virtual time.</p>
-    </div>
-    <div className="timeline-view-switch" role="group" aria-label="Timeline view">
-      <button type="button" aria-pressed={view === "story"} onClick={() => setView("story")}>Story</button>
-      <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning</button>
-      <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw</button>
-    </div>
-    <p className="timeline-count">{view === "story" ? storyCount
+    <p className="sr-only">{view === "story" ? storyCount
       : view === "learning"
       ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
         : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized in expandable groups. Select a row to inspect its details.`
@@ -563,7 +507,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     {view === "learning" ? <>
       <div className="learning-column-headings" aria-hidden="true"><span>Summary</span><span>Virtual time · sequence</span><span>Component / destination</span></div>
     </> : null}
-    <div id="timeline-rows" ref={scrollerRef} className="timeline-rows" tabIndex={0} aria-describedby="timeline-order"
+    <div id="timeline-rows" ref={scrollerRef} className={`timeline-rows${view === "story" ? " story-stage" : ""}`}  tabIndex={0} aria-describedby="timeline-order"
       aria-label={view === "story" ? "Story milestone strip and table" : view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
         // The Story view is read by its own milestone table, so arrow keys stay with that table.
@@ -582,9 +526,12 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       </div> : null}
     </div>
     </section>
-    <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
-      hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
-      onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
+    {selected ? <details className="story-inspector">
+      <summary>Selected event details · #{selected.sequence}</summary>
+      <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
+        hidden={!filtered.some(item => item.id === selected.id)}
+        onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
+    </details> : null}
   </div>;
 }
 
@@ -600,11 +547,18 @@ function StoryView({ milestones, lanes, legend, summary, detail, reduction, sele
   readonly hasRecords: boolean;
   readonly onChoose: (id: string) => void;
 }) {
+  const [presentation, setPresentation] = useState<"diagram" | "table">("diagram");
   const cells = new Map(milestones.map(milestone => [`${milestone.lane}:${milestone.column}`, milestone]));
   const columns = milestones.length;
-  const gridColumns = `minmax(7rem, auto) repeat(${Math.max(columns, 1)}, 6.5rem)`;
+  const gridColumns = `10rem repeat(${Math.max(columns, 1)}, minmax(6rem, 1fr))`;
   return <div className="story-view">
-    <HelpHint label="About this strip" className="story-summary" bodyId="story-summary">{summary}</HelpHint>
+    <div className="story-view-toolbar">
+      <div role="group" aria-label="Story presentation">
+        <button type="button" aria-pressed={presentation === "diagram"} onClick={() => setPresentation("diagram")}>Diagram</button>
+        <button type="button" aria-pressed={presentation === "table"} onClick={() => setPresentation("table")}>Table</button>
+      </div>
+      <HelpHint label="Reading the story" className="story-summary" bodyId="story-summary">{summary} Columns follow recorded sequence, not elapsed duration. Select a milestone for details.</HelpHint>
+    </div>
     <p className="sr-only">{detail}</p>
     {milestones.length === 0 ? hasRecords
       ? <p className="story-empty">None of the visible records is a teaching milestone. Use Learning or Raw to read them.</p>
@@ -616,9 +570,8 @@ function StoryView({ milestones, lanes, legend, summary, detail, reduction, sele
           <span className="story-legend-count">{entry.count}</span>
         </li>)}
       </ul>
-      <HelpHint label="Reading this strip">Columns follow recorded observation sequence. A dashed rule marks a recorded virtual-time boundary.</HelpHint>
-      <div className="story-strip" aria-hidden="true">
-        <div className="story-grid" style={{ gridTemplateColumns: gridColumns }}>
+      {presentation === "diagram" ? <div className="story-strip" role="region" aria-label="Story diagram" tabIndex={0}>
+        <div className="story-grid" style={{ gridTemplateColumns: gridColumns, gridTemplateRows: `auto repeat(${lanes.length}, minmax(5rem, 1fr))` }}>
           <div className="story-corner">Component</div>
           {milestones.map(milestone => <div key={`time-${milestone.observation.id}`} className="story-time"
             data-boundary={milestone.timeBoundary ? "true" : "false"}>
@@ -630,18 +583,20 @@ function StoryView({ milestones, lanes, legend, summary, detail, reduction, sele
               const cell = cells.get(`${lane}:${milestone.column}`);
               return <div key={cell?.observation.id ?? `empty-${milestone.column}`} className="story-cell"
                 data-boundary={milestone.timeBoundary ? "true" : "false"}>
-                {cell ? <span className={`story-milestone story-milestone-${cell.kind}`}
+                {cell ? <button type="button" className={`story-milestone story-milestone-${cell.kind}`}
                   data-observation-id={cell.observation.id}
+                  aria-label={`${cell.label}, ${componentLabels.get(lane) ?? lane}, virtual time ${cell.observation.time}, sequence ${cell.observation.sequence}`}
+                  aria-pressed={cell.observation.id === selectedId}
                   data-selected={cell.observation.id === selectedId ? "true" : "false"}
                   onClick={() => onChoose(cell.observation.id)}>
                   <span className={`story-shape story-shape-${cell.kind}`}>{cell.shape}</span>
                   <span className="story-milestone-label">{cell.label}</span>
-                </span> : null}
+                </button> : null}
               </div>;
             })}
           </Fragment>)}
         </div>
-      </div>
+      </div> : <div className="story-table-scroll">
       <table className="story-table">
         <caption>{reduction} Each row selects the same recorded observation as the strip.</caption>
         <thead>
@@ -671,6 +626,7 @@ function StoryView({ milestones, lanes, legend, summary, detail, reduction, sele
           })}
         </tbody>
       </table>
+      </div>}
     </>}
   </div>;
 }
@@ -841,7 +797,7 @@ function ObservationDetail({ observation, observations, componentTitles, hidden,
 }) {
   return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h2 id="observation-detail-heading">Observation detail</h2>
-    {!observation ? <p>Select an observation to inspect its trace, causation, and stored data.</p> : <DetailBody
+    {!observation ? <p>Select a milestone to see what happened and which components were involved. Technical details are available when you need them.</p> : <DetailBody
       observation={observation} observations={observations} componentTitles={componentTitles} hidden={hidden}
       onSelect={onSelect} onShowTrace={onShowTrace} onUseText={onUseText} onUseEntity={onUseEntity} />}
   </section>;
@@ -868,8 +824,11 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
   const heading = observationHeading(observation);
   return <>
     {hidden ? <p>This observation is hidden by the current filters.</p> : null}
-    <h3>Event summary</h3>
-    <h4>{heading}</h4>
+    <h3>{heading}</h3>
+    <p className="event-path">{componentLabel(observation.source, componentTitles)}{target ? ` → ${componentLabel(target, componentTitles)}` : ""}</p>
+    <p className="event-time">Virtual time {observation.time} · Step #{observation.sequence}</p>
+    <details className="detail-disclosure">
+    <summary>Record fields & filter shortcuts</summary>
     <dl>
       <dt>Sequence</dt><dd>#{observation.sequence}</dd>
       <dt>Virtual time</dt><dd>t={observation.time}</dd>
@@ -885,6 +844,7 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
       </dd></> : null}
       <dt>Payload</dt><dd>{payloadCopy(observation)}</dd>
     </dl>
+    </details>
     <h3>Effect and evidence</h3>
     {evidence.length === 0 ? <p>No before or after values were stored.</p> : <ul className="change-evidence">
       {evidence.map((item, index) => <li key={`${item.label}:${index}`}>
@@ -893,7 +853,8 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
         {Object.hasOwn(item, "after") ? <><h4>After</h4><pre>{JSON.stringify(item.after, null, 2)}</pre></> : <p>After was not stored.</p>}
       </li>)}
     </ul>}
-    <h3>Related evidence</h3>
+    <details className="detail-disclosure">
+    <summary>Related evidence</summary>
     <h4>Causation</h4>
     {links.cause ? <p><button type="button" aria-controls="timeline-rows" onClick={() => onSelect(links.cause!.id)}>Select causing observation {links.cause.type} at virtual time {links.cause.time}</button></p> : null}
     {links.unresolvedCauseId ? <p>Causation {links.unresolvedCauseId} is not in this history.</p> : null}
@@ -907,7 +868,9 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
       {eventId !== undefined ? <button type="button" onClick={() => onUseText("eventId", eventId)}>Use this event</button> : null}
       {entities.map((entity, index) => <button key={`${entity.kind}:${entity.id}:${index}`} type="button" onClick={() => onUseEntity(entity.kind, entity.id)}>Use entity {entity.kind} {entity.id}</button>)}
     </div> : null}
-    <h3>Technical record</h3>
+    </details>
+    <details className="detail-disclosure">
+    <summary>Technical record</summary>
     <dl>
       <dt>Observation</dt><dd><span>{observation.id}</span><CopyButton label="Copy observation id" value={observation.id} /></dd>
       <dt>Type</dt><dd>{observation.type}</dd>
@@ -933,6 +896,7 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
       {trace.causation.some(item => !item.causeFound) ? <ul>{trace.causation.filter(item => !item.causeFound).map(item =>
         <li key={item.effectId}>Causation {item.causeId} is not in this history.</li>)}</ul> : null}
     </> : null}
+    </details>
   </>;
 }
 
