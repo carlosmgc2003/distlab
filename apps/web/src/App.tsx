@@ -27,6 +27,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
+  const [showHistoryControls, setShowHistoryControls] = useState(false);
   const tabRequest = useRef<{ tab: WorkspaceTab; focusPanel: boolean } | null>(null);
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
   const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
@@ -97,10 +98,11 @@ export function App({ host }: { readonly host: SimulationHost }) {
     else setSelected(id);
   };
 
-  return <main className="app-shell">
+  return <main className={`app-shell${tab === "history" && projection && !showHistoryControls ? " history-focus" : ""}`}>
+    {tab === "history" && projection && !showHistoryControls ? <h1 className="sr-only">DistLab · Recorded history</h1> : null}
     <header className="command-toolbar">
       <div className="toolbar-row">
-        <h1>DistLab</h1>
+        <div className="brand"><h1>DistLab</h1><span>Distributed systems, explained</span></div>
         <div className="scenario-picker">
           <label htmlFor="scenario">Scenario</label>
           <select id="scenario" value={selected} disabled={busy} aria-describedby="scenario-help" onChange={event => onScenario(event.target.value)}>
@@ -111,6 +113,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </div>
       <SimulationControls host={host} snapshot={snapshot} notices={<>
         {mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
+        <details className="lesson-drawer">
+        <summary>Lesson guide & run insights</summary>
         <div className="shell-notices">
         <section className="lesson-guide" aria-labelledby="lesson-heading">
           <h2 id="lesson-heading" className="sr-only">Checkout lesson</h2>
@@ -149,10 +153,16 @@ export function App({ host }: { readonly host: SimulationHost }) {
           </div>
         </details> : null}
         </div>
+        </details>
       </>}>
       </SimulationControls>
     </header>
     {projection ? <div className="investigation-workspace">
+      <aside className="learning-prompt" aria-label="Learning objective">
+        <strong>{loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</strong>
+        <span>Explore the architecture, run the scenario, then follow its recorded story.</span>
+      </aside>
+      <div className="workspace-navigation">
       <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
         {tabs.map(([id, label]) => <button key={id} type="button" role="tab"
           id={id === "architecture" ? "tab-architecture" : "tab-history"}
@@ -160,6 +170,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
           tabIndex={tab === id ? 0 : -1}
           className={tab === id ? "is-active" : undefined}
           onClick={() => showTab(id)}>{label}</button>)}
+      </div>
+      {tab === "history" ? <button type="button" className="history-controls-toggle" aria-expanded={showHistoryControls}
+        onClick={() => setShowHistoryControls(current => !current)}>{showHistoryControls ? "Hide simulation controls" : "Show simulation controls"}</button> : null}
       </div>
       <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
         aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
@@ -175,7 +188,12 @@ export function App({ host }: { readonly host: SimulationHost }) {
           {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
       </div>
     </div> : <div className="investigation-workspace">
-      <p className="workspace-empty" tabIndex={-1}>Load a checkout scenario to inspect the architecture and timeline.</p>
+      <section className="workspace-empty" tabIndex={-1}>
+        <p className="eyebrow">A small system. A big question.</p>
+        <h2>What happens between checkout and payment?</h2>
+        <p>Follow requests between services, discover what each component knows, and compare a successful checkout with a lost response.</p>
+        <ol><li>Choose and load a scenario above.</li><li>Explore the system and run the simulation.</li><li>Read the story, then investigate only what interests you.</li></ol>
+      </section>
     </div>}
   </main>;
 }
