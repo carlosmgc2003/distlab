@@ -133,6 +133,12 @@ export interface GraphEmphasis {
   readonly text?: string;
   /** Changes when a movement cue should replay its transient paint. */
   readonly pulseId?: string;
+  /**
+   * How the highlight was raised. `selection` is a record the reader chose in
+   * Recorded history; `live` is the newest recorded movement flashing by itself.
+   * Only a selection takes the graph highlight back from architecture playback.
+   */
+  readonly origin?: "selection" | "live";
 }
 
 export interface ChangeEvidence {
@@ -362,12 +368,13 @@ export function emphasisFor(observation: Observation, edges: readonly MovementEd
       kind: cue.kind,
       text: cue.text,
       pulseId: cue.observationId,
+      origin: "selection" as const,
     };
   }
   const involved = involvement(observation, edges);
   const where = observation.target !== undefined && observation.target !== observation.source
     ? `${observation.source} to ${observation.target}` : observation.source;
-  return { ...involved, text: `Selected ${observation.type} at ${where} at virtual time ${observation.time}. No request or message movement.` };
+  return { ...involved, origin: "selection", text: `Selected ${observation.type} at ${where} at virtual time ${observation.time}. No request or message movement.` };
 }
 
 /** CSS-safe token so a new cue restarts the transient stroke without putting observation ids in a class. */

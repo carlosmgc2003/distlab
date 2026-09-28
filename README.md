@@ -231,6 +231,37 @@ hint pill rather than as permanent text. The inspector skip link moves keyboard
 focus directly to the metadata panel. These interactions remain local to the UI
 and send no worker commands.
 
+The Architecture tab replays the movements a run has already recorded, so a
+reader watches the system in action. A **Recorded history** group on the command
+row — `Play timeline`, `Pause timeline`, `Restart timeline`,
+`Previous observation`, `Next observation`, plus a **Speed** select of Slow,
+Steady, or Fast — moves a cursor over recorded movements and paints a token on
+the link each movement used: `→` for a request, `←` for a response, `⇢` for a
+message, and `⊘` or `◷` for a recorded drop or timeout, whose token stops on the
+link instead of arriving. It shares the command row with `Run`, `Pause`, `Step`,
+and `Reset` to keep the graph area tall, and is kept apart from them by a
+vertical rule, its own label, and the primary action paint on the simulation
+group alone. It shows only while the Architecture tab is active, because the
+graph it animates is the graph it belongs to. A movement that arrived leaves the
+link highlighted, and the sending and receiving components carry a text badge.
+Beside the graph, a narration names the stored label, the route, and the
+record's stored fields — endpoint, deadline, status, delivery attempt,
+destination, consumer, fault rule, reason, recorded transitions, changed rows,
+and the stored external change — followed by one question about the pattern that
+record belongs to. Payload *field names* are shown instead of payload values, a
+redacted or omitted payload contributes only a visibility statement, and a
+pattern question never asserts an outcome, so a dropped response is never
+described as a failed operation. Speed changes only how fast the browser paints
+movements: the host timer moves a browser cursor over records the worker already
+published and never advances virtual time, records an observation, or sends a
+worker command. While the run is still recording the cursor waits at the
+recorded end for the next movement; when the run has finished it ends with the
+last movement painted. Choosing a record in Recorded history takes the graph
+highlight back, a live cue does not, and reduced motion rests each token where
+the record says the movement stopped. The narration and the component inspector
+share one side column, so the graph keeps its height at the supported desktop
+baselines.
+
 The execution timeline has three read-only views over the same canonical
 history. Explanatory prose stays out of the layout: a compact hint pill opens
 the row-order, matching-rules, and strip-reading explanations on hover, focus,

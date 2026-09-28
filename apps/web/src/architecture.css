@@ -54,12 +54,27 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .scenario-picker { flex: 1 1 16rem; }
 .scenario-picker label { font-weight: 650; }
 .control-buttons button { min-width: 80px; }
-.control-buttons button:first-child { color: #fff; background: var(--action-primary); border-color: var(--action-primary); font-weight: 700; }
-.control-buttons button:first-child:hover { background: var(--action-primary-hover); }
-.control-buttons button:first-child[aria-disabled="true"] { color: var(--text-disabled); background: var(--surface-subtle); border-color: var(--border-subtle); }
+/* Only the simulation group carries the primary action, so the two groups on one
+   command row never read as one set of same-shaped commands. */
+[aria-labelledby="execution-label"] button:first-child { color: #fff; background: var(--action-primary); border-color: var(--action-primary); font-weight: 700; }
+[aria-labelledby="execution-label"] button:first-child:hover { background: var(--action-primary-hover); }
+[aria-labelledby="execution-label"] button:first-child[aria-disabled="true"] { color: var(--text-disabled); background: var(--surface-subtle); border-color: var(--border-subtle); }
 /* One visible label per control group, so execution commands and history navigation never
    share a row of same-shaped buttons. */
 .control-group-label { flex: 0 0 auto; margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .01em; color: var(--text-secondary); }
+/* Recorded history navigation sits on the command row, kept apart by a rule and its own
+   label rather than by taking a second block of vertical space away from the graph. */
+.flight-nav-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-left: 4px; padding-left: 14px; border-left: 2px solid var(--border-subtle); }
+.flight-nav-group .control-buttons { gap: 6px; }
+.flight-nav-group .control-buttons button { min-height: 36px; min-width: 0; padding: 4px 10px; font-size: .85rem; }
+.flight-pace { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 600; }
+.flight-pace select { min-height: 36px; padding: 4px 8px; }
+/* The replay position and the graph explanations share the panel's own heading lines. */
+.panel-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.panel-heading h2 { margin: 0; }
+.flight-readout { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.flight-position { margin: 0; color: var(--text-secondary); font-size: .78rem; }
+.flight-boundaries { margin: 0; color: var(--text-secondary); font-size: .75rem; }
 .control-group-note { flex: 1 1 100%; margin: 0; max-width: 70ch; color: var(--text-secondary); font-size: .78rem; }
 /* Desktop-only investigation tabs: Architecture holds the graph and inspector;
    Recorded history holds history navigation/filtering and Observation detail. */
@@ -99,7 +114,7 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .investigation-workspace { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
 .panel-architecture, .panel-history { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: hidden; }
 .panel-architecture[hidden], .panel-history[hidden] { display: none; }
-.panel-architecture { display: flex; flex-direction: column; overflow: hidden; }
+.panel-architecture { display: flex; flex-direction: column; overflow: auto; }
 /* The Recorded history tab keeps navigation/filtering adjacent to the selected record's detail. */
 .panel-history { display: flex; flex-direction: column; min-height: 0; }
 .history-layout { flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr); gap: 12px; overflow: hidden; }
@@ -119,18 +134,39 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 /* Many active filters scroll inside their own row instead of pushing the panel over. */
 .timeline-chip-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-height: 4.5rem; overflow: auto; }
 .timeline-count { margin: 2px 0 0; font-size: .85rem; }
-.graph-help, .movement-cue, .inspector-link, .graph-legend, .connections, .help-hint { flex: 0 0 auto; }
+.graph-help, .movement-cue, .inspector-link, .graph-legend, .connections, .help-hint, .flight-readout, .panel-heading { flex: 0 0 auto; }
 .graph-help, .movement-cue { margin: 0 0 4px; max-width: 85ch; color: #475569; }
 .graph-help { margin-bottom: 6px; }
 .inspector-link { display: inline-block; margin: 0 0 4px; color: #1d4ed8; }
 .inspector-link:hover { color: #172033; }
 .panel-architecture > .architecture-layout { flex: 1 1 auto; min-height: 0; }
 
+/* Recorded history navigation for the graph: a compact group on the command row, with the
+   narration for the movement being painted beside the graph. */
+.architecture-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: auto; }
+.flight-narration { margin: 0; padding: 8px 10px; border: 1px solid var(--border-subtle); border-left: 4px solid #1d4ed8; border-radius: 8px; background: var(--surface-panel); }
+.flight-narration.flight-response { border-left-color: #0f766e; }
+.flight-narration.flight-message { border-left-color: #6d28d9; }
+.flight-narration.shape-dotted { border-left-color: #b91c1c; border-left-style: dashed; }
+.flight-narration h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: .9rem; }
+.flight-glyph { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 2px solid #334155; border-radius: 50%; background: #fff; font-size: .8rem; }
+.flight-narration.shape-dashed .flight-glyph { border-style: dashed; border-radius: 5px; }
+.flight-narration.shape-dotted .flight-glyph { border-style: dotted; border-radius: 5px; border-color: #b91c1c; }
+.flight-route { margin: 0 0 6px; color: var(--text-secondary); font-size: .8rem; overflow-wrap: anywhere; }
+.flight-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 12px; margin: 0 0 8px; font-size: .8rem; }
+.flight-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-bottom: 3px; border-bottom: 1px solid #e2e8f0; }
+.flight-facts dt { color: var(--text-secondary); font-weight: 600; }
+.flight-facts dd { margin: 0; overflow-wrap: anywhere; }
+.flight-pattern { margin: 0; font-size: .85rem; overflow-wrap: anywhere; }
+.flight-pattern strong { display: block; margin-bottom: 2px; }
+.flight-trace, .flight-interrupted, .flight-facts-empty { margin: 6px 0 0; color: var(--text-secondary); font-size: .78rem; overflow-wrap: anywhere; }
+.flight-interrupted { color: var(--status-error); }
+
 .pan-controls { display: flex; gap: 4px; }
 .pan-controls button { width: 36px; height: 36px; min-height: 36px; padding: 0; }
 .architecture-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; align-items: stretch; }
-.architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); }
-.graph-canvas { height: 100%; min-height: 0; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }
+.architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(200px, 300px); }
+.graph-canvas { height: 100%; min-height: 240px; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }
 .graph-canvas .react-flow { width: 100%; height: 100%; }
 .component-node { width: 215px; min-height: 90px; padding: 17px; border: 2px solid #475569; background: white; color: #172033; }
 .component-node strong { display: block; line-height: 1.4; overflow-wrap: anywhere; }
@@ -173,10 +209,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .evidence-links button { max-width: 100%; }
 .fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
 .fact-list dt { margin-top: 0; }
-.graph-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 0; font-size: .85rem; }
-.line-sample { display: inline-block; vertical-align: middle; width: 30px; border-top: 2px solid #334155; margin-right: 6px; }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 4px 0 0; font-size: .78rem; }
+.line-sample { display: inline-block; vertical-align: middle; width: 24px; border-top: 2px solid #334155; margin-right: 5px; }
 .line-sample.subscription { border-top-style: dashed; }
 .line-sample.publication { border-top-style: dotted; }
+/* Movement tokens carry their meaning as glyph, outline, and border pattern, not color alone. */
+.token-sample { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-right: 6px; border: 2px solid #334155; border-radius: 50%; background: #fff; color: #172033; font-size: .75rem; font-weight: 700; vertical-align: middle; }
+.token-sample.shape-dashed { border-style: dashed; border-radius: 6px; }
+.token-sample.shape-dotted { border-style: dotted; border-radius: 6px; }
 .connections summary { cursor: pointer; width: fit-content; }
 .semantic-state { display: inline-block; padding: 2px 8px; border: 1px solid var(--border-default); border-radius: 999px; font-weight: 700; }
 .semantic-state.is-uncertain { color: var(--status-uncertain); background: var(--status-uncertain-bg); border-style: dashed; }
@@ -293,10 +333,34 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-detail h2, .timeline-detail h3 { margin-top: 0; }
 .timeline-tree { padding-left: 18px; }
 .react-flow__node.is-involved { box-shadow: 0 0 0 3px #1d4ed8; }
+
+/* Message animation: one token travels the measured link path of the recorded movement.
+   The token is decorative; the narration, the playback position, and the movement cue
+   carry the same movement as text for screen readers and reduced motion. */
+.flight-token { offset-path: var(--flight-path); offset-distance: 0%; offset-rotate: 0deg; }
+.flight-token-halo { fill: #1d4ed8; opacity: .18; }
+.flight-token-core { fill: #fff; stroke: #1d4ed8; stroke-width: 2.5; }
+.flight-token-glyph { fill: #172033; font-size: 9px; font-weight: 700; text-anchor: middle; }
+.flight-token.flight-response .flight-token-halo { fill: #0f766e; }
+.flight-token.flight-response .flight-token-core { stroke: #0f766e; }
+.flight-token.flight-message .flight-token-halo { fill: #6d28d9; }
+.flight-token.flight-message .flight-token-core { stroke: #6d28d9; stroke-dasharray: 4 2; }
+.flight-token.shape-dotted .flight-token-core { stroke: #b91c1c; stroke-dasharray: 1.5 2.5; }
+.flight-token.shape-dotted .flight-token-halo { fill: #b91c1c; }
+/* A movement that arrived leaves the link highlighted; a drop or timeout rests on the link. */
+.flight-token.shape-dotted { --flight-rest-opacity: 1; }
+.flight-token { animation: flight-travel var(--flight-duration, 900ms) cubic-bezier(.35, .05, .25, 1) 1 forwards, flight-life var(--flight-duration, 900ms) linear 1 forwards; }
+@keyframes flight-travel { from { offset-distance: 0%; } to { offset-distance: var(--flight-end, 100%); } }
+@keyframes flight-life { 0% { opacity: 0; } 10% { opacity: 1; } 76% { opacity: 1; } 100% { opacity: var(--flight-rest-opacity, 0); } }
+/* A recorded drop or timeout rests on the link: the token stops short and stays visible. */
 .react-flow__edge.is-movement .react-flow__edge-path { stroke-dasharray: 6 4; animation: movement-dash 0.9s linear 1; }
 @keyframes movement-dash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
+.role-badge { display: inline-block; margin-top: 7px; padding: 1px 8px; border: 1px solid #1d4ed8; border-radius: 999px; background: #dbeafe; color: #172033; font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.role-badge.role-receiving { border-style: dashed; background: #f0fdf4; border-color: #166534; }
 @media (prefers-reduced-motion: reduce) {
   .react-flow__edge.is-movement .react-flow__edge-path { animation: none; }
+  /* The token rests where the record says the movement stopped, with no travel. */
+  .flight-token { animation: none; offset-distance: var(--flight-end, 100%); opacity: var(--flight-rest-opacity, 0); }
 }
 [role="alert"] { border-left: 4px solid #b91c1c; padding: 8px 12px; background: #fef2f2; }
 
@@ -304,8 +368,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .app-shell { gap: 12px; padding: 16px 20px; }
 .command-toolbar { padding: 12px 16px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-panel); gap: 8px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); }
 .command-toolbar > .toolbar-row:first-child { grid-column: 1 / -1; }
+/* The command row holds both control groups, so it spans the toolbar; the committed run
+   summary keeps its own full-width line. */
+.command-toolbar .command-row { grid-column: 1 / -1; }
 .command-toolbar > .status-line { display: contents; }
-.command-toolbar .lesson-drawer, .command-toolbar .terminal-history, .command-toolbar [role="alert"] { grid-column: 1 / -1; }
+.command-toolbar .lesson-drawer, .command-toolbar .terminal-history, .command-toolbar [role="alert"], .command-toolbar .run-summary { grid-column: 1 / -1; }
 .command-toolbar .run-summary { justify-content: flex-end; }
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
@@ -346,7 +413,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .detail-disclosure { border-block-start: 1px solid var(--border-subtle); margin: 12px 0; }
 .event-path { font-weight: 650; line-height: 1.6; }
 .event-time { color: var(--text-secondary); font-size: .85rem; }
-.graph-legend p { margin: 4px 0; }
+.graph-legend p { margin: 2px 0; }
 .workspace-empty { max-width: 48rem; margin: auto; padding: 40px; background: var(--surface-panel); border: 1px solid var(--border-subtle); border-radius: 16px; line-height: 1.7; }
 .workspace-empty h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); line-height: 1.2; }
 .workspace-empty p, .workspace-empty li { color: var(--text-secondary); }
