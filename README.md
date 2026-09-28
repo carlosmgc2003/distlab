@@ -10,7 +10,7 @@ history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
 `apps/web` provides the React lesson backed by a Web Worker.
 `@distlab/catalogs` provides versioned checkout
-models, two scenarios, and their assessment predicates. `@distlab/scenario`
+models, two checkout scenarios, and ten commerce lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
 deterministic event boundaries. Golden scenarios 01, 02, 04, 05, 06, and 07
 are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
@@ -39,6 +39,7 @@ DistLab models the semantics that matter for learning rather than emulating spec
 
 - [Vision](docs/vision.md) describes the educational problem, target audience, reference domain, and intended product experience.
 - [Architecture](docs/architecture.md) defines the simulation model, runtime components, state boundaries, and architectural guarantees.
+- [Commerce lessons](docs/commerce-lessons.md) explains executable timeout/idempotency, Saga, outbox, CQRS, and circuit-breaker comparisons, including timeline inspection and replay.
 - [Glossary](docs/glossary.md) establishes the terminology used throughout the project.
 - [Shared simulation contracts](docs/spec/contracts.md) defines common values, identities, capabilities, and correlation rules. The TypeScript encoding is [`packages/contracts`](packages/contracts) (`@distlab/contracts`).
 - [Component specifications](docs/spec/) covers the simulation core, scheduler, virtual clock, observability, and the following runtime and application models:
@@ -153,6 +154,10 @@ npm run golden:04                # print headless golden scenario 04
 npm run golden:05                # print headless golden scenario 05
 npm run golden:06                # print headless golden scenario 06
 npm run golden:07                # print headless golden scenario 07
+npm run lesson -- retry-unsafe   # run a commerce lesson with textual timeline
+npm run lesson -- retry-idempotent --replay # verify deterministic reset/replay
+npm run lesson -- saga-compensated --step  # interactive event stepping
+npm run --silent lesson -- outbox-idempotent --json # full state/history export
 npm exec -w @distlab/web -- playwright test checkout-lesson.spec.ts # focused lesson E2E
 ```
 
@@ -192,12 +197,15 @@ boundaries, and the kernel yields every 16 events so pause messages can arrive.
 Projections are copied and recursively frozen on both sides of structured clone.
 Component state labeled `host` stays on the projection for assessment comparison and is not rendered. The shell renders a separate `student` projection: committed Orders and Payments rows, service lifecycle, bus delivery state, the client-observed checkout outcome, and Payment Processor authorization facts. Provider counters and runtime handles are omitted from that projection.
 
-This initial host accepts exactly the two packaged checkout documents. Their
-complete, visible scheduler observations provide pending/processed event counts,
-and their specified random draw count is zero. Modified or arbitrary scenarios
-are rejected with `INVALID_SCENARIO`: general scenario hosting requires a kernel
-counter read port, including reliable counts when history is incomplete or
-redacted. No counters are inferred from incomplete history. When a terminal
+The host accepts the two packaged checkout documents and ten packaged commerce
+lessons. Choose them in the Scenario picker; commerce lessons show service-owned
+state and assertion verdicts below the graph, business events in Story, and a
+Compare button for paired experiments. Compare loads a fresh session rather than
+editing an active run. Runtime models remain worker-only.
+
+Modified or arbitrary scenarios are rejected with `INVALID_SCENARIO`. Queue,
+dispatch, and random-draw counters come from the read-only Simulation properties
+specified in [ADR-003](docs/spec/adr/003-boundary-counters.md), never from history. When a terminal
 failure seals incomplete history, the host drops that projection, shows
 `FAILED`, and still accepts Reset for the same loaded scenario.
 

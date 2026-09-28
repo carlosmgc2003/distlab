@@ -320,6 +320,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .lesson-drawer .lesson-guide { display: block; }
 .lesson-drawer .lesson-guide details[open] { max-height: none; overflow: visible; }
 .learning-prompt { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 16px; border-left: 3px solid var(--action-primary); background: var(--surface-panel); border-radius: 0 10px 10px 0; }
+.panel-architecture:has(.commerce-state) { overflow: auto; }
+.panel-architecture:has(.commerce-state) > .architecture-layout { flex: 0 0 28rem; min-height: 28rem; }
+.commerce-state { flex: none; padding: 1rem; }
+.commerce-state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
+.commerce-state-grid > section { padding: 1rem; border: 1px solid var(--border-subtle, #dbe2ea); border-radius: 8px; }
+.commerce-facts { overflow-wrap: anywhere; font-size: .875rem; line-height: 1.5; }
+.commerce-facts ul { padding-left: 1.25rem; }
+.learning-prompt button { white-space: normal; }
 .learning-prompt strong { font-size: .95rem; }
 .learning-prompt span { color: var(--text-secondary); font-size: .85rem; }
 .workspace-tabs { border-bottom: 1px solid var(--border-subtle); gap: 4px; }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { CommerceFacts, CommerceState } from "./CommerceLesson.tsx";
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
@@ -31,7 +32,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const tabRequest = useRef<{ tab: WorkspaceTab; focusPanel: boolean } | null>(null);
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
   const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
-  const report = useMemo(() => projection && lesson ? inspectFaults(projection, lesson) : null, [projection, lesson]);
+  const commerce = loadedChoice?.family === "commerce";
+  const report = useMemo(() => projection && lesson && !commerce ? inspectFaults(projection, lesson) : null, [projection, lesson, commerce]);
   const graph = useMemo(() => projection && lesson
     ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name) : null, [projection, lesson]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
@@ -39,7 +41,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   // The lesson line names the loaded experiment. The run status itself is announced once, by the
   // committed-state summary, so this region never restates it.
-  const lessonState = loading ? "Loading the checkout lesson…"
+  const lessonState = loading ? "Loading the lesson…"
     : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
     : snapshot.error ? "The lesson could not be opened. Choose a scenario and load it again."
     : !projection ? "No lesson is loaded."
@@ -117,8 +119,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <summary>Lesson guide & run insights</summary>
         <div className="shell-notices">
         <section className="lesson-guide" aria-labelledby="lesson-heading">
-          <h2 id="lesson-heading" className="sr-only">Checkout lesson</h2>
-          <p id="scenario-help" className="sr-only">Choose the normal checkout or the recorded response-lost rule. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+          <h2 id="lesson-heading" className="sr-only">{commerce ? "Commerce lesson" : "Checkout lesson"}</h2>
+          <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
           <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
           {projection && report ? <details className="execution-overview">
             <summary>Run overview</summary>
@@ -133,10 +135,12 @@ export function App({ host }: { readonly host: SimulationHost }) {
           </details> : null}
           <details>
             <summary>Lesson guide</summary>
+            {commerce ? <><p>{loadedChoice.description}</p><p>Seed: {lesson?.seed}. Observe the service state and lesson checks in Architecture, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p></> : <>
             <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
             {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
             <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
             <p>For the response-lost experiment, find the processor authorization, the dropped response, and the Payments timeout. What does Payments know, and what does the processor know? Does the timeout prove that payment failed?</p>
+            </>}
             <p>Reset and run again to compare the same virtual-time history.</p>
             <p>Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
           </details>
@@ -159,8 +163,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
     </header>
     {projection ? <div className="investigation-workspace">
       <aside className="learning-prompt" aria-label="Learning objective">
-        <strong>{loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</strong>
-        <span>Explore the architecture, run the scenario, then follow its recorded story.</span>
+        <strong>{commerce ? loadedChoice.title : loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</strong>
+        <span>{commerce ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</span>
+        {commerce && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => replaceSession(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
       </aside>
       <div className="workspace-navigation">
       <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
@@ -180,7 +185,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <ArchitectureView architecture={projection.architecture} sessionKey={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`}
           {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
           {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
-          {...(report ? { inspectorFacts: componentId => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
+          {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
+        {commerce ? <CommerceState projection={projection} /> : null}
       </section>
       <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
         aria-labelledby="tab-history" hidden={tab !== "history"}>

@@ -15,7 +15,8 @@ export type StoryKind =
   | "external"
   | "fault"
   | "drop"
-  | "timeout";
+  | "timeout"
+  | "business";
 
 export interface StoryMilestone {
   /** The exact canonical observation this milestone projects. */
@@ -51,6 +52,7 @@ const SHAPES: Readonly<Record<StoryKind, string>> = {
   fault: "⚠",
   drop: "⊘",
   timeout: "◷",
+  business: "◇",
 };
 
 const KIND_LABELS: Readonly<Record<StoryKind, string>> = {
@@ -64,6 +66,7 @@ const KIND_LABELS: Readonly<Record<StoryKind, string>> = {
   fault: "Fault",
   drop: "Dropped message",
   timeout: "Timeout",
+  business: "Business event",
 };
 
 /** Every teaching category, in legend order. */
@@ -167,6 +170,12 @@ export function storyDetail(milestones: readonly StoryMilestone[]): string {
 function milestoneCopy(observation: Observation): MilestoneCopy | undefined {
   const type = observation.type;
   switch (type) {
+    case "runtime.log": {
+      const data = isRecord(observation.data) ? observation.data : {};
+      const detail = isRecord(data.data) ? data.data : {};
+      const suffix = typeof detail.state === "string" ? detail.state : typeof detail.component === "string" ? detail.component : "";
+      return { kind: "business", label: typeof data.message === "string" ? `${data.message}${suffix ? ` · ${suffix}` : ""}` : "Business event" };
+    }
     case "network.request.sent": return { kind: "request", label: "Request sent" };
     case "network.request.delivered": return { kind: "request", label: "Request delivered" };
     case "network.request.dropped": return { kind: "drop", label: "Request dropped" };

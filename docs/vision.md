@@ -1352,6 +1352,13 @@ DistLab succeeds if a student can inspect a distributed execution and answer:
 - Why did the system become inconsistent?
 - How can the architecture recover?
 
+The packaged browser lessons now offer paired retry/idempotency, Saga, outbox,
+and circuit-breaker experiments, plus delayed CQRS convergence. Students can
+inspect service-owned state and lesson checks, follow business transitions in
+the timeline, and load a paired experiment without changing a running system.
+Headless runs expose the same deterministic execution. Browser engine counters
+come from read-only simulation state, not assumptions about visible history.
+
 The desired educational outcome is not:
 
 > The student knows the definition of Saga.
