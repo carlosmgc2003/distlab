@@ -3,6 +3,9 @@ import type { Page } from "@playwright/test";
 
 async function revealRawState(page: Page) {
   // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
+  // Advanced diagnostics lives inside the collapsed lesson drawer, so open that first.
+  const drawer = page.locator("details.lesson-drawer");
+  if ((await drawer.getAttribute("open")) === null) await drawer.locator("> summary").click();
   const raw = page.locator(".shell-notices > details.raw-state");
   const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
   await expect(raw).toBeVisible();
@@ -43,6 +46,8 @@ test("response-lost selection shows remote authorization and local timeout as di
   await page.getByRole("button", { name: "Show Payments timeout", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("network.request.timedout");
+  // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
   await page.getByRole("button", { name: "Show fault selection", exact: true }).click();

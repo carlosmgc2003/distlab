@@ -71,6 +71,9 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   const button = (name: string) => page.getByRole("button", { name, exact: true });
   const status = page.getByRole("status", { name: "Simulation status" });
   const lesson = page.getByRole("region", { name: "Checkout lesson" });
+  // The lesson guide lives inside the collapsed lesson drawer; open it before reading the lesson.
+  const lessonDrawer = page.locator("details.lesson-drawer");
+  if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
   await expect(lesson).toContainText("No lesson is loaded");
   await page.locator(".lesson-guide summary").click();
   await expect(lesson).toContainText("Does the timeout prove that payment failed?");
@@ -135,6 +138,8 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await button("Show fault selection").click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");
+  // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await button("Show processor authorization").click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
   await button("Show Payments timeout").click();

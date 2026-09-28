@@ -84,6 +84,8 @@ test("the filter, row order, and strip explanations keep their text and stay out
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const afterRun = await commands(page);
 
+  const drawer = page.locator(".history-filter-drawer");
+  if ((await drawer.getAttribute("open")) === null) await drawer.locator("> summary").click();
   const before = await page.locator(".timeline-tools").evaluate(node => node.clientHeight);
   await page.locator(".timeline-filter-disclosure summary").click();
   const filterHelp = page.getByRole("button", { name: "How matching works" });
@@ -117,7 +119,7 @@ test("a pinned explanation closes on Escape or an outside click and fits 200% zo
   await completed(page);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
-  const strip = page.getByRole("button", { name: "About this strip" });
+  const strip = page.getByRole("button", { name: "Reading the story" });
   await strip.click();
   await expect(page.locator("#story-summary")).toBeVisible();
   await page.getByRole("heading", { name: "Recorded history", exact: true }).click();
@@ -125,7 +127,7 @@ test("a pinned explanation closes on Escape or an outside click and fits 200% zo
 
   await page.setViewportSize({ width: 683, height: 384 });
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  const mobileStrip = page.getByRole("button", { name: "About this strip" });
+  const mobileStrip = page.getByRole("button", { name: "Reading the story" });
   await expect(mobileStrip).toBeVisible();
   await mobileStrip.click();
   await expect(page.locator("#story-summary")).toBeVisible();
