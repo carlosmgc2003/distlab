@@ -105,6 +105,10 @@ export interface SimulationStep {
 export interface Simulation {
   readonly status: SimulationStatus;
   readonly time: SimulationTime;
+  /** Read-only boundary counters; independent of observation visibility. */
+  readonly pendingEvents: number;
+  readonly processedEvents: number;
+  readonly randomDrawCount: number;
   step(): Promise<SimulationStep | undefined>;
   run(options?: RunOptions): Promise<RunResult>;
   pause(): void;

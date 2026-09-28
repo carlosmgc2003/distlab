@@ -1548,3 +1548,16 @@ Before introducing a dependency, component, or abstraction, ask:
 If there is no clear educational answer, the feature probably does not belong in the core.
 
 DistLab should remain intentionally smaller than the distributed systems it teaches.
+
+## Packaged browser lessons and boundary counters
+
+The browser hosts the two checkout documents and ten commerce lessons through
+worker-only catalog composition. Main-thread imports are limited to contracts
+and data-only scenario documents. Committed business facts, KV metrics, client
+outcomes, and assessment verdicts are explicitly projected for student inspection;
+runtime task handles and provider counters are not student-visible.
+
+`Simulation.pendingEvents`, `processedEvents`, and `randomDrawCount` are read-only
+boundary counters, independent of history visibility. Reading them does not
+advance time or record observations. See [ADR-003](spec/adr/003-boundary-counters.md).
+Existing scheduling, reset, and deterministic replay guarantees are unchanged.

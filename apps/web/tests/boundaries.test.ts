@@ -8,6 +8,7 @@ import ts from "typescript";
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 const app = resolve(root, "apps/web/src");
 const dataModule = resolve(root, "packages/catalogs/src/scenarios.ts");
+const commerceDataModule = resolve(root, "packages/catalogs/src/commerce/scenarios.ts");
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(resolve(directory, entry.name)) : /\.tsx?$/.test(entry.name) ? [resolve(directory, entry.name)] : []);
 }
@@ -40,7 +41,7 @@ test("main-thread import graph uses application contracts and data, never runtim
         assert.ok(dependency.names.every(name => allowed.has(name)), `Low-level contract in ${file}`);
       } else if (dependency.path.startsWith(".")) {
         const target = resolve(dirname(file), dependency.path);
-        assert.ok(target.startsWith(app) || target === dataModule, `Only the catalog's data-only source may cross a source boundary: ${target}`);
+        assert.ok(target.startsWith(app) || target === dataModule || target === commerceDataModule, `Only the catalog's data-only source may cross a source boundary: ${target}`);
         if (!target.endsWith(".css")) walk(target);
       } else assert.ok(["react", "react-dom/client", "@xyflow/react", "@xyflow/react/dist/style.css"].includes(dependency.path), `Runtime dependency ${dependency.path} in ${file}`);
     }
@@ -48,6 +49,7 @@ test("main-thread import graph uses application contracts and data, never runtim
   walk(resolve(app, "main.tsx"));
   assert.ok(visited.has(resolve(app, "host.ts")));
   assert.ok(visited.has(dataModule));
+  assert.ok(visited.has(commerceDataModule));
 });
 
 test("kernel and contracts have no upward application, catalog or browser dependencies", () => {

@@ -1,14 +1,15 @@
 import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout } from "@distlab/catalogs";
+import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, normalizeScenario } from "@distlab/scenario";
 import type { DeterministicScenarioSession } from "@distlab/scenario";
 import { applicationError, detached, isCanonical, isWorkerCommand, requestIdOf } from "../protocol.ts";
-import { studentComponents } from "./student-projection.ts";
+import { commerceComponents, studentComponents } from "./student-projection.ts";
 
 /** The sole runtime composition root. The transport delegates every control to Simulation. */
 export class WorkerAdapter {
-  readonly #engine = new DeterministicScenarioEngine({ catalog: checkoutCatalog, assessment: checkoutAssessment });
+  #commerce = false;
+  #definition: ArchitectureDefinition | undefined;
   readonly #send: (event: WorkerEvent) => void;
   #session: DeterministicScenarioSession | undefined;
   #architecture: ArchitectureProjection | undefined;
@@ -46,16 +47,19 @@ export class WorkerAdapter {
       if (command.type === "load") {
         // Construction is atomic from the host's perspective: failures expose no old session.
         this.#session = undefined; this.#architecture = undefined;
-        const diagnostics = this.#engine.validate(command.scenario);
-        if (diagnostics.length) throw { code: "INVALID_SCENARIO", context: diagnostics };
-        // These fixtures have complete visible history and no random draws. Broader scenario
-        // hosting needs a kernel counter read port; do not guess counts for arbitrary inputs.
         const encoded = canonicalEncode(command.scenario);
-        if (![normalCheckout, responseLostCheckout].some(scenario => canonicalEncode(scenario) === encoded)) {
-          throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged checkout scenarios are supported." } };
+        this.#commerce = commerceLessonNames.some(name => canonicalEncode(commerceScenario(name)) === encoded);
+        if (!this.#commerce && ![normalCheckout, responseLostCheckout].some(scenario => canonicalEncode(scenario) === encoded)) {
+          throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
         }
-        const session = this.#engine.create(command.scenario);
-        const normalized = normalizeScenario(command.scenario, checkoutCatalog, checkoutAssessment).scenario!;
+        const catalog = this.#commerce ? commerceCatalog : checkoutCatalog;
+        const assessment = this.#commerce ? commerceAssessment : checkoutAssessment;
+        const engine = new DeterministicScenarioEngine({ catalog, assessment });
+        const diagnostics = engine.validate(command.scenario);
+        if (diagnostics.length) throw { code: "INVALID_SCENARIO", context: diagnostics };
+        const session = engine.create(command.scenario);
+        const normalized = normalizeScenario(command.scenario, catalog, assessment).scenario!;
+        this.#definition = normalized.architecture;
         this.#architecture = architectureProjection(normalized.architecture);
         this.#session = session;
         this.#emit({ version: 1, requestId: command.requestId, type: "loaded", projection: this.#project() });
@@ -108,10 +112,10 @@ export class WorkerAdapter {
     const sample = () => {
       if (this.#session?.simulation.status !== "RUNNING") return;
       try {
-        const projection = this.#project();
-        if (projection.simulation.processedEvents !== previousBoundary) {
-          previousBoundary = projection.simulation.processedEvents;
-          this.#emit({ version: 1, requestId, type: "projection.updated", projection });
+        const boundary = this.#session.simulation.processedEvents;
+        if (boundary !== previousBoundary) {
+          previousBoundary = boundary;
+          this.#emit({ version: 1, requestId, type: "projection.updated", projection: this.#project() });
         }
       } catch { /* Projection subscribers cannot fail or control simulation execution. */ }
       channel.port2.postMessage(null);
@@ -127,26 +131,19 @@ export class WorkerAdapter {
     const session = this.#session!;
     const read = session.projection();
     const history = session.simulation.history.export();
-    if (history.terminalFailure?.historyComplete === false) throw new Error("Incomplete history cannot supply projection counters.");
-    let pendingEvents = 0;
-    let processedEvents = 0;
-    for (const observation of history.observations) {
-      if (observation.type === "scheduler.event.scheduled") pendingEvents++;
-      else if (observation.type === "scheduler.event.cancelled") pendingEvents--;
-      else if (observation.type === "scheduler.event.dispatched") { pendingEvents--; processedEvents++; }
-    }
+    const { pendingEvents, processedEvents, randomDrawCount } = session.simulation;
     const components = read.components as Readonly<Record<string, CanonicalValue>>;
     return detached({
       architecture: this.#architecture!,
       simulation: {
         runId: history.runId, status: session.simulation.status, time: session.simulation.time,
-        pendingEvents, processedEvents, randomDrawCount: 0,
+        pendingEvents, processedEvents, randomDrawCount,
       },
       history: { observations: history.observations },
       components: [
         // Host entries preserve the assessment read model and stay unrendered.
         ...Object.entries(components).map(([componentId, state]) => ({ componentId, state, visibility: "host" as const })),
-        ...studentComponents(read),
+        ...(this.#commerce ? commerceComponents(read, this.#definition!, detached(session.results()) as unknown as CanonicalValue) : studentComponents(read)),
       ],
     });
   }
@@ -164,6 +161,11 @@ function architectureProjection(architecture: ArchitectureDefinition): Architect
     links: [
       ...architecture.links.map(({ source, target }) => ({ source, target })),
       ...architecture.subscriptions.map(({ destination, consumer }) => ({ source: destination, target: consumer, label: "subscription" })),
+      // Declared publications of the exact versioned commerce models, not history inference.
+      ...architecture.components.flatMap(component => {
+        const destination = component.model === "commerce.outbox-payment" ? "PaymentApproved" : component.model === "commerce.order-write" ? "OrderUpdated" : undefined;
+        return destination ? [{ source: component.id, target: destination, label: "publication" }] : [];
+      }),
     ],
   };
 }

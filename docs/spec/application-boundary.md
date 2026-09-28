@@ -35,6 +35,21 @@ React plus React Flow is the MVP presentation stack. React Flow positions and
 selection state are host/UI state and must not enter `RunInputs`, scheduling,
 randomness, assertions, or canonical history.
 
+## Packaged scenario hosting
+
+The current host accepts exact packaged checkout and commerce documents only.
+Catalog factories and ScenarioEngine stay in the worker. The main thread imports
+the data-only scenario modules, never runtime code. Commerce student projections
+include committed DB rows, atomic KV metrics, client-observed outcomes, declared
+external-visible facts, delivery records, and assessment verdicts. The commerce
+client projection carries those verdicts in its canonical `assertions` field;
+no worker command or top-level protocol variant is added. Raw runtime tasks and
+provider counters remain host-only. Paired comparisons replace the worker session.
+
+Engine counters use the read-only properties documented in
+[ADR-003](adr/003-boundary-counters.md), not observation counting or a hardcoded
+zero for random draws.
+
 ## Read-only projections
 
 ```ts
