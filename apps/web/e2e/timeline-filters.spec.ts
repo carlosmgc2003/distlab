@@ -43,6 +43,10 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // These assertions read canonical rows; the teaching Story view has its own spec.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
+  // Simulation commands are hidden in history focus, and filters live in the collapsed drawer.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
+  const filterDrawer = page.locator(".history-filter-drawer");
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.locator("#timeline-filter-help")).toContainText("combine with AND");
   await expect(page.locator("#timeline-filter-help")).toContainText("case-sensitive");
@@ -93,22 +97,34 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await expect(selected).toHaveAttribute("aria-pressed", "true");
   await typeInput.press("ArrowDown");
   await expect(selected).toHaveAttribute("aria-pressed", "true");
+  await typeInput.press("Escape");
+  // Detail actions live inside the collapsed inspector and its disclosures.
+  const inspector = page.locator(".story-inspector");
+  if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
+  await page.locator("#inspection-panel").getByText("Record fields & filter shortcuts", { exact: true }).click();
   await page.getByRole("button", { name: "Use source as component filter" }).click();
+  await page.getByLabel("Filter by", { exact: true }).selectOption("component");
   await expect(page.getByLabel("Component", { exact: true })).toHaveValue("payment-processor");
   await expect(page.getByRole("list", { name: "Active filters" })).toContainText("Payment Processor (payment-processor)");
   const observationId = await page.locator("#timeline-rows button[aria-pressed='true']").getAttribute("data-observation-id");
+  await page.locator("#inspection-panel").getByText("Technical record", { exact: true }).click();
   await page.getByRole("button", { name: "Copy observation id" }).click();
   await expect(page.getByRole("button", { name: "Copied observation id" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(observationId);
+  await page.locator("#inspection-panel").getByText("Related evidence", { exact: true }).click();
   await page.getByRole("button", { name: "Show this trace" }).click();
+  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
   await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
+  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
 
   await page.getByRole("button", { name: "Clear all filters" }).click();
+  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
   await expect(page.getByLabel("Trace", { exact: true })).toHaveValue("");
   const cleared = await countPair(page);
   expect(cleared.shown).toBe(cleared.total);
 
+  await page.getByLabel("Filter by", { exact: true }).selectOption("component");
   const component = page.getByLabel("Component", { exact: true });
   await component.fill("Orders");
   await expect(page.getByRole("option", { name: "Orders (orders)", exact: true })).toBeVisible();
@@ -128,6 +144,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.getByRole("button", { name: "Clear all filters" }).click();
   await expect(page.locator("#timeline-filter-error")).toHaveCount(0);
 
+  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
   await typeInput.fill("network");
   await expect(page.getByRole("listbox", { name: "Type choices" })).toBeVisible();
   await typeInput.press("Escape");
@@ -137,6 +154,8 @@ test("discoverable filters suggest the current run and keep partial matching exp
 
   await page.getByLabel("Scenario", { exact: true }).selectOption("normal");
   await expect(status).toHaveText("READY");
+  // The scenario change remounts the history panel, so both disclosures start closed again.
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");

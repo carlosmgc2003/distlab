@@ -501,7 +501,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         </li>)}</ul> : null}
       <button type="button" disabled={!filtersActive} onClick={clearAllFilters}>Clear all filters</button>
     </div>
-    <p className="sr-only">{view === "story" ? storyCount
+    <p className="timeline-count sr-only">{view === "story" ? storyCount
       : view === "learning"
       ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
         : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized in expandable groups. Select a row to inspect its details.`

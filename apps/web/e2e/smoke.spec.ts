@@ -111,6 +111,9 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByLabel("Scenario").selectOption(other);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
+    // Advanced diagnostics lives inside the collapsed lesson drawer, so open that first.
+    const lessonDrawer = page.locator("details.lesson-drawer");
+    if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
     const raw = page.locator(".shell-notices > details.raw-state");
     const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
     if ((await raw.getAttribute("open")) === null) await rawToggle.click();
@@ -180,7 +183,7 @@ for (const mode of ["empty", "invalid", "error", "private"] as const) {
     }
     if (mode === "private") {
       await page.getByRole("button", { name: "Orders, Internal service" }).click();
-      await expect(page.getByRole("complementary")).toContainText("Database owned by orders");
+      await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("Database owned by orders");
       await expect(page.locator("body")).not.toContainText("PRIVATE_STATE_SENTINEL");
     }
   });

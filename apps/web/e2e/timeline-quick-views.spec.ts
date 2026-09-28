@@ -29,9 +29,18 @@ async function completed(page: Page) {
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(status).toHaveText("READY");
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  // Run while the simulation controls are visible (the architecture tab), then review history.
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  // The committed-state summary lives in the command toolbar, hidden in history focus.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
+}
+
+/** The quick views live inside the collapsed filter drawer. */
+async function openFilterDrawer(page: Page) {
+  const drawer = page.locator(".history-filter-drawer");
+  if ((await drawer.getAttribute("open")) === null) await drawer.locator("> summary").click();
 }
 
 function commands(page: Page) {
@@ -47,6 +56,7 @@ test("one quick view reaches the dropped response and the timeout in the faulted
   const afterRun = await commands(page);
   expect(afterRun).toEqual(["load", "run"]);
 
+  await openFilterDrawer(page);
   const faults = page.getByRole("button", { name: /^Faults & timeouts/ });
   await expect(faults).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("#timeline-quick-count")).toContainText("No quick view is active");
@@ -56,10 +66,9 @@ test("one quick view reaches the dropped response and the timeout in the faulted
   await expect(page.locator("#timeline-quick-help")).toContainText("they never change the run");
   await expect(page.locator(".timeline-count")).toContainText("Filters show 4 of 267 observations");
 
-  const milestones = page.getByRole("row").filter({ hasText: "Response dropped" });
-  await expect(milestones).toHaveCount(1);
-  await expect(page.getByRole("row").filter({ hasText: "Request timed out" })).toHaveCount(1);
-  await expect(page.getByRole("row").filter({ hasText: "scheduler.event.scheduled" })).toHaveCount(0);
+  await expect(page.locator(".story-milestone").filter({ hasText: "Response dropped" })).toHaveCount(1);
+  await expect(page.locator(".story-milestone").filter({ hasText: "Request timed out" })).toHaveCount(1);
+  await expect(page.locator(".story-milestone").filter({ hasText: "scheduler.event.scheduled" })).toHaveCount(0);
   // Quick views are display-only: the run, its virtual time, and its history are unchanged.
   expect(await commands(page)).toEqual(afterRun);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
@@ -80,8 +89,10 @@ test("quick views and advanced filters compose through removable chips", async (
   await completed(page);
   const afterRun = await commands(page);
 
+  await openFilterDrawer(page);
   await page.getByRole("button", { name: /^Faults & timeouts/ }).click();
   await page.locator(".timeline-filter-disclosure summary").click();
+  await page.getByLabel("Filter by", { exact: true }).selectOption("component");
   await page.getByLabel("Component", { exact: true }).fill("payments");
   await page.getByLabel("Component", { exact: true }).press("ArrowDown");
   await page.getByLabel("Component", { exact: true }).press("Enter");
@@ -120,13 +131,14 @@ test("an empty result names the active quick view and the canonical filters, and
   await completed(page);
   const afterRun = await commands(page);
 
+  await openFilterDrawer(page);
   await page.getByRole("button", { name: /^Faults & timeouts/ }).click();
   await page.getByRole("button", { name: /^Key events/ }).click();
-  await page.getByRole("button", { name: "Orders (orders)" }).click();
+  await page.getByRole("button", { name: "Orders (orders)", exact: true }).click();
   await page.getByRole("button", { name: /^Faults & timeouts/ }).click();
   await page.getByRole("button", { name: "Clear all filters" }).click();
   await page.getByRole("button", { name: /^Faults & timeouts/ }).click();
-  await page.getByRole("button", { name: "Customer App (customer-app)" }).click();
+  await page.getByRole("button", { name: "Customer App (customer-app)", exact: true }).click();
   const empty = page.locator(".timeline-empty");
   await expect(empty).toBeVisible();
   await expect(empty).toContainText("faults & timeouts quick view");
@@ -146,6 +158,7 @@ test("quick views are keyboard operable and stay reachable at 200% zoom", async 
   await completed(page);
   const afterRun = await commands(page);
 
+  await openFilterDrawer(page);
   const faults = page.getByRole("button", { name: /^Faults & timeouts/ });
   await faults.focus();
   await expect(faults).toBeFocused();

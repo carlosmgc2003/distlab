@@ -54,26 +54,33 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  // Simulation commands are hidden in history focus; keep them reachable for this canonical-row test.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
   // This test reads canonical rows; the teaching Story view has its own spec.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recorded history", exact: true })).toBeVisible();
   await expect(page.locator("#timeline-order")).toContainText("it does not execute an event");
   const ready = await latestProjection(page);
+  const filterDrawer = page.locator(".history-filter-drawer");
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
   await page.getByLabel("Type", { exact: true }).fill("simulation.created");
+  await page.getByLabel("Type", { exact: true }).press("Escape");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
   // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
+  await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
 
   await stepUntil(page, "network.request.sent");
   await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
+  await page.getByLabel("Type", { exact: true }).press("Escape");
   const requestRows = page.locator("#timeline-rows button");
   await expect(requestRows).toHaveCount(1);
   const requestText = await requestRows.first().innerText();
@@ -86,6 +93,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
 
   await stepUntil(page, "message.delivered");
   await page.getByLabel("Type", { exact: true }).fill("message.delivered");
+  await page.getByLabel("Type", { exact: true }).press("Escape");
   await expect(page.locator("#timeline-rows button").first()).toContainText("message.delivered");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
@@ -95,19 +103,26 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   await page.getByLabel("Type", { exact: true }).fill("database.write.staged");
+  await page.getByLabel("Type", { exact: true }).press("Escape");
   await page.locator("#timeline-rows button").first().click();
-  const detail = page.getByRole("region", { name: "Observation detail" });
+  const detail = page.locator("#inspection-panel");
   await expect(detail).toContainText("Before");
   await expect(detail).toContainText("After");
   await expect(detail).toContainText("Trace");
   await expect(detail).toContainText("Span");
+  const inspector = page.locator(".story-inspector");
+  if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
+  await detail.getByText("Related evidence", { exact: true }).click();
   await expect(detail.getByRole("heading", { name: "Causation" })).toBeVisible();
   await page.getByRole("button", { name: "Show this trace" }).click();
+  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
   await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
   await expect(page.locator(".timeline-count")).not.toContainText(/^0 of /);
 
-  await page.getByLabel("Type", { exact: true }).fill("scenario.assertion.evaluated");
   await page.getByLabel("Trace", { exact: true }).fill("");
+  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
+  await page.getByLabel("Type", { exact: true }).fill("scenario.assertion.evaluated");
+  await page.getByLabel("Type", { exact: true }).press("Escape");
   const visible = await page.locator("#timeline-rows button").allInnerTexts();
   const parsed = visible.map(text => {
     const time = /t=(\d+)/.exec(text);
@@ -117,10 +132,13 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   assertOrder(parsed);
 
   const commands = await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type));
+  // Playback navigation lives with the architecture graph now.
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await page.getByRole("button", { name: "Next observation" }).click();
   await page.getByRole("button", { name: "Play timeline" }).click();
   await page.getByRole("button", { name: "Pause timeline" }).click();
   expect(await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type))).toEqual(commands);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   expect(requestText).toContain("network.request.sent");
 
   await page.getByRole("button", { name: "Reset", exact: true }).click();
@@ -129,7 +147,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveCount(0);
+  await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(0);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
@@ -145,9 +163,9 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   await page.getByRole("button", { name: "Load scenario" }).click();
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const observations = (await latestProjection(page)).history.observations;
   await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Learning", exact: true }).click();
@@ -164,7 +182,7 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   await expect(rawMembers).toHaveCount(9);
   const exactId = observations.find(item => item.type === "scheduler.event.scheduled")!.id;
   await rawMembers.filter({ hasText: exactId }).getByRole("button", { name: "Open raw observation" }).click();
-  await expect(page.getByRole("region", { name: "Observation detail" })).toContainText(exactId);
+  await expect(page.locator("#inspection-panel")).toContainText(exactId);
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.getByRole("button", { name: "Raw", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".timeline-count")).toContainText(`${observations.length} of ${observations.length}`);
@@ -180,12 +198,15 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await page.goto("/");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
+  const reducedDrawer = page.locator(".history-filter-drawer");
+  if ((await reducedDrawer.getAttribute("open")) === null) await reducedDrawer.locator("> summary").click();
   await page.locator(".timeline-filter-disclosure summary").click();
   await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
+  await page.getByLabel("Type", { exact: true }).press("Escape");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders");
@@ -231,13 +252,15 @@ test("redacted and omitted payloads stay unmarked and incomplete history is labe
     });
   });
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  // Simulation commands are hidden in history focus.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.locator(".timeline-count")).toContainText("3 of 3");
   const rows = page.locator("#timeline-rows button");
   const labels = await rows.allInnerTexts();
   assertOrder(labels.map(text => ({ time: Number(/t=(\d+)/.exec(text)?.[1]), sequence: Number(/#(\d+)/.exec(text)?.[1]) })));
   await rows.nth(1).click();
-  const detail = page.getByRole("region", { name: "Observation detail" });
+  const detail = page.locator("#inspection-panel");
   await expect(detail).toContainText("Stored payload is redacted. Hidden fields are not available.");
   await expect(detail).toContainText('"redacted": true');
   await expect(detail).not.toContainText("invented-secret");

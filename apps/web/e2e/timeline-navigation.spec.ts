@@ -46,31 +46,29 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(status).toHaveText("READY");
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   const commands = await commandTypes(page);
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // This test walks canonical rows; the Story view is covered in story-timeline.spec.ts.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
+  const filterDrawer = page.locator(".history-filter-drawer");
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
   await page.locator(".timeline-filter-disclosure summary").click();
 
   await page.getByLabel("Type", { exact: true }).fill("not.a.real.type");
   await expect(page.getByText("No observations match every active filter.")).toBeVisible();
   await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
-  for (const name of ["Previous observation", "Next observation", "Play timeline", "Pause timeline"]) {
-    await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
-  }
   await page.getByLabel("Type", { exact: true }).press("Escape");
 
   await page.getByRole("button", { name: "Clear all filters", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Clear all filters", exact: true })).toBeDisabled();
+  await expect(page.getByRole("group", { name: "Active filters and reset" })).not.toBeVisible();
   await page.getByLabel("Type", { exact: true }).fill("network.response.dropped");
   await page.getByLabel("Type", { exact: true }).press("Escape");
   await expect(page.locator(".timeline-count")).toContainText(/^1 of /);
-  await expect(page.getByRole("button", { name: "Next observation" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Previous observation" })).toBeEnabled();
   await expect(page.locator("#timeline-boundary")).toContainText("Next and Previous select it.");
-  await page.getByRole("button", { name: "Next observation" }).click();
+  await page.locator("#timeline-rows").focus();
+  await page.keyboard.press("ArrowDown");
 
   const selected = page.locator("#timeline-rows button[aria-pressed='true']");
   await expect(selected).toHaveCount(1);
@@ -81,12 +79,9 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(selected).toBeFocused();
   await expect(selected).toBeInViewport();
   await expect(selected).toHaveCSS("outline-style", "solid");
-  await expect(page.getByRole("button", { name: "Next observation" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Previous observation" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeDisabled();
   await expect(page.locator("#timeline-boundary")).toContainText("Previous and Next cannot move.");
   await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${selectedSequence}`);
-  await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("network.response.dropped");
+  await expect(page.locator("#inspection-panel")).toContainText("network.response.dropped");
   const sequence = await selected.innerText();
   await page.keyboard.press("ArrowDown");
   expect(await selected.innerText()).toBe(sequence);
@@ -94,8 +89,13 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.keyboard.press("ArrowUp");
   expect(await selected.innerText()).toBe(sequence);
 
+  const inspector = page.locator(".story-inspector");
+  if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
+  await page.locator("#inspection-panel").getByText("Related evidence", { exact: true }).click();
   await page.getByRole("button", { name: "Show this trace" }).click();
+  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
   await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
+  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator("#timeline-feedback")).toContainText("type filter was cleared");
   await expect(selected).toContainText("network.response.dropped");
@@ -113,48 +113,36 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("alert")).toContainText("Virtual time from 999999 is after virtual time to 0");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
+  // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
+  const lessonDrawer = page.locator("details.lesson-drawer");
+  if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
   const raw = page.locator(".shell-notices > details.raw-state");
   if ((await raw.getAttribute("open")) === null) await page.locator(".shell-notices > details.raw-state > summary").click();
   await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(selected).toContainText("external.effect.committed");
   await expect(selected).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Observation detail" })).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Observation detail" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("external.effect.committed");
   await expect(page.locator("#timeline-feedback")).toContainText("Selected #");
   await expect(page.locator("#timeline-feedback")).toContainText("filters were cleared");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
+  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
   await page.getByLabel("Trace", { exact: true }).fill("");
+  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
   await page.getByLabel("Type", { exact: true }).fill("");
   await expect(page.locator(".timeline-count")).toContainText(/^[0-9]{2,} of /);
   await page.locator("#timeline-rows").focus();
   await page.keyboard.press("Home");
-  await expect(page.getByRole("button", { name: "Previous observation" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Next observation" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeEnabled();
   await expect(page.locator("#timeline-boundary")).toContainText("Previous cannot move.");
   await page.keyboard.press("End");
-  await expect(page.getByRole("button", { name: "Next observation" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Previous observation" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Restart timeline" })).toBeEnabled();
   await expect(page.locator("#timeline-boundary")).toContainText("Next cannot move.");
   const atEnd = await selected.innerText();
   await page.keyboard.press("ArrowDown");
   expect(await selected.innerText()).toBe(atEnd);
   await expect(page.locator("#timeline-feedback")).toContainText("Next cannot move.");
 
-  await page.getByRole("button", { name: "Restart timeline" }).click();
-  await expect(page.locator("#timeline-playback")).toContainText("Playing the visible timeline.");
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Play timeline" })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: "Pause timeline" })).toBeEnabled();
-  await page.getByRole("button", { name: "Pause timeline" }).click();
-  await expect(page.locator("#timeline-playback")).toContainText("Playback is paused.");
-  await expect(page.getByRole("button", { name: "Pause timeline" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeEnabled();
-
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(await commandTypes(page)).toEqual(commands);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -197,11 +185,10 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await emit("READY", [], "loaded", true);
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  // Simulation commands are hidden in history focus; reveal them to check the lifecycle here.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await expect(page.getByText("No observations have been recorded for this run.")).toBeVisible();
   await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
-  for (const name of ["Previous observation", "Next observation", "Play timeline", "Pause timeline"]) {
-    await expect(button(name)).toBeDisabled();
-  }
   await expect(button("Run")).toBeEnabled();
   await expect(button("Step")).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
@@ -210,18 +197,13 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await emit("READY", history, "projection.updated", false);
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.locator(".timeline-count")).toContainText("3 of 3");
-  await expect(button("Next observation")).toBeEnabled();
-  await expect(button("Previous observation")).toBeEnabled();
-  await button("Next observation").click();
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#1");
-  await expect(button("Previous observation")).toBeDisabled();
-  await expect(button("Next observation")).toBeEnabled();
-  await expect(page.locator("#timeline-boundary")).toContainText("Previous cannot move.");
   await page.locator("#timeline-rows").focus();
+  await page.keyboard.press("Home");
+  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#1");
+  await expect(page.locator("#timeline-boundary")).toContainText("Previous cannot move.");
   await page.keyboard.press("End");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#3");
-  await expect(button("Next observation")).toBeDisabled();
-  await expect(button("Restart timeline")).toBeEnabled();
+  await expect(page.locator("#timeline-boundary")).toContainText("Next cannot move.");
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await page.getByRole("button", { name: "orders, Internal service" }).focus();
   await page.keyboard.press("Enter");
@@ -235,8 +217,6 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(button("Load scenario")).toBeDisabled();
   await expect(button("Pause")).toBeEnabled();
   for (const name of ["Run", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
-  await button("Previous observation").click();
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#2");
 
   await emit("PAUSED", history, "projection.updated", false);
   await expect(status).toHaveText("PAUSED");
@@ -251,13 +231,6 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   for (const name of ["Run", "Pause", "Step"]) await expect(button(name)).toBeDisabled();
   await expect(page.locator(".run-summary")).toContainText("COMPLETED");
   await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toHaveCount(0);
-  await page.locator("#timeline-rows").focus();
-  await page.keyboard.press("End");
-  await button("Restart timeline").click();
-  await expect(page.locator("#timeline-playback")).toContainText("Playback reached the end", { timeout: 5_000 });
-  await expect(button("Restart timeline")).toBeEnabled();
-  await expect(button("Pause timeline")).toBeDisabled();
-  await expect(page.locator("#timeline-feedback")).toContainText("Restart timeline plays from the first visible observation.");
 
   await emit("PAUSED", history, "projection.updated", false);
   await button("Step").click();

@@ -60,9 +60,10 @@ async function runScenario(page: Page, scenario: string) {
   await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  // Run while the simulation controls are visible (the architecture tab), then review history.
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 }
 
 test("Story reduces a completed checkout to labeled milestones and keeps Learning and Raw", async ({ page }) => {
@@ -73,6 +74,8 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   const observations = (await latestProjection(page)).history.observations;
   const before = await commandTypes(page);
 
+  // The milestone table is one presentation of the Story view; the strip is the other.
+  await page.getByRole("button", { name: "Table", exact: true }).click();
   await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Learning", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".timeline-count")).toHaveText(
@@ -96,6 +99,8 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
     expect(tableText[index]).toContain(observation.source);
   }
 
+  // The diagram presents the same milestones as a component-lane strip.
+  await page.getByRole("button", { name: "Diagram", exact: true }).click();
   // Accessible summary, shapes, and labeled boundaries.
   await expect(page.locator(".story-view")).toContainText("no elapsed duration between milestones is stored");
   await expect(page.locator("#story-summary")).toContainText("component lanes");
@@ -112,27 +117,23 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
 
   // A visual milestone and its accessible row produce the same detail and emphasis.
   await stripMilestone.click();
-  const fromStrip = await page.getByRole("region", { name: "Observation detail" }).innerText();
+  const fromStrip = await page.locator("#inspection-panel").textContent() ?? "";
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   const cueFromStrip = await page.locator("#movement-cue").innerText();
   expect(fromStrip).toContain(sent.id);
   expect(cueFromStrip).toContain("Request sent");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Story", exact: true }).click();
+  await expect(page.locator(".story-milestone[data-selected='true']")).toHaveCount(1);
+  await page.getByRole("button", { name: "Table", exact: true }).click();
   await tableRow.click();
-  expect(await page.getByRole("region", { name: "Observation detail" }).innerText()).toBe(fromStrip);
+  expect(await page.locator("#inspection-panel").textContent()).toBe(fromStrip);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   expect(await page.locator("#movement-cue").innerText()).toBe(cueFromStrip);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(tableRow).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".story-table tr[data-selected='true']")).toHaveCount(1);
-  await expect(page.locator(".story-milestone[data-selected='true']")).toHaveCount(1);
 
-  // Story selection and playback stay inside the presentation layer.
-  expect(await commandTypes(page)).toEqual(before);
-  await page.getByRole("button", { name: "Play timeline" }).click();
-  await expect(page.locator("#timeline-playback")).toContainText("Playing the visible timeline.");
-  await page.getByRole("button", { name: "Pause timeline" }).click();
+  // Story selection stays inside the presentation layer. Playback is covered by the architecture spec.
   expect(await commandTypes(page)).toEqual(before);
   await page.getByRole("button", { name: "Story", exact: true }).click();
 
@@ -169,15 +170,16 @@ test("response-lost Story milestones stay linked to their records without new co
 
   const dropRow = page.locator(rowSelector(dropped));
   await page.locator(".story-strip .story-milestone").filter({ hasText: "Response dropped" }).first().click();
-  const stripDetail = await page.getByRole("region", { name: "Observation detail" }).innerText();
+  const stripDetail = await page.locator("#inspection-panel").textContent() ?? "";
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   const stripCue = await page.locator("#movement-cue").innerText();
   expect(stripDetail).toContain(dropped.id);
   expect(stripCue).toContain("Response dropped");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Story", exact: true }).click();
+  await page.getByRole("button", { name: "Table", exact: true }).click();
   await dropRow.click();
-  expect(await page.getByRole("region", { name: "Observation detail" }).innerText()).toBe(stripDetail);
+  expect(await page.locator("#inspection-panel").textContent()).toBe(stripDetail);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   expect(await page.locator("#movement-cue").innerText()).toBe(stripCue);
   await expect(page.locator(".react-flow__node.is-involved")).toHaveCount(2);
@@ -189,7 +191,7 @@ test("response-lost Story milestones stay linked to their records without new co
   // A timeout is a distinct stored fact from the dropped response and the commit.
   for (const [label, observation] of [["Request timed out", timedOut], ["Transaction rolled back", rolledBack]] as const) {
     await page.locator(rowSelector(observation)).click();
-    const detail = page.getByRole("region", { name: "Observation detail" });
+    const detail = page.locator("#inspection-panel");
     await expect(detail).toContainText(observation.id);
     await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${observation.sequence}`);
     expect(await page.locator(".story-table tr[data-selected='true'] button").innerText()).toBe(label);
