@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { CommerceFacts, CommerceState } from "./CommerceLesson.tsx";
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
+import { FlightControls } from "./ArchitecturePlayback.tsx";
+import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationControls } from "./SimulationControls.tsx";
@@ -38,6 +40,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
     ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name) : null, [projection, lesson]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
+  // Replay state lives in the shell, so the cursor and the narration survive a tab switch.
+  // Choosing a record in Recorded history takes the graph highlight back, so the cursor stands
+  // down. A record that travels no link has no pulse id, so its movement text is the fallback
+  // identity; a live cue never takes the highlight back.
+  const release = emphasis?.origin === "selection" ? emphasis.pulseId ?? emphasis.text : undefined;
+  const playback = useFlightPlayback(projection?.history.observations ?? [], edges,
+    snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   // The lesson line names the loaded experiment. The run status itself is announced once, by the
   // committed-state summary, so this region never restates it.
@@ -159,6 +168,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
         </div>
         </details>
       </>}>
+        {/* Recorded history navigation shares the command row, kept apart by its own rule and label. */}
+        {tab === "architecture" && projection ? <FlightControls playback={playback} /> : null}
       </SimulationControls>
     </header>
     {projection ? <div className="investigation-workspace">
@@ -181,8 +192,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </div>
       <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
         aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
-        <h2 id="architecture-heading">Architecture</h2>
-        <ArchitectureView architecture={projection.architecture} sessionKey={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`}
+        <ArchitectureView architecture={projection.architecture} sessionKey={`${loadedChoice?.id ?? "none"}:${snapshot.attempt}`} playback={playback}
           {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
           {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
           {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />

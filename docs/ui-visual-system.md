@@ -39,12 +39,14 @@ Rules that keep the levels distinct:
   and no region repeats the run's virtual time. Engine counters such as random
   draws and the observation count stay under the **Advanced diagnostics**
   disclosure.
-- Simulation commands and recorded-history navigation are never one group and
-  never one row. `Run`, `Pause`, `Step`, and `Reset` carry the visible label
-  **Simulation execution**; `Play timeline`, `Pause timeline`,
-  `Previous observation`, and `Next observation` carry **Recorded history
-  navigation**. Both labels are the accessible name of their group, so the
-  distinction survives without the styling.
+- Simulation commands and recorded-history navigation are two separate control
+  groups that share the command row, kept apart by a vertical rule and their own
+  visible labels. `Run`, `Pause`, `Step`, and `Reset` carry **Simulation
+  execution**; `Play timeline`, `Pause timeline`, `Previous observation`, and
+  `Next observation` carry **Recorded history navigation**. Each group is a
+  `group` with its label as the accessible name, so the distinction survives
+  without the styling, and only the simulation group's first command is painted
+  as the primary action.
 - Only the first group changes the run. The history group states its boundary
   in one sentence: reviewing history does not change the simulation or its
   virtual time.
@@ -76,6 +78,87 @@ Rules that keep the levels distinct:
   JSON). Headings for requests, commits, faults, dropped responses, timeouts,
   and external effects are pure presentation mappings over stored fields;
   redacted payloads are never reconstructed or summarized as if visible.
+
+## Architecture playback and message flight
+
+The Architecture tab can replay the movements a run has already recorded, so a
+reader watches requests, responses, and messages travel between components at a
+pace they choose. The transport is the **Recorded history** group on the command
+row: `Play timeline`, `Pause timeline`, `Restart timeline`, `Previous
+observation`, `Next observation`, and a **Speed** select. It shares the command
+row with **Simulation execution** to keep the graph area tall, and is separated
+from it by a vertical rule and its own label rather than by a second block of
+chrome. It appears only while the Architecture tab is showing, because the graph
+it animates is the graph it belongs to.
+
+- A *movement* is one stored observation that travels a link. A record that
+  travels no link is not a movement and stays in Recorded history. Movements keep
+  canonical sequence order; nothing is merged, reordered, or dropped.
+- The transport states its own position in one region beside the graph: the
+  movement number, the recorded virtual time, and the observation sequence. A
+  second line states the recorded virtual-time boundaries of the movement list
+  and says that no duration is stored. The panel's heading line carries the
+  `Graph controls` and `Playback speed` explanations, so neither costs the graph
+  a row.
+- **Speed** offers Slow, Steady, and Fast. It changes only how long the browser
+  paints each movement. It never changes virtual time, the recorded history, or
+  the run, and the `Playback speed` hint says so.
+- While the run is still recording, the cursor waits at the recorded end for the
+  next movement instead of stopping. When the run has finished, the transport
+  ends with the last movement still painted and offers `Restart timeline`.
+
+The narration beside the graph is a presentation mapping over stored fields:
+
+| Line | Reads |
+| --- | --- |
+| Heading | The stored plain-language label for the record type |
+| Route | Stored `source`, `target`, and the presentation relationship of the link |
+| Stored fields | Stored endpoint, deadline, status, attempt, destination, consumer, fault rule, reason, recorded transitions, changed row names, and the stored external change |
+| Stored body fields | Stored body field *names*; narration never restates payload values |
+| What to look for | One question about the pattern the stored record belongs to |
+| Trace | The stored trace id |
+
+A redacted or omitted payload contributes one visibility statement and nothing
+else. Pattern questions ask what to look for and never state an outcome, so a
+dropped response is never described as a failed operation.
+
+Meaning is carried by text, glyph, and shape. Each painted token has a glyph and
+an outline that match the Story timeline legend: `→` request, `←` response,
+`⇢` message, `⊘` dropped, `◷` timeout. A movement that arrived leaves the link
+highlighted; a recorded drop or timeout leaves its token resting on the link and
+states only that the record says the movement did not arrive. The sending and
+receiving components carry a text badge on the graph, and the legend names every
+token. The token is decorative: the narration, the playback position, and the
+`Request and message movement` region carry the same movement as text.
+
+Choosing a record in Recorded history takes the graph highlight back and the
+replay cursor stands down. A live cue, which flashes by itself as a run records,
+never takes the highlight back from playback. Both tab panels stay mounted, so
+the cursor and the narration survive a tab switch.
+
+### Non-inference rules
+
+- The host timer moves a browser cursor over records the worker already
+  published. It does not advance virtual time, allocate an observation, or send a
+  worker command, and it does not change the run.
+- A token paints the stored movement of one record. It encodes no latency,
+  ordering, or duration, and it never implies that a component reacted.
+- Narration values are stored values. Field names replace payload values, and a
+  missing field is not reconstructed.
+- Movement order and identity come only from `Observation.sequence` and
+  observation ids, exactly as in the Recorded history views.
+
+### Accessibility
+
+The transport is a labelled button group with a `select`, and every control
+reaches the next movement or the recorded boundary. The playback position is a
+polite live region; the narration is a labelled article, and the graph's
+`Request and message movement` region carries the movement sentence while the
+narration is open, so no fact is stated twice. Token movement is removed under
+`prefers-reduced-motion: reduce`: each token rests where the record says the
+movement stopped and keeps its outline, and the narration and position text are
+unchanged. The narration and the component inspector share one side column, so
+the graph keeps its height at the supported desktop baselines.
 
 ## Explanations on demand
 

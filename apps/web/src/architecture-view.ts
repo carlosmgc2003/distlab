@@ -3,6 +3,8 @@ import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
+import { flightStop } from "./flight.ts";
+import type { FlightPace, FlightStep } from "./flight.ts";
 import type { MovementEdge } from "./timeline.ts";
 
 export const categoryLabels = {
@@ -17,8 +19,17 @@ export type ArchitectureNode = Node<{
   title: string;
   configuration: CanonicalValue | undefined;
   resources: readonly string[];
+  /** Set while a recorded movement is painted on the graph. */
+  role?: "sending" | "receiving";
+  roleLabel?: string;
 }, "component">;
-export type ArchitectureEdge = Edge<{ relationship: "request" | "subscription" | "publication" }>;
+export type ArchitectureEdge = Edge<{
+  relationship: "request" | "subscription" | "publication";
+  /** The recorded movement currently painted on this link, if any. */
+  flight?: FlightStep;
+  /** The chosen playback pace, so the token paints over the same interval the cursor waits. */
+  pace?: FlightPace;
+}>;
 
 const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly y: number }>> = {
   "customer-app": { x: 0, y: 0 },
@@ -87,7 +98,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const label = subscription ? `Subscribe · ${link.source}` : publication ? `Publish · ${link.target}` : `Request${link.label ? ` · ${link.label}` : ""}`;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
-      type: "smoothstep", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship },
+      type: "link", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship },
       sourceHandle: subscription ? "bottom" : "right", targetHandle: subscription ? "top" : "left",
       markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
       style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
@@ -101,7 +112,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     && nodes.some(node => node.id === topic.id && node.data.component.kind === "infrastructure")) {
     edges.push({
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
-      sourceHandle: "bottom", targetHandle: "top", type: "smoothstep",
+      sourceHandle: "bottom", targetHandle: "top", type: "link",
       label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication" },
       markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
       style: { stroke: "#334155", strokeWidth: 2, strokeDasharray: "2 5" },
@@ -117,4 +128,17 @@ export function movementEdges(edges: readonly ArchitectureEdge[]): MovementEdge[
   return edges.flatMap(edge => edge.data ? [{
     id: edge.id, source: edge.source, target: edge.target, relationship: edge.data.relationship,
   }] : []);
+}
+
+/**
+ * Inline custom properties for one token. The token follows the same measured
+ * path as the link it belongs to, and stops on the link for a recorded drop or
+ * timeout. Presentation only: it reads stored record fields and never state.
+ */
+export function flightTokenStyle(step: FlightStep, path: string, durationMs: number): Record<string, string> {
+  return {
+    "--flight-path": `path("${path}")`,
+    "--flight-end": flightStop(step),
+    "--flight-duration": `${Math.max(durationMs, 1)}ms`,
+  };
 }

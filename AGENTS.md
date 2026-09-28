@@ -61,7 +61,13 @@ commerce lessons. Simulation exposes explicit pending-event, processed-event,
 and random-draw counters; never infer these from arbitrary/redacted history.
 Commerce student projections expose committed business rows, KV metrics, client
 outcomes, declared external-visible state, delivery facts, and assertion results;
-runtime tasks and provider counters remain host-only.
+runtime tasks and provider counters remain host-only. Architecture playback in
+`apps/web/src/flight.ts` and `apps/web/src/flight-playback.ts` is presentation
+over records the worker already published: a host timer may move the playback
+cursor and paint a movement token on a measured link path, and it must not
+advance virtual time, record observations, or send worker commands. Narration
+reads stored observation fields only, and a redacted or omitted payload is never
+reconstructed.
 
 ## Coding Style & Naming Conventions
 

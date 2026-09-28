@@ -143,6 +143,8 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       kind: liveCue.kind,
       text: liveCue.text,
       pulseId: liveCue.observationId,
+      // A live cue flashes by itself; it never takes the graph highlight back from playback.
+      origin: "live" as const,
     };
   }, [selected, edges, liveCue]);
 
