@@ -36,6 +36,10 @@ npm run golden:04                 # print UI-free golden scenario 04 state/histo
 npm run golden:05                 # print UI-free golden scenario 05 state/history
 npm run golden:06                 # print UI-free golden scenario 06 state/history
 npm run golden:07                 # print UI-free golden scenario 07 state/history
+npm run lesson -- retry-unsafe    # run a commerce lesson with textual timeline
+npm run lesson -- retry-idempotent --replay # verify deterministic reset/replay
+npm run lesson -- saga-compensated --step  # interactive event stepping
+npm run --silent lesson -- outbox-idempotent --json # full state/history export
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included
@@ -49,12 +53,15 @@ Chromium system dependencies with
 `npm exec -w @distlab/web -- playwright install --with-deps chromium` if needed.
 `apps/web/src/worker/` is the browser runtime composition root. Main-thread
 modules may import application contracts, the host client, and the data-only
-`packages/catalogs/src/scenarios.ts` module; they must not import runtime model
+`packages/catalogs/src/scenarios.ts` and `packages/catalogs/src/commerce/scenarios.ts` modules; they must not import runtime model
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command.
-The initial host accepts only the two packaged checkout documents; broader
-scenario support requires an explicit counter read port rather than inferred
-counts from arbitrary/redacted history. Architecture playback in
+The host accepts only the two packaged checkout documents and ten packaged
+commerce lessons. Simulation exposes explicit pending-event, processed-event,
+and random-draw counters; never infer these from arbitrary/redacted history.
+Commerce student projections expose committed business rows, KV metrics, client
+outcomes, declared external-visible state, delivery facts, and assertion results;
+runtime tasks and provider counters remain host-only. Architecture playback in
 `apps/web/src/flight.ts` and `apps/web/src/flight-playback.ts` is presentation
 over records the worker already published: a host timer may move the playback
 cursor and paint a movement token on a measured link path, and it must not

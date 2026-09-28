@@ -117,7 +117,8 @@ test("each preset keeps exactly the stored records it names", () => {
   }
   // Key events are exactly the Story milestones, so both views name the same records.
   assert.deepEqual(quickViewObservations(sample, "key-events").map(item => item.id), ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-  assert.equal(storyKinds.length, 10);
+  assert.equal(storyKinds.length, 11);
+  assert.ok(storyKinds.includes("business"));
 });
 
 test("quick view counts and summaries state shown out of recorded total", () => {

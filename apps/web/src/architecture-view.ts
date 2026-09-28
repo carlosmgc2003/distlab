@@ -50,6 +50,16 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
   const instances = new Map(metadata?.components.map(component => [component.id, component]));
   const destinations = new Map(metadata?.destinations.map(destination => [destination.id, destination]));
   const sorted = [...projection.components].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const commerce = metadata?.components.some(component => component.model.startsWith("commerce."));
+  const depth = new Map<string, number>();
+  const queue = sorted.filter(component => component.kind === "client").map(component => component.id);
+  for (const id of queue) depth.set(id, 0);
+  for (let i = 0; i < queue.length; i++) {
+    for (const link of projection.links.filter(link => link.source === queue[i])) {
+      if (!depth.has(link.target)) { depth.set(link.target, depth.get(link.source)! + 1); queue.push(link.target); }
+    }
+  }
+  const rows = new Map<number, number>();
   const nodes = sorted.map((component, index): ArchitectureNode => {
     const instance = instances.get(component.id);
     const matches = instance?.kind === component.kind && instance.model === component.model && instance.version === component.version;
@@ -62,6 +72,9 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
         `Database owned by ${database.owner}: ${database.tables.map(table => table.name).join(", ")}`) ?? []),
       ...(metadata?.stores.filter(store => store.owner === component.id).map(store => `KeyValueStore owned by ${store.owner}`) ?? []),
     ] : destination ? [`MessageBus ${destination.kind}: ${destination.id}`] : [];
+    const column = depth.get(component.id) ?? 0;
+    const row = rows.get(column) ?? 0;
+    rows.set(column, row + 1);
     return {
       id: component.id, type: "component", data: {
         component, title, resources,
@@ -70,7 +83,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
           retryDelay: destination.retryDelay, maxAttempts: destination.maxAttempts, capacity: destination.capacity,
         } : undefined,
       },
-      position: { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
+      position: commerce ? { x: column * 310, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
       sourcePosition: Position.Bottom, targetPosition: Position.Top,
       draggable: false, connectable: false, deletable: false, focusable: true,
       ariaRole: "button", ariaLabel: `${title}, ${categoryLabels[component.kind]}`,
@@ -80,14 +93,15 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
   const edges = projection.links.map((link, index): ArchitectureEdge => {
     const subscription = metadata?.subscriptions.some(item => item.destination === link.source && item.consumer === link.target)
       || link.label === "subscription";
-    const relationship = subscription ? "subscription" : "request";
-    const label = subscription ? `Subscribe · ${link.source}` : `Request${link.label ? ` · ${link.label}` : ""}`;
+    const publication = link.label === "publication";
+    const relationship = subscription ? "subscription" : publication ? "publication" : "request";
+    const label = subscription ? `Subscribe · ${link.source}` : publication ? `Publish · ${link.target}` : `Request${link.label ? ` · ${link.label}` : ""}`;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
       type: "link", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship },
       sourceHandle: subscription ? "bottom" : "right", targetHandle: subscription ? "top" : "left",
       markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
-      style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : {}) },
+      style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5],
       labelBgStyle: { fill: "#fff" }, selectable: false, focusable: false, deletable: false,
     };

@@ -1,4 +1,4 @@
-import type { CanonicalValue, ComponentStateProjection } from "@distlab/contracts";
+import type { ArchitectureDefinition, CanonicalValue, ComponentStateProjection } from "@distlab/contracts";
 
 /** Authorized read model. Counters, tasks, and provider handles stay out of this projection. */
 interface AssessmentRead {
@@ -76,6 +76,24 @@ function deliveries(messageBus: CanonicalValue): CanonicalValue[] {
     });
   }
   return facts;
+}
+
+/** Exact packaged commerce inputs authorize these business-state fields only. */
+export function commerceComponents(read: AssessmentRead & { readonly stores: CanonicalValue }, architecture: ArchitectureDefinition, assertions: CanonicalValue): ComponentStateProjection[] {
+  const stores = isRecord(read.stores) ? read.stores : {};
+  return [
+    ...architecture.components.map(({ id, kind }): ComponentStateProjection => {
+      const runtime = component(read.components, id);
+      const entries = stores[id];
+      const state: CanonicalValue = kind === "service" ? {
+        ...service(read.components, read.databases, id) as Record<string, CanonicalValue>,
+        store: Array.isArray(entries) ? entries.filter(isRecord).map(entry => ({ key: entry.key ?? null, value: entry.value ?? null })) : [],
+      } : kind === "client" ? { role: "commerce-client", observed: runtime?.state ?? {}, assertions }
+        : { role: "external-visible", availability: runtime?.availability ?? "UNKNOWN", visible: runtime?.visible ?? {} };
+      return { componentId: id, visibility: "student", state };
+    }),
+    ...architecture.destinations.map(({ id }): ComponentStateProjection => ({ componentId: id, visibility: "student", state: { role: "bus-delivery", records: deliveries(read.messageBus).filter(item => isRecord(item) && item.destination === id) } })),
+  ];
 }
 
 /** Student-visible checkout facts copied from the assessment read model. */

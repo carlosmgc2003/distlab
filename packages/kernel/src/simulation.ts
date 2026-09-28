@@ -91,6 +91,8 @@ export class HeadlessSimulation implements Simulation {
   #failure: SimulationError | undefined;
   #generation = 0;
   #total = 0;
+  #processed = 0;
+  #draws = 0;
   #active: Task | undefined;
   #dispatching = false;
   #event: ScheduledEvent | undefined;
@@ -166,6 +168,9 @@ export class HeadlessSimulation implements Simulation {
   /** Task event while a generator runs, so storage correlation survives a wake or commit dispatch. */
   get activeTaskEvent(): ScheduledEvent | undefined { return this.#originEvent ?? this.activeEvent; }
   get time() { return this.#clock.now(); }
+  get pendingEvents(): number { return this.#scheduler.size(); }
+  get processedEvents(): number { return this.#processed; }
+  get randomDrawCount(): number { return this.#draws; }
   get history(): ExecutionHistoryReader {
     const history = this.#history;
     const reader: ExecutionHistoryReader = { all: () => history.all(), query: filter => history.query(filter),
@@ -175,7 +180,7 @@ export class HeadlessSimulation implements Simulation {
   }
   get random(): SeededRandomPort {
     const generation = this.#generation;
-    return Object.freeze({ draw: (label: string) => this.#guard(generation, () => { this.#check(generation); return this.#random.draw(label); }) });
+    return Object.freeze({ draw: (label: string) => this.#guard(generation, () => { this.#check(generation); const draw = this.#random.draw(label); this.#draws++; return draw; }) });
   }
   get operations(): OperationController { const generation = this.#generation; return Object.freeze({
     create: () => this.#guard(generation, () => { this.#check(generation); const task = this.#active; if (!task || task.created || task.waiting) return fail(ErrorCodes.INVALID_OPERATION);
@@ -236,7 +241,7 @@ export class HeadlessSimulation implements Simulation {
     this.#failure = undefined;
     this.#status = "READY";
     this.#boundaryHook = undefined;
-    this.#total = 0; this.#tasks = new Map(); this.#operations = new Map(); this.#processGenerations = new Map();
+    this.#total = 0; this.#processed = 0; this.#draws = 0; this.#tasks = new Map(); this.#operations = new Map(); this.#processGenerations = new Map();
     this.#handlers = new Map([[wakeType, { owner: "simulation", handler: e => {
       const id = (e.payload as { operationId: string }).operationId;
       const op = this.#operations.get(id);
@@ -441,6 +446,7 @@ export class HeadlessSimulation implements Simulation {
     try { event = this.#scheduler.takeNext(); }
     catch (error) { this.#terminal(error, pending); throw this.#failure; }
     if (!event) { this.#boundary(); return undefined; }
+    this.#processed++;
     this.#event = event; this.#dispatching = true;
     const generation = this.#generation;
     try {

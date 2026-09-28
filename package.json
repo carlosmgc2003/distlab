@@ -15,6 +15,7 @@
     "browser:install": "npm exec -w @distlab/web -- playwright install chromium",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
+    "lesson": "npm run build:packages --silent && node --experimental-strip-types packages/catalogs/examples/commerce.ts",
     "golden:01": "npm run golden:01 -w @distlab/kernel",
     "golden:02": "npm run golden:02 -w @distlab/kernel",
     "golden:04": "npm run golden:04 -w @distlab/kernel",

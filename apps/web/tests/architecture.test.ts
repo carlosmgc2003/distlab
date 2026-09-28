@@ -16,6 +16,7 @@ async function load(index = 0): Promise<RuntimeProjectionSet> {
 
 test("maps both checkout projections, all categories, requests and bus relationships without mutating inputs", async () => {
   for (const [index, choice] of scenarios.entries()) {
+    if (choice.family !== "checkout") continue; // Commerce layouts are covered by commerce-worker.test.ts.
     const projection = await load(index);
     const metadata = packagedMetadata(choice);
     const before = JSON.stringify({ projection, metadata });

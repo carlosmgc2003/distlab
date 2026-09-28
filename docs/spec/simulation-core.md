@@ -36,6 +36,9 @@ type SimulationStatus =
 interface Simulation {
   readonly status: SimulationStatus;
   readonly time: SimulationTime;
+  readonly pendingEvents: number;
+  readonly processedEvents: number;
+  readonly randomDrawCount: number;
 
   step(): Promise<SimulationStep | undefined>;
   run(options?: RunOptions): Promise<RunResult>;
