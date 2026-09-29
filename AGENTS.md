@@ -90,3 +90,20 @@ Future simulation code must preserve determinism: use the virtual clock instead 
 ## Commit & Pull Request Guidelines
 
 History currently contains only `Initial commit`, so no established convention exists. Use short, imperative commit subjects, for example `Document virtual clock invariants`, and keep each commit focused. Pull requests should explain the motivation, summarize affected design guarantees, link relevant issues, list validation performed, and include screenshots for future browser UI changes.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `carlosmgc2003/distlab`; use the `gh` CLI.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles use their own names: `needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` plus ADRs in `docs/spec/adr/`.
+See `docs/agents/domain.md`.
