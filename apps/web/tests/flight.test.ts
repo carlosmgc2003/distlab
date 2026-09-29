@@ -15,6 +15,8 @@ import {
   flightSteps,
   flightStop,
   flightTransport,
+  playbackControl,
+  playbackStatus,
   FLIGHT_LEGEND,
 } from "../src/flight.ts";
 import { flightTokenStyle } from "../src/architecture-view.ts";
@@ -232,6 +234,16 @@ test("the transport states one position, one reason, and the two step directions
   const empty = flightTransport(-1, 0, "idle", false);
   assert.equal(empty.control.action, "unavailable");
   assert.match(empty.status, /No visible observations/);
+  // The shared control copy states the action and the phase wording.
+  assert.equal(playbackControl(-1, 0, false).action, "unavailable");
+  assert.equal(playbackControl(0, 1, false).action, "unavailable");
+  assert.equal(playbackControl(-1, 4, false).label, "Play timeline");
+  assert.equal(playbackControl(1, 4, false).action, "play");
+  assert.equal(playbackControl(3, 4, false).label, "Restart timeline");
+  assert.equal(playbackControl(1, 4, true).action, "unavailable");
+  assert.match(playbackStatus("ended", playbackControl(3, 4, false)), /Restart timeline/);
+  assert.match(playbackStatus("playing", playbackControl(1, 4, true)), /Pause/);
+  assert.match(playbackStatus("paused", playbackControl(1, 4, false)), /paused/);
 
   const position = flightPosition(steps, 2);
   assert.equal(position.text, `Movement 3 of ${steps.length} · virtual time ${steps[2]!.time} · observation #${steps[2]!.sequence}.`);

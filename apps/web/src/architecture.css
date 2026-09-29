@@ -224,7 +224,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .semantic-state.is-approved { color: var(--status-approved); background: var(--status-approved-bg); border-width: 2px; }
 .timeline-rows button .is-error { color: var(--status-error); background: var(--status-error-bg); font-weight: 700; }
 .state-explanation { display: inline-block; color: var(--status-uncertain); font-weight: 600; }
-.timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-playback, .timeline-quick-count { max-width: 85ch; color: #475569; }
+.timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-quick-count { max-width: 85ch; color: #475569; }
 .timeline-quick-count { margin: 0; font-size: .8rem; }
 .timeline-count, #timeline-order { margin: 2px 0; }
 .timeline-cursor { margin: 2px 0 0; padding: 5px 8px; border-left: 4px solid #1d4ed8; background: #eff6ff; font-size: .8rem; font-weight: 650; }
@@ -235,7 +235,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
    playback, and the result count stay outside it. */
 .timeline-filter-disclosure .timeline-help { margin: 4px 0 8px; }
 .timeline-mode button[aria-pressed="true"] { background: #dbeafe; border-color: #1d4ed8; }
-.timeline-boundary, .timeline-playback { margin: 4px 0; }
+.timeline-boundary { margin: 4px 0; }
 .timeline-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 4px 8px; margin: 4px 0; align-items: start; }
 .timeline-filters label { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: .75rem; font-weight: 650; color: #475569; }
 .timeline-filters input, .timeline-filters select { min-width: 0; width: 100%; margin: 0; font: inherit; color: #172033; padding: 6px 8px; border: 1px solid #64748b; border-radius: 6px; background: #fff; }

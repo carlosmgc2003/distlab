@@ -7,9 +7,8 @@ import {
   flightSteps,
   flightTransport,
 } from "./flight.ts";
-import type { FlightPace, FlightPosition, FlightStep, FlightTransport } from "./flight.ts";
+import type { FlightPace, FlightPosition, FlightStep, FlightTransport, PlaybackPhase } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
-import type { PlaybackPhase } from "./timeline.ts";
 import { selectionStep } from "./timeline.ts";
 import type { Observation } from "@distlab/contracts";
 
