@@ -1,27 +1,17 @@
 import type { Observation } from "@distlab/contracts";
-import { orderObservations } from "./timeline.ts";
+import { attemptLabel, orderObservations, recordKind, recordKinds } from "./records.ts";
+import type { MilestoneType, RecordKind } from "./records.ts";
 
 /**
- * Teaching categories for the Story view. Every category is a stored record;
- * the projection never invents a milestone, an ordering, or a duration.
+ * Teaching projection of the recorded execution. The milestone set and the
+ * teaching category of each record come from the record reading module; only the
+ * wording below belongs to this view. Milestone order, identity, lane, and
+ * virtual time come only from the stored observations.
  */
-export type StoryKind =
-  | "request"
-  | "response"
-  | "message"
-  | "retry"
-  | "commit"
-  | "rollback"
-  | "external"
-  | "fault"
-  | "drop"
-  | "timeout"
-  | "business";
-
 export interface StoryMilestone {
   /** The exact canonical observation this milestone projects. */
   readonly observation: Observation;
-  readonly kind: StoryKind;
+  readonly kind: RecordKind;
   /** Text describing only the stored type and stored fields. */
   readonly label: string;
   /** Non-color marker that distinguishes the category shape. */
@@ -35,13 +25,14 @@ export interface StoryMilestone {
 }
 
 export interface StoryLegendEntry {
-  readonly kind: StoryKind;
+  readonly kind: RecordKind;
   readonly label: string;
   readonly shape: string;
   readonly count: number;
 }
 
-const SHAPES: Readonly<Record<StoryKind, string>> = {
+/** Non-color marker per teaching category. */
+const SHAPES: Readonly<Record<RecordKind, string>> = {
   request: "→",
   response: "←",
   message: "⇢",
@@ -52,10 +43,9 @@ const SHAPES: Readonly<Record<StoryKind, string>> = {
   fault: "⚠",
   drop: "⊘",
   timeout: "◷",
-  business: "◇",
 };
 
-const KIND_LABELS: Readonly<Record<StoryKind, string>> = {
+const KIND_LABELS: Readonly<Record<RecordKind, string>> = {
   request: "Request",
   response: "Response",
   message: "Message",
@@ -66,39 +56,61 @@ const KIND_LABELS: Readonly<Record<StoryKind, string>> = {
   fault: "Fault",
   drop: "Dropped message",
   timeout: "Timeout",
-  business: "Business event",
 };
 
-/** Every teaching category, in legend order. */
-export const storyKinds: readonly StoryKind[] = Object.keys(SHAPES) as readonly StoryKind[];
+/**
+ * Wording per milestone type. Typed by `MilestoneType`, so a milestone without
+ * a label is a compile error rather than a raw type shown to a student.
+ */
+const STORY_LABELS: Readonly<Record<MilestoneType, string>> = {
+  "network.request.sent": "Request sent",
+  "network.request.delivered": "Request delivered",
+  "network.request.dropped": "Request dropped",
+  "network.request.timedout": "Request timed out",
+  "network.response.sent": "Response sent",
+  "network.response.received": "Response received",
+  "network.response.dropped": "Response dropped",
+  "message.published": "Message published",
+  "message.delivered": "Message delivered",
+  "message.acknowledged": "Message acknowledged",
+  "message.ack.stale": "Stale message acknowledgement",
+  "message.retry.scheduled": "Message retry scheduled",
+  "database.transaction.committed": "Transaction committed",
+  "database.transaction.rolledback": "Transaction rolled back",
+  "external.effect.committed": "External side effect committed",
+  "fault.rule.matched": "Fault rule matched",
+  "fault.effect.selected": "Fault effect selected",
+};
 
-/** The teaching category of one stored record, or undefined when the record is not a milestone. */
-export function storyKind(observation: Observation): StoryKind | undefined {
-  return milestoneCopy(observation)?.kind;
-}
+/** Milestones whose label names a stored delivery attempt. */
+const ATTEMPT_MILESTONES: ReadonlySet<string> = new Set(["message.delivered"]);
 
-interface MilestoneCopy {
-  readonly kind: StoryKind;
-  readonly label: string;
+/** Wording for a fault record the milestone table does not name individually. */
+const OTHER_FAULT_LABEL = "Fault recorded";
+
+export function storyLabel(observation: Observation): string | undefined {
+  if (!recordKind(observation)) return undefined;
+  const base = (STORY_LABELS as Readonly<Record<string, string | undefined>>)[observation.type] ?? OTHER_FAULT_LABEL;
+  return ATTEMPT_MILESTONES.has(observation.type) ? `${base}${attemptLabel(observation)}` : base;
 }
 
 /**
- * Read-only teaching projection of canonical history. Milestone order, identity,
- * lane, and virtual time come only from the stored observations. Records that
- * are not listed here stay in Learning and Raw views.
+ * Read-only teaching projection of canonical history. Records that are not
+ * milestones stay in Learning and Raw views.
  */
 export function storyMilestones(observations: readonly Observation[]): readonly StoryMilestone[] {
   const ordered = orderObservations(observations);
   const milestones: StoryMilestone[] = [];
   for (const observation of ordered) {
-    const copy = milestoneCopy(observation);
-    if (!copy) continue;
+    const kind = recordKind(observation);
+    const label = kind === undefined ? undefined : storyLabel(observation);
+    if (kind === undefined || label === undefined) continue;
     const previous = milestones.at(-1);
     milestones.push({
       observation,
-      kind: copy.kind,
-      label: copy.label,
-      shape: SHAPES[copy.kind],
+      kind,
+      label,
+      shape: SHAPES[kind],
       lane: observation.source,
       column: milestones.length,
       timeBoundary: previous === undefined || previous.observation.time !== observation.time,
@@ -122,7 +134,7 @@ export function storyReduction(milestones: readonly StoryMilestone[], recorded: 
 }
 
 export function storyLegend(milestones: readonly StoryMilestone[]): readonly StoryLegendEntry[] {
-  return storyKinds
+  return recordKinds
     .map(kind => ({
       kind,
       label: KIND_LABELS[kind],
@@ -165,46 +177,4 @@ export function storyDetail(milestones: readonly StoryMilestone[]): string {
     + `Each milestone is one recorded observation; order is its recorded sequence. `
     + `Stored milestone categories and their shapes: ${kinds}. `
     + `The table repeats the same milestones in the same order and selects the same observations.`;
-}
-
-function milestoneCopy(observation: Observation): MilestoneCopy | undefined {
-  const type = observation.type;
-  switch (type) {
-    case "runtime.log": {
-      const data = isRecord(observation.data) ? observation.data : {};
-      const detail = isRecord(data.data) ? data.data : {};
-      const suffix = typeof detail.state === "string" ? detail.state : typeof detail.component === "string" ? detail.component : "";
-      return { kind: "business", label: typeof data.message === "string" ? `${data.message}${suffix ? ` · ${suffix}` : ""}` : "Business event" };
-    }
-    case "network.request.sent": return { kind: "request", label: "Request sent" };
-    case "network.request.delivered": return { kind: "request", label: "Request delivered" };
-    case "network.request.dropped": return { kind: "drop", label: "Request dropped" };
-    case "network.request.timedout": return { kind: "timeout", label: "Request timed out" };
-    case "network.response.sent": return { kind: "response", label: "Response sent" };
-    case "network.response.received": return { kind: "response", label: "Response received" };
-    case "network.response.dropped": return { kind: "drop", label: "Response dropped" };
-    case "message.published": return { kind: "message", label: "Message published" };
-    case "message.delivered": return { kind: "message", label: `Message delivered${attemptSuffix(observation)}` };
-    case "message.acknowledged": return { kind: "message", label: "Message acknowledged" };
-    case "message.ack.stale": return { kind: "message", label: "Stale message acknowledgement" };
-    case "message.retry.scheduled": return { kind: "retry", label: "Message retry scheduled" };
-    case "database.transaction.committed": return { kind: "commit", label: "Transaction committed" };
-    case "database.transaction.rolledback": return { kind: "rollback", label: "Transaction rolled back" };
-    case "external.effect.committed": return { kind: "external", label: "External side effect committed" };
-    case "fault.effect.selected": return { kind: "fault", label: "Fault effect selected" };
-    case "fault.rule.matched": return { kind: "fault", label: "Fault rule matched" };
-    default: break;
-  }
-  if (type.startsWith("fault.")) return { kind: "fault", label: "Fault recorded" };
-  return undefined;
-}
-
-function attemptSuffix(observation: Observation): string {
-  if (!Object.hasOwn(observation, "data") || !isRecord(observation.data)) return "";
-  const attempt = observation.data.attempt;
-  return typeof attempt === "number" || typeof attempt === "string" ? ` (attempt ${attempt})` : "";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }

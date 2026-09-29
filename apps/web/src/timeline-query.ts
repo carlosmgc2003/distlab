@@ -1,5 +1,5 @@
 import type { EntityRef, Observation, ObservationFilter, SimulationTime } from "@distlab/contracts";
-import { orderObservations } from "./timeline.ts";
+import { orderObservations } from "./records.ts";
 
 /** Popup size for recorded values. The applied filter still uses the full visible history. */
 export const TIMELINE_SUGGESTION_LIMIT = 8;

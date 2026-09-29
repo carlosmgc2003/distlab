@@ -1,7 +1,6 @@
 import type { Observation } from "@distlab/contracts";
-import { orderObservations } from "./timeline.ts";
-import { storyKind, storyKinds } from "./story-timeline.ts";
-import type { StoryKind } from "./story-timeline.ts";
+import { orderObservations, recordKind, recordKinds } from "./records.ts";
+import type { RecordKind } from "./records.ts";
 import type { ComponentTitle } from "./timeline-query.ts";
 
 export type QuickViewId =
@@ -17,7 +16,7 @@ export interface QuickView {
   readonly label: string;
   /** Plain sentence naming the stored records this view keeps. It never claims to change a run. */
   readonly keeps: string;
-  readonly kinds: readonly StoryKind[];
+  readonly kinds: readonly RecordKind[];
   readonly types: readonly string[];
 }
 
@@ -31,7 +30,7 @@ export interface QuickView {
 export const QUICK_VIEWS: readonly QuickView[] = [
   {
     id: "key-events", label: "Key events", keeps: "the teaching milestones of the Story view",
-    kinds: storyKinds, types: [],
+    kinds: recordKinds, types: [],
   },
   {
     id: "faults-and-timeouts", label: "Faults & timeouts", keeps: "fault rules, fault effects, dropped messages, and timeouts",
@@ -72,7 +71,7 @@ export function matchesQuickView(id: QuickViewId | null, observation: Observatio
   if (id === null) return true;
   const view = quickViewById(id);
   if (view.types.includes(observation.type)) return true;
-  const kind = storyKind(observation);
+  const kind = recordKind(observation);
   return kind !== undefined && view.kinds.includes(kind);
 }
 

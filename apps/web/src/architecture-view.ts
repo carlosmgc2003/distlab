@@ -5,7 +5,7 @@ import type { Edge, Node } from "@xyflow/react";
 import { checkoutDisplay } from "./checkout-display.ts";
 import { flightStop } from "./flight.ts";
 import type { FlightPace, FlightStep } from "./flight.ts";
-import type { MovementEdge } from "./timeline.ts";
+import type { MovementEdge } from "./records.ts";
 
 export const categoryLabels = {
   client: "Client",

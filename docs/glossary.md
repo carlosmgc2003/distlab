@@ -169,6 +169,13 @@ a distributed execution inspectable.
 including its simulation time, source, optional target, type, data, and trace
 identifier where applicable.
 
+**Record reading** — The derived facts one stored Observation states: its
+teaching milestone category, the movement it describes, its delivery attempt,
+its stored changes, and whether its payload is visible, redacted, or omitted. It
+reads only stored fields and never reconstructs a payload. Each view supplies
+its own wording; the milestone set is listed in
+[Learning Timeline](learning-timeline.md).
+
 **Optimistic concurrency** — A coordination strategy that detects conflicting
 updates when a write is attempted rather than preventing all concurrent work in
 advance.

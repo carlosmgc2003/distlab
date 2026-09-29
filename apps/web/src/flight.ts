@@ -1,14 +1,19 @@
 import type { CanonicalValue, Observation, SimulationTime } from "@distlab/contracts";
 import {
-  learningSummary,
-  movementCue,
+  bodyFields,
+  edgeFor,
+  externalChanges,
+  movementOf,
   orderObservations,
   payloadVisibility,
-  playbackControl,
-  playbackStatus,
-  selectionStep,
-} from "./timeline.ts";
-import type { MovementCue, MovementEdge, PlaybackControl, PlaybackPhase } from "./timeline.ts";
+  recordedChanges,
+  storedFieldsAt,
+  storedScalar,
+  storedScalarAt,
+} from "./records.ts";
+import type { Movement, MovementEdge } from "./records.ts";
+import { playbackControl, playbackStatus, recordLabel, selectionStep } from "./timeline.ts";
+import type { PlaybackControl, PlaybackPhase } from "./timeline.ts";
 
 /**
  * Presentation-only reading of recorded movements. Every value here is copied
@@ -48,7 +53,7 @@ export interface FlightStep {
   readonly observationId: string;
   readonly sequence: number;
   readonly time: SimulationTime;
-  readonly kind: MovementCue["kind"];
+  readonly kind: Movement["kind"];
   readonly relationship: MovementEdge["relationship"];
   readonly edgeId?: string;
   readonly nodeIds: readonly string[];
@@ -114,63 +119,6 @@ const INTERRUPTED_TYPES = new Set([
   "network.response.dropped",
 ]);
 
-function isRecord(value: CanonicalValue | undefined): value is Record<string, CanonicalValue> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function scalar(value: CanonicalValue): string | undefined {
-  if (typeof value === "string") return value.length > 0 ? value : undefined;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return undefined;
-}
-
-function field(record: Record<string, CanonicalValue>, key: string): CanonicalValue | undefined {
-  return Object.hasOwn(record, key) ? record[key] : undefined;
-}
-
-function storedField(record: Record<string, CanonicalValue>, key: string): string | undefined {
-  const value = field(record, key);
-  return value === undefined ? undefined : scalar(value);
-}
-
-/** Field names only. Stored values stay in the technical record, so narration never restates a payload. */
-function bodyFields(value: CanonicalValue | undefined): string | undefined {
-  if (!isRecord(value)) return undefined;
-  const names = Object.keys(value);
-  return names.length > 0 ? names.join(", ") : undefined;
-}
-
-function changeRows(data: Record<string, CanonicalValue>): string | undefined {
-  const changes = field(data, "changes");
-  if (!Array.isArray(changes)) return undefined;
-  const names = changes.flatMap(item => {
-    if (!isRecord(item)) return [];
-    const table = storedField(item, "table");
-    const key = storedField(item, "key");
-    return table !== undefined && key !== undefined ? [`${table}/${key}`] : [];
-  });
-  return names.length > 0 ? names.join(", ") : undefined;
-}
-
-/** Reads the stored external change list. Values are the stored ids and statuses, nothing else. */
-function externalChange(value: CanonicalValue | undefined): string | undefined {
-  if (!isRecord(value)) return undefined;
-  const parts: string[] = [];
-  for (const [key, entry] of Object.entries(value)) {
-    if (!Array.isArray(entry)) continue;
-    for (const item of entry) {
-      if (!isRecord(item)) continue;
-      const id = storedField(item, "authorizationId") ?? storedField(item, "paymentId")
-        ?? storedField(item, "operationId") ?? storedField(item, "id");
-      const status = storedField(item, "status") ?? storedField(item, "state");
-      if (id !== undefined && status !== undefined) parts.push(`${id} ${status}`);
-      else if (id !== undefined) parts.push(id);
-    }
-    if (parts.length === 0) continue;
-    return `${key}: ${parts.join(", ")}`;
-  }
-  return parts.length > 0 ? parts.join(", ") : undefined;
-}
 
 /**
  * Stored fields for the narration. A redacted or omitted payload contributes
@@ -178,38 +126,30 @@ function externalChange(value: CanonicalValue | undefined): string | undefined {
  */
 export function flightFacts(observation: Observation): readonly FlightFact[] {
   const visibility = payloadVisibility(observation);
+  if (visibility !== "omitted" && visibility !== "redacted" && visibility !== "visible") return [];
   if (visibility !== "visible") {
     return [{ label: "Stored payload", value: visibility === "redacted" ? "Redacted; not shown" : "Omitted; not shown" }];
   }
-  if (!Object.hasOwn(observation, "data") || !isRecord(observation.data)) return [];
-  const data = observation.data;
   const facts: FlightFact[] = [];
   for (const [key, label] of FIELD_LABELS) {
-    const value = storedField(data, key);
+    const value = storedScalar(observation, key);
     if (value !== undefined) facts.push({ label, value });
   }
-  const before = storedField(data, "before");
-  const after = storedField(data, "after");
-  if (before !== undefined && after !== undefined) facts.push({ label: "Recorded transition", value: `${before} → ${after}` });
-  const rows = changeRows(data);
-  if (rows !== undefined) facts.push({ label: "Recorded changed rows", value: rows });
-  const message = field(data, "message");
-  if (isRecord(message)) {
-    const type = storedField(message, "type");
-    if (type !== undefined) facts.push({ label: "Message type", value: type });
-    const fields = bodyFields(field(message, "body"));
-    if (fields !== undefined) facts.push({ label: "Message body fields", value: fields });
-  }
-  const body = bodyFields(field(data, "body"));
+  const changes = recordedChanges(observation);
+  const before = changes.find(change => change.before !== undefined)?.before;
+  const after = changes.find(change => change.after !== undefined)?.after;
+  if (before !== undefined && after !== undefined) facts.push({ label: "Recorded transition", value: `${before} \u2192 ${after}` });
+  const rows = changes.flatMap(change => change.table !== undefined && change.key !== undefined ? [`${change.table}/${change.key}`] : []);
+  if (rows.length > 0) facts.push({ label: "Recorded changed rows", value: rows.join(", ") });
+  const messageType = storedScalarAt(observation, ["message", "type"]);
+  if (messageType !== undefined) facts.push({ label: "Message type", value: messageType });
+  const messageFields = storedFieldsAt(observation, ["message", "body"]);
+  if (messageFields !== undefined) facts.push({ label: "Message body fields", value: messageFields });
+  const body = bodyFields(observation, "body");
   if (body !== undefined) facts.push({ label: "Stored body fields", value: body });
-  const change = externalChange(field(data, "visibleChanges"));
-  if (change !== undefined) facts.push({ label: "Recorded external change", value: change });
-  if (field(data, "redacted") === true) facts.push({ label: "Stored payload", value: "Redacted; not shown" });
+  const external = externalChanges(observation, "visibleChanges");
+  if (external.length > 0) facts.push({ label: "Recorded external change", value: external.join(", ") });
   return facts;
-}
-
-function relationshipOf(cue: MovementCue, edges: readonly MovementEdge[]): MovementEdge["relationship"] {
-  return edges.find(edge => edge.id === cue.edgeId)?.relationship ?? "request";
 }
 
 const RELATIONSHIP_LABELS = {
@@ -218,7 +158,7 @@ const RELATIONSHIP_LABELS = {
   subscription: "MessageBus subscription",
 } as const satisfies Record<MovementEdge["relationship"], string>;
 
-function glyphOf(observation: Observation, kind: MovementCue["kind"]): FlightGlyph {
+function glyphOf(observation: Observation, kind: Movement["kind"]): FlightGlyph {
   if (observation.type === "network.request.timedout") return "◷";
   if (observation.type === "network.request.dropped" || observation.type === "network.response.dropped") return "⊘";
   if (kind === "request") return "→";
@@ -234,31 +174,33 @@ function shapeOf(observation: Observation, relationship: MovementEdge["relations
 }
 
 /** One recorded movement, ready to animate. Reads stored fields and presentation link identity only. */
-export function flightStep(observation: Observation, cue: MovementCue, edges: readonly MovementEdge[]): FlightStep {
-  const relationship = relationshipOf(cue, edges);
-  const from = cue.nodeIds[0] ?? observation.source;
-  const to = cue.nodeIds[1] ?? observation.target;
+export function flightStep(observation: Observation, movement: Movement, edges: readonly MovementEdge[]): FlightStep {
+  const edge = edgeFor(movement, edges);
+  const relationship = movement.relationship;
+  const from = movement.from;
+  const to = movement.to;
+  const nodeIds = to !== undefined ? [from, to] : [from];
   const route = to !== undefined
     ? `${from} → ${to} · ${RELATIONSHIP_LABELS[relationship]}`
     : `${from} · ${RELATIONSHIP_LABELS[relationship]}`;
   const where = to !== undefined ? `from ${from} to ${to}` : `at ${from}`;
   return {
-    observationId: cue.observationId,
+    observationId: movement.observationId,
     sequence: observation.sequence,
     time: observation.time,
-    kind: cue.kind,
+    kind: movement.kind,
     relationship,
-    ...(cue.edgeId !== undefined ? { edgeId: cue.edgeId } : {}),
-    nodeIds: cue.nodeIds,
+    ...(edge !== undefined ? { edgeId: edge.id } : {}),
+    nodeIds,
     from,
     ...(to !== undefined ? { to } : {}),
-    headline: learningSummary(observation),
-    announcement: `${learningSummary(observation)} ${where} at virtual time ${observation.time}.`,
+    headline: recordLabel(observation),
+    announcement: movement.text,
     route,
     ...(observation.traceId !== undefined ? { traceId: observation.traceId } : {}),
     facts: flightFacts(observation),
     pattern: PATTERNS[observation.type] ?? PATTERN_FALLBACK,
-    glyph: glyphOf(observation, cue.kind),
+    glyph: glyphOf(observation, movement.kind),
     shape: shapeOf(observation, relationship),
     interrupted: INTERRUPTED_TYPES.has(observation.type),
   };
@@ -271,8 +213,8 @@ export function flightStep(observation: Observation, cue: MovementCue, edges: re
 export function flightSteps(observations: readonly Observation[], edges: readonly MovementEdge[]): readonly FlightStep[] {
   const steps: FlightStep[] = [];
   for (const observation of orderObservations(observations)) {
-    const cue = movementCue(observation, edges);
-    if (cue) steps.push(flightStep(observation, cue, edges));
+    const movement = movementOf(observation);
+    if (movement) steps.push(flightStep(observation, movement, edges));
   }
   return steps;
 }
