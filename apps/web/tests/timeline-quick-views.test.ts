@@ -6,8 +6,8 @@ import { normalCheckout, responseLostCheckout } from "@distlab/catalogs";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { emptyTimelineDraft, queryTimeline, withExactValue } from "../src/timeline-query.ts";
 import type { TimelineDraft } from "../src/timeline-query.ts";
-import { storyKinds } from "../src/story-timeline.ts";
-import { orderObservations } from "../src/timeline.ts";
+import { recordKinds } from "../src/records.ts";
+import { orderObservations } from "../src/records.ts";
 import {
   QUICK_VIEWS,
   emptyQuickViewExplanation,
@@ -117,8 +117,9 @@ test("each preset keeps exactly the stored records it names", () => {
   }
   // Key events are exactly the Story milestones, so both views name the same records.
   assert.deepEqual(quickViewObservations(sample, "key-events").map(item => item.id), ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-  assert.equal(storyKinds.length, 11);
-  assert.ok(storyKinds.includes("business"));
+  // One teaching category list, owned by the record readers. `business` existed only for runtime.log.
+  assert.equal(recordKinds.length, 10);
+  assert.ok(!recordKinds.includes("business" as never));
 });
 
 test("quick view counts and summaries state shown out of recorded total", () => {

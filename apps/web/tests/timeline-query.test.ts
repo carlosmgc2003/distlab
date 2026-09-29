@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Observation } from "@distlab/contracts";
 import { simulationTime } from "@distlab/contracts";
-import { filterObservations } from "../src/timeline.ts";
+import { filterObservations } from "./filter-oracle.ts";
 import {
   TIMELINE_FILTER_HELP,
   activeFilterChips,

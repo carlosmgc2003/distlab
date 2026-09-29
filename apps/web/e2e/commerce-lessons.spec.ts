@@ -29,7 +29,13 @@ for (const name of commerceLessonNames) {
     await page.screenshot({ path: testInfo.outputPath(`${name}-state.png`) });
     await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
     await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("list", { name: "Milestone categories, shapes, and counts" })).toContainText("Business event");
+    // Story keeps only the documented milestones, so a commerce run teaches on its network,
+    // message, transaction, and fault records. runtime.log is not a milestone; its records
+    // stay in Learning and Raw.
+    const legend = page.getByRole("list", { name: "Milestone categories, shapes, and counts" });
+    await expect(legend).not.toContainText("Business event");
+    await expect(legend.locator("li")).not.toHaveCount(0);
+    await expect(legend).toContainText(/Request|Response|Transaction commit|Fault|Timeout/);
     await expect(page.getByRole("region", { name: "Story diagram", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Table", exact: true }).click();
     await expect(page.locator(".story-table")).toBeVisible();

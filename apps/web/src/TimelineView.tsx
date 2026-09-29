@@ -31,30 +31,27 @@ import {
   revealQuickView,
 } from "./timeline-quick-views.ts";
 import type { QuickViewChip, QuickViewId } from "./timeline-quick-views.ts";
+import { continuesHistory, correlation, edgeFor, movementOf, payloadVisibility, traceView } from "./records.ts";
+import type { MovementEdge, SpanNode } from "./records.ts";
 import {
   TIMELINE_ROW_HEIGHT,
   TIMELINE_VIEWPORT,
   boundaryCopy,
   changeEvidence,
-  continuesHistory,
-  correlation,
   emphasisFor,
   learningTimeline,
-  movementCue,
   movementMessage,
-  observationHeading,
   payloadCopy,
-  payloadVisibility,
   playbackControl,
   playbackStatus,
+  recordLabel,
   revealMessage,
   selectionMessage,
   selectionStep,
   traceFilterMessage,
-  traceView,
   visibleRowRange,
 } from "./timeline.ts";
-import type { GraphEmphasis, MovementEdge, PlaybackPhase, SpanNode } from "./timeline.ts";
+import type { GraphEmphasis, PlaybackPhase } from "./timeline.ts";
 import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, storySummary } from "./story-timeline.ts";
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
 import { HelpHint } from "./ui-hint.tsx";
@@ -132,14 +129,15 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const liveCue = useMemo(() => {
     if (selected || liveCueId === null) return null;
     const observation = observations.find(item => item.id === liveCueId);
-    return observation ? movementCue(observation, edges) : null;
-  }, [selected, liveCueId, observations, edges]);
+    return observation ? movementOf(observation) : null;
+  }, [selected, liveCueId, observations]);
   const emphasis = useMemo(() => {
     if (selected) return emphasisFor(selected, edges);
     if (!liveCue) return undefined;
+    const edge = edgeFor(liveCue, edges);
     return {
-      nodeIds: liveCue.nodeIds,
-      ...(liveCue.edgeId !== undefined ? { edgeId: liveCue.edgeId } : {}),
+      nodeIds: liveCue.to !== undefined ? [liveCue.from, liveCue.to] : [liveCue.from],
+      ...(edge !== undefined ? { edgeId: edge.id } : {}),
       kind: liveCue.kind,
       text: liveCue.text,
       pulseId: liveCue.observationId,
@@ -216,7 +214,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     let newest: string | null = null;
     for (const observation of observations) {
       if (observation.sequence <= seenRef.current) continue;
-      if (movementCue(observation, edges)) newest = observation.id;
+      if (movementOf(observation)) newest = observation.id;
     }
     seenRef.current = observations.at(-1)?.sequence ?? seenRef.current;
     if (newest) setLiveCueId(newest);
@@ -823,7 +821,7 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
   const traceId = observation.traceId;
   const target = observation.target;
   const entities = observation.entityRefs ?? [];
-  const heading = observationHeading(observation);
+  const heading = recordLabel(observation);
   return <>
     {hidden ? <p>This observation is hidden by the current filters.</p> : null}
     <h3>{heading}</h3>

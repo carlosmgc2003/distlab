@@ -5,7 +5,7 @@ import { simulationTime } from "@distlab/contracts";
 import { normalCheckout, responseLostCheckout } from "@distlab/catalogs";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { componentLabel } from "../src/timeline-query.ts";
-import { orderObservations } from "../src/timeline.ts";
+import { orderObservations } from "../src/records.ts";
 import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, storySummary } from "../src/story-timeline.ts";
 
 const runs = new Map<string, Promise<RuntimeProjectionSet>>();

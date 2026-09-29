@@ -5,38 +5,37 @@ import { simulationTime } from "@distlab/contracts";
 import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine } from "@distlab/scenario";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
-import { learningTimeline as groupedLearningTimeline } from "../src/learning-timeline.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import {
-  boundaryCopy,
-  changeEvidence,
   continuesHistory,
   correlation,
+  edgeFor,
+  movementOf,
+  orderObservations,
+  payloadVisibility,
+  traceView,
+} from "../src/records.ts";
+import type { MovementEdge } from "../src/records.ts";
+import {
+  boundaryCopy,
+  changeEvidence,
   emphasisFor,
-  filterObservations,
-  learningSummary,
   learningTimeline,
-  movementCue,
   movementMessage,
   movementPulseClass,
-  observationHeading,
-  orderObservations,
-  parseTimelineFilter,
   payloadCopy,
-  payloadVisibility,
-  playbackAdvance,
   playbackControl,
   playbackStatus,
+  recordLabel,
   revealMessage,
   selectionStep,
   terminalCopy,
   terminalMark,
   traceFilterMessage,
-  traceView,
   visibleRowRange,
 } from "../src/timeline.ts";
-import type { MovementEdge } from "../src/timeline.ts";
+import { filterObservations, parseTimelineFilter } from "./filter-oracle.ts";
 import { emptyTimelineDraft, narrowToTrace, parseTimelineQuery, queryTimeline, readerFilter, revealTimelineObservation, timelineSuggestions, visibleChoices } from "../src/timeline-query.ts";
 
 const checkoutEdges: readonly MovementEdge[] = [
@@ -70,17 +69,18 @@ test("learning timeline collapses only contiguous unchanged bookkeeping and pres
   for (const [scenario, choice] of [[normalCheckout, scenarios[0]!], [responseLostCheckout, scenarios[1]!]] as const) {
     const { projection } = await completed(scenario, choice);
     const observations = projection.history.observations;
-    const entries = groupedLearningTimeline(observations);
-    assert.deepEqual(entries.flatMap(entry => entry.observations), orderObservations(observations));
-    assert.ok(entries.length < observations.length);
-    for (const entry of entries.filter(item => item.collapsed)) {
-      assert.ok(entry.observations.length > 1);
-      assert.ok(entry.observations.every((item, index) => index === 0 || item.sequence === entry.observations[index - 1]!.sequence + 1));
+    const items = learningTimeline(observations);
+    const grouped = items.filter(item => item.kind === "group");
+    assert.deepEqual(items.flatMap(item => item.kind === "group" ? item.observations : [item.observation]), orderObservations(observations));
+    assert.ok(items.length < observations.length);
+    for (const item of grouped) {
+      assert.ok(item.observations.length > 1);
+      assert.ok(item.observations.every((member, index) => index === 0 || member.sequence === item.observations[index - 1]!.sequence + 1));
     }
-    assert.ok(entries.some(entry => entry.summary.startsWith("Initial engine queue setup × ")));
+    assert.ok(grouped.some(item => item.summary === "Initial engine queue setup"));
     if (choice.id === "response-lost") {
       for (const type of ["external.effect.committed", "network.response.dropped", "network.request.timedout"]) {
-        assert.equal(entries.flatMap(entry => entry.observations).filter(item => item.type === type).length, 1);
+        assert.equal(observations.filter(item => item.type === type).length, 1);
       }
       const attempts = observations.filter(item => item.type === "message.delivered");
       assert.ok(attempts.some(item => (item.data as Record<string, unknown> | undefined)?.attempt === 2));
@@ -97,9 +97,10 @@ test("same-time operations, duplicate delivery, retries, and changed assertion r
     observation({ id: "assertion-fail", time: 4, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: false, evidence: { count: 0 } } }),
     observation({ id: "assertion-pass", time: 4, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: true, evidence: { count: 1 } } }),
   ];
-  const entries = groupedLearningTimeline(rows);
-  assert.deepEqual(entries.flatMap(entry => entry.observations.map(item => item.id)), rows.map(item => item.id));
-  assert.ok(entries.every(entry => !entry.collapsed));
+  const items = learningTimeline(rows);
+  assert.deepEqual(items.flatMap(item => item.kind === "group" ? item.observations.map(member => member.id) : [item.observation.id]), rows.map(item => item.id));
+  // Two identical assertion records with different verdicts never collapse into one group.
+  assert.ok(items.every(item => item.kind !== "group"));
 });
 
 function completed(scenario: typeof normalCheckout, choice: (typeof scenarios)[number]) {
@@ -149,7 +150,7 @@ test("learning timeline groups only adjacent bookkeeping and preserves attempts 
   assert.deepEqual(projection.map(item => item.kind === "group" ? item.observations.map(member => member.id) : item.observation.id), [
     ["schedule-1", "schedule-2"], "delivery-1", "delivery-2", ["assertion-1", "assertion-2"], "assertion-change", "unrelated",
   ]);
-  assert.equal(learningSummary(rows[2]!), "Message delivered (attempt 1)");
+  assert.equal(recordLabel(rows[2]!), "Message delivered (attempt 1)");
   assert.deepEqual(projection.flatMap(item => item.kind === "group" ? item.observations : [item.observation]).map(item => item.id),
     orderObservations(rows).map(item => item.id));
 });
@@ -240,17 +241,17 @@ test("request and message observations project onto the checkout links", async (
     const delivered = observations.find(item => item.type === "message.delivered");
     const acknowledged = observations.find(item => item.type === "message.acknowledged");
     assert.ok(request && response && published && delivered && acknowledged);
-    assert.equal(movementCue(request, edges)?.edgeId, edges.find(edge => edge.source === "customer-app")?.id);
-    assert.match(movementCue(request, edges)?.text ?? "", /Request sent from customer-app to orders at virtual time/);
-    assert.equal(movementCue(response, edges)?.edgeId, edges.find(edge => edge.source === "payments" && edge.target === "payment-processor")?.id);
-    assert.match(movementCue(response, edges)?.text ?? "", /Response sent from payment-processor to payments/);
-    assert.equal(movementCue(published, edges)?.edgeId, edges.find(edge => edge.relationship === "publication")?.id);
-    assert.match(movementCue(delivered, edges)?.text ?? "", /Message delivered from OrderCreated to payments/);
-    assert.equal(movementCue(delivered, edges)?.edgeId, edges.find(edge => edge.relationship === "subscription")?.id);
-    assert.match(movementCue(acknowledged, edges)?.text ?? "", /Message acknowledged by payments on OrderCreated/);
+    assert.equal(edgeFor(movementOf(request)!, edges)?.id, edges.find(edge => edge.source === "customer-app")?.id);
+    assert.match(movementOf(request)?.text ?? "", /Request sent from customer-app to orders at virtual time/);
+    assert.equal(edgeFor(movementOf(response)!, edges)?.id, edges.find(edge => edge.source === "payments" && edge.target === "payment-processor")?.id);
+    assert.match(movementOf(response)?.text ?? "", /Response sent from payment-processor to payments/);
+    assert.equal(edgeFor(movementOf(published)!, edges)?.id, edges.find(edge => edge.relationship === "publication")?.id);
+    assert.match(movementOf(delivered)?.text ?? "", /Message delivered from OrderCreated to payments/);
+    assert.equal(edgeFor(movementOf(delivered)!, edges)?.id, edges.find(edge => edge.relationship === "subscription")?.id);
+    assert.match(movementOf(acknowledged)?.text ?? "", /Message acknowledged by payments on OrderCreated/);
     const redactedPublished = { ...published, data: { redacted: true } };
-    assert.equal(movementCue(redactedPublished, edges)?.edgeId, movementCue(published, edges)?.edgeId);
-    assert.equal(movementCue(redactedPublished, edges)?.text.includes("OrderCreated"), true);
+    assert.equal(edgeFor(movementOf(redactedPublished)!, edges)?.id, edgeFor(movementOf(published)!, edges)?.id);
+    assert.equal(movementOf(redactedPublished)?.text.includes("OrderCreated"), true);
     const emphasis = emphasisFor(request, edges);
     assert.equal(emphasis.kind, "request");
     assert.equal(emphasis.pulseId, request.id);
@@ -262,7 +263,7 @@ test("request and message observations project onto the checkout links", async (
   const lost = await completed(responseLostCheckout, scenarios[1]);
   const dropped = lost.projection.history.observations.find(item => item.type === "network.response.dropped");
   assert.ok(dropped);
-  assert.match(movementCue(dropped, checkoutEdges)?.text ?? "", /Response dropped from payment-processor to payments/);
+  assert.match(movementOf(dropped)?.text ?? "", /Response dropped from payment-processor to payments/);
 });
 
 test("visible-history suggestions refresh across runs and exact mode matches the reader", async () => {
@@ -308,17 +309,14 @@ test("movement only highlights an edge with the matching relationship", () => {
     { id: "request", source: "payments", target: "orders", relationship: "request" },
   ];
   const response = observation({ id: "response", time: 1, sequence: 1, type: "network.response.sent", source: "orders", target: "payments" });
-  assert.equal(movementCue(response, edges)?.edgeId, "request");
-  assert.equal(movementCue(response, edges.filter(edge => edge.relationship === "publication"))?.edgeId, undefined);
+  assert.equal(edgeFor(movementOf(response)!, edges)?.id, "request");
+  // A drawn publication link is not the link a response travels, even for the same components.
+  assert.equal(edgeFor(movementOf(response)!, edges.filter(edge => edge.relationship === "publication")), undefined);
 });
 
 test("playback, filters, and reset stay on the UI copy of history", () => {
   const rows = [observation({ id: "a", time: 0, sequence: 0, type: "simulation.created", source: "simulation" })];
   const copy = structuredClone(rows);
-  assert.deepEqual(playbackAdvance(-1, 3), { cursor: 0, playing: true });
-  assert.deepEqual(playbackAdvance(1, 3), { cursor: 2, playing: true });
-  assert.deepEqual(playbackAdvance(2, 3), { cursor: 2, playing: false });
-  assert.deepEqual(playbackAdvance(0, 0), { cursor: -1, playing: false });
   assert.deepEqual(rows, copy);
   assert.equal(continuesHistory(rows, [...rows, observation({ id: "b", time: 1, sequence: 1, type: "clock.advanced", source: "simulation" })]), true);
   assert.equal(continuesHistory([...rows, observation({ id: "b", time: 1, sequence: 1, type: "clock.advanced", source: "simulation" })], rows), false);
@@ -460,7 +458,6 @@ test("observation headings describe only stored fields and never reconstruct red
     "message.ack.stale": "Stale message acknowledgement",
     "message.retry.scheduled": "Message retry scheduled",
     "database.transaction.committed": "Database transaction committed",
-    "database.transaction.rolled_back": "Database transaction rolled back",
     "database.transaction.rolledback": "Database transaction rolled back",
     "external.effect.committed": "External side effect committed",
     "fault.effect.selected": "Fault effect selected",
@@ -468,15 +465,15 @@ test("observation headings describe only stored fields and never reconstruct red
     "fault.custom.rule": "Fault recorded",
   };
   for (const [type, heading] of Object.entries(headings)) {
-    assert.equal(observationHeading(observation({ id: type, time: 1, sequence: 1, type, source: "orders" })), heading);
+    assert.equal(recordLabel(observation({ id: type, time: 1, sequence: 1, type, source: "orders" })), heading);
   }
   const delivered = observation({ id: "delivered", time: 1, sequence: 2, type: "message.delivered", source: "payments", data: { attempt: 2 } });
-  assert.equal(observationHeading(delivered), "Message delivered (attempt 2)");
+  assert.equal(recordLabel(delivered), "Message delivered (attempt 2)");
   const redactedDelivered = observation({ id: "redacted", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { redacted: true } });
-  assert.equal(observationHeading(redactedDelivered), "Message delivered");
+  assert.equal(recordLabel(redactedDelivered), "Message delivered");
   assert.equal(JSON.stringify(redactedDelivered).includes("invented-secret"), false);
   const before = structuredClone(delivered);
-  observationHeading(delivered);
+  recordLabel(delivered);
   assert.deepEqual(delivered, before);
 });
 

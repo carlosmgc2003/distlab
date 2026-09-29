@@ -21,7 +21,7 @@ import { flightTokenStyle } from "../src/architecture-view.ts";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
-import type { MovementEdge } from "../src/timeline.ts";
+import type { MovementEdge } from "../src/records.ts";
 
 const checkoutEdges: readonly MovementEdge[] = [
   { id: "request:customer-app:orders:0", source: "customer-app", target: "orders", relationship: "request" },
