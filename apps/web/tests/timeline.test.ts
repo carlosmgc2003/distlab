@@ -25,8 +25,6 @@ import {
   movementMessage,
   movementPulseClass,
   payloadCopy,
-  playbackControl,
-  playbackStatus,
   recordLabel,
   revealMessage,
   selectionStep,
@@ -332,7 +330,7 @@ test("playback, filters, and reset stay on the UI copy of history", () => {
   assert.equal(terminalMark("COMPLETED", null), null);
 });
 
-test("previous, next, and playback follow whether the visible selection can change", () => {
+test("previous and next follow whether the visible selection can change", () => {
   assert.equal(selectionStep(-1, 0, 1), null);
   assert.equal(selectionStep(-1, 0, -1), null);
   assert.equal(selectionStep(-1, 1, 1), 0);
@@ -348,15 +346,6 @@ test("previous, next, and playback follow whether the visible selection can chan
   assert.match(boundaryCopy(2, 3), /Next cannot move/);
   assert.match(boundaryCopy(0, 3), /Previous cannot move/);
   assert.match(boundaryCopy(-1, 0), /No visible observations/);
-  assert.equal(playbackControl(-1, 0, false).action, "unavailable");
-  assert.equal(playbackControl(0, 1, false).action, "unavailable");
-  assert.equal(playbackControl(-1, 4, false).label, "Play timeline");
-  assert.equal(playbackControl(1, 4, false).action, "play");
-  assert.equal(playbackControl(3, 4, false).label, "Restart timeline");
-  assert.equal(playbackControl(1, 4, true).action, "unavailable");
-  assert.match(playbackStatus("ended", playbackControl(3, 4, false)), /Restart timeline/);
-  assert.match(playbackStatus("playing", playbackControl(1, 4, true)), /Pause/);
-  assert.match(playbackStatus("paused", playbackControl(1, 4, false)), /paused/);
   const rows = [observation({ id: "a", time: 0, sequence: 0, type: "simulation.created", source: "simulation" })];
   assert.equal(JSON.stringify(rows), JSON.stringify(structuredClone(rows)));
 });

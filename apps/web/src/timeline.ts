@@ -219,14 +219,6 @@ export function movementPulseClass(id: string): string {
   return `pulse-${(hash >>> 0).toString(36)}`;
 }
 
-export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
-
-export interface PlaybackControl {
-  readonly action: "play" | "restart" | "unavailable";
-  readonly label: "Play timeline" | "Restart timeline";
-  readonly reason: string;
-}
-
 /** Index of the row this direction would select, or null when the selection would stay put. */
 export function selectionStep(index: number, count: number, delta: -1 | 1): number | null {
   if (count <= 0) return null;
@@ -234,10 +226,6 @@ export function selectionStep(index: number, count: number, delta: -1 | 1): numb
   const next = index + delta;
   if (next < 0 || next >= count) return null;
   return next;
-}
-
-export function selectionAvailability(index: number, count: number): { readonly previous: boolean; readonly next: boolean } {
-  return { previous: selectionStep(index, count, -1) !== null, next: selectionStep(index, count, 1) !== null };
 }
 
 export function boundaryCopy(index: number, count: number): string {
@@ -252,35 +240,6 @@ export function boundaryCopy(index: number, count: number): string {
   if (index === 0) return `${position} Previous cannot move.`;
   if (index === count - 1) return `${position} Next cannot move.`;
   return position;
-}
-
-/** Play, pause, and restart describe the UI cursor. They do not rewind the simulation. */
-export function playbackControl(index: number, count: number, playing: boolean): PlaybackControl {
-  if (playing) {
-    return {
-      action: "unavailable",
-      label: "Play timeline",
-      reason: "Playing the visible timeline. Pause stops the cursor.",
-    };
-  }
-  if (count <= 0) return { action: "unavailable", label: "Play timeline", reason: "No visible observations to play." };
-  if (count === 1) return { action: "unavailable", label: "Play timeline", reason: "Only one visible observation. Playback cannot advance." };
-  if (index >= 0 && index >= count - 1) {
-    return {
-      action: "restart",
-      label: "Restart timeline",
-      reason: "At the end of the visible results. Restart timeline plays from the first visible observation.",
-    };
-  }
-  if (index < 0) return { action: "play", label: "Play timeline", reason: "Play timeline starts at the first visible observation." };
-  return { action: "play", label: "Play timeline", reason: "Play timeline continues from the selected observation." };
-}
-
-export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): string {
-  if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor.";
-  if (phase === "paused") return "Playback is paused.";
-  if (phase === "ended") return "Playback reached the end of the visible results. Restart timeline plays from the first visible observation.";
-  return control.reason;
 }
 
 /** The review position, naming the stored type. Rows and the detail panel carry the wording. */

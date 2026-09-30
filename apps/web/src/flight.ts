@@ -12,8 +12,7 @@ import {
   storedScalarAt,
 } from "./records.ts";
 import type { Movement, MovementEdge } from "./records.ts";
-import { playbackControl, playbackStatus, recordLabel, selectionStep } from "./timeline.ts";
-import type { PlaybackControl, PlaybackPhase } from "./timeline.ts";
+import { recordLabel, selectionStep } from "./timeline.ts";
 
 /**
  * Presentation-only reading of recorded movements. Every value here is copied
@@ -255,6 +254,43 @@ function boundaryDetail(steps: readonly FlightStep[]): string {
   return times.length === 1
     ? `All ${steps.length} recorded movements are at virtual time ${times[0]}.`
     : `${steps.length} recorded movements across ${times.length} recorded virtual-time boundaries, from t=${times[0]} to t=${times.at(-1)}. Rules mark boundaries only; no duration is stored.`;
+}
+
+export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
+
+export interface PlaybackControl {
+  readonly action: "play" | "restart" | "unavailable";
+  readonly label: "Play timeline" | "Restart timeline";
+  readonly reason: string;
+}
+
+/** Play, pause, and restart describe the cursor. They do not rewind the simulation. */
+export function playbackControl(index: number, count: number, playing: boolean): PlaybackControl {
+  if (playing) {
+    return {
+      action: "unavailable",
+      label: "Play timeline",
+      reason: "Playing the visible timeline. Pause stops the cursor.",
+    };
+  }
+  if (count <= 0) return { action: "unavailable", label: "Play timeline", reason: "No visible observations to play." };
+  if (count === 1) return { action: "unavailable", label: "Play timeline", reason: "Only one visible observation. Playback cannot advance." };
+  if (index >= 0 && index >= count - 1) {
+    return {
+      action: "restart",
+      label: "Restart timeline",
+      reason: "At the end of the visible results. Restart timeline plays from the first visible observation.",
+    };
+  }
+  if (index < 0) return { action: "play", label: "Play timeline", reason: "Play timeline starts at the first visible observation." };
+  return { action: "play", label: "Play timeline", reason: "Play timeline continues from the selected observation." };
+}
+
+export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): string {
+  if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor.";
+  if (phase === "paused") return "Playback is paused.";
+  if (phase === "ended") return "Playback reached the end of the visible results. Restart timeline plays from the first visible observation.";
+  return control.reason;
 }
 
 export interface FlightAdvance {

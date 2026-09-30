@@ -42,8 +42,6 @@ import {
   learningTimeline,
   movementMessage,
   payloadCopy,
-  playbackControl,
-  playbackStatus,
   recordLabel,
   revealMessage,
   selectionMessage,
@@ -51,7 +49,7 @@ import {
   traceFilterMessage,
   visibleRowRange,
 } from "./timeline.ts";
-import type { GraphEmphasis, PlaybackPhase } from "./timeline.ts";
+import type { GraphEmphasis } from "./timeline.ts";
 import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, storySummary } from "./story-timeline.ts";
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
 import { HelpHint } from "./ui-hint.tsx";
@@ -74,7 +72,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const [view, setView] = useState<"story" | "learning" | "raw">("story");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [phase, setPhase] = useState<PlaybackPhase>("idle");
   const [feedback, setFeedback] = useState("");
   const [liveCueId, setLiveCueId] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -124,8 +121,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const selected = observations.find(item => item.id === selectedId);
   const selectedTrace = selected?.traceId;
   const selectedIndex = filtered.findIndex(item => item.id === selectedId);
-  const playing = phase === "playing";
-  const transport = playbackControl(selectedIndex, filtered.length, playing);
   const liveCue = useMemo(() => {
     if (selected || liveCueId === null) return null;
     const observation = observations.find(item => item.id === liveCueId);
@@ -150,8 +145,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     pendingFocusId.current = id;
     setFocusNonce(value => value + 1);
   };
-  const haltPlayback = () => { setPhase(current => current === "idle" ? "idle" : "paused"); };
-
   useEffect(() => { onEmphasis(emphasis); }, [emphasis, onEmphasis]);
 
   useEffect(() => {
@@ -171,7 +164,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   useEffect(() => {
     if (focusedObservationId === undefined) return;
     const observation = observationsRef.current.find(item => item.id === focusedObservationId);
-    setPhase(current => current === "idle" ? "idle" : "paused");
     if (!observation) {
       setFeedback("That observation is not in this history.");
       return;
@@ -199,7 +191,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     }
     if (!continuesHistory(previous, observations)) {
       setSelectedId(null);
-      setPhase("idle");
       setFeedback("");
       setLiveCueId(null);
       setScrollTop(0);
@@ -221,13 +212,13 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   }, [observations, edges]);
 
   useEffect(() => {
-    if (!liveCueId || playing || selectedId) return;
+    if (!liveCueId || selectedId) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setTimeout(() => {
       setLiveCueId(current => current === liveCueId ? null : current);
     }, 1200);
     return () => window.clearTimeout(timer);
-  }, [liveCueId, playing, selectedId]);
+  }, [liveCueId, selectedId]);
 
   const filterKey = JSON.stringify([query, quickView]);
   useEffect(() => {
@@ -298,7 +289,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     else setFilterError(parsed.message);
   };
   const choose = (id: string) => {
-    haltPlayback();
     setSelectedId(id);
     const observation = observations.find(item => item.id === id);
     if (observation) setFeedback(selectionMessage(observation));
@@ -309,7 +299,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       setFeedback("That observation is not in this history.");
       return;
     }
-    haltPlayback();
     setView("raw");
     const revealed = revealTimelineObservation(draft, observation);
     if (revealed.changed) {
@@ -349,7 +338,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   };
   const showTrace = (traceId: string) => {
     const change = narrowToTrace(draft, traceId);
-    haltPlayback();
     applyDraft(change.draft);
     const member = observations.find(item => item.traceId === traceId);
     const unhidden = member === undefined ? { id: quickView, cleared: "" } : revealQuickView(quickView, member);
@@ -363,7 +351,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   const selectIndex = (index: number) => {
     const row = filtered[index];
     if (!row) return;
-    haltPlayback();
     setView("raw");
     setSelectedId(row.id);
     setFeedback(movementMessage(row, index, filtered.length));
@@ -481,7 +468,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
 
     </div>
     </details>
-    <p id="timeline-playback" className="sr-only">{playbackStatus(phase, transport)}</p>
     <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
     {/* Active constraints remain visible even when the filter drawer is closed. */}
     <div className="timeline-chip-row" hidden={!filtersActive} tabIndex={0} role="group" aria-label="Active filters and reset">

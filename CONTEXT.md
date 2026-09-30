@@ -30,6 +30,9 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - **Presentation playback** (`apps/web/src/flight.ts`, `flight-playback.ts`)
   moves a browser cursor over records the worker already published. It never
   advances virtual time, allocates an observation, or sends a worker command.
+  The architecture-graph flight cursor is the only playback. Selecting a row in
+  Recorded history is review navigation, not playback, and deliberately shares
+  no cursor seam with the graph.
 
 ## Application composition root
 
