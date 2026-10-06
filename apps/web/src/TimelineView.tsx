@@ -1,61 +1,27 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { Observation } from "@distlab/contracts";
-import {
-  TIMELINE_FILTER_HELP,
-  activeFilterChips,
-  clearTimelineField,
-  componentLabel,
-  emptyFilterExplanation,
-  emptyTimelineDraft,
-  narrowToTrace,
-  parseTimelineQuery,
-  queryTimeline,
-  revealTimelineObservation,
-  timelineDraftIsBlank,
-  timelineSuggestions,
-  visibleChoices,
-  withExactValue,
-} from "./timeline-query.ts";
-import type { ComponentTitle, FilterChoice, TextFilterField, TextMatchMode, TimelineDraft, TimelineQuery } from "./timeline-query.ts";
-import {
-  QUICK_VIEWS,
-  QUICK_VIEW_HELP,
-  emptyQuickViewExplanation,
-  quickViewChip,
-  quickViewCounts,
-  quickViewFeedback,
-  quickViewLabel,
-  quickViewObservations,
-  quickViewSummary,
-  recordedComponentChips,
-  revealQuickView,
-} from "./timeline-quick-views.ts";
-import type { QuickViewChip, QuickViewId } from "./timeline-quick-views.ts";
-import { continuesHistory, correlation, edgeFor, movementOf, payloadVisibility, traceView } from "./records.ts";
+import { QUICK_VIEWS, QUICK_VIEW_HELP } from "./timeline-quick-views.ts";
+import { TIMELINE_FILTER_HELP, visibleChoices, withExactValue, clearTimelineField } from "./timeline-query.ts";
+import type { ComponentTitle, FilterChoice, TextFilterField, TextMatchMode } from "./timeline-query.ts";
 import type { MovementEdge, SpanNode } from "./records.ts";
-import {
-  TIMELINE_ROW_HEIGHT,
-  TIMELINE_VIEWPORT,
-  boundaryCopy,
-  changeEvidence,
-  emphasisFor,
-  learningTimeline,
-  movementMessage,
-  payloadCopy,
-  recordLabel,
-  revealMessage,
-  selectionMessage,
-  selectionStep,
-  traceFilterMessage,
-  visibleRowRange,
-} from "./timeline.ts";
-import type { GraphEmphasis } from "./timeline.ts";
-import { storyDetail, storyLanes, storyLegend, storyMilestones, storyReduction, storySummary } from "./story-timeline.ts";
+import { correlation, payloadVisibility, traceView } from "./records.ts";
+import { componentLabel } from "./timeline-query.ts";
+import { TIMELINE_ROW_HEIGHT, TIMELINE_VIEWPORT, changeEvidence, learningTimeline, payloadCopy, recordLabel } from "./timeline.ts";
+import type { GraphEmphasis, LearningTimelineItem } from "./timeline.ts";
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
+import { createReviewNavigation, derive, transition } from "./review-navigation.ts";
+import type { ReviewContext, ReviewIntent, ReviewNavigation } from "./review-navigation.ts";
 import { HelpHint } from "./ui-hint.tsx";
 
 const SPAN_PREVIEW = 12;
 
+/**
+ * Recorded history presentation. This component renders what review navigation
+ * decided and adapts the DOM to it: it measures the scroller, and it applies the
+ * scroll and focus requests navigation returns. Where the reader is, which
+ * constraints are active, and which record is revealed all live in
+ * `review-navigation.ts`; this file decides none of it.
+ */
 export function TimelineView({ observations, edges, componentTitles = [], onEmphasis, focusedObservationId, focusToken = 0 }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
@@ -64,88 +30,46 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
 }) {
-  const [draft, setDraft] = useState<TimelineDraft>(emptyTimelineDraft);
-  const [filterField, setFilterField] = useState<TextFilterField>("type");
-  const [query, setQuery] = useState<TimelineQuery>({});
-  const [filterError, setFilterError] = useState<string | null>(null);
-  const [quickView, setQuickView] = useState<QuickViewId | null>(null);
-  const [view, setView] = useState<"story" | "learning" | "raw">("story");
-  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(() => new Set());
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState("");
-  const [liveCueId, setLiveCueId] = useState<string | null>(null);
+  const [navigation, send] = useReducer(reduce, undefined, createReviewNavigation);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [rowViewport, setRowViewport] = useState(TIMELINE_VIEWPORT);
-  const [focusNonce, setFocusNonce] = useState(0);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const previousRef = useRef<readonly Observation[] | null>(null);
-  const seenRef = useRef(-1);
-  const pendingFocusId = useRef<string | null>(null);
-  const suggestions = useMemo(() => timelineSuggestions(observations, componentTitles), [observations, componentTitles]);
-  // The quick view narrows the snapshot first; the canonical fields then narrow that result.
-  const scoped = useMemo(() => quickViewObservations(observations, quickView), [observations, quickView]);
-  const filtered = useMemo(() => queryTimeline(scoped, query), [scoped, query]);
-  const quickCounts = useMemo(() => quickViewCounts(observations), [observations]);
-  const componentChips = useMemo(() => recordedComponentChips(observations, componentTitles), [observations, componentTitles]);
-  const learningItems = useMemo(() => learningTimeline(filtered), [filtered]);
-  const hiddenLearningRecords = filtered.length - learningItems.length;
-  const milestones = useMemo(() => storyMilestones(filtered), [filtered]);
-  const lanes = useMemo(() => storyLanes(milestones), [milestones]);
-  const legend = useMemo(() => storyLegend(milestones), [milestones]);
-  const reduction = storyReduction(milestones, filtered.length);
-  const componentLabels = useMemo(
-    () => new Map(componentTitles.map(item => [item.id, componentLabel(item.id, componentTitles)])),
-    [componentTitles],
-  );
-  const storyCopy = useMemo(() => storySummary(milestones, filtered.length, componentLabels), [milestones, filtered.length, componentLabels]);
-  const storyDetailCopy = useMemo(() => storyDetail(milestones), [milestones]);
-  const chips = useMemo(() => activeFilterChips(query, componentTitles), [query, componentTitles]);
-  const viewChip: QuickViewChip | null = quickView === null ? null : quickViewChip(quickView);
-  const quickCopy = quickViewSummary(quickView, filtered.length, observations.length);
-  const explanation = useMemo(() => {
-    if (filtered.length > 0 || observations.length === 0) return "";
-    const reset = quickView === null
-      ? undefined
-      : `Remove the ${quickViewLabel(quickView).toLowerCase()} quick view chip or clear all filters to see recorded observations again.`;
-    const parts: string[] = [];
-    if (quickView !== null) parts.push(emptyQuickViewExplanation(quickView, observations.length));
-    parts.push(emptyFilterExplanation(query, scoped, componentTitles, reset));
-    return parts.join(" ");
-  }, [filtered.length, observations.length, quickView, query, scoped, componentTitles]);
-  const draftRef = useRef(draft);
-  const quickViewRef = useRef(quickView);
-  const observationsRef = useRef(observations);
-  draftRef.current = draft;
-  quickViewRef.current = quickView;
-  observationsRef.current = observations;
-  const selected = observations.find(item => item.id === selectedId);
-  const selectedTrace = selected?.traceId;
-  const selectedIndex = filtered.findIndex(item => item.id === selectedId);
-  const liveCue = useMemo(() => {
-    if (selected || liveCueId === null) return null;
-    const observation = observations.find(item => item.id === liveCueId);
-    return observation ? movementOf(observation) : null;
-  }, [selected, liveCueId, observations]);
-  const emphasis = useMemo(() => {
-    if (selected) return emphasisFor(selected, edges);
-    if (!liveCue) return undefined;
-    const edge = edgeFor(liveCue, edges);
-    return {
-      nodeIds: liveCue.to !== undefined ? [liveCue.from, liveCue.to] : [liveCue.from],
-      ...(edge !== undefined ? { edgeId: edge.id } : {}),
-      kind: liveCue.kind,
-      text: liveCue.text,
-      pulseId: liveCue.observationId,
-      // A live cue flashes by itself; it never takes the graph highlight back from playback.
-      origin: "live" as const,
-    };
-  }, [selected, edges, liveCue]);
+  const appliedScrollRef = useRef(0);
+  const appliedFocusRef = useRef(-1);
+  const emphasisRef = useRef<GraphEmphasis | undefined>(undefined);
+  const requestedRef = useRef<number>(-1);
 
-  const requestFocus = (id: string) => {
-    pendingFocusId.current = id;
-    setFocusNonce(value => value + 1);
-  };
-  useEffect(() => { onEmphasis(emphasis); }, [emphasis, onEmphasis]);
+  const context: ReviewContext = useMemo(() => ({
+    observations,
+    edges,
+    componentTitles,
+    viewport: { scrollTop, height: rowViewport },
+  }), [observations, edges, componentTitles, scrollTop, rowViewport]);
+  const view = derive(navigation, context);
+  const dispatch = (intent: ReviewIntent) => send({ intent, context });
+
+  // History continuity: growth raises a cue for the newest movement, replacement
+  // drops the review position and every active constraint.
+  useEffect(() => {
+    dispatch({ type: "published", observations });
+  }, [observations]);
+
+  // A record named from outside Recorded history, such as an evidence link.
+  useEffect(() => {
+    if (focusedObservationId === undefined) return;
+    if (requestedRef.current === focusToken) return;
+    requestedRef.current = focusToken;
+    dispatch({ type: "reveal", observationId: focusedObservationId });
+  }, [focusedObservationId, focusToken]);
+
+  // Derive returns a fresh projection each render, so the graph highlight is
+  // compared by value. Comparing by identity would hand the shell a new object
+  // on every render and never settle.
+  useEffect(() => {
+    if (sameEmphasis(emphasisRef.current, view.emphasis)) return;
+    emphasisRef.current = view.emphasis;
+    onEmphasis(view.emphasis);
+  }, [view.emphasis, onEmphasis]);
 
   useEffect(() => {
     const node = scrollerRef.current;
@@ -161,238 +85,76 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     return () => observer.disconnect();
   }, []);
 
+  // Scroll and focus are requests, so each is applied once per change. A
+  // `focus-row` request is applied with the focus, below.
   useEffect(() => {
-    if (focusedObservationId === undefined) return;
-    const observation = observationsRef.current.find(item => item.id === focusedObservationId);
-    if (!observation) {
-      setFeedback("That observation is not in this history.");
-      return;
-    }
-    setView("raw");
-    const revealed = revealTimelineObservation(draftRef.current, observation);
-    if (revealed.changed) {
-      setDraft(revealed.draft);
-      setQuery(revealed.query);
-      setFilterError(null);
-    }
-    const unhidden = revealQuickView(quickViewRef.current, observation);
-    if (unhidden.id !== quickViewRef.current) setQuickView(unhidden.id);
-    setSelectedId(observation.id);
-    setFeedback(revealMessage([...revealed.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])], observation));
-    requestFocus(observation.id);
-  }, [focusedObservationId, focusToken]);
-
-  useEffect(() => {
-    const previous = previousRef.current;
-    previousRef.current = observations;
-    if (previous === null) {
-      seenRef.current = observations.at(-1)?.sequence ?? -1;
-      return;
-    }
-    if (!continuesHistory(previous, observations)) {
-      setSelectedId(null);
-      setFeedback("");
-      setLiveCueId(null);
+    const node = scrollerRef.current;
+    if (!node || view.scroll.epoch === appliedScrollRef.current) return;
+    appliedScrollRef.current = view.scroll.epoch;
+    if (view.scroll.kind === "top") {
+      node.scrollTop = 0;
       setScrollTop(0);
-      setDraft(emptyTimelineDraft);
-      setQuery({});
-      setFilterError(null);
-      setQuickView(null);
-      setFeedback("");
-      seenRef.current = observations.at(-1)?.sequence ?? -1;
       return;
     }
-    let newest: string | null = null;
-    for (const observation of observations) {
-      if (observation.sequence <= seenRef.current) continue;
-      if (movementOf(observation)) newest = observation.id;
-    }
-    seenRef.current = observations.at(-1)?.sequence ?? seenRef.current;
-    if (newest) setLiveCueId(newest);
-  }, [observations, edges]);
-
-  useEffect(() => {
-    if (!liveCueId || selectedId) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setTimeout(() => {
-      setLiveCueId(current => current === liveCueId ? null : current);
-    }, 1200);
-    return () => window.clearTimeout(timer);
-  }, [liveCueId, selectedId]);
-
-  const filterKey = JSON.stringify([query, quickView]);
-  useEffect(() => {
-    if (pendingFocusId.current) return;
-    const node = scrollerRef.current;
-    if (node) node.scrollTop = 0;
-    setScrollTop(0);
-  }, [filterKey]);
-
-  useEffect(() => {
-    const node = scrollerRef.current;
-    if (!node || selectedId === null) return;
-    const index = filtered.findIndex(item => item.id === selectedId);
-    if (index < 0) return;
-    if (view === "raw") {
-      const top = index * TIMELINE_ROW_HEIGHT;
-      if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) node.scrollTop = top;
+    if (view.scroll.kind !== "ensure-visible" || view.scroll.index < 0) return;
+    if (view.scroll.view === "raw") {
+      // Raw rows have fixed geometry, so the selected row's offset is its index.
+      const top = view.scroll.index * TIMELINE_ROW_HEIGHT;
+      if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) {
+        node.scrollTop = top;
+        setScrollTop(top);
+      }
       return;
     }
     // Story and Learning rows have variable height; scroll the actual member.
-    const scope = view === "story" ? node.querySelector(".story-table") ?? node : node;
-    const row = scope.querySelector<HTMLElement>(`[data-observation-id="${CSS.escape(selectedId)}"]`);
-    row?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [selectedId, filtered, view]);
+    const scope = view.scroll.view === "story" ? node.querySelector(".story-table") ?? node : node;
+    scope.querySelector<HTMLElement>(`[data-observation-id="${CSS.escape(view.scroll.observationId ?? "")}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [view.scroll]);
 
+  // Focus stays requested until the DOM reports the row focused.
   useEffect(() => {
-    const id = pendingFocusId.current;
     const node = scrollerRef.current;
-    if (!id || !node) return;
-    const index = filtered.findIndex(item => item.id === id);
-    if (index < 0) return;
-    const row = node.querySelector<HTMLButtonElement>(`[data-observation-id="${CSS.escape(id)}"]`);
-    if (!row && view === "raw") {
+    const focus = view.focus;
+    if (!node || focus === null || appliedFocusRef.current === focus.token) return;
+    const row = node.querySelector<HTMLButtonElement>(`[data-observation-id="${CSS.escape(focus.observationId)}"]`);
+    if (!row && navigation.view === "raw") {
       // Virtualized Raw rows outside the current window are not in the DOM.
       // Move the window to the selected index so the next render includes it,
-      // then retry focusing. This covers evidence navigation that activates
-      // the Recorded history tab while it was hidden.
-      const top = index * TIMELINE_ROW_HEIGHT;
+      // then retry focusing. This covers evidence navigation that activates the
+      // Recorded history tab while it was hidden.
+      const top = view.selectedIndex * TIMELINE_ROW_HEIGHT;
       node.scrollTop = top;
       setScrollTop(top);
       return;
     }
     if (!row) return;
+    appliedFocusRef.current = focus.token;
     // Learning groups have variable height; scroll the actual member rather than
     // assuming the fixed raw-row geometry used by the virtualized Raw view.
-    if (view === "learning") row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (navigation.view === "learning") row.scrollIntoView({ block: "nearest", inline: "nearest" });
     else {
-      const top = index * TIMELINE_ROW_HEIGHT;
+      const top = view.selectedIndex * TIMELINE_ROW_HEIGHT;
       if (top < node.scrollTop || top + TIMELINE_ROW_HEIGHT > node.scrollTop + node.clientHeight) node.scrollTop = top;
     }
-    pendingFocusId.current = null;
     row.focus({ preventScroll: true });
     node.scrollIntoView({ block: "nearest", inline: "nearest" });
     document.getElementById("inspection-panel")?.scrollTo(0, 0);
-  }, [filtered, focusNonce, scrollTop, view]);
+  }, [view.focus, navigation.view, view.selectedIndex, scrollTop]);
 
-  useEffect(() => {
-    // Switching views replaces the scroller content; a stale offset would open on empty space.
-    const node = scrollerRef.current;
-    if (node) node.scrollTop = 0;
-    setScrollTop(0);
-  }, [view]);
+  const {
+    boundaryCopy, chips, componentChips, componentLabels, explanation, filtered, filtersActive,
+    hiddenLearningRecords, learningItems, legend, lanes, milestones, quickCounts, quickCopy,
+    reduction, selected, selectedTrace, storyCopy, storyCount, storyDetailCopy, suggestions, viewChip,
+  } = view;
 
-  const applyDraft = (next: TimelineDraft) => {
-    setDraft(next);
-    const parsed = parseTimelineQuery(next);
-    if (parsed.ok) { setQuery(parsed.query); setFilterError(null); }
-    else setFilterError(parsed.message);
-  };
-  const choose = (id: string) => {
-    setSelectedId(id);
-    const observation = observations.find(item => item.id === id);
-    if (observation) setFeedback(selectionMessage(observation));
-  };
-  const reveal = (id: string) => {
-    const observation = observations.find(item => item.id === id);
-    if (!observation) {
-      setFeedback("That observation is not in this history.");
-      return;
-    }
-    setView("raw");
-    const revealed = revealTimelineObservation(draft, observation);
-    if (revealed.changed) {
-      setDraft(revealed.draft);
-      setQuery(revealed.query);
-      setFilterError(null);
-    }
-    const unhidden = revealQuickView(quickView, observation);
-    if (unhidden.id !== quickView) setQuickView(unhidden.id);
-    setSelectedId(observation.id);
-    setFeedback(revealMessage([...revealed.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])], observation));
-    requestFocus(observation.id);
-  };
-  const toggleQuickView = (id: QuickViewId) => {
-    const next = quickView === id ? null : id;
-    setQuickView(next);
-    setFeedback(quickViewFeedback(next, quickViewObservations(observations, next).length, observations.length));
-  };
-  const toggleComponentChip = (value: string) => {
-    const active = draft.component.trim() === value && draft.componentMode === "exact";
-    applyDraft(active ? clearTimelineField(draft, "component") : withExactValue(draft, "component", value));
-    setFeedback(active
-      ? `Component filter for ${componentLabel(value, componentTitles)} was removed.`
-      : `Component filter is now ${componentLabel(value, componentTitles)}. It narrows the display and changes nothing in the run.`);
-  };
-  const toggleTraceChip = (traceId: string) => {
-    const active = draft.traceId.trim() === traceId && draft.traceMode === "exact";
-    applyDraft(active ? clearTimelineField(draft, "traceId") : withExactValue(draft, "traceId", traceId));
-    setFeedback(active
-      ? `Trace filter for ${traceId} was removed.`
-      : `Trace filter is now ${traceId}. It narrows the display and changes nothing in the run.`);
-  };
-  const clearAllFilters = () => {
-    applyDraft(emptyTimelineDraft);
-    setQuickView(null);
-    setFeedback(`All filters and quick views were cleared. ${observations.length} recorded observations are available again.`);
-  };
-  const showTrace = (traceId: string) => {
-    const change = narrowToTrace(draft, traceId);
-    applyDraft(change.draft);
-    const member = observations.find(item => item.traceId === traceId);
-    const unhidden = member === undefined ? { id: quickView, cleared: "" } : revealQuickView(quickView, member);
-    if (unhidden.id !== quickView) setQuickView(unhidden.id);
-    setFeedback(traceFilterMessage(traceId, {
-      changed: change.changed || unhidden.cleared !== "",
-      cleared: [...change.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])],
-    }));
-    if (selectedId) requestFocus(selectedId);
-  };
-  const selectIndex = (index: number) => {
-    const row = filtered[index];
-    if (!row) return;
-    setView("raw");
-    setSelectedId(row.id);
-    setFeedback(movementMessage(row, index, filtered.length));
-    requestFocus(row.id);
-  };
-  const move = (delta: -1 | 1) => {
-    const next = selectionStep(selectedIndex, filtered.length, delta);
-    if (next === null) {
-      setFeedback(boundaryCopy(selectedIndex, filtered.length));
-      return;
-    }
-    selectIndex(next);
-  };
-  const useText = (field: TextFilterField, value: string) => applyDraft(withExactValue(draft, field, value));
-  const useEntity = (kind: string, id: string) => applyDraft(withExactValue(withExactValue(draft, "entityKind", kind), "entityId", id));
-  const range = visibleRowRange(filtered.length, scrollTop, rowViewport, TIMELINE_ROW_HEIGHT);
-  const windowRows = filtered.slice(range.start, range.end);
-  // The selected Raw row stays in the DOM even when virtualized out, so evidence
-  // navigation that activates the tab always has a focus target and a pressed state.
-  // It is merged in index order so DOM order still follows observation sequence.
-  const rawRows = (() => {
-    if (selectedId === null || view !== "raw") return windowRows.map((observation, offset) => ({ observation, index: range.start + offset }));
-    const selectedIdx = filtered.findIndex(item => item.id === selectedId);
-    const rows = windowRows.map((observation, offset) => ({ observation, index: range.start + offset }));
-    if (selectedIdx < 0 || (selectedIdx >= range.start && selectedIdx < range.end)) return rows;
-    const observation = filtered[selectedIdx];
-    if (observation === undefined) return rows;
-    return [...rows, { observation, index: selectedIdx }].sort((a, b) => a.index - b.index);
-  })();
-  const filtersActive = !timelineDraftIsBlank(draft) || filterError !== null || quickView !== null;
-  const otherRecords = filtered.length - milestones.length;
-  const storyCount = `${reduction} ${observations.length === filtered.length ? "" : `Filters show ${filtered.length} of ${observations.length} observations; `}`
-    + `${otherRecords === 0
-      ? filtered.length === 0 ? "No visible records to reduce. " : "Every visible record is a milestone. "
-      : `${otherRecords} visible records are not teaching milestones; Learning and Raw keep all of them. `}`;
   return <div className="history-layout">
     <section id="timeline-panel" className="timeline-panel" tabIndex={-1} aria-labelledby="timeline-heading">
     <div className="history-heading"><h2 id="timeline-heading">Recorded history</h2>
       <div className="timeline-view-switch" role="group" aria-label="Timeline view">
-        <button type="button" aria-pressed={view === "story"} onClick={() => setView("story")}>Story</button>
-        <button type="button" aria-pressed={view === "learning"} onClick={() => setView("learning")}>Learning</button>
-        <button type="button" aria-pressed={view === "raw"} onClick={() => setView("raw")}>Raw</button>
+        <button type="button" aria-pressed={navigation.view === "story"} onClick={() => dispatch({ type: "switch-view", view: "story" })}>Story</button>
+        <button type="button" aria-pressed={navigation.view === "learning"} onClick={() => dispatch({ type: "switch-view", view: "learning" })}>Learning</button>
+        <button type="button" aria-pressed={navigation.view === "raw"} onClick={() => dispatch({ type: "switch-view", view: "raw" })}>Raw</button>
       </div>
     </div>
     {/* The review position only. Run status and virtual time have one home, the committed-state summary. */}
@@ -402,48 +164,48 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     <p id="timeline-quick-count" className={filtersActive ? "timeline-quick-count" : "sr-only"}>{quickCopy}</p>
     <div className="story-filter-bar">
       <label htmlFor="story-quick-view">Show</label>
-      <select id="story-quick-view" value={quickView ?? "all"} onChange={event => {
+      <select id="story-quick-view" value={navigation.quickView ?? "all"} onChange={event => {
         const next = QUICK_VIEWS.find(item => item.id === event.target.value);
-        if (next) { if (next.id !== quickView) toggleQuickView(next.id); }
-        else setQuickView(null);
+        dispatch({ type: "select-quick-view", id: next ? next.id : null });
       }}>
         <option value="all">All categories</option>
         {QUICK_VIEWS.map(item => <option key={item.id} value={item.id}>{item.label} ({quickCounts[item.id]})</option>)}
       </select>
       <label htmlFor="story-component">Focus component</label>
-      <select id="story-component" value={componentChips.some(chip => chip.value === draft.component) && draft.componentMode === "exact" ? draft.component : ""}
-        onChange={event => applyDraft(event.target.value ? withExactValue(draft, "component", event.target.value) : clearTimelineField(draft, "component"))}>
+      <select id="story-component" value={componentChips.some(chip => chip.value === navigation.draft.component) && navigation.draft.componentMode === "exact" ? navigation.draft.component : ""}
+        onChange={event => dispatch({ type: "set-draft",
+          draft: event.target.value ? withExactValue(navigation.draft, "component", event.target.value) : clearTimelineField(navigation.draft, "component") })}>
         <option value="">All components</option>
         {componentChips.map(chip => <option key={chip.value} value={chip.value}>{chip.label}</option>)}
       </select>
     </div>
     <details className="history-filter-drawer">
-    <summary>Filter history{filtersActive ? ` · ${chips.length + (quickView ? 1 : 0)} active` : ""}</summary>
+    <summary>Filter history{filtersActive ? ` · ${chips.length + (navigation.quickView ? 1 : 0)} active` : ""}</summary>
     <div className="timeline-tools" tabIndex={0} aria-label="Timeline quick views and advanced filters">
     <div className="timeline-quick-views">
-    <p id="timeline-quick-help" className="timeline-help">{QUICK_VIEW_HELP}</p>
-    <div className="timeline-quick-row" role="group" aria-label="Quick views" aria-describedby="timeline-quick-help">
-      {QUICK_VIEWS.map(item => <button key={item.id} type="button" aria-pressed={quickView === item.id}
-        aria-describedby="timeline-quick-help" onClick={() => toggleQuickView(item.id)}>
+      <p id="timeline-quick-help" className="timeline-help">{QUICK_VIEW_HELP}</p>
+      <div className="timeline-quick-row" role="group" aria-label="Quick views" aria-describedby="timeline-quick-help">
+      {QUICK_VIEWS.map(item => <button key={item.id} type="button" aria-pressed={navigation.quickView === item.id}
+        aria-describedby="timeline-quick-help" onClick={() => dispatch({ type: "toggle-quick-view", id: item.id })}>
         {item.label} <span className="quick-view-count" aria-hidden="true">{quickCounts[item.id]}</span>
         <span className="sr-only">, {quickCounts[item.id]} of {observations.length} recorded observations. It keeps {item.keeps}.</span>
       </button>)}
     </div>
     <div className="timeline-quick-row" role="group" aria-label="Recorded components and selected trace">
-      {componentChips.map(chip => <button key={chip.value} type="button" aria-pressed={draft.component.trim() === chip.value && draft.componentMode === "exact"}
-        onClick={() => toggleComponentChip(chip.value)}>{chip.label}<span className="sr-only"> ({chip.value})</span></button>)}
-      {selectedTrace !== undefined ? <button type="button" aria-pressed={draft.traceId.trim() === selectedTrace && draft.traceMode === "exact"}
-        onClick={() => toggleTraceChip(selectedTrace)}>Selected trace {selectedTrace}</button> : null}
+      {componentChips.map(chip => <button key={chip.value} type="button" aria-pressed={navigation.draft.component.trim() === chip.value && navigation.draft.componentMode === "exact"}
+        onClick={() => dispatch({ type: "toggle-component", value: chip.value })}>{chip.label}<span className="sr-only"> ({chip.value})</span></button>)}
+      {selectedTrace !== undefined ? <button type="button" aria-pressed={navigation.draft.traceId.trim() === selectedTrace && navigation.draft.traceMode === "exact"}
+        onClick={() => dispatch({ type: "toggle-trace", traceId: selectedTrace })}>Selected trace {selectedTrace}</button> : null}
     </div>
     </div>
-    <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy(selectedIndex, filtered.length)}</p>
+    <p id="timeline-boundary" className="timeline-boundary">{boundaryCopy}</p>
     <details className="timeline-filter-disclosure">
     <summary>Advanced filters{chips.length > 0 ? ` (${chips.length} active)` : ""}</summary>
     <HelpHint label="How matching works" bodyId="timeline-filter-help">{TIMELINE_FILTER_HELP}</HelpHint>
     <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => event.preventDefault()}>
-      <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.fromTime} onChange={event => applyDraft({ ...draft, fromTime: event.target.value })} /></label>
-      <label>Virtual time to<input id="timeline-to" inputMode="numeric" autoComplete="off" aria-invalid={filterError !== null} aria-describedby={filterError ? "timeline-filter-error" : undefined} value={draft.toTime} onChange={event => applyDraft({ ...draft, toTime: event.target.value })} /></label>
-      <div className="filter-field"><label htmlFor="filter-field-choice">Filter by</label><select id="filter-field-choice" value={filterField} onChange={event => setFilterField(event.target.value as TextFilterField)}>
+      <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" aria-invalid={navigation.filterError !== null} aria-describedby={navigation.filterError ? "timeline-filter-error" : undefined} value={navigation.draft.fromTime} onChange={event => dispatch({ type: "set-draft", draft: { ...navigation.draft, fromTime: event.target.value } })} /></label>
+      <label>Virtual time to<input id="timeline-to" inputMode="numeric" autoComplete="off" aria-invalid={navigation.filterError !== null} aria-describedby={navigation.filterError ? "timeline-filter-error" : undefined} value={navigation.draft.toTime} onChange={event => dispatch({ type: "set-draft", draft: { ...navigation.draft, toTime: event.target.value } })} /></label>
+      <div className="filter-field"><label htmlFor="filter-field-choice">Filter by</label><select id="filter-field-choice" value={navigation.filterField} onChange={event => dispatch({ type: "set-filter-field", field: event.target.value as TextFilterField })}>
         <option value="type">Type</option><option value="component">Component</option>
         <option value="traceId">Trace</option><option value="eventId">Event</option>
         <option value="entityKind">Entity kind</option><option value="entityId">Entity id</option>
@@ -455,60 +217,57 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         { field: "eventId", label: "Event", id: "event", mode: "eventMode", choices: suggestions.events },
         { field: "entityKind", label: "Entity kind", id: "entity-kind", mode: "entityKindMode", choices: suggestions.entityKinds },
         { field: "entityId", label: "Entity id", id: "entity-id", mode: "entityIdMode", choices: suggestions.entityIds },
-      ] as const).filter(item => item.field === filterField).map(item => <SuggestionField key={item.field}
-        id={`timeline-${item.id}`} label={item.label} value={draft[item.field]} mode={draft[item.mode]} choices={item.choices}
-        onValue={value => applyDraft({ ...draft, [item.field]: value })}
-        onMode={mode => applyDraft({ ...draft, [item.mode]: mode })}
-        onChoose={value => applyDraft(withExactValue(draft, item.field, value))} />)}
+      ] as const).filter(item => item.field === navigation.filterField).map(item => <SuggestionField key={item.field}
+        id={`timeline-${item.id}`} label={item.label} value={navigation.draft[item.field]} mode={navigation.draft[item.mode]} choices={item.choices}
+        onValue={value => dispatch({ type: "set-draft", draft: { ...navigation.draft, [item.field]: value } })}
+        onMode={mode => dispatch({ type: "set-draft", draft: { ...navigation.draft, [item.mode]: mode } })}
+        onChoose={value => dispatch({ type: "set-draft", draft: withExactValue(navigation.draft, item.field, value) })} />)}
       <p className="filter-composer-note">Filters combine. Choose another field to narrow further; remove any condition using its chip below.</p>
     </form>
-    {filterError ? <p id="timeline-filter-error" role="alert">{filterError}</p> : null}
+    {navigation.filterError ? <p id="timeline-filter-error" role="alert">{navigation.filterError}</p> : null}
     </details>
     <HelpHint label="Row order" bodyId="timeline-order" className="timeline-help">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</HelpHint>
 
     </div>
     </details>
-    <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{feedback}</p>
+    <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{navigation.feedback}</p>
     {/* Active constraints remain visible even when the filter drawer is closed. */}
     <div className="timeline-chip-row" hidden={!filtersActive} tabIndex={0} role="group" aria-label="Active filters and reset">
       {viewChip !== null || chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">
         {viewChip !== null ? <li>
           <span>{viewChip.label}</span>
-          <button type="button" aria-label={viewChip.removeLabel} onClick={() => {
-            setQuickView(null);
-            setFeedback(quickViewFeedback(null, observations.length, observations.length));
-          }}>Remove</button>
+          <button type="button" aria-label={viewChip.removeLabel} onClick={() => dispatch({ type: "clear-quick-view" })}>Remove</button>
         </li> : null}
         {chips.map(chip => <li key={chip.field}>
           <span>{chip.label}</span>
-          <button type="button" aria-label={chip.removeLabel} onClick={() => applyDraft(clearTimelineField(draft, chip.field))}>Remove</button>
+          <button type="button" aria-label={chip.removeLabel} onClick={() => dispatch({ type: "set-draft", draft: clearTimelineField(navigation.draft, chip.field) })}>Remove</button>
         </li>)}</ul> : null}
-      <button type="button" disabled={!filtersActive} onClick={clearAllFilters}>Clear all filters</button>
+      <button type="button" disabled={!filtersActive} onClick={() => dispatch({ type: "clear-all" })}>Clear all filters</button>
     </div>
-    <p className="timeline-count sr-only">{view === "story" ? storyCount
-      : view === "learning"
+    <p className="timeline-count sr-only">{navigation.view === "story" ? storyCount
+      : navigation.view === "learning"
       ? filtered.length === 0 ? `0 of ${observations.length} observations in virtual-time order.`
         : `${filtered.length} of ${observations.length} observations in virtual-time order. Learning view shows ${learningItems.length} items; ${hiddenLearningRecords} records summarized in expandable groups. Select a row to inspect its details.`
       : `${filtered.length} of ${observations.length} observations in virtual-time order.`}</p>
-    {view === "learning" ? <>
+    {navigation.view === "learning" ? <>
       <div className="learning-column-headings" aria-hidden="true"><span>Summary</span><span>Virtual time · sequence</span><span>Component / destination</span></div>
     </> : null}
-    <div id="timeline-rows" ref={scrollerRef} className={`timeline-rows${view === "story" ? " story-stage" : ""}`}  tabIndex={0} aria-describedby="timeline-order"
-      aria-label={view === "story" ? "Story milestone strip and table" : view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+    <div id="timeline-rows" ref={scrollerRef} className={`timeline-rows${navigation.view === "story" ? " story-stage" : ""}`}  tabIndex={0} aria-describedby="timeline-order"
+      aria-label={navigation.view === "story" ? "Story milestone strip and table" : navigation.view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onKeyDown={event => {
         // The Story view is read by its own milestone table, so arrow keys stay with that table.
-        if (view === "story") return;
-        if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
-        else if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
-        else if (event.key === "Home") { event.preventDefault(); if (filtered.length === 0) setFeedback(boundaryCopy(-1, 0)); else selectIndex(0); }
-        else if (event.key === "End") { event.preventDefault(); const last = filtered.length - 1; if (last < 0) setFeedback(boundaryCopy(-1, 0)); else selectIndex(last); }
+        if (navigation.view === "story") return;
+        if (event.key === "ArrowDown") { event.preventDefault(); dispatch({ type: "move", delta: 1 }); }
+        else if (event.key === "ArrowUp") { event.preventDefault(); dispatch({ type: "move", delta: -1 }); }
+        else if (event.key === "Home") { event.preventDefault(); dispatch({ type: "select-index", index: 0 }); }
+        else if (event.key === "End") { event.preventDefault(); dispatch({ type: "select-index", index: filtered.length - 1 }); }
       }}>
       {filtered.length === 0 ? <p className="timeline-empty">{observations.length === 0 ? "No observations have been recorded for this run." : explanation}</p> : null}
-      {view === "story" ? <StoryView milestones={milestones} lanes={lanes} legend={legend} summary={storyCopy} detail={storyDetailCopy}
-        reduction={reduction} selectedId={selectedId} componentLabels={componentLabels} hasRecords={filtered.length > 0} onChoose={choose} /> : null}
-      {view === "learning" ? <LearningRows items={learningItems} selectedId={selectedId} expandedGroups={expandedGroups}
-        onToggle={id => setExpandedGroups(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onChoose={choose} /> : view === "raw" ? <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
-        {rawRows.map(item => <RawRow key={item.observation.id} observation={item.observation} index={item.index} selectedId={selectedId} onChoose={choose} />)}
+      {navigation.view === "story" ? <StoryView milestones={milestones} lanes={lanes} legend={legend} summary={storyCopy} detail={storyDetailCopy}
+        reduction={reduction} selectedId={navigation.selectedId} componentLabels={componentLabels} hasRecords={filtered.length > 0} onChoose={id => dispatch({ type: "select", observationId: id })} /> : null}
+      {navigation.view === "learning" ? <LearningRows items={learningItems} selectedId={navigation.selectedId} expandedGroups={navigation.expandedGroups}
+        onToggle={id => dispatch({ type: "toggle-group", id })} onChoose={id => dispatch({ type: "select", observationId: id })} /> : navigation.view === "raw" ? <div style={{ height: filtered.length * TIMELINE_ROW_HEIGHT, position: "relative" }}>
+        {view.rawRows.map(item => <RawRow key={item.observation.id} observation={item.observation} index={item.index} selectedId={navigation.selectedId} onChoose={id => dispatch({ type: "select", observationId: id })} />)}
       </div> : null}
     </div>
     </section>
@@ -516,11 +275,30 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       <summary>Selected event details · #{selected.sequence}</summary>
       <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
         hidden={!filtered.some(item => item.id === selected.id)}
-        onSelect={reveal} onShowTrace={showTrace} onUseText={useText} onUseEntity={useEntity} />
+        onSelect={id => dispatch({ type: "reveal", observationId: id })}
+        onShowTrace={traceId => dispatch({ type: "narrow-to-trace", traceId })}
+        onUseText={(field, value) => dispatch({ type: "set-draft", draft: withExactValue(navigation.draft, field, value) })}
+        onUseEntity={(kind, id) => dispatch({ type: "set-draft", draft: withExactValue(withExactValue(navigation.draft, "entityKind", kind), "entityId", id) })} />
     </details> : null}
   </div>;
 }
 
+/**
+ * The reducer is the only writer of navigation state. It carries the context the
+ * transition needs, so no transition reads a stale projection.
+ */
+function reduce(state: ReviewNavigation, action: { readonly intent: ReviewIntent; readonly context: ReviewContext }): ReviewNavigation {
+  return transition(state, action.intent, action.context);
+}
+
+/** Value equality for the graph highlight, so an unchanged selection is not republished. */
+function sameEmphasis(left: GraphEmphasis | undefined, right: GraphEmphasis | undefined): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.edgeId === right.edgeId && left.kind === right.kind && left.text === right.text
+    && left.pulseId === right.pulseId && left.origin === right.origin
+    && left.nodeIds.length === right.nodeIds.length && left.nodeIds.every((id, index) => id === right.nodeIds[index]);
+}
 function StoryView({ milestones, lanes, legend, summary, detail, reduction, selectedId, componentLabels, hasRecords, onChoose }: {
   readonly milestones: readonly StoryMilestone[];
   readonly lanes: readonly string[];
