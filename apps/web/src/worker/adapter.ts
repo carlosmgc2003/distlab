@@ -1,6 +1,5 @@
 import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
-import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, normalizeScenario } from "@distlab/scenario";
 import type { DeterministicScenarioSession } from "@distlab/scenario";
 import { applicationError, detached, isCanonical, isWorkerCommand, requestIdOf } from "../protocol.ts";
@@ -47,10 +46,15 @@ export class WorkerAdapter {
       if (command.type === "load") {
         // Construction is atomic from the host's perspective: failures expose no old session.
         this.#session = undefined; this.#architecture = undefined;
-        const encoded = canonicalEncode(command.scenario);
-        this.#commerce = commerceLessonNames.some(name => canonicalEncode(commerceScenario(name)) === encoded);
-        if (!this.#commerce && ![normalCheckout, responseLostCheckout].some(scenario => canonicalEncode(scenario) === encoded)) {
-          throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
+        // A scenario must derive from a packaged lesson: its name selects the model catalog, and
+        // experiment edits (seed, link policy, configuration switches, added fault rules) are then
+        // accepted only if the engine validates them against that catalog.
+        const name = typeof command.scenario === "object" && command.scenario !== null && !Array.isArray(command.scenario)
+          ? (command.scenario as { readonly name?: unknown }).name : undefined;
+        const named = (scenario: unknown) => (scenario as { readonly name?: unknown }).name === name;
+        this.#commerce = commerceLessonNames.some(lesson => named(commerceScenario(lesson)));
+        if (!this.#commerce && ![normalCheckout, responseLostCheckout].some(named)) {
+          throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios and their experiment edits are supported." } };
         }
         const catalog = this.#commerce ? commerceCatalog : checkoutCatalog;
         const assessment = this.#commerce ? commerceAssessment : checkoutAssessment;

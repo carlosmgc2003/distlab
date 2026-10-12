@@ -487,3 +487,24 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .panel-history { min-height: 36rem; }
   .history-layout { min-height: 36rem; }
 }
+
+/* Experiment panel: a modal dialog edits the loaded scenario's inputs before a new session. */
+.experiment-panel { display: contents; }
+.experiment-badge { align-self: center; padding: 2px 10px; border-radius: 999px; background: #fff3cd; color: #5c4400; border: 1px solid #c79a00; font-size: .8rem; font-weight: 700; }
+.experiment-dialog { width: min(56rem, calc(100vw - 32px)); max-height: calc(100dvh - 48px); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px 20px; }
+.experiment-dialog::backdrop { background: rgb(15 23 42 / .45); }
+.experiment-form { display: grid; gap: 12px; font-size: .85rem; }
+.experiment-form h2 { margin: 0; font-size: 1.1rem; }
+.experiment-group { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 12px; margin: 0; }
+.experiment-group > legend { font-weight: 650; padding: 0 4px; }
+.experiment-field { display: grid; gap: 4px; }
+.experiment-field input[type="number"] { width: 7rem; }
+.experiment-field input[type="text"] { width: 14rem; max-width: 100%; }
+.experiment-check { display: flex; gap: 6px; align-items: center; min-height: 32px; }
+.experiment-fault { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; width: 100%; padding-bottom: 8px; border-bottom: 1px dashed var(--border-subtle); }
+.experiment-errors { color: #8a1c1c; border: 1px solid #d9534f; border-radius: 8px; padding: 4px 12px; background: #fdf0f0; }
+.experiment-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.experiment-actions button[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.experiment-help { margin: 0; color: var(--text-secondary); }
+.experiment-field input[aria-invalid="true"] { outline: 2px solid #d9534f; }
+.learning-prompt .experiment-panel > button { min-height: 32px; padding: 4px 12px; }
