@@ -50,21 +50,31 @@ async function graphFit(page: Page): Promise<GraphFit> {
   });
 }
 
+/**
+ * Asserts the whole fit on one settled frame. A canvas resize (closing the inspector, a tab
+ * switch, a window resize) triggers a refit; during it React Flow briefly renders edge labels
+ * without text, so nothing is clipped yet labels are missing. Checking only `clipped` in the
+ * poll and the rest once afterwards could sample that transitional frame, so every condition is
+ * retried together until a single measurement satisfies all of them.
+ */
 async function expectGraphFits(page: Page, context: string) {
-  await expect.poll(async () => (await graphFit(page)).clipped, { message: `graph fits the canvas at ${context}` }).toEqual([]);
-  const fit = await graphFit(page);
-  const label = `graph fits the canvas at ${context} (canvas ${fit.width}×${fit.height})`;
-  expect(fit.nodes, label).toHaveLength(5);
-  for (const node of fit.nodes) {
-    expect(node.label, `${label}: ${node.id} keeps a readable name`).not.toBe("");
-    // Comfortable padding means the graph is not flush against the canvas edge.
-    expect(node.left, `${label}: ${node.id} left padding`).toBeGreaterThan(1);
-    expect(node.top, `${label}: ${node.id} top padding`).toBeGreaterThan(1);
-    expect(fit.width - node.right, `${label}: ${node.id} right padding`).toBeGreaterThan(1);
-    expect(fit.height - node.bottom, `${label}: ${node.id} bottom padding`).toBeGreaterThan(1);
-  }
-  expect(fit.labels.length, `${label}: connection labels`).toBeGreaterThanOrEqual(4);
-  return fit;
+  let fit: GraphFit | undefined;
+  await expect(async () => {
+    fit = await graphFit(page);
+    const label = `graph fits the canvas at ${context} (canvas ${fit.width}×${fit.height})`;
+    expect(fit.clipped, label).toEqual([]);
+    expect(fit.nodes, label).toHaveLength(5);
+    for (const node of fit.nodes) {
+      expect(node.label, `${label}: ${node.id} keeps a readable name`).not.toBe("");
+      // Comfortable padding means the graph is not flush against the canvas edge.
+      expect(node.left, `${label}: ${node.id} left padding`).toBeGreaterThan(1);
+      expect(node.top, `${label}: ${node.id} top padding`).toBeGreaterThan(1);
+      expect(fit.width - node.right, `${label}: ${node.id} right padding`).toBeGreaterThan(1);
+      expect(fit.height - node.bottom, `${label}: ${node.id} bottom padding`).toBeGreaterThan(1);
+    }
+    expect(fit.labels.length, `${label}: connection labels`).toBeGreaterThanOrEqual(4);
+  }, { message: `graph fits the canvas at ${context}` }).toPass({ timeout: 5_000 });
+  return fit!;
 }
 
 async function expectFittedDefault(page: Page, context: string, transform: string) {
