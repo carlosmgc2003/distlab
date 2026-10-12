@@ -33,6 +33,17 @@ reader needs before changing code, and the vocabulary used when discussing them.
   The architecture-graph flight cursor is the only playback. Selecting a row in
   Recorded history is review navigation, not playback, and deliberately shares
   no cursor seam with the graph.
+- **Review navigation** (`apps/web/src/review-navigation.ts`) is the one place
+  that decides where the reader is in Recorded history: the **review position**
+  (the stored record under review), the active constraints, and a focus request.
+  It is pure — it reads records and link identity, never a DOM node, virtual
+  time, or a worker command — and it returns scroll and focus as *requests* for
+  the presentation to apply. `TimelineView.tsx` renders what it decides and
+  adapts the DOM to it; it decides none of it. A record reached from a row, from
+  a related-observation link, or from an evidence link arrives by the same
+  transition, so the constraints hiding it are cleared in one place.
+- The review position is **not** a cursor. Playback and review deliberately share
+  no seam, so nothing in review navigation may be named a cursor.
 
 ## Application composition root
 

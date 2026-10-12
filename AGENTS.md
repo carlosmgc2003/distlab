@@ -67,7 +67,11 @@ over records the worker already published: a host timer may move the playback
 cursor and paint a movement token on a measured link path, and it must not
 advance virtual time, record observations, or send worker commands. Narration
 reads stored observation fields only, and a redacted or omitted payload is never
-reconstructed.
+reconstructed. Review navigation in `apps/web/src/review-navigation.ts` decides
+the review position in Recorded history and is pure: it reads records and link
+identity, never a DOM node, virtual time, or a worker command, and it returns
+scroll and focus as requests for the presentation to apply. Presentation playback
+and review navigation share no seam; nothing in review navigation is a cursor.
 
 ## Coding Style & Naming Conventions
 
