@@ -85,7 +85,7 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
   await expect(page.locator(".react-flow__node")).toHaveCount(5);
   await expect(page.locator(".react-flow__edge")).toHaveCount(4);
-  for (const category of ["Client", "Internal service", "Infrastructure", "External service"]) {
+  for (const category of ["Client", "Internal service", "Message bus topic", "External service"]) {
     await expect(page.locator(".category-label", { hasText: category }).first()).toBeVisible();
   }
   const initial = await latestProjection(page);

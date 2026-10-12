@@ -30,7 +30,7 @@ async function observeWorker(page: Page) {
 const components = [
   { name: "Customer App", category: "Client", id: "customer-app", resource: "Model-owned checkout request and outcome" },
   { name: "Orders", category: "Internal service", id: "orders", resource: "Database owned by orders: orders, outbox" },
-  { name: "MessageBus · OrderCreated", category: "Infrastructure", id: "OrderCreated", resource: "MessageBus topic: OrderCreated" },
+  { name: "MessageBus · OrderCreated", category: "Message bus topic", id: "OrderCreated", resource: "MessageBus topic: OrderCreated" },
   { name: "Payments", category: "Internal service", id: "payments", resource: "Database owned by payments: payments, inbox" },
   { name: "Payment Processor", category: "External service", id: "payment-processor", resource: "Model-owned provider authorization ledger" },
 ] as const;

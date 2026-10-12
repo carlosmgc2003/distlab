@@ -168,7 +168,8 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(200px, 300px); }
 .graph-canvas { height: 100%; min-height: 240px; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }
 .graph-canvas .react-flow { width: 100%; height: 100%; }
-.component-node { width: 215px; min-height: 90px; padding: 17px; border: 2px solid #475569; background: white; color: #172033; }
+.component-node { width: 215px; min-height: 90px; color: #172033; }
+.node-body { position: relative; width: 100%; min-height: 90px; }
 .component-node strong { display: block; line-height: 1.4; overflow-wrap: anywhere; }
 .category-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
 .category-client { border-radius: 28px; border-color: var(--category-client); background: #eff6ff; }
@@ -179,6 +180,34 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .category-service .category-label { color: var(--category-service); }
 .category-external .category-label { color: var(--category-external); }
 .category-infrastructure .category-label { color: var(--category-infrastructure); }
+/* Phase 1 symbol system: shape and glyph overlay; category colors remain a secondary cue via stroke/fill. */
+.component-node { padding: 0; background: transparent; border: none; }
+.node-shape { position: absolute; inset: 0; z-index: 0; overflow: visible; }
+.shape-svg { width: 100%; height: 100%; display: block; }
+.shape-fill { fill: #fff; }
+.shape-stroke { stroke: #475569; stroke-width: 2; }
+.node-content { position: relative; z-index: 1; padding: 17px; min-height: 90px; }
+.node-glyph { position: absolute; top: 10px; right: 12px; width: 22px; height: 22px; z-index: 2; color: #475569; pointer-events: none; }
+.node-glyph svg { width: 100%; height: 100%; display: block; }
+.symbol-client .shape-fill { fill: #eff6ff; }
+.symbol-client .shape-stroke { stroke: var(--category-client); }
+.symbol-client .node-glyph { color: var(--category-client); }
+.symbol-service .shape-fill { fill: #f0fdf4; }
+.symbol-service .shape-stroke { stroke: var(--category-service); }
+.symbol-service .node-glyph { color: var(--category-service); }
+.symbol-external .shape-fill { fill: #fff7ed; }
+.symbol-external .shape-stroke { stroke: var(--category-external); }
+.symbol-external .node-glyph { color: var(--category-external); }
+.symbol-external .node-content { padding-left: 20px; padding-right: 20px; }
+.symbol-topic .shape-fill { fill: #f5f3ff; }
+.symbol-topic .shape-stroke { stroke: var(--category-infrastructure); }
+.symbol-topic .node-glyph { color: var(--category-infrastructure); }
+.symbol-topic .node-content { padding-top: 18px; padding-bottom: 18px; padding-left: 12px; padding-right: 12px; }
+.symbol-topic .node-content strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.symbol-queue .shape-fill { fill: #f5f3ff; }
+.symbol-queue .shape-stroke { stroke: var(--category-infrastructure); }
+.symbol-queue .node-glyph { color: var(--category-infrastructure); }
+.symbol-queue .node-content { padding-left: 38px; padding-right: 17px; }
 .react-flow__node.component-node[aria-pressed="true"] { outline: 3px solid #1d4ed8; outline-offset: 4px; }
 .react-flow__node.component-node:focus-visible { outline: 4px solid #172033; outline-offset: 7px; }
 .component-node .react-flow__handle { opacity: 0; pointer-events: none; }

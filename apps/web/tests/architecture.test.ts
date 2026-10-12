@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ArchitectureProjection, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
-import { mapArchitecture } from "../src/architecture-view.ts";
+import type { ArchitectureDefinition, ArchitectureProjection, ComponentNodeProjection, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
+import { duration } from "@distlab/contracts/kernel";
+import { deriveSymbol, mapArchitecture, symbolLabels } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { detached } from "../src/protocol.ts";
@@ -12,6 +13,10 @@ async function load(index = 0): Promise<RuntimeProjectionSet> {
   const loaded = events.find(event => event.type === "loaded");
   assert.ok(loaded?.type === "loaded");
   return loaded.projection;
+}
+
+function component(id: string, kind: ComponentNodeProjection["kind"]): ComponentNodeProjection {
+  return { id, kind, label: id };
 }
 
 test("maps both checkout projections, all categories, requests and bus relationships without mutating inputs", async () => {
@@ -32,10 +37,50 @@ test("maps both checkout projections, all categories, requests and bus relations
     for (const node of graph.nodes) {
       assert.equal(node.draggable, false); assert.equal(node.connectable, false); assert.equal(node.deletable, false);
       assert.ok(node.ariaLabel?.includes(node.data.title));
+      assert.equal(node.data.symbol, deriveSymbol(node.data.component, metadata.architecture.destinations.find(d => d.id === node.id)));
+      assert.ok(node.className?.includes(`symbol-${node.data.symbol}`));
+      assert.ok(node.ariaLabel?.includes(symbolLabels[node.data.symbol]));
     }
     assert.equal(JSON.stringify({ projection, metadata }), before);
     assert.ok(Object.isFrozen(metadata.architecture.components[0]?.configuration));
   }
+});
+
+test("deriveSymbol chooses shape by kind and infrastructure subkind", () => {
+  assert.equal(deriveSymbol(component("c", "client")), "client");
+  assert.equal(deriveSymbol(component("s", "service")), "service");
+  assert.equal(deriveSymbol(component("e", "external")), "external");
+  assert.equal(deriveSymbol(component("t", "infrastructure"), { id: "t", kind: "topic", deliveryDelay: duration(0), ackTimeout: duration(0), retryDelay: duration(0), maxAttempts: 0, capacity: 0 }), "topic");
+  assert.equal(deriveSymbol(component("q", "infrastructure"), { id: "q", kind: "queue", deliveryDelay: duration(0), ackTimeout: duration(0), retryDelay: duration(0), maxAttempts: 0, capacity: 0 }), "queue");
+  assert.equal(deriveSymbol(component("fallback", "infrastructure")), "topic");
+});
+
+test("infrastructure nodes extend aria labels with topic or queue", () => {
+  const projection: ArchitectureProjection = { components: [component("t", "infrastructure"), component("q", "infrastructure")], links: [] };
+  const metadata: ArchitectureDefinition = {
+    components: [], links: [], databases: [], stores: [], subscriptions: [],
+    destinations: [
+      { id: "t", kind: "topic", deliveryDelay: duration(0), ackTimeout: duration(0), retryDelay: duration(0), maxAttempts: 3, capacity: 100 },
+      { id: "q", kind: "queue", deliveryDelay: duration(0), ackTimeout: duration(0), retryDelay: duration(0), maxAttempts: 3, capacity: 100 },
+    ],
+  };
+  const graph = mapArchitecture(projection, metadata);
+  assert.equal(graph.error, null);
+  assert.ok(graph.nodes.find(node => node.id === "t")!.ariaLabel!.includes("Message bus topic"));
+  assert.ok(graph.nodes.find(node => node.id === "q")!.ariaLabel!.includes("Message bus queue"));
+});
+
+test("mapArchitecture never mutates its inputs", async () => {
+  const projection = await load();
+  const metadata = packagedMetadata(scenarios[0]);
+  const beforeProjection = JSON.stringify(projection.architecture);
+  const beforeMetadata = JSON.stringify(metadata.architecture);
+  const beforeComponents = [...projection.architecture.components];
+  mapArchitecture(projection.architecture, metadata.architecture, metadata.name);
+  assert.equal(JSON.stringify(projection.architecture), beforeProjection);
+  assert.equal(JSON.stringify(metadata.architecture), beforeMetadata);
+  assert.deepEqual(projection.architecture.components, beforeComponents);
+  assert.ok(Object.isFrozen(metadata.architecture.components[0]?.configuration));
 });
 
 test("layout is deterministic, detached, and independent of input ordering", async () => {

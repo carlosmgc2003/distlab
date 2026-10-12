@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useReactFlow, useStore } from "@xyflow/react";
 import type { EdgeProps, NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { categoryLabels, flightTokenStyle, mapArchitecture } from "./architecture-view.ts";
+import { flightTokenStyle, mapArchitecture, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import type { ArchitectureEdge, ArchitectureNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
@@ -15,13 +15,93 @@ import type { GraphEmphasis } from "./timeline.ts";
 import "@xyflow/react/dist/style.css";
 import "./architecture.css";
 
+function SymbolShape({ symbol }: { readonly symbol: NodeSymbol }) {
+  switch (symbol) {
+    case "client":
+      return <rect x="1" y="1" width="213" height="88" rx="44" ry="44" className="shape-fill shape-stroke" />;
+    case "service":
+      return <>
+        <rect x="1" y="1" width="213" height="88" rx="6" ry="6" className="shape-fill shape-stroke" />
+        <rect x="-5" y="26" width="14" height="12" rx="2" className="shape-fill shape-stroke" />
+        <rect x="-5" y="52" width="14" height="12" rx="2" className="shape-fill shape-stroke" />
+      </>;
+    case "external":
+      return <polygon points="22,1 193,1 214,45 193,89 22,89 1,45" className="shape-fill shape-stroke" />;
+    case "topic":
+      return <>
+        <rect x="1" y="26" width="213" height="38" rx="8" ry="8" className="shape-fill shape-stroke" />
+        <line x1="45" y1="26" x2="45" y2="10" className="shape-stroke" />
+        <line x1="107" y1="26" x2="107" y2="10" className="shape-stroke" />
+        <line x1="170" y1="26" x2="170" y2="10" className="shape-stroke" />
+        <line x1="45" y1="64" x2="45" y2="80" className="shape-stroke" />
+        <line x1="107" y1="64" x2="107" y2="80" className="shape-stroke" />
+        <line x1="170" y1="64" x2="170" y2="80" className="shape-stroke" />
+      </>;
+    case "queue":
+      return <>
+        <rect x="8" y="8" width="30" height="74" rx="6" ry="6" className="shape-fill shape-stroke" />
+        <line x1="38" y1="25" x2="52" y2="25" className="shape-stroke" />
+        <line x1="38" y1="45" x2="52" y2="45" className="shape-stroke" />
+        <line x1="38" y1="65" x2="52" y2="65" className="shape-stroke" />
+      </>;
+  }
+}
+
+function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
+  switch (symbol) {
+    case "client":
+      return <svg viewBox="0 0 20 18" aria-hidden="true">
+        <rect x="2" y="2" width="16" height="11" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="10" y1="13" x2="10" y2="16" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="6" y1="16" x2="14" y2="16" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "service":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="5" y="2" width="13" height="16" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="1" y="5" width="6" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="1" y="11" width="6" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "external":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <ellipse cx="10" cy="10" rx="3" ry="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="10" y1="3" x2="10" y2="17" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "topic":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="16" r="1.8" fill="currentColor" />
+        <path d="M6 12 Q10 8 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M4 9 Q10 4 16 9" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M2 6 Q10 0 18 6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "queue":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <line x1="2" y1="6" x2="13" y2="6" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="2" y1="10" x2="13" y2="10" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="2" y1="14" x2="13" y2="14" stroke="currentColor" strokeWidth="1.6" />
+        <polyline points="14,4 18,10 14,16" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+  }
+}
+
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
   return <>
     <Handle id="top" type="target" position={Position.Top} />
     <Handle id="left" type="target" position={Position.Left} />
-    <span className="category-label">{categoryLabels[data.component.kind]}</span>
-    <strong>{data.title}</strong>
-    {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+    <div className="node-body">
+      <div className="node-shape" aria-hidden="true">
+        <svg viewBox="0 0 215 90" preserveAspectRatio="none" className="shape-svg">
+          <SymbolShape symbol={data.symbol} />
+        </svg>
+        <span className="node-glyph"><SymbolGlyph symbol={data.symbol} /></span>
+      </div>
+      <div className="node-content">
+        <span className="category-label">{symbolLabels[data.symbol]}</span>
+        <strong>{data.title}</strong>
+        {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+      </div>
+    </div>
     <Handle id="right" type="source" position={Position.Right} />
     <Handle id="bottom" type="source" position={Position.Bottom} />
   </>;

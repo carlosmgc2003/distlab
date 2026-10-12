@@ -14,8 +14,20 @@ export const categoryLabels = {
   infrastructure: "Infrastructure",
 } as const satisfies Record<ComponentNodeProjection["kind"], string>;
 
+/** Derived presentation symbol: one shape plus glyph per value. */
+export type NodeSymbol = "client" | "service" | "external" | "topic" | "queue";
+
+export const symbolLabels: Record<NodeSymbol, string> = {
+  client: "Client",
+  service: "Internal service",
+  external: "External service",
+  topic: "Message bus topic",
+  queue: "Message bus queue",
+};
+
 export type ArchitectureNode = Node<{
   component: ComponentNodeProjection;
+  symbol: NodeSymbol;
   title: string;
   configuration: CanonicalValue | undefined;
   resources: readonly string[];
@@ -38,6 +50,13 @@ const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly 
   payments: { x: 310, y: 420 },
   "payment-processor": { x: 620, y: 420 },
 };
+
+/** Derive the presentation symbol from the component kind and, for infrastructure, the destination kind. */
+export function deriveSymbol(component: ComponentNodeProjection, destination?: unknown): NodeSymbol {
+  if (component.kind !== "infrastructure") return component.kind;
+  const kind = typeof destination === "object" && destination !== null ? (destination as { readonly kind?: unknown }).kind : undefined;
+  return kind === "queue" ? "queue" : "topic";
+}
 
 /** Copies presentation data only; never accepts a simulation projection or a mutation port. */
 export function mapArchitecture(projection: ArchitectureProjection, metadata?: ArchitectureDefinition, scenarioName?: string): {
@@ -64,6 +83,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const instance = instances.get(component.id);
     const matches = instance?.kind === component.kind && instance.model === component.model && instance.version === component.version;
     const destination = component.kind === "infrastructure" ? destinations.get(component.id) : undefined;
+    const symbol = deriveSymbol(component, destination);
     const copy = matches ? checkoutDisplay(scenarioName, component) : undefined;
     const title = destination ? `MessageBus · ${component.label}` : copy?.title ?? component.label;
     const resources = matches ? [
@@ -77,7 +97,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     rows.set(column, row + 1);
     return {
       id: component.id, type: "component", data: {
-        component, title, resources,
+        component, symbol, title, resources,
         configuration: matches ? instance.configuration : destination ? {
           deliveryDelay: destination.deliveryDelay, ackTimeout: destination.ackTimeout,
           retryDelay: destination.retryDelay, maxAttempts: destination.maxAttempts, capacity: destination.capacity,
@@ -86,8 +106,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       position: commerce ? { x: column * 310, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
       sourcePosition: Position.Bottom, targetPosition: Position.Top,
       draggable: false, connectable: false, deletable: false, focusable: true,
-      ariaRole: "button", ariaLabel: `${title}, ${categoryLabels[component.kind]}`,
-      className: `component-node category-${component.kind} nopan`,
+      ariaRole: "button", ariaLabel: `${title}, ${symbolLabels[symbol]}`,
+      className: `component-node category-${component.kind} symbol-${symbol} nopan`,
     };
   });
   const edges = projection.links.map((link, index): ArchitectureEdge => {
