@@ -110,6 +110,11 @@ internal implementation is normally opaque to students.
 external service's operations, latency, availability, callbacks, and configured
 failure behavior.
 
+**Experiment edit** — A student change to a packaged scenario's inputs (seed,
+link policy, boolean component configuration switch, or an added fault rule)
+applied before a new session starts. It produces a new scenario definition and
+never changes a running simulation.
+
 **Failure injection** — Deliberately applying a modeled fault—such as delay,
 drop, duplication, timeout, crash, disconnection, reordering, or rate
 limiting—to an observable operation.

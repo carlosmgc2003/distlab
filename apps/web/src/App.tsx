@@ -6,9 +6,13 @@ import { FlightControls } from "./ArchitecturePlayback.tsx";
 import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
+import { ExperimentPanel } from "./ExperimentPanel.tsx";
+import { applyEdits } from "./experiment-edits.ts";
+import type { ExperimentEdits } from "./experiment-edits.ts";
 import { SimulationControls } from "./SimulationControls.tsx";
 import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedScenario } from "./scenarios.ts";
+import type { ScenarioDefinition } from "@distlab/contracts";
 import type { SimulationHost } from "./host.ts";
 import { experimentLabel, packagedMetadata, scenarios } from "./scenarios.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
@@ -27,13 +31,16 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const busy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
   const [selected, setSelected] = useState<string>(scenarios[0].id);
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
+  // Applied experiment edits for the loaded lesson; null means the packaged scenario runs unchanged.
+  const [applied, setApplied] = useState<ExperimentEdits | null>(null);
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
   const [showHistoryControls, setShowHistoryControls] = useState(false);
   const tabRequest = useRef<{ tab: WorkspaceTab; focusPanel: boolean } | null>(null);
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
-  const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
+  const lesson = useMemo(() => !loadedChoice ? undefined
+    : applied ? applyEdits(loadedChoice.scenario, applied) as unknown as ScenarioDefinition : packagedMetadata(loadedChoice), [loadedChoice, applied]);
   const commerce = loadedChoice?.family === "commerce";
   const report = useMemo(() => projection && lesson && !commerce ? inspectFaults(projection, lesson) : null, [projection, lesson, commerce]);
   const graph = useMemo(() => projection && lesson
@@ -54,7 +61,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
     : snapshot.error ? "The lesson could not be opened. Choose a scenario and load it again."
     : !projection ? "No lesson is loaded."
-    : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice) : "checkout"}.`;
+    : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice) : "checkout"}${applied ? " (modified experiment)" : ""}.`;
   const sessionKey = `${loadedChoice?.id ?? ""}:${snapshot.attempt}:${projection?.simulation.runId ?? ""}`;
 
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
@@ -99,9 +106,24 @@ export function App({ host }: { readonly host: SimulationHost }) {
     if (!choice) return;
     setSelected(choice.id);
     setLoadedChoice(choice);
+    setApplied(null);
     setEvidenceFocus(null);
     // The host publishes structured failures; the event handler owns no simulation state.
     void host.load(choice.scenario).catch(() => {});
+  };
+  // Experiment edits replace the session through the same load command; no new worker command exists.
+  const applyExperiment = (edits: ExperimentEdits) => {
+    if (busy || !loadedChoice) return;
+    const scenario = applyEdits(loadedChoice.scenario, edits);
+    setApplied(edits);
+    setEvidenceFocus(null);
+    void host.load(scenario).catch(() => {});
+  };
+  const restoreExperiment = () => {
+    if (busy || !loadedChoice) return;
+    setApplied(null);
+    setEvidenceFocus(null);
+    void host.load(loadedChoice.scenario).catch(() => {});
   };
   const onScenario = (id: string) => {
     if (busy) return;
@@ -176,6 +198,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
       <aside className="learning-prompt" aria-label="Learning objective">
         <strong>{commerce ? loadedChoice.title : loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</strong>
         <span>{commerce ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</span>
+        {loadedChoice ? <ExperimentPanel key={loadedChoice.id} scenario={loadedChoice.scenario} applied={applied} busy={busy}
+          onApply={applyExperiment} onRestore={restoreExperiment} /> : null}
         {commerce && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => replaceSession(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
       </aside>
       <div className="workspace-navigation">

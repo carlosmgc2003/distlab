@@ -45,6 +45,20 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - The review position is **not** a cursor. Playback and review deliberately share
   no seam, so nothing in review navigation may be named a cursor.
 
+## Experiment edits
+
+- **Experiment edits** (`apps/web/src/experiment-edits.ts`) are the one place that
+  turns a packaged scenario plus student changes (seed, link policy, boolean
+  component configuration switches, added fault rules) into a new scenario
+  definition. It is pure data: it never touches the worker, virtual time, or a
+  runtime model, and it rejects invalid values before they reach the worker.
+- Applying edits replaces the session through the existing `load` command; there
+  is no edit command and nothing changes during a run. The worker accepts a
+  scenario whose `name` matches a packaged lesson and lets the scenario engine
+  validate the edited definition against that lesson's catalog.
+- `ExperimentPanel.tsx` presents the edits in a modal dialog; the shell shows a
+  **Modified** badge and **Restore original** while edits are applied.
+
 ## Application composition root
 
 - `apps/web/src/worker/` is the sole runtime composition root. Main-thread
