@@ -34,6 +34,13 @@ test("maps both checkout projections, all categories, requests and bus relations
       ["OrderCreated", "payments", "subscription"], ["orders", "OrderCreated", "publication"],
     ]);
     assert.equal(new Set(graph.edges.map(edge => edge.style?.strokeDasharray ?? "solid")).size, 3);
+    const markers = Object.fromEntries(graph.edges.map(edge => [edge.data?.relationship, edge.markerEnd]));
+    assert.equal(markers.request?.type, "arrowclosed");
+    assert.equal(markers.subscription?.type, "arrow");
+    assert.equal(markers.publication?.type, "arrowclosed");
+    assert.notDeepEqual(markers.request, markers.publication);
+    assert.notDeepEqual(markers.request, markers.subscription);
+    assert.notDeepEqual(markers.publication, markers.subscription);
     for (const node of graph.nodes) {
       assert.equal(node.draggable, false); assert.equal(node.connectable, false); assert.equal(node.deletable, false);
       assert.ok(node.ariaLabel?.includes(node.data.title));

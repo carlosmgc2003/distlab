@@ -238,10 +238,22 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .evidence-links button { max-width: 100%; }
 .fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
 .fact-list dt { margin-top: 0; }
-.graph-legend { display: flex; flex-wrap: wrap; gap: 2px 10px; margin: 4px 0 0; font-size: .78rem; }
-.line-sample { display: inline-block; vertical-align: middle; width: 24px; border-top: 2px solid #334155; margin-right: 5px; }
-.line-sample.subscription { border-top-style: dashed; }
-.line-sample.publication { border-top-style: dotted; }
+.graph-legend { width: min(300px, calc(100vw - 48px)); max-height: min(42%, 330px); overflow: auto; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 8px; background: rgba(255, 255, 255, .96); box-shadow: 0 2px 8px #17203322; color: var(--text-primary); font-size: .72rem; }
+.graph-legend h3 { margin: 0 0 4px; font-size: .82rem; }
+.graph-legend section { margin-top: 5px; }
+.graph-legend h4 { margin: 0 0 2px; color: var(--text-secondary); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; }
+.graph-legend ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 8px; margin: 0; padding: 0; list-style: none; }
+.graph-legend li { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.graph-legend li > span:last-child { min-width: 0; }
+.legend-node { flex: 0 0 34px; width: 34px; height: 17px; overflow: visible; }
+.graph-legend .shape-fill { fill: #fff; }
+.graph-legend .shape-stroke { stroke-width: 5; }
+.edge-sample { flex: 0 0 42px; width: 42px; height: 14px; overflow: visible; }
+.edge-sample line, .edge-sample path { stroke: #334155; stroke-width: 1.8; }
+.edge-sample path { fill: #334155; }
+.edge-sample.subscription line { stroke-dasharray: 7 5; }
+.edge-sample.subscription path { fill: none; }
+.edge-sample.publication line { stroke-dasharray: 2 5; }
 /* Movement tokens carry their meaning as glyph, outline, and border pattern, not color alone. */
 .token-sample { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-right: 6px; border: 2px solid #334155; border-radius: 50%; background: #fff; color: #172033; font-size: .75rem; font-weight: 700; vertical-align: middle; }
 .token-sample.shape-dashed { border-style: dashed; border-radius: 6px; }
@@ -450,7 +462,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .detail-disclosure { border-block-start: 1px solid var(--border-subtle); margin: 12px 0; }
 .event-path { font-weight: 650; line-height: 1.6; }
 .event-time { color: var(--text-secondary); font-size: .85rem; }
-.graph-legend p { margin: 2px 0; }
 .workspace-empty { max-width: 48rem; margin: auto; padding: 40px; background: var(--surface-panel); border: 1px solid var(--border-subtle); border-radius: 16px; line-height: 1.7; }
 .workspace-empty h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); line-height: 1.2; }
 .workspace-empty p, .workspace-empty li { color: var(--text-secondary); }
