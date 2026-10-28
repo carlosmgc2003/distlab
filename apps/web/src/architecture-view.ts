@@ -76,6 +76,12 @@ const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly 
   "payment-processor": { x: 620, y: 420 },
 };
 
+const relationshipMarkers = {
+  request: { type: MarkerType.ArrowClosed, color: "#334155", width: 20, height: 20 },
+  subscription: { type: MarkerType.Arrow, color: "#334155", width: 20, height: 20 },
+  publication: { type: MarkerType.ArrowClosed, color: "#334155", width: 12, height: 12 },
+} as const;
+
 /** Derive the presentation symbol from the component kind and, for infrastructure, the destination kind. */
 export function deriveSymbol(component: ComponentNodeProjection, destination?: unknown): NodeSymbol {
   if (component.kind !== "infrastructure") return component.kind;
@@ -145,7 +151,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
       type: "link", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship },
       sourceHandle: subscription ? "bottom" : "right", targetHandle: subscription ? "top" : "left",
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
+      markerEnd: relationshipMarkers[relationship],
       style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5],
       labelBgStyle: { fill: "#fff" }, selectable: false, focusable: false, deletable: false,
@@ -193,7 +199,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
       sourceHandle: "bottom", targetHandle: "top", type: "link",
       label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication" },
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
+      markerEnd: relationshipMarkers.publication,
       style: { stroke: "#334155", strokeWidth: 2, strokeDasharray: "2 5" },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5], labelBgStyle: { fill: "#fff" },
       selectable: false, focusable: false, deletable: false,

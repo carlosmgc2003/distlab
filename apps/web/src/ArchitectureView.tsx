@@ -85,6 +85,45 @@ function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
   }
 }
 
+const legendSymbols: readonly NodeSymbol[] = ["client", "service", "external", "topic", "queue"];
+
+function EdgeSample({ relationship, label }: { readonly relationship: "request" | "subscription" | "publication"; readonly label: string }) {
+  return <svg className={`edge-sample ${relationship}`} viewBox="0 0 56 14" role="img" aria-label={label}>
+    <line x1="1" y1="7" x2="48" y2="7" />
+    {relationship === "subscription"
+      ? <path d="M47 3 L53 7 L47 11" />
+      : <path d={relationship === "publication" ? "M48 4 L54 7 L48 10 Z" : "M46 2 L54 7 L46 12 Z"} />}
+  </svg>;
+}
+
+function ArchitectureLegend() {
+  return <Panel position="bottom-left" className="graph-legend" role="region" aria-label="Architecture legend">
+    <h3>Legend</h3>
+    <section aria-labelledby="legend-nodes-heading">
+      <h4 id="legend-nodes-heading">Nodes</h4>
+      <ul>{legendSymbols.map(symbol => <li key={symbol}>
+        <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>
+        <span>{symbolLabels[symbol]}</span>
+      </li>)}</ul>
+    </section>
+    <section aria-labelledby="legend-edges-heading">
+      <h4 id="legend-edges-heading">Relationships</h4>
+      <ul>
+        <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
+        <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
+        <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
+      </ul>
+    </section>
+    <section aria-labelledby="legend-movements-heading">
+      <h4 id="legend-movements-heading">Recorded movements</h4>
+      <ul>{FLIGHT_LEGEND.map(entry => <li key={entry.glyph}>
+        <span className={`token-sample shape-${entry.shape}`} aria-hidden="true">{entry.glyph}</span>
+        <span>{entry.label}<span className="sr-only">, {entry.detail}</span></span>
+      </li>)}</ul>
+    </section>
+  </Panel>;
+}
+
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
   return <>
     <Handle id="top" type="target" position={Position.Top} />
@@ -317,6 +356,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} fitViewOptions={fitViewOptions} />
           <PanControls />
+          <ArchitectureLegend />
         </ReactFlow>
       </div>
       {selectedId || flight ? <div className="architecture-side">
@@ -325,15 +365,6 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}
       </div> : null}
-    </div>
-    <div className="graph-legend" aria-label="Architecture legend">
-      <p><span className="line-sample request" aria-hidden="true" /> Solid arrow: request link</p>
-      <p><span className="line-sample publication" aria-hidden="true" /> Dotted arrow: MessageBus publication</p>
-      <p><span className="line-sample subscription" aria-hidden="true" /> Dashed arrow: MessageBus subscription</p>
-      {FLIGHT_LEGEND.map(entry => <p key={entry.glyph}>
-        <span className={`token-sample shape-${entry.shape}`} aria-hidden="true">{entry.glyph}</span>
-        {entry.label}<span className="sr-only">, {entry.detail}</span>
-      </p>)}
     </div>
     <details className="connections">
       <summary>Connections ({graph.edges.length})</summary>
