@@ -87,10 +87,22 @@ function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
 
 const legendSymbols: readonly NodeSymbol[] = ["client", "service", "external", "topic", "queue"];
 
-function EdgeSample({ relationship, label }: { readonly relationship: "request" | "subscription" | "publication"; readonly label: string }) {
+function ResourceSample({ kind, label }: { readonly kind: "database" | "kvstore"; readonly label: string }) {
+  return <svg className={`resource-sample resource-sample-${kind}`} viewBox="0 0 40 24" role="img" aria-label={label}>
+    {kind === "database" ? <>
+      <path d="M3 5a17 3 0 1 0 34 0a17 3 0 1 0-34 0 M3 5v14a17 3 0 0 0 34 0V5" />
+      <path d="M3 12a17 3 0 0 0 34 0" />
+    </> : <>
+      <path d="M3 5 20 2l17 3-17 3z M3 5v14l17 3 17-3V5 M3 11l17 3 17-3 M3 16l17 3 17-3" />
+      <circle cx="20" cy="12" r="2" />
+    </>}
+  </svg>;
+}
+
+function EdgeSample({ relationship, label }: { readonly relationship: "request" | "subscription" | "publication" | "ownership"; readonly label: string }) {
   return <svg className={`edge-sample ${relationship}`} viewBox="0 0 56 14" role="img" aria-label={label}>
-    <line x1="1" y1="7" x2="48" y2="7" />
-    {relationship === "subscription"
+    <line x1="1" y1="7" x2={relationship === "ownership" ? "55" : "48"} y2="7" />
+    {relationship === "ownership" ? null : relationship === "subscription"
       ? <path d="M47 3 L53 7 L47 11" />
       : <path d={relationship === "publication" ? "M48 4 L54 7 L48 10 Z" : "M46 2 L54 7 L46 12 Z"} />}
   </svg>;
@@ -104,7 +116,10 @@ function ArchitectureLegend() {
       <ul>{legendSymbols.map(symbol => <li key={symbol}>
         <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>
         <span>{symbolLabels[symbol]}</span>
-      </li>)}</ul>
+      </li>)}
+        <li><ResourceSample kind="database" label="Cylinder" /><span>Database (owned)</span></li>
+        <li><ResourceSample kind="kvstore" label="Layered box with key" /><span>KV store (owned)</span></li>
+      </ul>
     </section>
     <section aria-labelledby="legend-edges-heading">
       <h4 id="legend-edges-heading">Relationships</h4>
@@ -112,6 +127,7 @@ function ArchitectureLegend() {
         <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
         <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
         <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
+        <li><EdgeSample relationship="ownership" label="Short thin solid line without arrowhead" /><span>Ownership</span></li>
       </ul>
     </section>
     <section aria-labelledby="legend-movements-heading">
