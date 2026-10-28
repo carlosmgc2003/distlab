@@ -287,7 +287,7 @@ test("the graph keeps its fit while the narration column opens and closes", asyn
       const rect = element.getBoundingClientRect();
       return { id: element.getAttribute("data-id"), left: rect.left - area.x, top: rect.top - area.y, right: rect.right - area.x, bottom: rect.bottom - area.y };
     }), { x: box.x, y: box.y });
-    expect(nodes.length).toBe(5);
+    expect(nodes.length).toBe(7);
     for (const node of nodes) {
       expect(node.left, `${label}: ${node.id} left padding`).toBeGreaterThan(1);
       expect(node.top, `${label}: ${node.id} top padding`).toBeGreaterThan(1);

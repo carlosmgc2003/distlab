@@ -30,7 +30,7 @@ async function observeWorker(page: Page) {
 const components = [
   { name: "Customer App", category: "Client", id: "customer-app", resource: "Model-owned checkout request and outcome" },
   { name: "Orders", category: "Internal service", id: "orders", resource: "Database owned by orders: orders, outbox" },
-  { name: "MessageBus · OrderCreated", category: "Infrastructure", id: "OrderCreated", resource: "MessageBus topic: OrderCreated" },
+  { name: "MessageBus · OrderCreated", category: "Message bus topic", id: "OrderCreated", resource: "MessageBus topic: OrderCreated" },
   { name: "Payments", category: "Internal service", id: "payments", resource: "Database owned by payments: payments, inbox" },
   { name: "Payment Processor", category: "External service", id: "payment-processor", resource: "Model-owned provider authorization ledger" },
 ] as const;
@@ -51,16 +51,33 @@ for (const scenario of ["normal", "response-lost"]) {
     const inspector = page.getByRole("complementary", { name: "Component inspector" });
     await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
     await expect(inspector).toHaveCount(0);
-    await expect(architecture.locator(".react-flow__node")).toHaveCount(5);
-    await expect(architecture.locator(".react-flow__edge")).toHaveCount(4);
-    await expect(architecture).toContainText("Solid arrow: request link");
-    await expect(architecture).toContainText("Dotted arrow: MessageBus publication");
-    await expect(architecture).toContainText("Dashed arrow: MessageBus subscription");
+    await expect(architecture.locator(".react-flow__node")).toHaveCount(7);
+    await expect(architecture.locator(".react-flow__edge")).toHaveCount(6);
+    const legend = architecture.getByRole("region", { name: "Architecture legend" });
+    await expect(legend).toHaveCount(1);
+    await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Relationships" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Recorded movements" })).toBeVisible();
+    await expect(legend).toContainText("Database (owned)");
+    await expect(legend).toContainText("KV store (owned)");
+    await expect(legend).toContainText("Ownership");
+    await expect(legend.getByRole("img", { name: "Cylinder" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Layered box with key" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Short thin solid line without arrowhead" })).toBeVisible();
+    await expect(legend).toContainText("Client");
+    await expect(legend).toContainText("Internal service");
+    await expect(legend).toContainText("External service");
+    await expect(legend).toContainText("Message bus topic");
+    await expect(legend).toContainText("Message bus queue");
+    await expect(legend).toContainText("Request");
+    await expect(legend).toContainText("MessageBus publication");
+    await expect(legend).toContainText("MessageBus subscription");
     const before = await page.evaluate(() => window.workerEvidence.events.find(event => event.type === "loaded"));
     expect(before?.type).toBe("loaded");
     for (const component of components) {
       const node = page.getByRole("button", { name: `${component.name}, ${component.category}`, exact: true });
       await expect(node).toContainText(component.category);
+      await expect(node).toHaveClass(new RegExp(`symbol-${component.id === "customer-app" ? "client" : component.id === "OrderCreated" ? "topic" : component.id === "payment-processor" ? "external" : "service"}`));
       await node.click();
       await expect(node).toHaveAttribute("aria-pressed", "true");
       await expect(node).toHaveCSS("outline-style", "solid");
@@ -149,6 +166,62 @@ for (const scenario of ["normal", "response-lost"]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("commerce owned resources are visible and keyboard-inspectable with static facts only", async ({ page }) => {
+  for (const [scenario, resourceIds] of [
+    ["retry-unsafe", ["resource:db:payments"]],
+    ["retry-idempotent", ["resource:db:payments"]],
+    ["saga-uncompensated", ["resource:db:orders", "resource:db:inventory", "resource:db:payments"]],
+    ["saga-compensated", ["resource:db:orders", "resource:db:inventory", "resource:db:payments"]],
+    ["dual-write", ["resource:db:payments"]],
+    ["outbox-unsafe-consumer", ["resource:db:payments", "resource:db:notifications"]],
+    ["outbox-idempotent", ["resource:db:payments", "resource:db:notifications"]],
+    ["cqrs-delayed", ["resource:db:orders", "resource:db:reporting"]],
+    ["cascade-unprotected", ["resource:kv:api", "resource:kv:orders", "resource:kv:payments"]],
+    ["cascade-breaker", ["resource:kv:api", "resource:kv:orders", "resource:kv:payments"]],
+  ] as const) {
+    await page.goto("/");
+    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
+    await page.getByRole("button", { name: "Load scenario" }).click();
+    await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+
+    const architecture = page.getByRole("tabpanel", { name: "Architecture", exact: true });
+    const legend = architecture.getByRole("region", { name: "Architecture legend" });
+    await expect(legend).toHaveCount(1);
+    await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Relationships" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Recorded movements" })).toBeVisible();
+    await expect(legend).toContainText("Database (owned)");
+    await expect(legend).toContainText("KV store (owned)");
+    await expect(legend).toContainText("Ownership");
+    await expect(legend.getByRole("img", { name: "Cylinder" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Layered box with key" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Short thin solid line without arrowhead" })).toBeVisible();
+    for (const id of resourceIds) {
+      const resource = page.locator(`.react-flow__node[data-id="${id}"]`);
+      await expect(resource).toBeVisible();
+      const [, kind, owner] = id.split(":");
+      const label = `${kind === "db" ? "Database" : "KeyValueStore"} owned by ${owner}`;
+      await expect(resource).toHaveAttribute("aria-label", label);
+      await expect(resource).toHaveAttribute("role", "button");
+    }
+  }
+
+  const apiStore = page.locator('.react-flow__node[data-id="resource:kv:api"]');
+  await expect(apiStore).toHaveAttribute("aria-label", "KeyValueStore owned by api");
+  await expect(apiStore.locator(".react-flow__handle")).toHaveCount(0);
+  await apiStore.focus();
+  await apiStore.press("Enter");
+  await expect(apiStore).toHaveAttribute("aria-pressed", "true");
+
+  const inspector = page.getByRole("complementary", { name: "Component inspector" });
+  await expect(inspector.getByRole("heading", { name: "KeyValueStore owned by api", exact: true })).toBeVisible();
+  await expect(inspector).toContainText("Owner");
+  await expect(inspector).toContainText("api");
+  await expect(inspector).toContainText("Initial keys");
+  await expect(inspector).toContainText("None declared");
+  await expect(inspector).not.toContainText(/configuration|model|version|committed rows|KV metrics/i);
+});
 
 async function stubWorker(page: Page, mode: "empty" | "invalid" | "error" | "private") {
   await page.addInitScript(({ mode }) => {

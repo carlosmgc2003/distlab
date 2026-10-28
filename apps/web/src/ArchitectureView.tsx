@@ -3,8 +3,8 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useReactFlow, useStore } from "@xyflow/react";
 import type { EdgeProps, NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { categoryLabels, flightTokenStyle, mapArchitecture } from "./architecture-view.ts";
-import type { ArchitectureEdge, ArchitectureNode } from "./architecture-view.ts";
+import { flightTokenStyle, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
+import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
 import { flightDelayMs, FLIGHT_LEGEND } from "./flight.ts";
@@ -15,15 +15,165 @@ import type { GraphEmphasis } from "./timeline.ts";
 import "@xyflow/react/dist/style.css";
 import "./architecture.css";
 
+function SymbolShape({ symbol }: { readonly symbol: NodeSymbol }) {
+  switch (symbol) {
+    case "client":
+      return <rect x="1" y="1" width="213" height="88" rx="44" ry="44" className="shape-fill shape-stroke" />;
+    case "service":
+      return <>
+        <rect x="1" y="1" width="213" height="88" rx="6" ry="6" className="shape-fill shape-stroke" />
+        <rect x="-5" y="26" width="14" height="12" rx="2" className="shape-fill shape-stroke" />
+        <rect x="-5" y="52" width="14" height="12" rx="2" className="shape-fill shape-stroke" />
+      </>;
+    case "external":
+      return <polygon points="22,1 193,1 214,45 193,89 22,89 1,45" className="shape-fill shape-stroke" />;
+    case "topic":
+      return <>
+        <rect x="1" y="26" width="213" height="38" rx="8" ry="8" className="shape-fill shape-stroke" />
+        <line x1="45" y1="26" x2="45" y2="10" className="shape-stroke" />
+        <line x1="107" y1="26" x2="107" y2="10" className="shape-stroke" />
+        <line x1="170" y1="26" x2="170" y2="10" className="shape-stroke" />
+        <line x1="45" y1="64" x2="45" y2="80" className="shape-stroke" />
+        <line x1="107" y1="64" x2="107" y2="80" className="shape-stroke" />
+        <line x1="170" y1="64" x2="170" y2="80" className="shape-stroke" />
+      </>;
+    case "queue":
+      return <>
+        <rect x="8" y="8" width="30" height="74" rx="6" ry="6" className="shape-fill shape-stroke" />
+        <line x1="38" y1="25" x2="52" y2="25" className="shape-stroke" />
+        <line x1="38" y1="45" x2="52" y2="45" className="shape-stroke" />
+        <line x1="38" y1="65" x2="52" y2="65" className="shape-stroke" />
+      </>;
+  }
+}
+
+function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
+  switch (symbol) {
+    case "client":
+      return <svg viewBox="0 0 20 18" aria-hidden="true">
+        <rect x="2" y="2" width="16" height="11" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="10" y1="13" x2="10" y2="16" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="6" y1="16" x2="14" y2="16" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "service":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="5" y="2" width="13" height="16" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="1" y="5" width="6" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="1" y="11" width="6" height="4" rx="1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "external":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <ellipse cx="10" cy="10" rx="3" ry="7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="10" y1="3" x2="10" y2="17" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "topic":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="16" r="1.8" fill="currentColor" />
+        <path d="M6 12 Q10 8 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M4 9 Q10 4 16 9" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M2 6 Q10 0 18 6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+    case "queue":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <line x1="2" y1="6" x2="13" y2="6" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="2" y1="10" x2="13" y2="10" stroke="currentColor" strokeWidth="1.6" />
+        <line x1="2" y1="14" x2="13" y2="14" stroke="currentColor" strokeWidth="1.6" />
+        <polyline points="14,4 18,10 14,16" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      </svg>;
+  }
+}
+
+const legendSymbols: readonly NodeSymbol[] = ["client", "service", "external", "topic", "queue"];
+
+function ResourceSample({ kind, label }: { readonly kind: "database" | "kvstore"; readonly label: string }) {
+  return <svg className={`resource-sample resource-sample-${kind}`} viewBox="0 0 40 24" role="img" aria-label={label}>
+    {kind === "database" ? <>
+      <path d="M3 5a17 3 0 1 0 34 0a17 3 0 1 0-34 0 M3 5v14a17 3 0 0 0 34 0V5" />
+      <path d="M3 12a17 3 0 0 0 34 0" />
+    </> : <>
+      <path d="M3 5 20 2l17 3-17 3z M3 5v14l17 3 17-3V5 M3 11l17 3 17-3 M3 16l17 3 17-3" />
+      <circle cx="20" cy="12" r="2" />
+    </>}
+  </svg>;
+}
+
+function EdgeSample({ relationship, label }: { readonly relationship: "request" | "subscription" | "publication" | "ownership"; readonly label: string }) {
+  return <svg className={`edge-sample ${relationship}`} viewBox="0 0 56 14" role="img" aria-label={label}>
+    <line x1="1" y1="7" x2={relationship === "ownership" ? "55" : "48"} y2="7" />
+    {relationship === "ownership" ? null : relationship === "subscription"
+      ? <path d="M47 3 L53 7 L47 11" />
+      : <path d={relationship === "publication" ? "M48 4 L54 7 L48 10 Z" : "M46 2 L54 7 L46 12 Z"} />}
+  </svg>;
+}
+
+function ArchitectureLegend() {
+  return <Panel position="top-left" className="graph-legend" role="region" aria-label="Architecture legend" tabIndex={0}>
+    <h3>Legend</h3>
+    <section aria-labelledby="legend-nodes-heading">
+      <h4 id="legend-nodes-heading">Nodes</h4>
+      <ul>{legendSymbols.map(symbol => <li key={symbol}>
+        <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>
+        <span>{symbolLabels[symbol]}</span>
+      </li>)}
+        <li><ResourceSample kind="database" label="Cylinder" /><span>Database (owned)</span></li>
+        <li><ResourceSample kind="kvstore" label="Layered box with key" /><span>KV store (owned)</span></li>
+      </ul>
+    </section>
+    <section aria-labelledby="legend-edges-heading">
+      <h4 id="legend-edges-heading">Relationships</h4>
+      <ul>
+        <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
+        <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
+        <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
+        <li><EdgeSample relationship="ownership" label="Short thin solid line without arrowhead" /><span>Ownership</span></li>
+      </ul>
+    </section>
+    <section aria-labelledby="legend-movements-heading">
+      <h4 id="legend-movements-heading">Recorded movements</h4>
+      <ul>{FLIGHT_LEGEND.map(entry => <li key={entry.glyph}>
+        <span className={`token-sample shape-${entry.shape}`} aria-hidden="true">{entry.glyph}</span>
+        <span>{entry.label}<span className="sr-only">, {entry.detail}</span></span>
+      </li>)}</ul>
+    </section>
+  </Panel>;
+}
+
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
   return <>
     <Handle id="top" type="target" position={Position.Top} />
     <Handle id="left" type="target" position={Position.Left} />
-    <span className="category-label">{categoryLabels[data.component.kind]}</span>
-    <strong>{data.title}</strong>
-    {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+    <div className="node-body">
+      <div className="node-shape" aria-hidden="true">
+        <svg viewBox="0 0 215 90" preserveAspectRatio="none" className="shape-svg">
+          <SymbolShape symbol={data.symbol} />
+        </svg>
+        <span className="node-glyph"><SymbolGlyph symbol={data.symbol} /></span>
+      </div>
+      <div className="node-content">
+        <span className="category-label">{symbolLabels[data.symbol]}</span>
+        <strong>{data.title}</strong>
+        {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+      </div>
+    </div>
     <Handle id="right" type="source" position={Position.Right} />
     <Handle id="bottom" type="source" position={Position.Bottom} />
+  </>;
+});
+const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<ResourceNode>) {
+  return <>
+    <span className="target resource-anchor" data-handleid="top" data-handlepos="top" aria-hidden="true" />
+    <div className={`resource-body resource-body-${data.kind}`}>
+    {data.kind === "database" ? <svg viewBox="0 0 115 56" aria-hidden="true">
+      <path d="M2 9a55.5 7 0 1 0 111 0a55.5 7 0 1 0-111 0 M2 9v38a55.5 7 0 0 0 111 0V9" />
+      <path d="M2 28a55.5 7 0 0 0 111 0" />
+    </svg> : <svg viewBox="0 0 115 56" aria-hidden="true">
+      <path d="M8 11l49-8 50 8-50 9z M8 11v34l49 8 50-8V11 M8 24l49 9 50-9 M8 36l49 9 50-9" />
+    </svg>}
+    <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
+    <span className="resource-title">{resourceLabels[data.kind]} owned by {data.owner}</span>
+    </div>
   </>;
 });
 /** The token follows the measured link path, so the link is drawn here instead of by a built-in edge. */
@@ -58,7 +208,7 @@ const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
     </g> : null}
   </>;
 });
-const nodeTypes = { component: ComponentNode };
+const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
 const edgeTypes = { link: LinkEdge };
 const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
@@ -147,7 +297,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
     : emphasis;
-  const nodes = useMemo(() => graph.nodes.map(node => {
+  const componentNodes = useMemo(() => graph.nodes.map(node => {
     const involved = painted?.nodeIds.includes(node.id) === true;
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
@@ -161,13 +311,20 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
     };
   }), [graph.nodes, selectedId, painted, flight]);
-  const edges = useMemo(() => graph.edges.map(edge => {
+  const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
+    ...node,
+    selected: node.id === selectedId,
+    domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
+  })), [graph.resourceNodes, selectedId]);
+  const nodes = useMemo(() => [...componentNodes, ...resourceNodes], [componentNodes, resourceNodes]);
+  const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(edge => {
     const styled = emphasize(edge, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
-    return { ...styled, data: { ...styled.data, flight, pace: playback.pace } };
+    return { ...styled, data: { ...styled.data!, flight, pace: playback.pace } };
   }), [graph.edges, painted, flight, playback.pace]);
+  const edges = useMemo<(ArchitectureEdge | OwnershipEdge)[]>(() => [...componentEdges, ...graph.resourceEdges], [componentEdges, graph.resourceEdges]);
   // Accept only selection changes. Positions and graph structure are immutable presentation inputs.
-  const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode>[]) => {
+  const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode | ResourceNode>[]) => {
     setSelectedId(previous => {
       let next = previous;
       for (const change of changes) {
@@ -204,7 +361,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           event.preventDefault(); event.stopPropagation(); clearSelection();
         }
       }}>
-        <ReactFlow aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <ReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge> aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange} onPaneClick={clearSelection}
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
@@ -215,23 +372,15 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} fitViewOptions={fitViewOptions} />
           <PanControls />
+          <ArchitectureLegend />
         </ReactFlow>
       </div>
       {selectedId || flight ? <div className="architecture-side">
         {flight ? <FlightNarration step={flight} /> : null}
-        {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId)}>
-          {inspectorFacts ? inspectorFacts(selectedId) : null}
+        {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
+          {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}
       </div> : null}
-    </div>
-    <div className="graph-legend" aria-label="Architecture legend">
-      <p><span className="line-sample request" aria-hidden="true" /> Solid arrow: request link</p>
-      <p><span className="line-sample publication" aria-hidden="true" /> Dotted arrow: MessageBus publication</p>
-      <p><span className="line-sample subscription" aria-hidden="true" /> Dashed arrow: MessageBus subscription</p>
-      {FLIGHT_LEGEND.map(entry => <p key={entry.glyph}>
-        <span className={`token-sample shape-${entry.shape}`} aria-hidden="true">{entry.glyph}</span>
-        {entry.label}<span className="sr-only">, {entry.detail}</span>
-      </p>)}
     </div>
     <details className="connections">
       <summary>Connections ({graph.edges.length})</summary>

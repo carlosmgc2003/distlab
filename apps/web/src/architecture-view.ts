@@ -1,4 +1,4 @@
-import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, ComponentNodeProjection } from "@distlab/contracts";
+import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, ComponentNodeProjection, DatabaseDefinition, KeyValueDefinition, ComponentId } from "@distlab/contracts";
 import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
@@ -14,8 +14,20 @@ export const categoryLabels = {
   infrastructure: "Infrastructure",
 } as const satisfies Record<ComponentNodeProjection["kind"], string>;
 
+/** Derived presentation symbol: one shape plus glyph per value. */
+export type NodeSymbol = "client" | "service" | "external" | "topic" | "queue";
+
+export const symbolLabels: Record<NodeSymbol, string> = {
+  client: "Client",
+  service: "Internal service",
+  external: "External service",
+  topic: "Message bus topic",
+  queue: "Message bus queue",
+};
+
 export type ArchitectureNode = Node<{
   component: ComponentNodeProjection;
+  symbol: NodeSymbol;
   title: string;
   configuration: CanonicalValue | undefined;
   resources: readonly string[];
@@ -31,6 +43,31 @@ export type ArchitectureEdge = Edge<{
   pace?: FlightPace;
 }>;
 
+export type ResourceKind = "database" | "kvstore";
+
+export const resourceLabels = {
+  database: "Database",
+  kvstore: "KeyValueStore",
+} as const satisfies Record<ResourceKind, string>;
+
+export interface ResourceNodeData {
+  readonly [key: string]: unknown;
+  readonly kind: ResourceKind;
+  readonly owner: ComponentId;
+  /** Verbatim packaged definition, copied by reference and never mutated. */
+  readonly definition: DatabaseDefinition | KeyValueDefinition;
+}
+
+export type ResourceNode = Node<ResourceNodeData, ResourceKind>;
+
+export interface OwnershipEdgeData {
+  readonly [key: string]: unknown;
+  readonly owner: ComponentId;
+  readonly resource: ResourceKind;
+}
+
+export type OwnershipEdge = Edge<OwnershipEdgeData>;
+
 const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly y: number }>> = {
   "customer-app": { x: 0, y: 0 },
   orders: { x: 310, y: 0 },
@@ -39,13 +76,26 @@ const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly 
   "payment-processor": { x: 620, y: 420 },
 };
 
+const relationshipMarkers = {
+  request: { type: MarkerType.ArrowClosed, color: "#334155", width: 20, height: 20 },
+  subscription: { type: MarkerType.Arrow, color: "#334155", width: 20, height: 20 },
+  publication: { type: MarkerType.ArrowClosed, color: "#334155", width: 12, height: 12 },
+} as const;
+
+/** Derive the presentation symbol from the component kind and, for infrastructure, the destination kind. */
+export function deriveSymbol(component: ComponentNodeProjection, destination?: unknown): NodeSymbol {
+  if (component.kind !== "infrastructure") return component.kind;
+  const kind = typeof destination === "object" && destination !== null ? (destination as { readonly kind?: unknown }).kind : undefined;
+  return kind === "queue" ? "queue" : "topic";
+}
+
 /** Copies presentation data only; never accepts a simulation projection or a mutation port. */
 export function mapArchitecture(projection: ArchitectureProjection, metadata?: ArchitectureDefinition, scenarioName?: string): {
-  nodes: ArchitectureNode[]; edges: ArchitectureEdge[]; error: string | null;
+  nodes: ArchitectureNode[]; edges: ArchitectureEdge[]; resourceNodes: ResourceNode[]; resourceEdges: OwnershipEdge[]; error: string | null;
 } {
   const ids = new Set(projection.components.map(component => component.id));
   if (ids.size !== projection.components.length || projection.links.some(link => !ids.has(link.source) || !ids.has(link.target))) {
-    return { nodes: [], edges: [], error: "Architecture contains duplicate components or connections to missing components." };
+    return { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], error: "Architecture contains duplicate components or connections to missing components." };
   }
   const instances = new Map(metadata?.components.map(component => [component.id, component]));
   const destinations = new Map(metadata?.destinations.map(destination => [destination.id, destination]));
@@ -64,6 +114,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const instance = instances.get(component.id);
     const matches = instance?.kind === component.kind && instance.model === component.model && instance.version === component.version;
     const destination = component.kind === "infrastructure" ? destinations.get(component.id) : undefined;
+    const symbol = deriveSymbol(component, destination);
     const copy = matches ? checkoutDisplay(scenarioName, component) : undefined;
     const title = destination ? `MessageBus · ${component.label}` : copy?.title ?? component.label;
     const resources = matches ? [
@@ -71,13 +122,13 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       ...(metadata?.databases.filter(database => database.owner === component.id).map(database =>
         `Database owned by ${database.owner}: ${database.tables.map(table => table.name).join(", ")}`) ?? []),
       ...(metadata?.stores.filter(store => store.owner === component.id).map(store => `KeyValueStore owned by ${store.owner}`) ?? []),
-    ] : destination ? [`MessageBus ${destination.kind}: ${destination.id}`] : [];
+    ].sort() : destination ? [`MessageBus ${destination.kind}: ${destination.id}`] : [];
     const column = depth.get(component.id) ?? 0;
     const row = rows.get(column) ?? 0;
     rows.set(column, row + 1);
     return {
       id: component.id, type: "component", data: {
-        component, title, resources,
+        component, symbol, title, resources,
         configuration: matches ? instance.configuration : destination ? {
           deliveryDelay: destination.deliveryDelay, ackTimeout: destination.ackTimeout,
           retryDelay: destination.retryDelay, maxAttempts: destination.maxAttempts, capacity: destination.capacity,
@@ -86,8 +137,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       position: commerce ? { x: column * 310, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
       sourcePosition: Position.Bottom, targetPosition: Position.Top,
       draggable: false, connectable: false, deletable: false, focusable: true,
-      ariaRole: "button", ariaLabel: `${title}, ${categoryLabels[component.kind]}`,
-      className: `component-node category-${component.kind} nopan`,
+      ariaRole: "button", ariaLabel: `${title}, ${symbolLabels[symbol]}`,
+      className: `component-node category-${component.kind} symbol-${symbol} nopan`,
     };
   });
   const edges = projection.links.map((link, index): ArchitectureEdge => {
@@ -100,12 +151,46 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
       type: "link", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship },
       sourceHandle: subscription ? "bottom" : "right", targetHandle: subscription ? "top" : "left",
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
+      markerEnd: relationshipMarkers[relationship],
       style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5],
       labelBgStyle: { fill: "#fff" }, selectable: false, focusable: false, deletable: false,
     };
   });
+  const projectedById = new Map(projection.components.map(component => [component.id, component]));
+  const resourceDefinitions = new Map<string, { kind: ResourceKind; definition: DatabaseDefinition | KeyValueDefinition }>();
+  for (const [kind, definitions] of [["database", metadata?.databases ?? []], ["kvstore", metadata?.stores ?? []]] as const) {
+    for (const definition of definitions) {
+      const owner = projectedById.get(definition.owner);
+      const instance = instances.get(definition.owner);
+      if (!owner || instance?.kind !== owner.kind || instance.model !== owner.model || instance.version !== owner.version) continue;
+      resourceDefinitions.set(`${kind}:${definition.owner}`, { kind, definition });
+    }
+  }
+  const resourceNodes: ResourceNode[] = [...resourceDefinitions.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { kind, definition }]) => {
+    const owner = definition.owner;
+    const ownerNode = nodes.find(node => node.id === owner)!;
+    const companionKind: ResourceKind = kind === "database" ? "kvstore" : "database";
+    const companion = resourceDefinitions.has(`${companionKind}:${owner}`);
+    const offsetX = kind === "kvstore" && companion ? 173 : 50;
+    const id = `resource:${kind === "database" ? "db" : "kv"}:${owner}`;
+    const title = `${resourceLabels[kind]} owned by ${owner}`;
+    return {
+      id, type: kind, data: { kind, owner, definition },
+      position: { x: ownerNode.position.x + offsetX, y: ownerNode.position.y + 120 },
+      handles: [{ id: "top", type: "target", position: Position.Top, x: 57.5, y: 0 }],
+      draggable: false, connectable: false, deletable: false, selectable: true, focusable: true,
+      ariaRole: "button", ariaLabel: title,
+      className: `resource-node resource-${kind} nopan`,
+    };
+  });
+  const resourceEdges: OwnershipEdge[] = resourceNodes.map(node => ({
+    id: `ownership:${node.data.owner}:${node.id}`,
+    source: node.data.owner, target: node.id, sourceHandle: "bottom", targetHandle: "top",
+    data: { owner: node.data.owner, resource: node.data.kind },
+    style: { stroke: "#94a3b8", strokeWidth: 1 },
+    selectable: false, focusable: false, deletable: false,
+  }));
   const publisher = nodes.find(node => node.id === "orders");
   const topic = destinations.get("OrderCreated");
   if (publisher && publisher.data.configuration !== undefined && checkoutDisplay(scenarioName, publisher.data.component) && topic?.kind === "topic"
@@ -114,13 +199,13 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
       sourceHandle: "bottom", targetHandle: "top", type: "link",
       label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication" },
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#334155" },
+      markerEnd: relationshipMarkers.publication,
       style: { stroke: "#334155", strokeWidth: 2, strokeDasharray: "2 5" },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5], labelBgStyle: { fill: "#fff" },
       selectable: false, focusable: false, deletable: false,
     });
   }
-  return { nodes, edges, error: null };
+  return { nodes, edges, resourceNodes, resourceEdges, error: null };
 }
 
 /** Read-only link identity for observation movement. Relationship comes from the presentation edge. */
