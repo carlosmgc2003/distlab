@@ -51,8 +51,8 @@ for (const scenario of ["normal", "response-lost"]) {
     const inspector = page.getByRole("complementary", { name: "Component inspector" });
     await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
     await expect(inspector).toHaveCount(0);
-    await expect(architecture.locator(".react-flow__node")).toHaveCount(5);
-    await expect(architecture.locator(".react-flow__edge")).toHaveCount(4);
+    await expect(architecture.locator(".react-flow__node")).toHaveCount(7);
+    await expect(architecture.locator(".react-flow__edge")).toHaveCount(6);
     await expect(architecture).toContainText("Solid arrow: request link");
     await expect(architecture).toContainText("Dotted arrow: MessageBus publication");
     await expect(architecture).toContainText("Dashed arrow: MessageBus subscription");
@@ -149,6 +149,29 @@ for (const scenario of ["normal", "response-lost"]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("commerce owned resources are visible and keyboard-inspectable with static facts only", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Scenario", { exact: true }).selectOption("cascade-breaker");
+  await page.getByRole("button", { name: "Load scenario" }).click();
+  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+
+  const apiStore = page.locator('.react-flow__node[data-id="resource:kv:api"]');
+  await expect(apiStore).toBeVisible();
+  await expect(apiStore).toHaveAttribute("aria-label", "KeyValueStore owned by api");
+  await expect(apiStore.locator(".react-flow__handle")).toHaveCount(0);
+  await apiStore.focus();
+  await apiStore.press("Enter");
+  await expect(apiStore).toHaveAttribute("aria-pressed", "true");
+
+  const inspector = page.getByRole("complementary", { name: "Component inspector" });
+  await expect(inspector.getByRole("heading", { name: "KeyValueStore owned by api", exact: true })).toBeVisible();
+  await expect(inspector).toContainText("Owner");
+  await expect(inspector).toContainText("api");
+  await expect(inspector).toContainText("Initial keys");
+  await expect(inspector).toContainText("None declared");
+  await expect(inspector).not.toContainText(/configuration|model|version|committed rows|KV metrics/i);
+});
 
 async function stubWorker(page: Page, mode: "empty" | "invalid" | "error" | "private") {
   await page.addInitScript(({ mode }) => {

@@ -3,8 +3,8 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useReactFlow, useStore } from "@xyflow/react";
 import type { EdgeProps, NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { flightTokenStyle, mapArchitecture, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
-import type { ArchitectureEdge, ArchitectureNode } from "./architecture-view.ts";
+import { flightTokenStyle, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
+import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
 import { flightDelayMs, FLIGHT_LEGEND } from "./flight.ts";
@@ -106,6 +106,21 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
     <Handle id="bottom" type="source" position={Position.Bottom} />
   </>;
 });
+const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<ResourceNode>) {
+  return <>
+    <span className="target resource-anchor" data-handleid="top" data-handlepos="top" aria-hidden="true" />
+    <div className={`resource-body resource-body-${data.kind}`}>
+    {data.kind === "database" ? <svg viewBox="0 0 115 56" aria-hidden="true">
+      <path d="M2 9a55.5 7 0 1 0 111 0a55.5 7 0 1 0-111 0 M2 9v38a55.5 7 0 0 0 111 0V9" />
+      <path d="M2 28a55.5 7 0 0 0 111 0" />
+    </svg> : <svg viewBox="0 0 115 56" aria-hidden="true">
+      <path d="M8 11l49-8 50 8-50 9z M8 11v34l49 8 50-8V11 M8 24l49 9 50-9 M8 36l49 9 50-9" />
+    </svg>}
+    <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
+    <span className="resource-title">{resourceLabels[data.kind]} owned by {data.owner}</span>
+    </div>
+  </>;
+});
 /** The token follows the measured link path, so the link is drawn here instead of by a built-in edge. */
 const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
   const { id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
@@ -138,7 +153,7 @@ const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
     </g> : null}
   </>;
 });
-const nodeTypes = { component: ComponentNode };
+const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
 const edgeTypes = { link: LinkEdge };
 const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
@@ -227,7 +242,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
     : emphasis;
-  const nodes = useMemo(() => graph.nodes.map(node => {
+  const componentNodes = useMemo(() => graph.nodes.map(node => {
     const involved = painted?.nodeIds.includes(node.id) === true;
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
@@ -241,13 +256,20 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
     };
   }), [graph.nodes, selectedId, painted, flight]);
-  const edges = useMemo(() => graph.edges.map(edge => {
+  const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
+    ...node,
+    selected: node.id === selectedId,
+    domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
+  })), [graph.resourceNodes, selectedId]);
+  const nodes = useMemo(() => [...componentNodes, ...resourceNodes], [componentNodes, resourceNodes]);
+  const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(edge => {
     const styled = emphasize(edge, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
-    return { ...styled, data: { ...styled.data, flight, pace: playback.pace } };
+    return { ...styled, data: { ...styled.data!, flight, pace: playback.pace } };
   }), [graph.edges, painted, flight, playback.pace]);
+  const edges = useMemo<(ArchitectureEdge | OwnershipEdge)[]>(() => [...componentEdges, ...graph.resourceEdges], [componentEdges, graph.resourceEdges]);
   // Accept only selection changes. Positions and graph structure are immutable presentation inputs.
-  const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode>[]) => {
+  const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode | ResourceNode>[]) => {
     setSelectedId(previous => {
       let next = previous;
       for (const change of changes) {
@@ -284,7 +306,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           event.preventDefault(); event.stopPropagation(); clearSelection();
         }
       }}>
-        <ReactFlow aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <ReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge> aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange} onPaneClick={clearSelection}
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
@@ -299,8 +321,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       </div>
       {selectedId || flight ? <div className="architecture-side">
         {flight ? <FlightNarration step={flight} /> : null}
-        {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId)}>
-          {inspectorFacts ? inspectorFacts(selectedId) : null}
+        {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
+          {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}
       </div> : null}
     </div>

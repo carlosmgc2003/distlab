@@ -211,6 +211,15 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .react-flow__node.component-node[aria-pressed="true"] { outline: 3px solid #1d4ed8; outline-offset: 4px; }
 .react-flow__node.component-node:focus-visible { outline: 4px solid #172033; outline-offset: 7px; }
 .component-node .react-flow__handle { opacity: 0; pointer-events: none; }
+.resource-node { width: 115px; height: 56px; padding: 0; border: 0; background: transparent; color: #334155; cursor: pointer; }
+.resource-anchor { position: absolute; top: 0; left: 57.5px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.resource-body { position: relative; width: 115px; height: 56px; display: flex; align-items: center; justify-content: center; }
+.resource-body svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; fill: #f8fafc; stroke: #64748b; stroke-width: 1.5; }
+.resource-body-kvstore svg { fill: #f8fafc; }
+.resource-glyph { position: absolute; top: 7px; right: 14px; color: #475569; font-size: 13px; font-weight: 700; line-height: 1; }
+.resource-title { position: relative; z-index: 1; max-width: 88px; padding-top: 4px; font-size: 10px; font-weight: 650; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.react-flow__node.resource-node[aria-pressed="true"] { outline: 3px solid #1d4ed8; outline-offset: 4px; }
+.react-flow__node.resource-node:focus-visible { outline: 4px solid #172033; outline-offset: 7px; }
 .react-flow__controls button { width: 36px; height: 36px; min-height: 36px; color: #172033; }
 .react-flow__controls button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
 .react-flow__attribution a { color: #475569; }

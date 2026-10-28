@@ -43,7 +43,7 @@ test("default architecture fit contains every checkout node after desktop and na
   for (const value of ["normal", "response-lost"]) {
     await scenario.selectOption(value);
     await button("Load scenario").click();
-    await expect(page.locator(".react-flow__node")).toHaveCount(5);
+    await expect(page.locator(".react-flow__node")).toHaveCount(7);
     for (const viewport of [{ width: 1534, height: 897 }, { width: 900, height: 800 }]) {
       await page.setViewportSize(viewport);
       await button("Fit View").click();
@@ -83,8 +83,8 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await expect(status).toHaveText("READY");
   await expect(lesson).toContainText("Lesson ready");
   await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
-  await expect(page.locator(".react-flow__node")).toHaveCount(5);
-  await expect(page.locator(".react-flow__edge")).toHaveCount(4);
+  await expect(page.locator(".react-flow__node")).toHaveCount(7);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(6);
   for (const category of ["Client", "Internal service", "Message bus topic", "External service"]) {
     await expect(page.locator(".category-label", { hasText: category }).first()).toBeVisible();
   }
@@ -147,7 +147,7 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.getByRole("status", { name: "Request and message movement" })).not.toContainText("No request or message movement");
   await button("Fit View").click();
-  await expect(page.locator(".react-flow__node")).toHaveCount(5);
+  await expect(page.locator(".react-flow__node")).toHaveCount(7);
   await button("Payments, Internal service").focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("NETWORK_TIMEOUT");
