@@ -97,7 +97,7 @@ function EdgeSample({ relationship, label }: { readonly relationship: "request" 
 }
 
 function ArchitectureLegend() {
-  return <Panel position="bottom-left" className="graph-legend" role="region" aria-label="Architecture legend">
+  return <Panel position="top-left" className="graph-legend" role="region" aria-label="Architecture legend" tabIndex={0}>
     <h3>Legend</h3>
     <section aria-labelledby="legend-nodes-heading">
       <h4 id="legend-nodes-heading">Nodes</h4>
