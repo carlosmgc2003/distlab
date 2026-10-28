@@ -159,6 +159,8 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
     const [nodeCount, edgeCount] = expected[choice.id]!;
     assert.equal(graph.resourceNodes.length, nodeCount, choice.id);
     assert.equal(graph.resourceEdges.length, edgeCount, choice.id);
+    assert.ok(!projection.architecture.components.some(component => component.id.startsWith("resource:")), choice.id);
+    assert.ok(!metadata.components.some(component => component.id.startsWith("resource:")), choice.id);
     assert.deepEqual(graph.resourceNodes.map(node => node.id).sort(), [
       ...metadata.databases.map(database => `resource:db:${database.owner}`),
       ...metadata.stores.map(store => `resource:kv:${store.owner}`),
@@ -178,12 +180,16 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
       assert.equal(node.ariaLabel, `${node.data.kind === "database" ? "Database" : "KeyValueStore"} owned by ${node.data.owner}`);
       assert.equal(node.className, `resource-node resource-${node.data.kind} nopan`);
       assert.deepEqual(node.handles, [{ id: "top", type: "target", position: "top", x: 57.5, y: 0 }]);
+      assert.equal("role" in node.data, false);
+      assert.equal("roleLabel" in node.data, false);
+      assert.equal("flight" in node.data, false);
     }
     assert.equal(graph.nodes.some(node => node.id.startsWith("resource:")), false);
     assert.equal(graph.edges.some(edge => edge.id.startsWith("ownership:")), false);
     assert.equal(movementEdges(graph.edges).some(edge => edge.id.startsWith("ownership:")), false);
     assert.ok(movementEdges(graph.edges).every(edge => ["request", "subscription", "publication"].includes(edge.relationship)));
     assert.ok(!Object.keys(Object.fromEntries(graph.nodes.map(node => [node.id, node.data.title]))).some(id => id.startsWith("resource:")));
+    assert.ok(graph.resourceNodes.every(node => !graph.nodes.some(component => component.id === node.id)));
     assert.ok(!projection.architecture.components.some(component => component.id.startsWith("resource:")));
   }
 });

@@ -34,6 +34,9 @@ worker commands.
 React plus React Flow is the MVP presentation stack. React Flow positions and
 selection state are host/UI state and must not enter `RunInputs`, scheduling,
 randomness, assertions, or canonical history.
+The main thread may derive presentation-only resource nodes from packaged
+`ArchitectureDefinition` metadata; those nodes remain outside
+`ArchitectureProjection`, worker messages, and canonical history.
 
 ## Packaged scenario hosting
 

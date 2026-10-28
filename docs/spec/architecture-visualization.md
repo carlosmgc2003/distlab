@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft plan |
+| Status | Implementation-ready |
 | Owner | DistLab core team |
-| Last updated | 2026-10-12 |
+| Last updated | 2026-10-28 |
 | Related issues | None |
 
 ## Responsibility
@@ -57,7 +57,7 @@ readable without color (color is retained as a secondary cue).
 | --- | --- | --- | --- |
 | Client | Pill (fully rounded card) | Monitor/person | `--category-client` (blue) |
 | Internal service | Rectangle, UML-component style | Component notch icon | `--category-service` (green) |
-| External service | Hexagon (or dashed rounded rect kept) | Globe | `--category-external` (orange) |
+| External service | Hexagon | Globe | `--category-external` (orange) |
 | Message bus — topic | Wide bar with pronged rail | Broadcast/envelope stack | `--category-infrastructure` (purple) |
 | Message bus — queue | Vertical rail/stack | FIFO arrow | `--category-infrastructure` (purple) |
 | Database (owned) | Cylinder | Database disc | neutral slate |
@@ -304,7 +304,7 @@ static facts only in the inspector.
 - One legend component shared by the graph panel, listing shapes, edges, and
   movement tokens together.
 
-### Phase 4 — Specification and tests
+### Phase 4 — Specification and tests (complete)
 
 - This document becomes the spec of record; update
   `docs/spec/application-boundary.md` with one sentence allowing the main
@@ -318,6 +318,11 @@ static facts only in the inspector.
 - `npm run test:boundaries` must keep passing (no new runtime imports).
 - Reproducibility is unaffected: no `RunInputs`, clock, randomness, or history
   change; golden outputs must be byte-identical before and after.
+
+The external-service shape decision is resolved as a hexagon. Resource nodes
+remain selectable, presentation-only satellites; their metadata eligibility,
+placement, labels, and ownership-edge semantics are specified above and require
+no further design decision.
 
 ## Guardrails
 

@@ -53,14 +53,25 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(inspector).toHaveCount(0);
     await expect(architecture.locator(".react-flow__node")).toHaveCount(7);
     await expect(architecture.locator(".react-flow__edge")).toHaveCount(6);
-    await expect(architecture).toContainText("Solid arrow: request link");
-    await expect(architecture).toContainText("Dotted arrow: MessageBus publication");
-    await expect(architecture).toContainText("Dashed arrow: MessageBus subscription");
+    const legend = architecture.getByRole("region", { name: "Architecture legend" });
+    await expect(legend).toHaveCount(1);
+    await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Relationships" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Recorded movements" })).toBeVisible();
+    await expect(legend).toContainText("Client");
+    await expect(legend).toContainText("Internal service");
+    await expect(legend).toContainText("External service");
+    await expect(legend).toContainText("Message bus topic");
+    await expect(legend).toContainText("Message bus queue");
+    await expect(legend).toContainText("Request");
+    await expect(legend).toContainText("MessageBus publication");
+    await expect(legend).toContainText("MessageBus subscription");
     const before = await page.evaluate(() => window.workerEvidence.events.find(event => event.type === "loaded"));
     expect(before?.type).toBe("loaded");
     for (const component of components) {
       const node = page.getByRole("button", { name: `${component.name}, ${component.category}`, exact: true });
       await expect(node).toContainText(component.category);
+      await expect(node).toHaveClass(new RegExp(`symbol-${component.id === "customer-app" ? "client" : component.id === "OrderCreated" ? "topic" : component.id === "payment-processor" ? "external" : "service"}`));
       await node.click();
       await expect(node).toHaveAttribute("aria-pressed", "true");
       await expect(node).toHaveCSS("outline-style", "solid");
@@ -151,13 +162,40 @@ for (const scenario of ["normal", "response-lost"]) {
 }
 
 test("commerce owned resources are visible and keyboard-inspectable with static facts only", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption("cascade-breaker");
-  await page.getByRole("button", { name: "Load scenario" }).click();
-  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+  for (const [scenario, resourceIds] of [
+    ["retry-unsafe", ["resource:db:payments"]],
+    ["retry-idempotent", ["resource:db:payments"]],
+    ["saga-uncompensated", ["resource:db:orders", "resource:db:inventory", "resource:db:payments"]],
+    ["saga-compensated", ["resource:db:orders", "resource:db:inventory", "resource:db:payments"]],
+    ["dual-write", ["resource:db:payments"]],
+    ["outbox-unsafe-consumer", ["resource:db:payments", "resource:db:notifications"]],
+    ["outbox-idempotent", ["resource:db:payments", "resource:db:notifications"]],
+    ["cqrs-delayed", ["resource:db:orders", "resource:db:reporting"]],
+    ["cascade-unprotected", ["resource:kv:api", "resource:kv:orders", "resource:kv:payments"]],
+    ["cascade-breaker", ["resource:kv:api", "resource:kv:orders", "resource:kv:payments"]],
+  ] as const) {
+    await page.goto("/");
+    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
+    await page.getByRole("button", { name: "Load scenario" }).click();
+    await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+
+    const architecture = page.getByRole("tabpanel", { name: "Architecture", exact: true });
+    const legend = architecture.getByRole("region", { name: "Architecture legend" });
+    await expect(legend).toHaveCount(1);
+    await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Relationships" })).toBeVisible();
+    await expect(legend.getByRole("heading", { name: "Recorded movements" })).toBeVisible();
+    for (const id of resourceIds) {
+      const resource = page.locator(`.react-flow__node[data-id="${id}"]`);
+      await expect(resource).toBeVisible();
+      const [, kind, owner] = id.split(":");
+      const label = `${kind === "db" ? "Database" : "KeyValueStore"} owned by ${owner}`;
+      await expect(resource).toHaveAttribute("aria-label", label);
+      await expect(resource).toHaveAttribute("role", "button");
+    }
+  }
 
   const apiStore = page.locator('.react-flow__node[data-id="resource:kv:api"]');
-  await expect(apiStore).toBeVisible();
   await expect(apiStore).toHaveAttribute("aria-label", "KeyValueStore owned by api");
   await expect(apiStore.locator(".react-flow__handle")).toHaveCount(0);
   await apiStore.focus();
