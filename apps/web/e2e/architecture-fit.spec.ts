@@ -54,7 +54,7 @@ async function expectGraphFits(page: Page, context: string) {
   await expect.poll(async () => (await graphFit(page)).clipped, { message: `graph fits the canvas at ${context}` }).toEqual([]);
   const fit = await graphFit(page);
   const label = `graph fits the canvas at ${context} (canvas ${fit.width}×${fit.height})`;
-  expect(fit.nodes, label).toHaveLength(5);
+  expect(fit.nodes, label).toHaveLength(7);
   for (const node of fit.nodes) {
     expect(node.label, `${label}: ${node.id} keeps a readable name`).not.toBe("");
     // Comfortable padding means the graph is not flush against the canvas edge.
@@ -77,7 +77,7 @@ async function loadScenario(page: Page, scenario: string) {
   await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-  await expect(page.locator(".react-flow__node")).toHaveCount(5);
+  await expect(page.locator(".react-flow__node")).toHaveCount(7);
 }
 
 test("the default view shows the whole checkout graph at the supported desktop baselines", async ({ page }) => {

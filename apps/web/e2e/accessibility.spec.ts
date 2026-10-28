@@ -7,7 +7,7 @@ test("architecture and each inspector pass accessibility checks at the desktop b
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("button", { name: "Load scenario" }).click();
   const nodes = page.locator(".react-flow__node");
-  await expect(nodes).toHaveCount(5);
+  await expect(nodes).toHaveCount(7);
   for (const size of [{ width: 1366, height: 768 }, { width: 683, height: 384 }]) {
     const width = size.width;
     await page.setViewportSize(size);
