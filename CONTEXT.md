@@ -53,6 +53,18 @@ reader needs before changing code, and the vocabulary used when discussing them.
   this.
 - **Status** is a projection field, never a new command.
 
+## Session overlays
+
+- A **packaged lesson** is one of the exact packaged scenario documents the host
+  accepts. A **session overlay** is the student's delta for one packaged lesson:
+  fault rules, scheduled faults, and **parameter overrides**. It is applied at
+  Load and replayed by Reset, never applied mid-run. See
+  [ADR-004](docs/spec/adr/004-session-overlays.md).
+- A **lesson overlay policy** is the lesson's data-only allow-list. The worker
+  reads it from its own catalog and never from a command.
+- Say *parameter*, not *configuration*. `configuration` means
+  `RunInputs.configuration`, which an overlay cannot change.
+
 ## Naming
 
 Import shared types from `@distlab/contracts` or `@distlab/contracts/kernel`.

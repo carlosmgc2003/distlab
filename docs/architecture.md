@@ -1561,3 +1561,18 @@ runtime task handles and provider counters are not student-visible.
 boundary counters, independent of history visibility. Reading them does not
 advance time or record observations. See [ADR-003](spec/adr/003-boundary-counters.md).
 Existing scheduling, reset, and deterministic replay guarantees are unchanged.
+
+## Session overlays on packaged lessons
+
+A student changes a loaded packaged lesson through a **session overlay**: student
+fault rules, student scheduled faults, and overrides of parameters that the lesson
+declares in its data-only overlay policy. The overlay travels as an optional
+field of the worker's `load` command. The worker validates it against the policy
+from its own catalog, then appends the rules and scheduled faults after the
+packaged ones. It replaces parameter values only at declared targets, and only
+then runs the unchanged ScenarioEngine. Overlays apply at Load, never during a
+run, and Reset replays the applied overlay. The applied document enters
+`RunInputs.scenario`, so `runId` identifies the overlaid run. The empty overlay
+reproduces the packaged lesson exactly. Kernel and runtime models are unaware of
+overlays, and dependency direction is unchanged. See
+[ADR-004](spec/adr/004-session-overlays.md).

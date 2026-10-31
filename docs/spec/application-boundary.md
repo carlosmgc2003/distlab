@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-09-27 |
-| Related issues | #3, #46, #47, #69 |
+| Last updated | 2026-10-31 |
+| Related issues | #3, #46, #47, #69, #93 |
 
 ## Responsibility
 
@@ -40,7 +40,14 @@ The main thread may derive presentation-only resource nodes from packaged
 
 ## Packaged scenario hosting
 
-The current host accepts exact packaged checkout and commerce documents only.
+The host accepts an exact packaged checkout or commerce document, optionally
+with a session overlay that the lesson's overlay policy allows
+([ADR-004](adr/004-session-overlays.md)). It accepts no other document.
+The overlay adds student fault rules, student scheduled faults, and parameter
+overrides at declared targets. It never edits assertions, workload, topology,
+seed, start time, or `RunInputs.configuration`. The worker resolves the policy
+from its own catalog after the document matches, applies the overlay, and only
+then calls ScenarioEngine. The main thread never sends an applied document.
 Catalog factories and ScenarioEngine stay in the worker. The main thread imports
 the data-only scenario modules, never runtime code. Commerce student projections
 include committed DB rows, atomic KV metrics, client-observed outcomes, declared
@@ -48,6 +55,10 @@ external-visible facts, delivery records, and assessment verdicts. The commerce
 client projection carries those verdicts in its canonical `assertions` field;
 no worker command or top-level protocol variant is added. Raw runtime tasks and
 provider counters remain host-only. Paired comparisons replace the worker session.
+Compare carries the student's fault entries and every parameter override whose
+key the paired lesson declares with the same domain and default. It drops and
+lists the others. The pair's distinguishing parameters therefore take the
+paired lesson's values.
 
 Engine counters use the read-only properties documented in
 [ADR-003](adr/003-boundary-counters.md), not observation counting or a hardcoded
@@ -112,9 +123,11 @@ Authorized projections may reveal more detail to assessment than the student UI,
 but neither projection can
 schedule events, mutate state, complete operations, or consume randomness.
 
-Selecting an interactive fault in the UI creates or loads recorded scenario
-inputs (`actions` or `faults`) and then constructs/resets a run from those inputs.
-It must not invisibly mutate a running simulation.
+Selecting an interactive fault or design parameter in the UI edits a draft
+session overlay, which is UI state. Applying the draft sends `load` with the
+packaged document and the overlay, and that constructs a new session from the
+start time. Reset replays the applied overlay. Neither path mutates a running
+simulation.
 
 ## Browser worker protocol
 
@@ -123,7 +136,8 @@ host-generated `requestId`; every terminal response echoes it.
 
 ```ts
 type WorkerCommand =
-  | { version: 1; requestId: string; type: "load"; scenario: CanonicalValue }
+  | { version: 1; requestId: string; type: "load"; scenario: CanonicalValue;
+      overlay?: CanonicalValue }
   | { version: 1; requestId: string; type: "run"; maxEvents?: number }
   | { version: 1; requestId: string; type: "pause" }
   | { version: 1; requestId: string; type: "step" }
@@ -131,17 +145,27 @@ type WorkerCommand =
 
 type WorkerEvent =
   | { version: 1; requestId: string; type: "accepted" }
-  | { version: 1; requestId: string; type: "loaded"; projection: RuntimeProjectionSet }
+  | { version: 1; requestId: string; type: "loaded"; projection: RuntimeProjectionSet;
+      session: SessionIdentity }
   | { version: 1; requestId?: string; type: "projection.updated"; projection: RuntimeProjectionSet }
   | { version: 1; requestId: string; type: "run.finished"; status: "PAUSED" | "COMPLETED" | "FAILED" }
   | { version: 1; requestId: string; type: "error"; error: ApplicationError };
 ```
 
-`load` validates and constructs a new session. `run` processes event boundaries
+`load` validates and constructs a new session. An absent `overlay` is the
+empty overlay, and it gives the packaged lesson exactly. `loaded.session`
+returns the lesson name, seed, and normalized overlay that the worker applied.
+The UI shows that value, not its draft. `run` processes event boundaries
 until completion, pause, failure, or the optional event limit. `pause` requests a
 boundary pause and does not finalize assertions. `step` processes at most one
 scheduled event. `reset` reconstructs the current loaded scenario with the same
-normalized inputs.
+normalized inputs, including the applied overlay. It never takes an overlay.
+
+The `overlay` field and `loaded.session` are accepted by ADR-004. The contract
+types (`SessionOverlay`, `SessionIdentity`, `LessonOverlayPolicy`) are added to
+`@distlab/contracts` with their first implementation in #94 and #95. Until then
+the worker rejects an `overlay` field as `INVALID_WORKER_COMMAND`, and `loaded`
+carries no `session`.
 
 The worker emits projection updates only after initialization, after event
 boundaries, reset, completion, or failure. It may coalesce updates, but it must
@@ -158,7 +182,12 @@ interface ApplicationError { readonly code: string; readonly message: string; re
 ```
 
 Invalid commands return `INVALID_WORKER_COMMAND`. Invalid scenario input returns
-`INVALID_SCENARIO`. Runtime terminal failures return `SIMULATION_FAILED` with the
+`INVALID_SCENARIO`. An overlay that the lesson's policy does not allow, or that
+makes the applied document invalid, returns `INVALID_OVERLAY` with
+`{ diagnostics }`. Each diagnostic path is a JSON pointer into the submitted
+overlay, and diagnostics are sorted by path, then code. The worker checks the
+command shape first, then the packaged document, then the overlay. A failed
+`load` exposes no session. Runtime terminal failures return `SIMULATION_FAILED` with the
 simulation error context. A failed subscriber or UI render path is host-only and
 cannot alter canonical history.
 
@@ -197,6 +226,7 @@ and it takes effect at an event boundary.
 | Pause | Unavailable | Unavailable | Request a pause at the next event boundary | Unavailable | Unavailable because the run is not in progress | Unavailable |
 | Step | Unavailable | Process one scheduled event | Unavailable | Process one scheduled event | Unavailable because the run has finished | Unavailable |
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
+| Break and design choices (draft overlay) | Not shown | Edit the draft. Apply sends `load` with the packaged document and the draft, which replaces the session | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
 | Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
 | Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
@@ -218,7 +248,8 @@ unavailable on the last.
 
 The MVP does not include a general architecture editor, YAML authoring format,
 save/load persistence, rewind, full snapshots, server execution, collaborative
-sessions, or direct mutation from inspectors.
+sessions, or direct mutation from inspectors. Session overlays do not include
+seed choice, service restart actions, assertion editing, or overlay persistence.
 
 ## Acceptance coverage
 
@@ -228,9 +259,18 @@ sessions, or direct mutation from inspectors.
   reset; it does not alter a live run invisibly.
 - **APP-AC-4:** Runtime packages have no React, React Flow, browser, catalog, or
   scenario dependencies.
+- **APP-AC-5:** `load` accepts an exact packaged document with an allowed overlay.
+  It rejects a disallowed or invalid overlay with `INVALID_OVERLAY` and
+  overlay-relative diagnostics, and no session stays exposed.
+- **APP-AC-6:** An absent or empty overlay reproduces the packaged lesson's
+  `runId` and export. The same lesson and overlay reproduce identical history
+  across fresh loads and Reset (OVL-AC-1, OVL-AC-2).
+- **APP-AC-7:** The main thread sends no applied document and imports no overlay
+  application code. The worker takes overlay policies only from its catalog.
 
 ## References
 
 - [Shared contracts](contracts.md)
+- [ADR-004: Session overlays](adr/004-session-overlays.md)
 - [Scenario Engine](scenario-engine.md)
 - [Observability](observability.md)
