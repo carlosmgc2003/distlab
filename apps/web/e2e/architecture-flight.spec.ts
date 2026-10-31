@@ -12,6 +12,8 @@ declare global {
 }
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-81");
+/** Evidence for direction and component activity. */
+const activityEvidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-92");
 
 /** Test-only transport spy. Playback must never reach the worker. */
 async function observeWorker(page: Page) {
@@ -71,9 +73,46 @@ async function stepTo(page: Page, headline: string) {
 function glyphFor(headline: string): string {
   if (headline === "Response dropped") return "⊘";
   if (headline === "Request timed out") return "◷";
-  if (headline.startsWith("Message")) return "⇢";
-  if (headline.startsWith("Response")) return "←";
-  return "→";
+  if (headline === "Message acknowledged") return "ACK";
+  if (headline.startsWith("Message")) return "MSG";
+  if (headline.startsWith("Response")) return "RES";
+  return "REQ";
+}
+
+/** Centre of an element, in page coordinates. */
+async function centre(page: Page, selector: string) {
+  return page.locator(selector).first().evaluate(element => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+}
+
+const nodeSelector = (id: string) => `.react-flow__node[data-id="${id}"]`;
+
+/** Token centre sampled while it travels, from its first painted frame to where it rests. */
+async function tokenPath(page: Page): Promise<{ x: number; y: number }[]> {
+  const samples: { x: number; y: number }[] = [];
+  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
+  samples.push(await centre(page, "[data-flight-token]"));
+  for (const wait of [250, 400, 900]) {
+    await page.waitForTimeout(wait);
+    samples.push(await centre(page, "[data-flight-token]"));
+  }
+  return samples;
+}
+
+const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+
+/**
+ * The heading mark sits ahead of the token in its direction of travel. Its offset
+ * from the token centre must point the same way as the token's own motion.
+ */
+async function headingAgreesWith(page: Page, motion: { x: number; y: number }) {
+  const token = await centre(page, "[data-flight-token]");
+  const heading = await centre(page, "[data-flight-heading] .flight-heading-mark");
+  const ahead = { x: heading.x - token.x, y: heading.y - token.y };
+  const dot = ahead.x * motion.x + ahead.y * motion.y;
+  expect(dot / (Math.hypot(ahead.x, ahead.y) * Math.hypot(motion.x, motion.y)), "the arrowhead points the way the token travels").toBeGreaterThan(0.9);
 }
 
 test("the replay cursor walks recorded movements and paints a token on the graph", async ({ page }) => {
@@ -125,8 +164,8 @@ test("the replay cursor walks recorded movements and paints a token on the graph
   await expect(narration(page)).toContainText("Deadline at virtual time");
   await expect(narration(page)).toContainText("What to look for");
   // The sending and receiving components are named on the graph, not only in the narration.
-  await expect(page.getByRole("button", { name: "Customer App, Client", exact: true })).toContainText("sends");
-  await expect(page.getByRole("button", { name: "Orders, Internal service", exact: true })).toContainText("receives");
+  await expect(page.getByRole("button", { name: "Customer App, Client", exact: true })).toContainText("REQ sends");
+  await expect(page.getByRole("button", { name: "Orders, Internal service", exact: true })).toContainText("REQ receives");
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-request-sent.png") });
 
   // A message movement is a different glyph, a different link, and a different narration.
@@ -154,14 +193,20 @@ test("a dropped response and a timeout stop on the link and state only what is r
   await expect(dropped).toContainText("does not state what either component concluded");
   const token = page.locator("[data-flight-token]");
   const stop = async () => token.evaluate(element => getComputedStyle(element).getPropertyValue("--flight-end").trim());
-  await expect.poll(stop, { message: "a dropped response stops short of the destination" }).toBe("52%");
+  // The response runs against the payments → payment-processor link, so its stop is measured from the far end:
+  // it continues past the middle toward payments and stops short of it.
+  await expect.poll(stop, { message: "a dropped response stops short of the destination" }).toBe("36%");
+  await expect(token).toHaveAttribute("data-flight-direction", "reverse");
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-response-dropped.png") });
 
   await stepTo(page, "Request timed out");
   await expect(narration(page)).toContainText("payments → payment-processor");
   await expect(narration(page)).toContainText("Deadline at virtual time");
   await expect(narration(page)).toContainText("What does the caller now know about the outcome?");
-  await expect.poll(stop, { message: "a timeout stops further along the link" }).toBe("78%");
+  // A timeout travels nowhere: the token rests at the caller and carries no heading mark.
+  await expect.poll(stop, { message: "a timeout rests at the caller's end of the link" }).toBe("8%");
+  await expect(page.locator("[data-flight-heading]")).toHaveCount(0);
+  await expect(narration(page)).toContainText("The token rests at the caller");
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-request-timed-out.png") });
 });
 
@@ -305,4 +350,122 @@ test("the graph keeps its fit while the narration column opens and closes", asyn
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-narration-and-inspector.png") });
   await page.keyboard.press("Escape");
   await fits("inspector closed");
+});
+
+test("responses and acknowledgements travel toward their destination, with the arrow leading", async ({ page }) => {
+  test.setTimeout(180_000);
+  mkdirSync(activityEvidenceDir, { recursive: true });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await observeWorker(page);
+  await runCheckout(page);
+  const before = await page.evaluate(() => window.workerEvidence.commands.map(command => command.type));
+
+  // Request, horizontal link: leaves Customer App and waits mid-link, then arrives at Orders on the next record.
+  await stepTo(page, "Request sent");
+  let trail = await tokenPath(page);
+  const app = await centre(page, nodeSelector("customer-app"));
+  const orders = await centre(page, nodeSelector("orders"));
+  expect(distance(trail.at(-1)!, orders), "a request moves toward the callee").toBeLessThan(distance(trail[0]!, orders));
+  await headingAgreesWith(page, { x: trail.at(-1)!.x - trail[0]!.x, y: trail.at(-1)!.y - trail[0]!.y });
+  const midLink = trail.at(-1)!;
+  expect(midLink.x, "the departure rests between the two components").toBeGreaterThan(app.x);
+  expect(midLink.x).toBeLessThan(orders.x);
+  await stepTo(page, "Request delivered");
+  trail = await tokenPath(page);
+  // The arrival continues from where the departure stopped: one trip across the link, not two.
+  expect(Math.abs(trail[0]!.x - midLink.x), "the arrival starts where the departure waited").toBeLessThan(30);
+  expect(distance(trail.at(-1)!, orders)).toBeLessThan(distance(trail[0]!, orders));
+
+  // Response, same link drawn the other way: it leaves Orders and moves toward Customer App.
+  await stepTo(page, "Response sent");
+  trail = await tokenPath(page);
+  expect(distance(trail.at(-1)!, app), "a response moves toward the caller").toBeLessThan(distance(trail[0]!, app) - 20);
+  expect(distance(trail.at(-1)!, orders), "a response moves away from the responder").toBeGreaterThan(distance(trail[0]!, orders) + 20);
+  await headingAgreesWith(page, { x: trail.at(-1)!.x - trail[0]!.x, y: trail.at(-1)!.y - trail[0]!.y });
+  await expect(page.locator("[data-flight-token]")).toHaveAttribute("data-flight-direction", "reverse");
+  await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-response-toward-caller.png") });
+
+  // Acknowledgement, vertical subscription link: it leaves Payments and moves up toward the topic.
+  await stepTo(page, "Message acknowledged");
+  trail = await tokenPath(page);
+  const topic = await centre(page, nodeSelector("OrderCreated"));
+  const payments = await centre(page, nodeSelector("payments"));
+  expect(distance(trail.at(-1)!, topic), "an acknowledgement moves toward the MessageBus").toBeLessThan(distance(trail[0]!, topic) - 20);
+  expect(distance(trail.at(-1)!, payments)).toBeGreaterThan(distance(trail[0]!, payments) + 20);
+  await headingAgreesWith(page, { x: trail.at(-1)!.x - trail[0]!.x, y: trail.at(-1)!.y - trail[0]!.y });
+  await expect(narration(page)).toContainText("payments → OrderCreated · MessageBus subscription");
+  await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-ack-toward-bus.png") });
+
+  expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type)), "playback sends no worker command").toEqual(before);
+});
+
+test("components show idle, processing, or waiting from the records at the cursor", async ({ page }) => {
+  test.setTimeout(180_000);
+  mkdirSync(activityEvidenceDir, { recursive: true });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await observeWorker(page);
+  await runCheckout(page);
+  const status = async () => page.getByRole("status", { name: "Simulation status" }).innerText();
+  // Virtual time, processed events, and pending events, as the status line states them.
+  const counters = async () => page.locator(".status-line").innerText();
+  const recorded = { status: await status(), counters: await counters() };
+  const node = (name: string) => page.getByRole("button", { name, exact: true });
+  const badge = (id: string) => page.locator(`${nodeSelector(id)} .activity-badge`);
+
+  // No cursor, no activity claim.
+  await expect(page.locator(".activity-badge")).toHaveCount(0);
+
+  await stepTo(page, "Request sent");
+  await expect(badge("customer-app")).toContainText("Waiting · deadline t=1000");
+  await expect(badge("orders")).toContainText("Idle");
+  // The badge is the node's accessible description, and the state has a non-colour outline cue.
+  await expect(node("Customer App, Client")).toHaveAttribute("aria-describedby", /activity-customer-app/);
+  await expect(page.locator(nodeSelector("customer-app"))).toHaveClass(/activity-waiting/);
+
+  await stepTo(page, "Request delivered");
+  await expect(badge("orders")).toContainText("Processing");
+  await expect(page.locator(nodeSelector("orders"))).toHaveClass(/activity-processing/);
+  // The live region names what changed.
+  await expect(page.locator("#movement-cue")).toContainText("orders is processing a delivered request.");
+
+  await stepTo(page, "Response received");
+  await expect(badge("customer-app")).toContainText("Idle");
+
+  // The processor's response is lost. Payments has recorded nothing, so it keeps waiting until its deadline.
+  await stepTo(page, "Response dropped");
+  await expect(badge("payments")).toContainText("Waiting · deadline t=1025");
+  await expect(narration(page)).toContainText("payments is waiting on payment-processor with a recorded deadline at virtual time 1025");
+  await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-payments-waiting.png") });
+
+  // The deadline passes: the position names the virtual-time jump, and Payments leaves waiting with a timeout cue.
+  await stepTo(page, "Request timed out");
+  await expect(position(page)).toContainText("Virtual time jumped t=55 → t=1025");
+  await expect(badge("payments")).not.toContainText("Waiting");
+  await expect(badge("payments")).toContainText("timed out t=1025");
+  await expect(page.locator("#movement-cue")).toContainText("Its request to payment-processor timed out at virtual time 1025.");
+  await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-payments-timed-out.png") });
+
+  // Playback changed nothing in the run.
+  expect({ status: await status(), counters: await counters() }).toEqual(recorded);
+});
+
+test("reduced motion shows the same direction and activity without animation", async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await runCheckout(page);
+  await stepTo(page, "Response sent");
+  const token = page.locator("[data-flight-token]");
+  const heading = page.locator("[data-flight-heading]");
+  for (const element of [token, heading]) {
+    expect(await element.evaluate(item => getComputedStyle(item).animationName)).toBe("none");
+  }
+  // The token rests mid-link, and the arrowhead still points toward the caller.
+  const rest = await centre(page, "[data-flight-token]");
+  const app = await centre(page, nodeSelector("customer-app"));
+  const orders = await centre(page, nodeSelector("orders"));
+  expect(rest.x).toBeGreaterThan(app.x);
+  expect(rest.x).toBeLessThan(orders.x);
+  await headingAgreesWith(page, { x: app.x - orders.x, y: 0 });
+  await expect(page.locator(`${nodeSelector("customer-app")} .activity-badge`)).toContainText("Waiting · deadline t=1000");
 });

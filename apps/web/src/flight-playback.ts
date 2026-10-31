@@ -8,6 +8,8 @@ import {
   flightTransport,
 } from "./flight.ts";
 import type { FlightPace, FlightPosition, FlightStep, FlightTransport, PlaybackPhase } from "./flight.ts";
+import { activityAt, activityChanges } from "./activity.ts";
+import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
 import { selectionStep } from "./timeline.ts";
 import type { Observation } from "@distlab/contracts";
@@ -28,6 +30,10 @@ export interface FlightPlayback {
   readonly pace: FlightPace;
   readonly position: FlightPosition;
   readonly transport: FlightTransport;
+  /** Component activity read from records at or before the cursor; empty with no cursor. */
+  readonly activity: ReadonlyMap<string, ComponentActivity>;
+  /** Activity that differs from the previous movement, one sentence per component. */
+  readonly activityChanges: readonly string[];
   readonly play: () => void;
   readonly pause: () => void;
   readonly restart: () => void;
@@ -66,6 +72,12 @@ export function useFlightPlayback(
   useEffect(() => { setCursor({ index: -1, phase: "idle" }); }, [release]);
 
   const step = cursor.index >= 0 ? steps[cursor.index] : undefined;
+  const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
+  const activity = useMemo(() => activityAt(observations, step?.observationId), [observations, step?.observationId]);
+  const changes = useMemo(
+    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity),
+    [observations, previousId, activity, step],
+  );
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current
       : steps.length === 0 ? current
@@ -107,6 +119,8 @@ export function useFlightPlayback(
     pace,
     position: flightPosition(steps, cursor.index),
     transport: flightTransport(cursor.index, steps.length, cursor.phase, recording),
+    activity,
+    activityChanges: changes,
     play, pause, restart, previous, next, setPace,
   };
 }

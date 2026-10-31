@@ -1,13 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
-import { Background, BaseEdge, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useReactFlow, useStore } from "@xyflow/react";
-import type { EdgeProps, NodeChange, NodeProps } from "@xyflow/react";
+import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useReactFlow, useStore } from "@xyflow/react";
+import type { EdgeProps, FitViewOptions, NodeChange, NodeProps } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
 import { flightDelayMs, FLIGHT_LEGEND } from "./flight.ts";
+import { ACTIVITY_SYMBOLS, activityOf } from "./activity.ts";
 import { ComponentInspector } from "./ComponentInspector.tsx";
 import { HelpHint } from "./ui-hint.tsx";
 import { movementPulseClass } from "./timeline.ts";
@@ -108,9 +109,15 @@ function EdgeSample({ relationship, label }: { readonly relationship: "request" 
   </svg>;
 }
 
-function ArchitectureLegend() {
-  return <Panel position="top-left" className="graph-legend" role="region" aria-label="Architecture legend" tabIndex={0}>
-    <h3>Legend</h3>
+function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readonly onToggle: () => void }) {
+  return <Panel position="top-left" className={`graph-legend${open ? "" : " is-collapsed"}`} role="region" aria-label="Architecture legend" tabIndex={0}>
+    <div className="graph-legend-header">
+      <h3>Legend</h3>
+      <button type="button" className="graph-legend-toggle" aria-expanded={open} aria-controls="graph-legend-body" onClick={onToggle}>
+        {open ? "Hide" : "Show"}<span className="sr-only"> legend</span>
+      </button>
+    </div>
+    <div id="graph-legend-body" hidden={!open}>
     <section aria-labelledby="legend-nodes-heading">
       <h4 id="legend-nodes-heading">Nodes</h4>
       <ul>{legendSymbols.map(symbol => <li key={symbol}>
@@ -137,6 +144,15 @@ function ArchitectureLegend() {
         <span>{entry.label}<span className="sr-only">, {entry.detail}</span></span>
       </li>)}</ul>
     </section>
+    <section aria-labelledby="legend-activity-heading">
+      <h4 id="legend-activity-heading">Component activity</h4>
+      <ul>
+        <li><span className="activity-sample activity-processing" aria-hidden="true">{ACTIVITY_SYMBOLS.processing}</span><span>Processing<span className="sr-only">: handling a delivered request, an open transaction, or a message delivery</span></span></li>
+        <li><span className="activity-sample activity-waiting" aria-hidden="true">{ACTIVITY_SYMBOLS.waiting}</span><span>Waiting<span className="sr-only">: sent a request with no response or timeout recorded yet</span></span></li>
+        <li><span className="activity-sample activity-idle" aria-hidden="true">{ACTIVITY_SYMBOLS.idle}</span><span>Idle</span></li>
+      </ul>
+    </section>
+    </div>
   </Panel>;
 }
 
@@ -155,6 +171,11 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
         <span className="category-label">{symbolLabels[data.symbol]}</span>
         <strong>{data.title}</strong>
         {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+        {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>
+          <span aria-hidden="true">{ACTIVITY_SYMBOLS[data.activity.state]} </span>{data.activity.label}
+          {data.activity.timedOut ? <span className="activity-timeout"> · <span aria-hidden="true">◷</span> timed out t={data.activity.timedOut.time}</span> : null}
+          <span className="sr-only">. {data.activity.description}</span>
+        </span> : null}
       </div>
     </div>
     <Handle id="right" type="source" position={Position.Right} />
@@ -176,6 +197,41 @@ const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<Reso
     </div>
   </>;
 });
+/**
+ * The token is two layers on the same measured path and the same animation. The
+ * label stays upright and direction-neutral; the heading mark turns with the
+ * path, so the arrowhead always points the way the token travels on any link
+ * orientation.
+ */
+function FlightToken({ flight, path, readable, durationMs }: {
+  readonly flight: NonNullable<NonNullable<ArchitectureEdge["data"]>["flight"]>;
+  readonly path: string;
+  readonly readable: number;
+  readonly durationMs: number;
+}) {
+  const style = flightTokenStyle(flight, path, durationMs) as CSSProperties;
+  const classes = `flight-${flight.kind} shape-${flight.shape} leg-${flight.leg}`;
+  return <g aria-hidden="true">
+    {flight.heading ? <g className={`flight-heading ${classes}`} data-flight-heading={flight.observationId} style={style}>
+      <g transform={`scale(${readable})`}>
+        <path className="flight-heading-mark" d="M 19 -7 L 30 0 L 19 7 Z" />
+      </g>
+    </g> : null}
+    <g className={`flight-token ${classes}`} data-flight-token={flight.observationId}
+      data-flight-direction={flight.reversed ? "reverse" : "forward"} style={style}>
+      <g transform={`scale(${readable})`}>
+        <rect className="flight-token-halo" x={-21} y={-13} width={42} height={26} rx={13} />
+        <rect className="flight-token-core" x={-16} y={-8} width={32} height={16} rx={8} />
+        <text className="flight-token-glyph" dy="3.2">{flight.glyph}</text>
+      </g>
+    </g>
+  </g>;
+}
+
+function activityBadgeId(componentId: string): string {
+  return `activity-${componentId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+
 /** The token follows the measured link path, so the link is drawn here instead of by a built-in edge. */
 const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
   const { id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
@@ -197,15 +253,7 @@ const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
       {...(labelBgBorderRadius !== undefined ? { labelBgBorderRadius } : {})}
       {...(style !== undefined ? { style } : {})}
       {...(markerEnd !== undefined ? { markerEnd } : {})} {...(markerStart !== undefined ? { markerStart } : {})} />
-    {flight ? <g className={`flight-token flight-${flight.kind} shape-${flight.shape}`} aria-hidden="true"
-      data-flight-token={flight.observationId}
-      style={flightTokenStyle(flight, path, Math.round(flightDelayMs(data?.pace ?? "slow") * 0.62)) as CSSProperties}>
-      <g transform={`scale(${readable})`}>
-        <circle className="flight-token-halo" r={13} />
-        <circle className="flight-token-core" r={7} />
-        <text className="flight-token-glyph" dy="4">{flight.glyph}</text>
-      </g>
-    </g> : null}
+    {flight ? <FlightToken flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(data?.pace ?? "slow") * 0.62)} /> : null}
   </>;
 });
 const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
@@ -216,13 +264,37 @@ const ariaLabelConfig = {
 };
 // Let fitView choose a scale for each measured canvas, including narrow workspaces.
 const fitViewOptions = { padding: 0.18 };
+/** Below this canvas width the legend starts collapsed, so it never covers the graph. */
+const NARROW_CANVAS = 720;
+/** Gap kept between the legend and the nearest node at the fitted view. */
+const LEGEND_GAP = 16;
+
+/**
+ * The fit for this canvas. An open legend reserves its own column on the left,
+ * so no node sits under it at the fitted view; a collapsed legend reserves its
+ * header row. The other sides keep the default padding.
+ */
+function fitOptionsFor(canvas: HTMLElement): FitViewOptions {
+  const legend = canvas.querySelector<HTMLElement>(".graph-legend");
+  if (!legend) return fitViewOptions;
+  const area = canvas.getBoundingClientRect();
+  const box = legend.getBoundingClientRect();
+  if (box.width < 1 || area.width < 1) return fitViewOptions;
+  if (legend.classList.contains("is-collapsed")) {
+    return { padding: { top: `${Math.ceil(box.bottom - area.top + LEGEND_GAP)}px`, right: 0.18, bottom: 0.18, left: 0.18 } };
+  }
+  return { padding: { top: 0.18, right: 0.18, bottom: 0.18, left: `${Math.ceil(box.right - area.left + LEGEND_GAP)}px` } };
+}
 /** Small enough that the default fit never has to clip the checkout graph on a narrow canvas. */
 const minZoom = 0.15;
 
 /** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
-function FitToCanvas({ container, sessionKey }: {
+function FitToCanvas({ container, sessionKey, legendOpen, onMeasure }: {
   readonly container: RefObject<HTMLDivElement | null>;
   readonly sessionKey: string;
+  /** Opening or closing the legend changes the space it reserves. */
+  readonly legendOpen: boolean;
+  readonly onMeasure: (width: number) => void;
 }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
@@ -236,7 +308,8 @@ function FitToCanvas({ container, sessionKey }: {
       const current = `${Math.round(width)}x${Math.round(height)}`;
       if (current === measured || width < 1 || height < 1) return;
       measured = current;
-      void fitView(fitViewOptions);
+      onMeasure(width);
+      void fitView(fitOptionsFor(element));
     };
     // A ResizeObserver sees every layout-driven canvas change: window resizes, panel switches, and the two-column inspector.
     const observer = new ResizeObserver(() => {
@@ -246,9 +319,14 @@ function FitToCanvas({ container, sessionKey }: {
     observer.observe(element);
     apply();
     return () => { if (queued) cancelAnimationFrame(queued); observer.disconnect(); };
-  }, [container, fitView]);
-  // Loading a scenario or resetting the simulation returns the view to the fitted default for the current canvas.
-  useEffect(() => { void fitView(fitViewOptions); }, [fitView, sessionKey]);
+  }, [container, fitView, onMeasure]);
+  // Loading a scenario, resetting the simulation, or toggling the legend returns the view to the fitted default.
+  useEffect(() => {
+    const element = container.current;
+    // Measure after the legend has painted at its new size.
+    const frame = requestAnimationFrame(() => { void fitView(element ? fitOptionsFor(element) : fitViewOptions); });
+    return () => cancelAnimationFrame(frame);
+  }, [container, fitView, sessionKey, legendOpen]);
   return null;
 }
 
@@ -261,6 +339,17 @@ function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined):
     className: `${emphasis.kind ? `is-movement movement-${emphasis.kind}` : "is-involved-edge"}${pulse}`,
     style: { ...edge.style, stroke, strokeWidth: 3 },
   };
+}
+
+/** Fit View with the same legend-aware padding as the default fit, so both give one view. */
+function LegendAwareFit({ container }: { readonly container: RefObject<HTMLDivElement | null> }) {
+  const { fitView } = useReactFlow();
+  return <ControlButton className="react-flow__controls-fitview" aria-label="Fit View" title="Fit View"
+    onClick={() => { void fitView(container.current ? fitOptionsFor(container.current) : fitViewOptions); }}>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 30" aria-hidden="true">
+      <path d="M3.692 4.63c0-.53.4-.938.939-.938h5.215V0H4.708C2.13 0 0 2.054 0 4.63v5.216h3.692V4.631zM27.354 0h-5.2v3.692h5.17c.53 0 .984.4.984.939v5.215H32V4.631A4.624 4.624 0 0027.354 0zm.954 24.83c0 .532-.4.94-.939.94h-5.215v3.768h5.215c2.577 0 4.631-2.13 4.631-4.707v-5.139h-3.692v5.139zm-23.677.94c-.531 0-.939-.4-.939-.94v-5.138H0v5.139c0 2.577 2.13 4.707 4.708 4.707h5.138V25.77H4.631z" />
+    </svg>
+  </ControlButton>;
 }
 
 function PanControls() {
@@ -301,16 +390,25 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     const involved = painted?.nodeIds.includes(node.id) === true;
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
+    // Activity is shown only while the cursor stands on a record, and only from records at or before it.
+    const activity = flight ? activityOf(playback.activity, node.id) : undefined;
+    const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : ""].filter(Boolean).join(" ");
     return {
       ...node,
-      ...(involved ? { className: `${node.className ?? ""} is-involved${pulse}`.trim() } : {}),
-      ...(role !== undefined && flight !== undefined
-        ? { data: { ...node.data, role, roleLabel: `${flight.glyph} ${role === "sending" ? "sends" : "receives"}` } }
-        : {}),
+      className: classes,
+      data: {
+        ...node.data,
+        ...(role !== undefined && flight !== undefined ? { role, roleLabel: `${flight.glyph} ${role === "sending" ? "sends" : "receives"}` } : {}),
+        ...(activity ? { activity } : {}),
+      },
       selected: node.id === selectedId,
-      domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
+      domAttributes: {
+        "aria-pressed": node.id === selectedId,
+        ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}),
+        ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
+      },
     };
-  }), [graph.nodes, selectedId, painted, flight]);
+  }), [graph.nodes, selectedId, painted, flight, playback.activity]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
     selected: node.id === selectedId,
@@ -338,6 +436,11 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   }, []);
   const clearSelection = useCallback(() => setSelectedId(null), []);
   const canvas = useRef<HTMLDivElement | null>(null);
+  // null keeps the automatic choice: open unless the canvas is narrow. A reader's toggle wins afterwards.
+  const [legendChoice, setLegendChoice] = useState<boolean | null>(null);
+  const [canvasWidth, setCanvasWidth] = useState(0);
+  const legendOpen = legendChoice ?? (canvasWidth === 0 || canvasWidth >= NARROW_CANVAS);
+  const toggleLegend = useCallback(() => setLegendChoice(!legendOpen), [legendOpen]);
 
   if (graph.error) return <p role="alert">{graph.error}</p>;
   if (!nodes.length) return <p>No architecture components to display.</p>;
@@ -366,17 +469,19 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}
-          fitView fitViewOptions={fitViewOptions} minZoom={minZoom} maxZoom={1.8}
+          minZoom={minZoom} maxZoom={1.8}
           ariaLabelConfig={ariaLabelConfig}>
-          <FitToCanvas container={canvas} sessionKey={sessionKey} />
+          <FitToCanvas container={canvas} sessionKey={sessionKey} legendOpen={legendOpen} onMeasure={setCanvasWidth} />
           <Background gap={24} color="#cbd5e1" />
-          <Controls showInteractive={false} fitViewOptions={fitViewOptions} />
+          <Controls showInteractive={false} showFitView={false}>
+            <LegendAwareFit container={canvas} />
+          </Controls>
           <PanControls />
-          <ArchitectureLegend />
+          <ArchitectureLegend open={legendOpen} onToggle={toggleLegend} />
         </ReactFlow>
       </div>
       {selectedId || flight ? <div className="architecture-side">
-        {flight ? <FlightNarration step={flight} /> : null}
+        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges} /> : null}
         {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
           {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}

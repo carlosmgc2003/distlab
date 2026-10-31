@@ -160,3 +160,32 @@ test("Reset and a new scenario return to the fitted default view", async ({ page
   await expectFittedDefault(page, "1534x897 after loading the other scenario", defaultView.transform);
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-after-reset.png") });
 });
+
+test("the legend covers no node at the default fit of any packaged lesson", async ({ page }) => {
+  test.setTimeout(240_000);
+  const { scenarios } = await import("../src/scenarios.ts");
+  expect(scenarios).toHaveLength(12);
+  for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(size);
+    for (const scenario of scenarios) {
+      await page.goto("/");
+      await page.getByLabel("Scenario", { exact: true }).selectOption(scenario.id);
+      await page.getByRole("button", { name: "Load scenario" }).click();
+      await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+      const legend = page.getByRole("region", { name: "Architecture legend" });
+      await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
+      const covered = async () => page.evaluate(() => {
+        const box = document.querySelector(".graph-legend")!.getBoundingClientRect();
+        return [...document.querySelectorAll(".react-flow__node")].filter(node => {
+          const rect = node.getBoundingClientRect();
+          return rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top;
+        }).map(node => node.getAttribute("data-id"));
+      });
+      await expect.poll(covered, { message: `${scenario.id} at ${size.width}×${size.height}: no node under the legend` }).toEqual([]);
+    }
+  }
+  // A reader can still fold the legend away, and the fit follows it.
+  await page.getByRole("button", { name: "Hide legend" }).click();
+  await expect(page.getByRole("button", { name: "Show legend" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("region", { name: "Architecture legend" }).getByRole("heading", { name: "Nodes" })).toBeHidden();
+});
