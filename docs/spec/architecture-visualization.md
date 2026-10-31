@@ -26,6 +26,7 @@ projections and packaged metadata.
 | Presentation never mutates or commands the run | `docs/spec/application-boundary.md` | No new worker commands, observations, or virtual-time effects; resource nodes derive from packaged `ArchitectureDefinition` metadata only |
 | Main-thread import boundary | `docs/spec/application-boundary.md` | `mapArchitecture` keeps importing `@distlab/contracts` types only; no runtime model factories |
 | Architecture playback is presentation over records | `docs/spec/observability.md` | Flight tokens, emphasis, and roles apply to component links only; owned-resource nodes never receive movement |
+| Playback direction and activity are read from records | `docs/spec/observability.md` | A token travels from the record's origin to its destination whatever the drawn link's direction; activity (idle, processing, waiting) is derived only from records at or before the cursor and never from records that were not written |
 | Contract names are authoritative | `docs/spec/contracts.md` | Reuses `DatabaseDefinition`, `KeyValueDefinition`, `DestinationKind` (`"queue" | "topic"`); introduces no new contract aliases; new node types are UI-local presentation types |
 
 Resolved decisions (both settled by the Phase 2 design; rationale in

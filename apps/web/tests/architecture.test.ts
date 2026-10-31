@@ -99,11 +99,11 @@ test("layout is deterministic, detached, and independent of input ordering", asy
   assert.deepEqual(first, second);
   assert.deepEqual(first.nodes, mapArchitecture({ ...architecture, components: [...architecture.components].reverse() }).nodes);
   assert.deepEqual(first.nodes.map(node => [node.id, node.position]), [
-    ["OrderCreated", { x: 310, y: 210 }], ["customer-app", { x: 0, y: 0 }],
-    ["orders", { x: 310, y: 0 }], ["payment-processor", { x: 620, y: 420 }], ["payments", { x: 310, y: 420 }],
+    ["OrderCreated", { x: 400, y: 210 }], ["customer-app", { x: 0, y: 0 }],
+    ["orders", { x: 400, y: 0 }], ["payment-processor", { x: 800, y: 420 }], ["payments", { x: 400, y: 420 }],
   ]);
   first.nodes[0]!.position.x = 999;
-  assert.equal(second.nodes[0]!.position.x, 310);
+  assert.equal(second.nodes[0]!.position.x, 400);
 });
 
 test("inspector metadata comes from matching static definitions and omits business-state values", async () => {
@@ -208,8 +208,8 @@ test("resource grouping is last-wins, stable, owner-gated, and placed in the res
   const db = first.resourceNodes.find(node => node.data.owner === "orders" && node.data.kind === "database")!;
   const kv = first.resourceNodes.find(node => node.data.owner === "orders" && node.data.kind === "kvstore")!;
   assert.equal(db.data.definition, last);
-  assert.deepEqual(db.position, { x: 360, y: 120 });
-  assert.deepEqual(kv.position, { x: 483, y: 120 });
+  assert.deepEqual(db.position, { x: 450, y: 120 });
+  assert.deepEqual(kv.position, { x: 573, y: 120 });
   const ordinary = mapArchitecture(architecture, source);
   const reversed = mapArchitecture({ ...architecture, components: [...architecture.components].reverse() }, {
     ...source, databases: [...source.databases].reverse(), stores: [...source.stores].reverse(),
@@ -240,12 +240,12 @@ test("resource grouping is last-wins, stable, owner-gated, and placed in the res
 test("resource placement matches checkout and commerce layout cells, and inputs remain unchanged", async () => {
   const checkout = mapArchitecture((await load(0)).architecture, packagedMetadata(scenarios[0]).architecture, scenarios[0].id);
   assert.deepEqual(checkout.resourceNodes.map(node => [node.id, node.position]), [
-    ["resource:db:orders", { x: 360, y: 120 }], ["resource:db:payments", { x: 360, y: 540 }],
+    ["resource:db:orders", { x: 450, y: 120 }], ["resource:db:payments", { x: 450, y: 540 }],
   ]);
   for (const [id, owner, expectedPosition] of [
-    ["saga-compensated", "inventory", { x: 670, y: 330 }],
-    ["cqrs-delayed", "reporting", { x: 360, y: 330 }],
-    ["cascade-breaker", "payments", { x: 980, y: 120 }],
+    ["saga-compensated", "inventory", { x: 810, y: 330 }],
+    ["cqrs-delayed", "reporting", { x: 430, y: 330 }],
+    ["cascade-breaker", "payments", { x: 1190, y: 120 }],
   ] as const) {
     const choice = scenarios.find(item => item.id === id)!;
     const graph = mapArchitecture((await load(scenarios.indexOf(choice))).architecture, packagedMetadata(choice).architecture, id);

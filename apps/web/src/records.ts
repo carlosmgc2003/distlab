@@ -230,11 +230,25 @@ export function movementOf(observation: Observation): Movement | null {
   if (observation.type === "message.published") {
     return leg("message", observation, observation.source, storedText(observation, "destination") ?? entityId(observation, "destination"), "publication");
   }
-  if (observation.type === "message.delivered" || observation.type === "message.acknowledged") {
+  if (observation.type === "message.delivered") {
     const consumer = storedText(observation, "consumer") ?? observation.source;
     return leg("message", observation, entityId(observation, "destination") ?? observation.source, consumer, "subscription");
   }
+  if (observation.type === "message.acknowledged") {
+    // The acknowledgement leaves the consumer and travels back to the MessageBus.
+    const consumer = storedText(observation, "consumer") ?? observation.source;
+    return leg("message", observation, consumer, entityId(observation, "destination"), "subscription");
+  }
   return null;
+}
+
+/**
+ * Which way a movement runs along the drawn link: "forward" when it leaves the
+ * link's source, "reverse" when it leaves the link's target. A response travels
+ * a request link in reverse; an acknowledgement travels a subscription in reverse.
+ */
+export function edgeDirection(movement: Pick<Movement, "from">, edge: MovementEdge): "forward" | "reverse" {
+  return edge.source === movement.from ? "forward" : "reverse";
 }
 
 /** The drawn link of this relationship that this movement travels, or undefined when none is drawn. */
@@ -404,7 +418,7 @@ function leg(
   const where = target !== undefined ? `from ${source} to ${target}` : `at ${source}`;
   const text = kind === "request" ? `Request ${phase} ${where} at virtual time ${observation.time}.`
     : kind === "response" ? `Response ${phase} ${where} at virtual time ${observation.time}.`
-    : phase === "acknowledged" && target !== undefined ? `Message acknowledged by ${target} on ${source} at virtual time ${observation.time}.`
+    : phase === "acknowledged" && target !== undefined ? `Message acknowledged by ${source} on ${target} at virtual time ${observation.time}.`
     : phase === "published" ? `Message published ${where} at virtual time ${observation.time}.`
     : phase === "delivered" ? `Message delivered ${where} at virtual time ${observation.time}.`
     : `Message ${phase} ${where} at virtual time ${observation.time}.`;

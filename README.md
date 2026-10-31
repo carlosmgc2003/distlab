@@ -244,9 +244,27 @@ reader watches the system in action. A **Recorded history** group on the command
 row — `Play timeline`, `Pause timeline`, `Restart timeline`,
 `Previous observation`, `Next observation`, plus a **Speed** select of Slow,
 Steady, or Fast — moves a cursor over recorded movements and paints a token on
-the link each movement used: `→` for a request, `←` for a response, `⇢` for a
-message, and `⊘` or `◷` for a recorded drop or timeout, whose token stops on the
-link instead of arriving. It shares the command row with `Run`, `Pause`, `Step`,
+the link each movement used: `REQ` for a request, `RES` for a response, `MSG`
+for a message, `ACK` for an acknowledgement, `⊘` for a recorded drop, and `◷`
+for a recorded timeout. The token always travels from the record's origin to its
+destination, whichever way the link is drawn: a response leaves the callee for
+the caller, and an acknowledgement leaves the consumer for the MessageBus. Its
+label stays upright and a separate arrowhead turns with the link path, so the
+arrow points the way the token moves on horizontal, vertical, and stepped links.
+One network hop crosses its link once over two records: `*.sent` departs and
+waits mid-link, and `*.delivered` or `*.received` arrives. The legs are paired by
+the stored request id. A drop stops on the link past the middle. A timeout
+travels nowhere and rests at the caller. While the cursor stands on a record,
+each component shows **Idle**, **Processing** (a delivered request with no
+response sent, an open transaction, or an unacknowledged delivery), or
+**Waiting** (a sent request with no response or timeout recorded, with its stored
+deadline). States are read only from records at or before the cursor, and each
+has a word, a symbol, and an outline pattern. A dropped request or response does
+not end a wait, because the caller has recorded nothing. When virtual time
+advances between two movements, the playback position names both times, for
+example `t=55 → t=1025`, without painting the interval as a duration. The legend
+reserves its own column in the fitted view so it covers no node, and folds away
+on narrow canvases. It shares the command row with `Run`, `Pause`, `Step`,
 and `Reset` to keep the graph area tall, and is kept apart from them by a
 vertical rule, its own label, and the primary action paint on the simulation
 group alone. It shows only while the Architecture tab is active, because the

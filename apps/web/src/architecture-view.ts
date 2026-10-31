@@ -3,7 +3,7 @@ import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
-import { flightStop } from "./flight.ts";
+import type { ComponentActivity } from "./activity.ts";
 import type { FlightPace, FlightStep } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
 
@@ -34,6 +34,8 @@ export type ArchitectureNode = Node<{
   /** Set while a recorded movement is painted on the graph. */
   role?: "sending" | "receiving";
   roleLabel?: string;
+  /** Set while the playback cursor is on a record: idle, processing, or waiting, read from records at or before it. */
+  activity?: ComponentActivity;
 }, "component">;
 export type ArchitectureEdge = Edge<{
   relationship: "request" | "subscription" | "publication";
@@ -70,11 +72,14 @@ export type OwnershipEdge = Edge<OwnershipEdgeData>;
 
 const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly y: number }>> = {
   "customer-app": { x: 0, y: 0 },
-  orders: { x: 310, y: 0 },
-  OrderCreated: { x: 310, y: 210 },
-  payments: { x: 310, y: 420 },
-  "payment-processor": { x: 620, y: 420 },
+  orders: { x: 400, y: 0 },
+  OrderCreated: { x: 400, y: 210 },
+  payments: { x: 400, y: 420 },
+  "payment-processor": { x: 800, y: 420 },
 };
+
+/** Horizontal distance between layout columns: long enough that a token visibly travels a short link. */
+const COLUMN_GAP = 380;
 
 const relationshipMarkers = {
   request: { type: MarkerType.ArrowClosed, color: "#334155", width: 20, height: 20 },
@@ -134,7 +139,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
           retryDelay: destination.retryDelay, maxAttempts: destination.maxAttempts, capacity: destination.capacity,
         } : undefined,
       },
-      position: commerce ? { x: column * 310, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
+      position: commerce ? { x: column * COLUMN_GAP, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
       sourcePosition: Position.Bottom, targetPosition: Position.Top,
       draggable: false, connectable: false, deletable: false, focusable: true,
       ariaRole: "button", ariaLabel: `${title}, ${symbolLabels[symbol]}`,
@@ -217,13 +222,19 @@ export function movementEdges(edges: readonly ArchitectureEdge[]): MovementEdge[
 
 /**
  * Inline custom properties for one token. The token follows the same measured
- * path as the link it belongs to, and stops on the link for a recorded drop or
- * timeout. Presentation only: it reads stored record fields and never state.
+ * path as the link it belongs to. The SVG path always runs from the link's
+ * source to its target, so a movement that runs against the link (a response, an
+ * acknowledgement) animates from the far end back: start and stop are mirrored,
+ * and the heading mark turns 180° from the path's own tangent. Presentation
+ * only: it reads stored record fields and never state.
  */
 export function flightTokenStyle(step: FlightStep, path: string, durationMs: number): Record<string, string> {
+  const along = (share: number) => `${step.reversed ? 100 - share : share}%`;
   return {
     "--flight-path": `path("${path}")`,
-    "--flight-end": flightStop(step),
+    "--flight-start": along(step.span.start),
+    "--flight-end": along(step.span.end),
+    "--flight-rotate": step.reversed ? "auto 180deg" : "auto",
     "--flight-duration": `${Math.max(durationMs, 1)}ms`,
   };
 }

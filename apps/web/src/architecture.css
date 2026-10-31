@@ -149,9 +149,14 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .flight-narration.flight-message { border-left-color: #6d28d9; }
 .flight-narration.shape-dotted { border-left-color: #b91c1c; border-left-style: dashed; }
 .flight-narration h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: .9rem; }
-.flight-glyph { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 2px solid #334155; border-radius: 50%; background: #fff; font-size: .8rem; }
+.flight-glyph { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 4px; border: 2px solid #334155; border-radius: 999px; background: #fff; font-size: .65rem; font-weight: 800; }
 .flight-narration.shape-dashed .flight-glyph { border-style: dashed; border-radius: 5px; }
 .flight-narration.shape-dotted .flight-glyph { border-style: dotted; border-radius: 5px; border-color: #b91c1c; }
+.flight-transit { margin: 0 0 6px; font-size: .8rem; overflow-wrap: anywhere; }
+.flight-activity { margin: 8px 0 0; font-size: .8rem; }
+.flight-activity ul { margin: 2px 0 0; padding: 0; list-style: none; }
+.flight-activity li, .flight-activity p { margin: 2px 0 0; overflow-wrap: anywhere; }
+.flight-jump { display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px dashed #92400e; border-radius: 4px; background: #fffbeb; color: #172033; font-weight: 600; }
 .flight-route { margin: 0 0 6px; color: var(--text-secondary); font-size: .8rem; overflow-wrap: anywhere; }
 .flight-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 12px; margin: 0 0 8px; font-size: .8rem; }
 .flight-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-bottom: 3px; border-bottom: 1px solid #e2e8f0; }
@@ -247,8 +252,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .evidence-links button { max-width: 100%; }
 .fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
 .fact-list dt { margin-top: 0; }
-.graph-legend { width: min(300px, calc(100vw - 48px)); max-height: min(42%, 330px); overflow: auto; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 8px; background: rgba(255, 255, 255, .96); box-shadow: 0 2px 8px #17203322; color: var(--text-primary); font-size: .72rem; }
-.graph-legend h3 { margin: 0 0 4px; font-size: .82rem; }
+.graph-legend { width: min(300px, calc(100vw - 48px)); max-height: calc(100% - 15px - var(--legend-controls-reserve, 140px)); overflow: auto; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 8px; background: rgba(255, 255, 255, .96); box-shadow: 0 2px 8px #17203322; color: var(--text-primary); font-size: .72rem; }
+.graph-legend h3 { margin: 0; font-size: .82rem; }
+.graph-legend-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.graph-legend.is-collapsed { width: auto; }
+.graph-legend.is-collapsed .graph-legend-header { margin-bottom: 0; }
+.graph-legend-toggle { min-height: 0; padding: 1px 8px; font-size: .7rem; }
 .graph-legend section { margin-top: 5px; }
 .graph-legend h4 { margin: 0 0 2px; color: var(--text-secondary); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; }
 .graph-legend ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 8px; margin: 0; padding: 0; list-style: none; }
@@ -268,7 +277,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .edge-sample.ownership { flex-basis: 34px; width: 34px; }
 .edge-sample.ownership line { stroke-width: 1; }
 /* Movement tokens carry their meaning as glyph, outline, and border pattern, not color alone. */
-.token-sample { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-right: 6px; border: 2px solid #334155; border-radius: 50%; background: #fff; color: #172033; font-size: .75rem; font-weight: 700; vertical-align: middle; }
+.token-sample { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 3px; margin-right: 6px; border: 2px solid #334155; border-radius: 999px; background: #fff; color: #172033; font-size: .6rem; font-weight: 800; vertical-align: middle; }
 .token-sample.shape-dashed { border-style: dashed; border-radius: 6px; }
 .token-sample.shape-dotted { border-style: dotted; border-radius: 6px; }
 .connections summary { cursor: pointer; width: fit-content; }
@@ -391,30 +400,50 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 /* Message animation: one token travels the measured link path of the recorded movement.
    The token is decorative; the narration, the playback position, and the movement cue
    carry the same movement as text for screen readers and reduced motion. */
-.flight-token { offset-path: var(--flight-path); offset-distance: 0%; offset-rotate: 0deg; }
+/* Two layers share one path and one animation: the label stays upright, and the
+   heading mark turns with the path tangent (180° more when the movement runs
+   against the drawn link), so the arrowhead always points the way the token moves. */
+.flight-token, .flight-heading { offset-path: var(--flight-path); offset-distance: var(--flight-start, 0%); }
+.flight-token { offset-rotate: 0deg; }
+.flight-heading { offset-rotate: var(--flight-rotate, auto); }
+.flight-heading-mark { fill: #172033; stroke: #fff; stroke-width: 1.5; paint-order: stroke; }
 .flight-token-halo { fill: #1d4ed8; opacity: .18; }
 .flight-token-core { fill: #fff; stroke: #1d4ed8; stroke-width: 2.5; }
-.flight-token-glyph { fill: #172033; font-size: 9px; font-weight: 700; text-anchor: middle; }
+.flight-token-glyph { fill: #172033; font-size: 9px; font-weight: 800; letter-spacing: .02em; text-anchor: middle; }
 .flight-token.flight-response .flight-token-halo { fill: #0f766e; }
 .flight-token.flight-response .flight-token-core { stroke: #0f766e; }
 .flight-token.flight-message .flight-token-halo { fill: #6d28d9; }
 .flight-token.flight-message .flight-token-core { stroke: #6d28d9; stroke-dasharray: 4 2; }
 .flight-token.shape-dotted .flight-token-core { stroke: #b91c1c; stroke-dasharray: 1.5 2.5; }
 .flight-token.shape-dotted .flight-token-halo { fill: #b91c1c; }
-/* A movement that arrived leaves the link highlighted; a drop or timeout rests on the link. */
-.flight-token.shape-dotted { --flight-rest-opacity: 1; }
-.flight-token { animation: flight-travel var(--flight-duration, 900ms) cubic-bezier(.35, .05, .25, 1) 1 forwards, flight-life var(--flight-duration, 900ms) linear 1 forwards; }
-@keyframes flight-travel { from { offset-distance: 0%; } to { offset-distance: var(--flight-end, 100%); } }
-@keyframes flight-life { 0% { opacity: 0; } 10% { opacity: 1; } 76% { opacity: 1; } 100% { opacity: var(--flight-rest-opacity, 0); } }
+/* Every token rests where its leg ends until the cursor moves: a departure waits
+   mid-link, an arrival rests at the destination, a drop rests on the link. */
+.flight-token, .flight-heading { animation: flight-travel var(--flight-duration, 900ms) cubic-bezier(.35, .05, .25, 1) 1 forwards, flight-life var(--flight-duration, 900ms) linear 1 forwards; }
+@keyframes flight-travel { from { offset-distance: var(--flight-start, 0%); } to { offset-distance: var(--flight-end, 100%); } }
+@keyframes flight-life { 0% { opacity: 0; } 12% { opacity: 1; } 100% { opacity: 1; } }
 /* A recorded drop or timeout rests on the link: the token stops short and stays visible. */
 .react-flow__edge.is-movement .react-flow__edge-path { stroke-dasharray: 6 4; animation: movement-dash 0.9s linear 1; }
 @keyframes movement-dash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
 .role-badge { display: inline-block; margin-top: 7px; padding: 1px 8px; border: 1px solid #1d4ed8; border-radius: 999px; background: #dbeafe; color: #172033; font-size: .7rem; font-weight: 700; white-space: nowrap; }
 .role-badge.role-receiving { border-style: dashed; background: #f0fdf4; border-color: #166534; }
+/* Activity is a word, a symbol, and an outline pattern; colour only repeats it. The badge
+   sits on the node's top edge so the node keeps its measured size during playback. */
+.activity-badge { position: absolute; top: -11px; right: 8px; z-index: 2; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; padding: 1px 7px; border: 1.5px solid #64748b; border-radius: 999px; background: #fff; color: #172033; font-size: .68rem; font-weight: 700; line-height: 1.4; white-space: nowrap; }
+.activity-badge.activity-idle { border-style: dotted; color: var(--text-secondary); font-weight: 600; }
+.activity-badge.activity-processing { border-color: #92400e; background: #fffbeb; }
+.activity-badge.activity-waiting { border-style: dashed; border-color: #1d4ed8; background: #eff6ff; }
+.activity-badge.has-timeout { border-color: #b91c1c; }
+.activity-timeout { color: #991b1b; }
+.react-flow__node.activity-processing .node-body { outline: 3px double #92400e; outline-offset: 3px; border-radius: 8px; }
+.react-flow__node.activity-waiting .node-body { outline: 2px dashed #1d4ed8; outline-offset: 4px; border-radius: 8px; }
+.activity-sample { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 18px; border: 1.5px solid #64748b; border-radius: 999px; background: #fff; font-size: .7rem; }
+.activity-sample.activity-processing { border-color: #92400e; background: #fffbeb; }
+.activity-sample.activity-waiting { border-style: dashed; border-color: #1d4ed8; background: #eff6ff; }
+.activity-sample.activity-idle { border-style: dotted; }
 @media (prefers-reduced-motion: reduce) {
   .react-flow__edge.is-movement .react-flow__edge-path { animation: none; }
   /* The token rests where the record says the movement stopped, with no travel. */
-  .flight-token { animation: none; offset-distance: var(--flight-end, 100%); opacity: var(--flight-rest-opacity, 0); }
+  .flight-token, .flight-heading { animation: none; offset-distance: var(--flight-end, 100%); opacity: 1; }
 }
 [role="alert"] { border-left: 4px solid #b91c1c; padding: 8px 12px; background: #fef2f2; }
 
