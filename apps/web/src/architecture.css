@@ -252,7 +252,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .evidence-links button { max-width: 100%; }
 .fact-list dl { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 8px; }
 .fact-list dt { margin-top: 0; }
-.graph-legend { width: min(300px, calc(100vw - 48px)); max-height: max(120px, calc(100% - 140px)); overflow: auto; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 8px; background: rgba(255, 255, 255, .96); box-shadow: 0 2px 8px #17203322; color: var(--text-primary); font-size: .72rem; }
+.graph-legend { width: min(300px, calc(100vw - 48px)); max-height: calc(100% - 15px - var(--legend-controls-reserve, 140px)); overflow: auto; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 8px; background: rgba(255, 255, 255, .96); box-shadow: 0 2px 8px #17203322; color: var(--text-primary); font-size: .72rem; }
 .graph-legend h3 { margin: 0; font-size: .82rem; }
 .graph-legend-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .graph-legend.is-collapsed { width: auto; }

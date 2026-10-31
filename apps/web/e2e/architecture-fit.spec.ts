@@ -182,6 +182,13 @@ test("the legend covers no node at the default fit of any packaged lesson", asyn
         }).map(node => node.getAttribute("data-id"));
       });
       await expect.poll(covered, { message: `${scenario.id} at ${size.width}×${size.height}: no node under the legend` }).toEqual([]);
+      // The legend shares the left edge with the zoom controls. A real gap, not a near miss,
+      // keeps every control clickable whatever the platform's font metrics.
+      const clearance = await page.evaluate(() => {
+        const box = document.querySelector(".graph-legend")!.getBoundingClientRect();
+        return document.querySelector(".react-flow__controls")!.getBoundingClientRect().top - box.bottom;
+      });
+      expect(clearance, `${scenario.id} at ${size.width}×${size.height}: legend clears the zoom controls`).toBeGreaterThanOrEqual(8);
     }
   }
   // A reader can still fold the legend away, and the fit follows it.

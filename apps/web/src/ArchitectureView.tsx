@@ -270,6 +270,19 @@ const NARROW_CANVAS = 720;
 const LEGEND_GAP = 16;
 
 /**
+ * The legend shares the left edge with the zoom controls. Its height is capped by
+ * the measured controls, not a guessed size, so it never covers a control
+ * whatever the font metrics.
+ */
+function reserveControls(canvas: HTMLElement): void {
+  const controls = canvas.querySelector<HTMLElement>(".react-flow__controls");
+  if (!controls) return;
+  const area = canvas.getBoundingClientRect();
+  const reserve = Math.ceil(area.bottom - controls.getBoundingClientRect().top + LEGEND_GAP);
+  canvas.style.setProperty("--legend-controls-reserve", `${reserve}px`);
+}
+
+/**
  * The fit for this canvas. An open legend reserves its own column on the left,
  * so no node sits under it at the fitted view; a collapsed legend reserves its
  * header row. The other sides keep the default padding.
@@ -308,6 +321,7 @@ function FitToCanvas({ container, sessionKey, legendOpen, onMeasure }: {
       const current = `${Math.round(width)}x${Math.round(height)}`;
       if (current === measured || width < 1 || height < 1) return;
       measured = current;
+      reserveControls(element);
       onMeasure(width);
       void fitView(fitOptionsFor(element));
     };
