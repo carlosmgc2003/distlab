@@ -72,7 +72,11 @@ reads stored observation fields only, and a redacted or omitted payload is never
 reconstructed. A token travels from the record's origin to its destination even
 when that runs against the drawn link. Component activity in
 `apps/web/src/activity.ts` is pure: it reads records at or before the cursor and
-nothing after it. Review navigation in `apps/web/src/review-navigation.ts` decides
+nothing after it. The Break panel (`apps/web/src/BreakPanel.tsx`, `apps/web/src/break-faults.ts`)
+edits a draft overlay as UI state; only Apply, Load, and Compare send it, inside
+an ordinary `load`. It never validates or applies an overlay itself, and it is
+unavailable while a command is outstanding or the simulation runs.
+Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns
 scroll and focus as requests for the presentation to apply. Presentation playback

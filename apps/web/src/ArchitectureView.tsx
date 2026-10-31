@@ -171,6 +171,7 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
         <span className="category-label">{symbolLabels[data.symbol]}</span>
         <strong>{data.title}</strong>
         {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+        {data.faults?.length ? <FaultBadge faults={data.faults} /> : null}
         {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>
           <span aria-hidden="true">{ACTIVITY_SYMBOLS[data.activity.state]} </span>{data.activity.label}
           {data.activity.timedOut ? <span className="activity-timeout"> · <span aria-hidden="true">◷</span> timed out t={data.activity.timedOut.time}</span> : null}
@@ -194,6 +195,7 @@ const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<Reso
     </svg>}
     <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
     <span className="resource-title">{resourceLabels[data.kind]} owned by {data.owner}</span>
+    {Array.isArray(data.faults) && data.faults.length ? <FaultBadge faults={data.faults as string[]} /> : null}
     </div>
   </>;
 });
@@ -226,6 +228,14 @@ function FlightToken({ flight, path, readable, durationMs }: {
       </g>
     </g>
   </g>;
+}
+
+/** A student fault from the applied overlay targets this element. */
+function FaultBadge({ faults }: { readonly faults: readonly string[] }) {
+  return <span className="fault-badge" title={faults.join("\n")}>
+    <span aria-hidden="true">⚡ </span>{faults.length === 1 ? "Student fault" : `${faults.length} student faults`}
+    <span className="sr-only">: {faults.join("; ")}</span>
+  </span>;
 }
 
 function activityBadgeId(componentId: string): string {
@@ -380,7 +390,17 @@ function PanControls() {
   </Panel>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts, sessionKey, playback }: {
+/** A graph element the student picked as a fault target. */
+export type GraphPick = { readonly kind: "node"; readonly id: string } | { readonly kind: "link"; readonly source: string; readonly target: string };
+
+export interface GraphFaultMarks {
+  /** Keyed by `${source}->${target}` of the drawn link. */
+  readonly links: ReadonlyMap<string, readonly string[]>;
+  /** Keyed by component or resource node ID. */
+  readonly nodes: ReadonlyMap<string, readonly string[]>;
+}
+
+export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
@@ -391,7 +411,13 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   readonly sessionKey: string;
   /** Replay state owned by the shell, so the cursor survives a tab switch. Reads projections only. */
   readonly playback: FlightPlayback;
+  /** Applied student faults, drawn as a broken-link mark or a node badge. Presentation only. */
+  readonly faultMarks?: GraphFaultMarks;
+  /** Set while the Break panel picks a target: a node or link choice is reported, nothing else changes. */
+  readonly onPick?: (picked: GraphPick) => void;
 }) {
+  const pickRef = useRef(onPick);
+  pickRef.current = onPick;
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
   const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName), [architectureKey, metadata, scenarioName]);
@@ -414,6 +440,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
         ...node.data,
         ...(role !== undefined && flight !== undefined ? { role, roleLabel: `${flight.glyph} ${role === "sending" ? "sends" : "receives"}` } : {}),
         ...(activity ? { activity } : {}),
+        ...(faultMarks?.nodes.get(node.id)?.length ? { faults: faultMarks.nodes.get(node.id)! } : {}),
       },
       selected: node.id === selectedId,
       domAttributes: {
@@ -422,18 +449,25 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
         ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
       },
     };
-  }), [graph.nodes, selectedId, painted, flight, playback.activity]);
+  }), [graph.nodes, selectedId, painted, flight, playback.activity, faultMarks]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
+    ...(faultMarks?.nodes.get(node.id)?.length ? { data: { ...node.data, faults: faultMarks.nodes.get(node.id)! }, className: `${node.className ?? ""} has-fault` } : {}),
     selected: node.id === selectedId,
     domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
-  })), [graph.resourceNodes, selectedId]);
+  })), [graph.resourceNodes, selectedId, faultMarks]);
   const nodes = useMemo(() => [...componentNodes, ...resourceNodes], [componentNodes, resourceNodes]);
   const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(edge => {
-    const styled = emphasize(edge, painted);
+    const marks = faultMarks?.links.get(`${edge.source}->${edge.target}`);
+    const marked: ArchitectureEdge = marks?.length ? {
+      ...edge, className: "has-fault", label: `✕ ${String(edge.label)}`,
+      ariaLabel: `${edge.ariaLabel ?? ""}. Student fault: ${marks.join("; ")}`,
+      style: { ...edge.style, stroke: "#b91c1c", strokeDasharray: "10 4 2 4" },
+    } : edge;
+    const styled = emphasize(marked, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
     return { ...styled, data: { ...styled.data!, flight, pace: playback.pace } };
-  }), [graph.edges, painted, flight, playback.pace]);
+  }), [graph.edges, painted, flight, playback.pace, faultMarks]);
   const edges = useMemo<(ArchitectureEdge | OwnershipEdge)[]>(() => [...componentEdges, ...graph.resourceEdges], [componentEdges, graph.resourceEdges]);
   // Accept only selection changes. Positions and graph structure are immutable presentation inputs.
   const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode | ResourceNode>[]) => {
@@ -441,7 +475,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       let next = previous;
       for (const change of changes) {
         if (change.type === "select") {
-          if (change.selected) next = change.id;
+          // Keyboard selection (Enter or Space) also picks a fault target while picking.
+          if (change.selected) { next = change.id; pickRef.current?.({ kind: "node", id: change.id }); }
           else if (change.id === next) next = null;
         }
       }
@@ -470,7 +505,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     {flight ? null
       : <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>}
     {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
-    <div className={`architecture-layout${selectedId || flight ? " has-selection" : ""}`}>
+    <div className={`architecture-layout${selectedId || flight ? " has-selection" : ""}${onPick ? " is-picking" : ""}`}>
       <div className="graph-canvas" ref={canvas} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
@@ -480,6 +515,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       }}>
         <ReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge> aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange} onPaneClick={clearSelection}
+          onNodeClick={(_, node) => pickRef.current?.({ kind: "node", id: node.id })}
+          onEdgeClick={(_, edge) => pickRef.current?.({ kind: "link", source: edge.source, target: edge.target })}
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}

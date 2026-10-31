@@ -1,7 +1,7 @@
 # Browser application module reference
 
 This reference is for developers tracing the browser application's dependencies,
-transport, and read-only teaching views. It covers all 27 TypeScript modules in
+transport, and read-only teaching views. It covers all 29 TypeScript modules in
 `apps/web/src/`, including the three worker modules, and the accompanying
 stylesheet. Source links are relative to this document.
 
@@ -90,8 +90,13 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   Invalid envelopes and transport failures release the worker. Successful reset
   increments the host-owned `attempt`, since deterministic `runId` can repeat.
   A projectionless `SIMULATION_FAILED` can still be reset.
+- **Session overlays:** `load(scenario, overlay?)` sends the exact packaged
+  document and, when present, the student's draft overlay in one `load`
+  command. `session` in the snapshot is the `SessionIdentity` from the latest
+  `loaded` event (lesson, seed, normalized overlay); it is present only with a
+  projection and survives Reset, which takes no overlay.
 - **Presentation/runtime separation:** frozen snapshots contain projection,
-  error, loading, pending command types, and attempt identity. Pending commands
+  error, loading, pending command types, attempt identity, and the applied session. Pending commands
   describe transport state; projected simulation status describes lifecycle.
   The host sends `load`, `run`, `pause`, `step`, and `reset`, never `status`.
 
@@ -106,7 +111,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **State and protocol:** `isCanonical` rejects capabilities, accessors,
   unsupported object prototypes, cycles, non-finite numbers, negative zero,
   and malformed arrays. `detached` performs `structuredClone` and recursive
-  freezing. Validators check permitted envelope keys, projection structure,
+  freezing. Validators check permitted envelope keys (an optional `overlay` on
+  `load` only, a required `session` on `loaded`), projection structure,
   lifecycle values, observation fields, and explicit counters. `requestIdOf`
   reads a data-property descriptor without invoking an accessor;
   `applicationError` creates a detached error.
@@ -123,8 +129,9 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   `detached` from `protocol.ts`, and the two permitted data-only catalog sources.
   Re-exports checkout lesson copy.
 - **State and protocol:** `scenarios` contains two checkout documents and ten
-  commerce lessons, with IDs, families, titles, descriptions, comparisons, and
-  detached documents. `packagedMetadata` casts these complete packaged values
+  commerce lessons, with IDs, families, titles, descriptions, comparisons,
+  detached documents, and each lesson's data-only overlay policy (the same value
+  the worker enforces from its own catalog). `packagedMetadata` casts these complete packaged values
   for static display; `experimentLabel` supplies picker wording.
 - **Presentation/runtime separation:** comparison choices and expected lesson
   behavior are teaching copy. Runtime validation belongs to the worker; the
@@ -144,12 +151,54 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   and evidence-focus tokens. Busy checks guard session replacement, which calls
   `host.load`. Loaded family chooses checkout or commerce facts. Session keys
   include host attempt identity so reset can remount review state even when the
-  deterministic run fingerprint repeats.
+  deterministic run fingerprint repeats. Owns the draft overlay, the overlay
+  last submitted (to place `INVALID_OVERLAY` diagnostics), and graph picking.
+  Apply and Compare call `host.load` with the packaged document and an overlay;
+  choosing a lesson starts from an empty draft. Compare carries the applied
+  overlay with `carryOverlay` and lists any dropped parameter overrides. The
+  run identity line shows seed, student fault count, and a short `runId`.
 - **Presentation/runtime separation:** owns `useFlightPlayback` outside the tab
   panels so playback survives tab switches. Explicit history selection releases
   the playback cursor; automatic live cues do not. Evidence links activate
   Recorded history and request row focus, without executing simulation work.
   Overview text distinguishes expected lessons from observed business outcomes.
+
+## `break-faults.ts`
+
+[Source](../src/break-faults.ts)
+
+- **Responsibility:** the Break panel's pure model (ADR-004): fault kinds a
+  lesson policy allows, targets from the packaged architecture, mapping form
+  text one-to-one to `FaultRule` or a scheduled `fault` action, chip text,
+  draft/overlay conversion, placement of worker diagnostics on entries and
+  fields, Compare carry rules, and graph fault marks.
+- **Imports and boundaries:** contract types only. `STUDENT_PREFIX` mirrors the
+  contract constant, checked by a unit test.
+- **State and protocol:** form checks reject only text with no contract value
+  (not a whole number, a probability outside 0 to 1, no target). Time windows,
+  copy limits, overlapping duplicates, and the policy are left to the worker,
+  whose `INVALID_OVERLAY` paths point into the submitted overlay. A response
+  fault names the responder as `source`, because the response travels back
+  along the link.
+- **Presentation/runtime separation:** never validates or applies an overlay,
+  and never sends a command.
+
+## `BreakPanel.tsx`
+
+[Source](../src/BreakPanel.tsx)
+
+- **Responsibility:** render “Break the system”: student faults as chips
+  (applied, not applied yet, or with inline diagnostics), the add/edit form,
+  graph picking, and Apply.
+- **Imports and boundaries:** React, contract types, `break-faults.ts`, and the
+  `GraphPick` type from `ArchitectureView.tsx`.
+- **State and protocol:** owns the form, field errors, and the entry being
+  edited. The draft, open state, and picking state belong to `App.tsx`. Editing
+  is available when no command is outstanding and the simulation is not
+  running; otherwise the applied faults stay listed read-only. A draft that
+  differs from the applied overlay says that applying it replaces the session.
+- **Presentation/runtime separation:** Apply hands the draft overlay to the
+  shell, which sends an ordinary `load`. Nothing here edits a running simulation.
 
 ## `SimulationControls.tsx`
 
@@ -508,7 +557,11 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **State and protocol:** owns the session, normalized definition, architecture
   projection, family flag, active control promise, and outgoing callback. Load
   accepts only canonical-equal copies of the two checkout documents or ten
-  packaged commerce lessons, then validates/creates the session. Load failure
+  packaged commerce lessons, then takes that lesson's overlay policy from its
+  own catalog and calls `composeOverlay` (ADR-004 stages 3 and 4) before
+  creating the session from the applied document. A rejected overlay returns
+  `INVALID_OVERLAY` with `{ diagnostics }`; `loaded` carries the applied
+  `SessionIdentity`. Load failure
   exposes no old session. Concurrent non-pause controls get `CONTROL_BUSY`;
   Pause delegates immediately and waits for the active control to settle.
   Run uses a host yield cadence of 16 events and optional event limit; Step and

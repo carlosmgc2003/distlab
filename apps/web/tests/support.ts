@@ -1,4 +1,4 @@
-import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import type { RuntimeProjectionSet, SessionIdentity, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import type { WorkerPort } from "../src/host.ts";
 import { simulationTime } from "@distlab/contracts";
 
@@ -9,6 +9,10 @@ export function projection(status: RuntimeProjectionSet["simulation"]["status"] 
     history: { observations: [] },
     components: [{ componentId: "orders", visibility: "host", state: { value: 1 } }],
   };
+}
+
+export function session(): SessionIdentity {
+  return { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] } };
 }
 
 export class FakeWorker extends EventTarget implements WorkerPort {

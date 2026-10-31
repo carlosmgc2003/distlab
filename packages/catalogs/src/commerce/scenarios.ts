@@ -1,4 +1,4 @@
-import type { CanonicalValue } from "@distlab/contracts";
+import type { CanonicalValue, FaultEffect, FaultPoint, LessonOverlayPolicy, ScheduledFault } from "@distlab/contracts";
 
 const component = (id: string, model: string, kind = "service", configuration = {}) => ({ id, model: `commerce.${model}`, kind, version: "1.0.0", configuration });
 const link = (source: string, target: string, timeout = 20) => ({ source, target, policy: { requestLatency: 1, responseLatency: 1, jitter: 0, timeout, failureRate: 0 } });
@@ -131,3 +131,27 @@ function circuitScenario(name: CommerceLessonName): CanonicalValue {
   } as CanonicalValue;
 }
 
+
+const network: { point: FaultPoint; effects: FaultEffect["kind"][] }[] = [
+  { point: "network.request", effects: ["delay", "drop", "disconnect"] },
+  { point: "network.response", effects: ["delay", "drop"] },
+];
+const delivery = { point: "message.delivery" as const, effects: ["delay", "drop", "duplicate"] as FaultEffect["kind"][] };
+const commit = { point: "database.commit" as const, effects: ["fail"] as FaultEffect["kind"][] };
+
+/**
+ * Lesson overlay policies (ADR-004). Each lesson offers only fault points its
+ * architecture has, and only scheduled faults its models survive: saga
+ * resources and the outbox payment service already script their own crash and
+ * restart, so a student crash there would end the run instead of telling a story.
+ */
+export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPolicy {
+  const family = name.split("-")[0];
+  const rules = family === "cascade" ? network
+    : family === "cqrs" || family === "outbox" || family === "dual" ? [...network, delivery, commit]
+    : [...network, commit];
+  const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
+    : family === "saga" ? ["external-availability"]
+    : family === "retry" || family === "cqrs" ? ["crash"] : [];
+  return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: [] };
+}

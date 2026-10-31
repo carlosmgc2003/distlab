@@ -161,11 +161,12 @@ boundary pause and does not finalize assertions. `step` processes at most one
 scheduled event. `reset` reconstructs the current loaded scenario with the same
 normalized inputs, including the applied overlay. It never takes an overlay.
 
-The `overlay` field and `loaded.session` are accepted by ADR-004. The contract
-types (`SessionOverlay`, `SessionIdentity`, `LessonOverlayPolicy`) are added to
-`@distlab/contracts` with their first implementation in #94 and #95. Until then
-the worker rejects an `overlay` field as `INVALID_WORKER_COMMAND`, and `loaded`
-carries no `session`.
+The `overlay` field and `loaded.session` are accepted by ADR-004 and implemented
+by #94. The contract types (`SessionOverlay`, `SessionIdentity`,
+`LessonOverlayPolicy`) live in `@distlab/contracts` (`overlay.ts`), and the pure
+validation and application live in `@distlab/scenario` (`composeOverlay`). Every
+lesson policy currently declares fault allowances only; parameter declarations
+arrive with #95.
 
 The worker emits projection updates only after initialization, after event
 boundaries, reset, completion, or failure. It may coalesce updates, but it must

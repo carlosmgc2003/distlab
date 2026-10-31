@@ -233,6 +233,7 @@ test("redacted and omitted payloads stay unmarked and incomplete history is labe
     const requestId = window.timelineFixture.commands.at(-1)!.requestId;
     window.timelineFixture.emit({
       version: 1, type: "loaded", requestId,
+      session: { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] } },
       projection: {
         architecture: {
           components: [

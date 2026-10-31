@@ -45,6 +45,35 @@ and the shared parameter overrides
 ([ADR-004](spec/adr/004-session-overlays.md)). Read-only kernel counters replace
 the old checkout-only history inference; see [ADR-003](spec/adr/003-boundary-counters.md).
 
+### Break the system
+
+**Break the system** adds student faults to a loaded lesson. Choose a fault, a
+target (from the list, or with **Pick on graph**), and its fields, which map one
+to one to a `FaultRule` or a scheduled fault. **Apply faults and reload** loads
+the same packaged lesson with the faults as a session overlay and starts again
+from t=0. Reset replays the applied faults. Student fault IDs start with
+`student-`, so Recorded history shows them in `fault.rule.matched`,
+`fault.effect.selected`, `fault.applied`, and `scenario.action.dispatched`.
+A probability other than 1 uses the session seed. Each lesson offers only the
+faults its architecture has and its models survive:
+
+| Lessons | Fault rules | Scheduled faults |
+| --- | --- | --- |
+| Checkout (both) | request, response, message delivery, database commit | crash |
+| `retry-*` | request, response, database commit | crash |
+| `saga-*` | request, response, database commit | external availability |
+| `dual-write`, `outbox-*` | request, response, message delivery, database commit | none |
+| `cqrs-delayed` | request, response, message delivery, database commit | crash |
+| `cascade-*` | request, response | crash, external availability |
+
+Every lesson allows up to four student faults. Saga resources and the outbox
+payment service already script their own crash and restart, so a student crash
+there would end the run instead of telling a story. The checkout payments model
+treats a provider error as a handler failure, so checkout does not offer
+external availability. A catalog test runs every offered kind to completion.
+Packaged lesson checks still run against the changed experiment and may FAIL:
+that means the faults changed the story, not that the simulator failed.
+
 ## 1. Timeout, retry, and idempotency
 
 **Pattern:** request idempotency with a durable previous result.

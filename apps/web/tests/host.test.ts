@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SimulationHost } from "../src/host.ts";
-import { FakeWorker, projection } from "./support.ts";
+import { FakeWorker, projection, session } from "./support.ts";
 
 async function ready() {
   const worker = new FakeWorker();
   const host = new SimulationHost(() => worker);
   const loaded = host.load({});
-  worker.emit({ version: 1, requestId: worker.last().requestId, type: "loaded", projection: projection() });
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "loaded", projection: projection(), session: session() });
   await loaded;
   return { host, worker };
 }
@@ -111,9 +111,9 @@ test("new loads fence pending requests and stale events even when run fingerprin
   await replaced;
   const old = workers[0]!, current = workers[1]!;
   assert.ok(old.terminated);
-  old.emit({ version: 1, requestId: old.last().requestId, type: "loaded", projection: projection() });
+  old.emit({ version: 1, requestId: old.last().requestId, type: "loaded", projection: projection(), session: session() });
   assert.equal(host.getSnapshot().projection, null);
-  current.emit({ version: 1, requestId: current.last().requestId, type: "loaded", projection: projection() });
+  current.emit({ version: 1, requestId: current.last().requestId, type: "loaded", projection: projection(), session: session() });
   await second;
   old.emit({ version: 1, type: "projection.updated", projection: projection("FAILED") });
   current.emit({ version: 1, requestId: old.last().requestId, type: "projection.updated", projection: projection("FAILED") });
@@ -175,7 +175,7 @@ test("invalid controls do not end an outstanding load", async () => {
   const loading = host.load({});
   await assert.rejects(host.run(-1), { code: "INVALID_WORKER_COMMAND" });
   assert.equal(host.getSnapshot().loading, true);
-  worker.emit({ version: 1, requestId: worker.last().requestId, type: "loaded", projection: projection() });
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "loaded", projection: projection(), session: session() });
   await loading;
   assert.equal(host.getSnapshot().loading, false);
   assert.equal(host.getSnapshot().error, null);
@@ -196,7 +196,7 @@ test("reload after worker failure fences queued callbacks and pending control re
   });
   const first = host.load({});
   const old = workers[0]!;
-  old.emit({ version: 1, requestId: old.last().requestId, type: "loaded", projection: projection() });
+  old.emit({ version: 1, requestId: old.last().requestId, type: "loaded", projection: projection(), session: session() });
   await first;
   const running = assert.rejects(host.run(), { code: "WORKER_UNAVAILABLE" });
   const runId = old.last().requestId;
@@ -204,7 +204,7 @@ test("reload after worker failure fences queued callbacks and pending control re
   await running;
   const reloading = host.load({});
   const current = workers[1]!;
-  current.emit({ version: 1, requestId: current.last().requestId, type: "loaded", projection: projection() });
+  current.emit({ version: 1, requestId: current.last().requestId, type: "loaded", projection: projection(), session: session() });
   await reloading;
   // Invoke the removed listener directly to model an already queued callback.
   callbacks[0]!(new MessageEvent("message", { data: { version: 1, type: "projection.updated", projection: projection("FAILED") } }));
