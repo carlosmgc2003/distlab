@@ -146,6 +146,8 @@ User data cannot carry handler closures or arbitrary event types. Client actions
 create their own roots; administrative actions may be untraced and use the
 event-start observation as cause. An interactive fault edit must produce a new
 scenario/run input, not mutate the current run outside its recorded action list.
+[ADR-004](adr/004-session-overlays.md) defines how a student overlay produces that
+input. The engine receives the applied document and is unaware of overlays.
 
 Assessment runs once after initialization and after each complete kernel event
 boundary, including synchronous controlled continuations. It does not subscribe

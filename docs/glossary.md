@@ -136,6 +136,11 @@ background tasks, a `Database`, and a `KeyValueStore`.
 supports operations and concepts such as TTL, set-if-absent, counters,
 compare-and-set, idempotency keys, locks, and leases.
 
+**Lesson overlay policy** — The data-only allow-list a packaged lesson declares
+for session overlays: the fault points, effects, and scheduled-fault kinds a
+student may add, an entry limit, and the parameters a student may override. See
+ADR-004.
+
 **Latency** — Simulated elapsed time between communication events. Network and
 external-service policies can add fixed or variable latency without causing a
 real-time wait.
@@ -180,6 +185,11 @@ its own wording; the milestone set is listed in
 updates when a write is attempted rather than preventing all concurrent work in
 advance.
 
+**Parameter override** — A student value for a parameter that a lesson
+declares. It replaces the packaged value at the parameter's declared targets.
+It is distinct from run configuration (`RunInputs.configuration`), which a
+student cannot change.
+
 **Projection** — A derived read model built from system activity, commonly by
 consuming events. A projection can lag behind its source state.
 
@@ -223,6 +233,11 @@ seeded generator. Simulation code must use it instead of `Math.random()`.
 **Service runtime** — The controlled execution environment for an internal
 service. It exposes assigned storage, messaging, networking, virtual time, and
 logging while preserving service isolation.
+
+**Session overlay** — A student's fault rules, scheduled faults, and parameter
+overrides for one packaged lesson. The overlay is applied when the session is
+loaded and replayed on reset. The same lesson, overlay, and seed produce the same
+history, and the empty overlay reproduces the packaged lesson.
 
 **Simulation kernel** — The lowest-level domain component. It owns logical
 time, scheduling, the event queue, seeded randomness, and execution history.

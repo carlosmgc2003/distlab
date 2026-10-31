@@ -57,7 +57,9 @@ modules may import application contracts, the host client, and the data-only
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command.
 The host accepts only the two packaged checkout documents and ten packaged
-commerce lessons. Simulation exposes explicit pending-event, processed-event,
+commerce lessons, each optionally with a session overlay that the lesson's
+data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`). The
+main thread never sends an applied document. Reset replays the applied overlay. Simulation exposes explicit pending-event, processed-event,
 and random-draw counters; never infer these from arbitrary/redacted history.
 Commerce student projections expose committed business rows, KV metrics, client
 outcomes, declared external-visible state, delivery facts, and assertion results;

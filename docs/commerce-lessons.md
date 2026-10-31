@@ -39,7 +39,10 @@ Table presentations select the same underlying observations.
 
 **Compare** loads the paired experiment with equivalent inputs and a fresh worker
 session (it does not retain a side-by-side result or change rules during a run).
-The host accepts only exact packaged documents. Read-only kernel counters replace
+The host accepts only exact packaged documents, each optionally with a session
+overlay that the lesson's policy allows. Compare carries the student's faults
+and the shared parameter overrides
+([ADR-004](spec/adr/004-session-overlays.md)). Read-only kernel counters replace
 the old checkout-only history inference; see [ADR-003](spec/adr/003-boundary-counters.md).
 
 ## 1. Timeout, retry, and idempotency
