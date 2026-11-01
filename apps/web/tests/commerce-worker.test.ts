@@ -52,3 +52,33 @@ for (const name of commerceLessonNames) test(`${name}: browser worker matches he
   await adapter.receive({ version: 1, requestId: "replay", type: "run" });
   assert.deepEqual(latest(), result);
 });
+
+test("notifications: the student projection shows delivery attempts, dead letters, and the provider's visible state", async () => {
+  const finished = async (name: "notifications-unbounded" | "notifications-dlq"): Promise<RuntimeProjectionSet> => {
+    const events: WorkerEvent[] = [];
+    const adapter = new WorkerAdapter(event => events.push(event));
+    await adapter.receive({ version: 1, requestId: "load", type: "load", scenario: commerceScenario(name) });
+    await adapter.receive({ version: 1, requestId: "run", type: "run" });
+    const event = events.filter(e => "projection" in e).at(-1);
+    assert.ok(event && "projection" in event);
+    return event.projection;
+  };
+  const state = (projection: RuntimeProjectionSet, id: string) =>
+    projection.components.find(c => c.componentId === id && c.visibility === "student")!.state as Record<string, CanonicalValue>;
+  const safe = await finished("notifications-dlq"), unsafe = await finished("notifications-unbounded");
+  const bus = state(safe, "OrderPlaced");
+  assert.equal(bus.role, "bus-delivery");
+  const [record] = bus.records as Record<string, CanonicalValue>[];
+  assert.deepEqual([record!.state, record!.attempt, record!.consumer], ["DEAD", 3, "notifications"]);
+  assert.deepEqual(bus.deadLetters, [{ messageId: record!.messageId, attempts: 3, reason: "nack", consumer: "notifications" }]);
+  // The dead letter is also a recorded fact in history, at the time the bus gave up.
+  const dead = safe.history.observations.filter(o => o.type === "message.dead");
+  assert.deepEqual(dead.map(o => o.time), [44]);
+  // The provider never accepted a send, so it has no visible effect to show.
+  assert.deepEqual(state(safe, "messaging"), { role: "external-visible", availability: "AVAILABLE", visible: {} });
+  assert.deepEqual(state(unsafe, "OrderPlaced").deadLetters, []);
+  assert.deepEqual((state(unsafe, "OrderPlaced").records as Record<string, CanonicalValue>[]).map(r => [r.state, r.attempt]), [["ACKED", 6]]);
+  assert.deepEqual(state(unsafe, "messaging").visible, { sent: [{ orderId: "order-1" }] });
+  // Message bodies stay out of the delivery projection; only delivery facts reach the student.
+  assert.ok(!JSON.stringify(bus).includes('"body"'));
+});

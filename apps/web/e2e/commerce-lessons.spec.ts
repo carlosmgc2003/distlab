@@ -95,3 +95,28 @@ test("compare replaces the experiment; commerce state fits a narrow viewport", a
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("the notifications pair shows the dead-letter queue only when the retry budget is bounded", async ({ page }) => {
+  await page.goto("/");
+  const status = page.getByRole("status", { name: "Simulation status" });
+  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const orderPlaced = state.getByRole("region", { name: "OrderPlaced state", exact: true });
+  for (const [name, letters] of [["notifications-dlq", 1], ["notifications-unbounded", 0]] as const) {
+    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
+    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await expect(status).toHaveText("READY");
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+    await expect(status).toHaveText("COMPLETED");
+    await expect(orderPlaced).toContainText("Dead-letter queue");
+    const queue = orderPlaced.getByRole("list", { name: "OrderPlaced dead-letter queue", exact: true });
+    if (letters) {
+      await expect(queue.getByRole("listitem")).toHaveCount(1);
+      await expect(queue).toContainText("attempts: 3");
+      await expect(orderPlaced).toContainText("state: DEAD");
+    } else {
+      await expect(queue).toHaveCount(0);
+      await expect(orderPlaced).toContainText("No dead-lettered messages.");
+      await expect(orderPlaced).toContainText("attempt: 6");
+    }
+  }
+});

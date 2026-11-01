@@ -18,6 +18,8 @@ const commerceCopy = {
   "cqrs-delayed": ["CQRS: delayed read model", "At t=10 Orders is PAID while Reporting is PENDING. At t=60 both are PAID.", ""],
   "cascade-unprotected": ["Cascading failure: unprotected", "A slow risk provider causes 13 dependency timeouts and a peak of 10 waiting payment requests.", "cascade-breaker"],
   "cascade-breaker": ["Cascading failure: circuit breaker", "Follow CLOSED → OPEN → HALF_OPEN → CLOSED. Risk calls fall from 16 to 5; rejected calls are not successes.", "cascade-unprotected"],
+  "notifications-unbounded": ["Notifications: retry until it works", "The Messaging Provider is unreachable until t=80. Orders waits for the notification, so the order stays PENDING while the send is retried 6 times.", "notifications-dlq"],
+  "notifications-dlq": ["Notifications: bounded retry and dead-letter queue", "The order is confirmed at checkout. After 3 failed attempts the notification goes to the dead-letter queue for inspection.", "notifications-unbounded"],
 } as const;
 
 /**

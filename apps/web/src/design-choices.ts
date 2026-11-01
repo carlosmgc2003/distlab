@@ -21,6 +21,8 @@ const copy: Readonly<Record<string, ChoiceCopy>> = {
   outbox: { label: "Transactional outbox", hint: "Payments records the event in the same commit as the payment and publishes it later." },
   "consumer-idempotency": { label: "Idempotent consumer", hint: "Notifications records each event ID in an inbox and skips one it has seen." },
   "circuit-breaker": { label: "Circuit breaker", hint: "Payments stops calling the risk provider after repeated failures and probes it later." },
+  "decoupled-confirmation": { label: "Confirm before notifying", hint: "Orders confirms the order at checkout instead of waiting for NotificationSent." },
+  "max-attempts": { label: "Notification delivery attempts", hint: "How many times the bus delivers OrderPlaced before it moves the message to the dead-letter queue." },
 };
 
 export function choiceCopy(key: string): ChoiceCopy {

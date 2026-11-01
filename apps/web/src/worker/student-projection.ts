@@ -78,6 +78,21 @@ function deliveries(messageBus: CanonicalValue): CanonicalValue[] {
   return facts;
 }
 
+/** Dead-lettered messages of one destination: identity, attempts used, and why the bus gave up. */
+function deadLetters(messageBus: CanonicalValue, destination: string): CanonicalValue[] {
+  if (!isRecord(messageBus) || !Array.isArray(messageBus.deadLetters)) return [];
+  const facts: CanonicalValue[] = [];
+  for (const item of messageBus.deadLetters) {
+    if (!isRecord(item) || item.destination !== destination || typeof item.messageId !== "string"
+      || typeof item.attempts !== "number" || typeof item.reason !== "string") continue;
+    facts.push({
+      messageId: item.messageId, attempts: item.attempts, reason: item.reason,
+      ...(typeof item.consumer === "string" ? { consumer: item.consumer } : {}),
+    });
+  }
+  return facts;
+}
+
 /** Exact packaged commerce inputs authorize these business-state fields only. */
 export function commerceComponents(read: AssessmentRead & { readonly stores: CanonicalValue }, architecture: ArchitectureDefinition, assertions: CanonicalValue): ComponentStateProjection[] {
   const stores = isRecord(read.stores) ? read.stores : {};
@@ -92,7 +107,11 @@ export function commerceComponents(read: AssessmentRead & { readonly stores: Can
         : { role: "external-visible", availability: runtime?.availability ?? "UNKNOWN", visible: runtime?.visible ?? {} };
       return { componentId: id, visibility: "student", state };
     }),
-    ...architecture.destinations.map(({ id }): ComponentStateProjection => ({ componentId: id, visibility: "student", state: { role: "bus-delivery", records: deliveries(read.messageBus).filter(item => isRecord(item) && item.destination === id) } })),
+    ...architecture.destinations.map(({ id }): ComponentStateProjection => ({ componentId: id, visibility: "student", state: {
+      role: "bus-delivery",
+      records: deliveries(read.messageBus).filter(item => isRecord(item) && item.destination === id),
+      deadLetters: deadLetters(read.messageBus, id),
+    } })),
   ];
 }
 
