@@ -175,7 +175,8 @@ type WorkerEvent =
 
 `load` validates and constructs a new session. An absent `overlay` is the
 empty overlay, and it gives the packaged lesson exactly. `loaded.session`
-returns the lesson name, seed, and normalized overlay that the worker applied.
+returns the lesson name, seed, normalized overlay, and origin that the worker
+applied.
 The UI shows that value, not its draft. `run` processes event boundaries
 until completion, pause, failure, or the optional event limit. `pause` requests a
 boundary pause and does not finalize assertions. `step` processes at most one
@@ -189,8 +190,13 @@ and `loaded.session.origin` carries its digest and catalog reference. The UI
 renders imported presentation, resource nodes, and Break choices from that
 value. Packaged sessions report the origin `{ kind: "packaged" }`. `reset`
 reconstructs an imported session from the same normalized document. The
-`document` variant, `loaded.document`, and `SessionIdentity.origin` are accepted
-by ADR-006 and not implemented yet.
+contract types (`ScenarioDocument`, `CatalogReference`, `SessionOrigin`,
+`ScenarioDocumentLimits`, `ScenarioDocumentDiagnosticCodes`) live in
+`@distlab/contracts` (`scenario-document.ts`), and the worker reports
+`{ kind: "packaged" }` for every session. Parsing, validation, the hosted
+catalog registry, and the worker's `document` load path are not implemented
+yet, so the host still rejects a `load` that carries `document` as an invalid
+command.
 
 The `overlay` field and `loaded.session` are accepted by ADR-004 and implemented
 by #94. The contract types (`SessionOverlay`, `SessionIdentity`,
