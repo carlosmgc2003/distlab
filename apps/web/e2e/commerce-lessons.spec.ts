@@ -157,5 +157,14 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   }
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.locator("#timeline-rows")).toContainText("kv.expired");
+  // Raw renders a window of rows, so narrow it to the expiry records with the Type filter.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
+  const filterDrawer = page.locator(".history-filter-drawer");
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
+  await page.locator(".timeline-filter-disclosure summary").click();
+  await page.getByLabel("Type", { exact: true }).fill("kv.expired");
+  const rows = page.locator("#timeline-rows");
+  await expect(page.locator(".timeline-count")).toHaveText(/^3 of \d+ observations/);
+  await expect(rows).toContainText("cart");
+  await expect(rows).toContainText("catalog");
 });
