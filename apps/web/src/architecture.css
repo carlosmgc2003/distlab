@@ -628,3 +628,24 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .fault-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1.5px solid var(--status-error); border-radius: 999px; background: var(--status-error-bg); color: var(--status-error); font-size: .7rem; font-weight: 700; white-space: nowrap; }
 .resource-body .fault-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); margin: 0; }
 .react-flow__edge.has-fault .react-flow__edge-text { fill: var(--status-error); font-weight: 700; }
+
+/* Design choices (ADR-004 parameters, #95): lesson-declared settings in the learning prompt.
+   Apply is an ordinary load; nothing here edits a running simulation. */
+.design-choices { flex-basis: 100%; display: grid; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+.design-choices-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.design-choices-header h2 { margin: 0; font-size: 1rem; }
+.learning-prompt .design-choices span.design-choices-summary { color: var(--text-secondary); font-size: .85rem; }
+.design-choices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 8px 16px; }
+.design-choice { display: grid; gap: 2px; align-content: start; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: 8px; }
+.design-choice.is-changed { border-color: var(--action-primary); border-width: 2px; }
+.design-choice-toggle { display: flex; gap: 8px; align-items: center; min-height: 32px; font-weight: 600; }
+.design-choice-toggle input { width: 18px; height: 18px; }
+.design-choice input[type="number"] { width: 7rem; min-height: 32px; }
+.investigation-workspace > .design-choices { flex: none; padding: 8px 16px; background: var(--surface-panel); border-radius: 10px; }
+/* The learning prompt styles every span; field messages keep their own size and colour. */
+.design-choices .field-help { font-size: .75rem; color: var(--text-secondary); }
+.design-choices .field-error { font-size: .8rem; color: var(--status-error); font-weight: 600; }
+.design-choices-summary { flex: 1 1 auto; }
+.design-choices-header button { min-height: 36px; padding: 4px 10px; }
+.design-choices-body[hidden] { display: none; }
+.design-choices-body { display: grid; gap: 6px; }

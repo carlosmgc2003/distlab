@@ -3,9 +3,11 @@ import { CommerceFacts, CommerceState } from "./CommerceLesson.tsx";
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import { BreakPanel } from "./BreakPanel.tsx";
-import { carryOverlay, draftFromOverlay, faultMarks, isEmptyOverlay } from "./break-faults.ts";
+import { carryOverlay, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
-import type { CanonicalValue, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
+import { DesignChoicesPanel } from "./DesignChoicesPanel.tsx";
+import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
+import type { CanonicalValue, ParameterOverride, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { FlightControls } from "./ArchitecturePlayback.tsx";
 import { useFlightPlayback } from "./flight-playback.ts";
@@ -39,11 +41,14 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const tabRequest = useRef<{ tab: WorkspaceTab; focusPanel: boolean } | null>(null);
   // The draft overlay is UI state (ADR-004). Only Apply, Load, and Compare send it, inside an ordinary load.
   const [draft, setDraft] = useState<readonly DraftEntry[]>([]);
+  const [choiceDraft, setChoiceDraft] = useState<readonly ParameterOverride[]>([]);
   const [submitted, setSubmitted] = useState<SessionOverlay | null>(null);
   const [picking, setPicking] = useState(false);
   const [pick, setPick] = useState<{ pick: GraphPick; token: number } | null>(null);
   const [carryNotice, setCarryNotice] = useState("");
   const [breakOpen, setBreakOpen] = useState(false);
+  // Collapsed by default, so the architecture keeps its height.
+  const [choicesOpen, setChoicesOpen] = useState(false);
   const onGraphPick = useCallback((value: GraphPick) => setPick(current => ({ pick: value, token: (current?.token ?? 0) + 1 })), []);
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
   const lesson = useMemo(() => loadedChoice ? packagedMetadata(loadedChoice) : undefined, [loadedChoice]);
@@ -73,11 +78,19 @@ export function App({ host }: { readonly host: SimulationHost }) {
     const diagnostics = context && typeof context === "object" && Array.isArray(context.diagnostics) ? context.diagnostics as ScenarioDiagnostic[] : null;
     return overlayError && submitted && diagnostics ? { overlay: submitted, diagnostics } : null;
   }, [overlayError, submitted]);
+  // Each panel shows the diagnostics that point into its own part of the overlay.
+  const rejectedFaults = useMemo(() => rejected ? { ...rejected, diagnostics: rejected.diagnostics.filter(item => !isChoiceDiagnostic(item)) } : null, [rejected]);
+  const rejectedChoices = useMemo(() => rejected ? placeChoiceDiagnostics(rejected.diagnostics.filter(isChoiceDiagnostic), rejected.overlay.parameters) : new Map<string, string>(), [rejected]);
+  const choicesPending = !sameChoices(choiceDraft, applied?.parameters ?? []);
+  const faultsPending = useMemo(() => {
+    const faults = overlayFromDraft(draft, applied?.parameters ?? []);
+    return applied ? !sameOverlay(faults, applied) : !isEmptyOverlay(faults);
+  }, [draft, applied]);
   // The lesson line names the loaded experiment. The run status itself is announced once, by the
   // committed-state summary, so this region never restates it.
   const lessonState = loading ? "Loading the lesson…"
     : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
-    : overlayError ? "The faults were not applied. Fix the marked faults in Break the system, then apply them again."
+    : overlayError ? "The changes were not applied. Fix the marked faults or design choices, then apply them again."
     : snapshot.error ? "The lesson could not be opened. Choose a scenario and load it again."
     : !projection ? "No lesson is loaded."
     : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice) : "checkout"}.`;
@@ -132,6 +145,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     setSubmitted(sent ?? null);
     // Choosing a lesson starts from an empty draft; Apply and Compare keep the overlay they send.
     setDraft(sent ? draftFromOverlay(sent) : []);
+    setChoiceDraft(sent?.parameters ?? []);
     if (!overlay) setCarryNotice("");
     // The host publishes structured failures; the event handler owns no simulation state.
     void host.load(choice.scenario, sent as unknown as CanonicalValue | undefined).catch(() => {});
@@ -148,8 +162,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
     // Compare carries the applied overlay; the paired lesson's policy may still reject a fault.
     const carried = carryOverlay(applied ?? { version: 1, faults: [], scheduledFaults: [], parameters: [] }, loadedChoice.policy, target.policy);
     const faults = carried.overlay.faults.length + carried.overlay.scheduledFaults.length;
-    setCarryNotice(faults || carried.dropped.length
-      ? `Compare kept ${faults} student fault${faults === 1 ? "" : "s"}${carried.dropped.length ? ` and dropped ${carried.dropped.join(", ")}` : ""}.` : "");
+    const kept = carried.overlay.parameters.length ? `, kept ${describeChoices(carried.overlay.parameters)}` : "";
+    // A dropped design choice is the one the pair compares: the paired lesson's own value applies.
+    setCarryNotice(faults || kept || carried.dropped.length
+      ? `Compare kept ${faults} student fault${faults === 1 ? "" : "s"}${kept}${carried.dropped.length ? ` and dropped ${carried.dropped.join(", ")}` : ""}.` : "");
     replaceSession(id, carried.overlay);
   };
   const onScenario = (id: string) => {
@@ -158,10 +174,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
     else setSelected(id);
   };
 
+  const editable = !busy && (projection !== null || overlayError !== null);
   const breakPanel = loadedChoice && lesson ? <BreakPanel key={loadedChoice.id} policy={loadedChoice.policy} architecture={lesson.architecture}
-    applied={applied} draft={draft} onDraftChange={setDraft} editable={!busy && (projection !== null || overlayError !== null)}
-    rejected={rejected} onApply={applyDraft} picking={picking} onPickingChange={setPicking} pick={pick} open={breakOpen} onOpenChange={setBreakOpen}
+    applied={applied} draft={draft} onDraftChange={setDraft} parameters={choiceDraft} choicesPending={choicesPending} editable={editable}
+    rejected={rejectedFaults} onApply={applyDraft} picking={picking} onPickingChange={setPicking} pick={pick} open={breakOpen} onOpenChange={setBreakOpen}
     hidden={projection !== null && tab !== "architecture"} /> : null;
+  // Design choices exist only for lessons whose policy declares parameters.
+  const choicesPanel = loadedChoice && loadedChoice.policy.parameters.length ? <DesignChoicesPanel key={loadedChoice.id} policy={loadedChoice.policy}
+    applied={applied?.parameters ?? null} draft={choiceDraft} onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices}
+    onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft))} faultsPending={faultsPending} open={choicesOpen} onOpenChange={setChoicesOpen} /> : null;
 
   return <main className={`app-shell${tab === "history" && projection && !showHistoryControls ? " history-focus" : ""}`}>
     {tab === "history" && projection && !showHistoryControls ? <h1 className="sr-only">DistLab · Recorded history</h1> : null}
@@ -232,9 +253,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <span>{commerce ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</span>
         {commerce && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => compare(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
         {snapshot.session ? <span className="run-identity" aria-label="Run identity">
-          Seed {snapshot.session.seed} · {appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"} · run {projection.simulation.runId.replace(/^run:/, "").slice(0, 8)}
+          Seed {snapshot.session.seed}{snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters)}` : ""} · {appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"} · run {projection.simulation.runId.replace(/^run:/, "").slice(0, 8)}
         </span> : null}
         {carryNotice ? <span role="status">{carryNotice}</span> : null}
+        {choicesPanel}
       </aside>
       <div className="workspace-navigation">
       <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
@@ -265,6 +287,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
           {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
       </div>
     </div> : overlayError && loadedChoice ? <div className="investigation-workspace">
+      {choicesPanel}
       {breakPanel}
     </div> : <div className="investigation-workspace">
       <section className="workspace-empty" tabIndex={-1}>

@@ -14,7 +14,9 @@ models, two checkout scenarios, and ten commerce lessons available in both the b
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
 deterministic event boundaries. In the browser, **Break the system** lets a student add
 deterministic faults to a loaded lesson before Run, as a session overlay that the lesson's
-policy allows ([ADR-004](docs/spec/adr/004-session-overlays.md)). Golden scenarios 01, 02, 04, 05, 06, and 07
+policy allows ([ADR-004](docs/spec/adr/004-session-overlays.md)). **Design choices** let a student
+change the settings a lesson declares (idempotency, timeout, compensation, outbox, circuit breaker)
+as parameter overrides in the same overlay. Golden scenarios 01, 02, 04, 05, 06, and 07
 are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
 
 ## Goals

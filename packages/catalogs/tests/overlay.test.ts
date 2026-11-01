@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CanonicalValue, LessonOverlayPolicy, ScenarioDefinition } from "@distlab/contracts";
+import type { CanonicalValue, LessonOverlayPolicy, LessonParameter, ScenarioDefinition } from "@distlab/contracts";
 import { STUDENT_ID_PREFIX } from "@distlab/contracts";
 import { canonicalEncode } from "@distlab/kernel";
 import {
@@ -40,7 +40,15 @@ async function run(lesson: Lesson, overlay: unknown, options: { maxEvents?: numb
   return session.inspect();
 }
 
-/** OVL-AC-2 fixture: a seeded probabilistic rule and, where the policy allows one, a scheduled fault. */
+/** A value inside the parameter's domain that differs from its default. */
+function nonDefault(parameter: LessonParameter): CanonicalValue {
+  const domain = parameter.domain;
+  if (domain.type === "boolean") return !domain.default;
+  if (domain.type === "integer") return domain.default < domain.maximum ? domain.default + 1 : domain.default - 1;
+  return domain.choices.find(choice => choice !== domain.default)!;
+}
+
+/** OVL-AC-2 fixture: a seeded probabilistic rule, a non-default parameter, and, where the policy allows one, a scheduled fault. */
 function fixture(lesson: Lesson) {
   const doc = definition(lesson);
   const link = doc.architecture.links[0]!;
@@ -53,7 +61,7 @@ function fixture(lesson: Lesson) {
     version: 1,
     faults: [{ id: "student-coin", point: "network.request", source: link.source, target: link.target, from: 0, probability: 0.5, maxApplications: 4, effect: { kind: "delay", duration: 3 } }],
     scheduledFaults: scheduled ? [scheduled] : [],
-    parameters: [],
+    parameters: lesson.policy.parameters.slice(0, 1).map(parameter => ({ key: parameter.key, value: nonDefault(parameter) })),
   };
 }
 
@@ -90,6 +98,7 @@ test("OVL-AC-2 the same lesson and overlay replay identically across sessions, r
     assert.equal((await run(lesson, overlay, { maxEvents: 3 })).digest, first.digest, `${lesson.id} maxEvents`);
     assert.equal((await run(lesson, overlay, { step: true })).digest, first.digest, `${lesson.id} step`);
     assert.ok(first.history.observations.some(item => item.type === "fault.rule.matched" && (item.data as { ruleId: string }).ruleId === "student-coin"), `${lesson.id} uses the student rule`);
+    if (overlay.parameters.length) assert.notEqual(encode(compose(lesson, { version: 1, parameters: overlay.parameters }).document), encode(lesson.document), `${lesson.id} the parameter changes the applied document`);
   }
 });
 
@@ -187,4 +196,49 @@ test("lessons offer only the fault points their architecture has", () => {
     assert.equal(points.has("database.commit"), doc.architecture.databases.length > 0, lesson.id);
     if (lesson.policy.faults.scheduled.includes("external-availability")) assert.ok(doc.architecture.components.some(item => item.kind === "external"), lesson.id);
   }
+});
+
+const pairs = [
+  ["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer"],
+  ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"],
+] as const;
+
+test("every paired lesson exposes the design choice that distinguishes the pair", () => {
+  const withoutLessonStory = (document: CanonicalValue) => { const { name: _, assertions: __, ...rest } = document as Record<string, CanonicalValue>; return encode(rest); };
+  for (const [from, to] of pairs) for (const [left, right] of [[from, to], [to, from]] as const) {
+    const lesson = lessons.find(item => item.id === left)!;
+    const paired = lessons.find(item => item.id === right)!;
+    // The switches whose defaults differ are the pair's design choice; the paired lesson's defaults are its values.
+    const parameters = paired.policy.parameters.filter(parameter => {
+      const own = lesson.policy.parameters.find(item => item.key === parameter.key);
+      assert.ok(own, `${left} declares ${parameter.key}`);
+      return encode(own.domain.default as CanonicalValue) !== encode(parameter.domain.default as CanonicalValue);
+    }).map(parameter => ({ key: parameter.key, value: parameter.domain.default }));
+    assert.ok(parameters.length > 0, `${left} → ${right} differs in a declared parameter`);
+    const applied = compose(lesson, { version: 1, parameters }).document;
+    // Assertions stay the lesson's own until #96 separates invariants from expectations.
+    assert.equal(withoutLessonStory(applied), withoutLessonStory(paired.document), `${left} with ${JSON.stringify(parameters)} has the ${right} architecture`);
+  }
+});
+
+test("every declared parameter value at its domain edges runs its lesson to completion", async () => {
+  for (const lesson of lessons) for (const parameter of lesson.policy.parameters) {
+    const domain = parameter.domain;
+    const values: CanonicalValue[] = domain.type === "boolean" ? [true, false] : domain.type === "integer" ? [domain.minimum, domain.maximum] : [...domain.choices];
+    for (const value of values) {
+      const result = await run(lesson, { version: 1, parameters: [{ key: parameter.key, value }] });
+      assert.equal(result.status, "COMPLETED", `${lesson.id} ${parameter.key}=${JSON.stringify(value)}`);
+    }
+  }
+});
+
+test("a design choice changes the lesson outcome without changing the packaged assertions", async () => {
+  const lesson = lessons.find(item => item.id === "retry-unsafe")!;
+  const result = await run(lesson, { version: 1, parameters: [{ key: "idempotency", value: true }] });
+  const verdict = result.results.find(item => item.id === "processed-payments");
+  // The packaged check expects the unsafe story (two payments); with idempotency on there is one.
+  assert.equal(verdict?.status, "FAIL");
+  const outOfRange = composeOverlay(lesson.document, lesson.policy, { version: 1, parameters: [{ key: "timeout", value: 0 }] } as unknown as CanonicalValue, value => lesson.engine.validate(value));
+  assert.ok(!outOfRange.ok && outOfRange.code === "INVALID_OVERLAY");
+  assert.deepEqual(outOfRange.diagnostics, [{ path: "/parameters/0/value", code: "PARAMETER_VALUE" }]);
 });

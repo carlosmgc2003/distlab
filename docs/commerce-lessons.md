@@ -45,6 +45,29 @@ and the shared parameter overrides
 ([ADR-004](spec/adr/004-session-overlays.md)). Read-only kernel counters replace
 the old checkout-only history inference; see [ADR-003](spec/adr/003-boundary-counters.md).
 
+### Design choices
+
+**Design choices** change the settings a lesson declares as parameters before
+Run ([ADR-004](spec/adr/004-session-overlays.md), #95). Each control shows a
+one-line hint and the lesson default. **Apply choices and reload** loads the
+same packaged lesson with the choices as parameter overrides and starts again
+from t=0 with the same seed. Reset replays them, and the run header lists every
+choice that differs from its default, for example `idempotency=on · timeout=40`.
+Setting every choice back to its default gives the packaged run exactly.
+
+| Lessons | Choices (component or link field) |
+| --- | --- |
+| `retry-*` | `idempotency` (payments `idempotent`), `timeout` 1–60 (client → payments link) |
+| `saga-*` | `compensation` (orders `compensate`) |
+| `dual-write`, `outbox-*` | `outbox` (payments `outbox`), `consumer-idempotency` (notifications `idempotent`) |
+| `cascade-*` | `circuit-breaker` (payments `breaker`) |
+
+Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
+switch that distinguishes it: setting it to the paired lesson's value gives the
+paired architecture. The checks stay the loaded lesson's, so a check can FAIL
+under a choice; that shows the changed story, not a simulator error (#96).
+Compare drops the switch the pair compares and keeps the shared ones.
+
 ### Break the system
 
 **Break the system** adds student faults to a loaded lesson. Choose a fault, a

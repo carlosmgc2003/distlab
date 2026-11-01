@@ -78,7 +78,10 @@ when that runs against the drawn link. Component activity in
 nothing after it. The Break panel (`apps/web/src/BreakPanel.tsx`, `apps/web/src/break-faults.ts`)
 edits a draft overlay as UI state; only Apply, Load, and Compare send it, inside
 an ordinary `load`. It never validates or applies an overlay itself, and it is
-unavailable while a command is outstanding or the simulation runs.
+unavailable while a command is outstanding or the simulation runs. The Design
+choices panel (`apps/web/src/DesignChoicesPanel.tsx`, `apps/web/src/design-choices.ts`)
+follows the same rules for parameter overrides; it offers only the parameters a
+lesson's policy declares and never edits the seed or the lesson checks.
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns

@@ -1,4 +1,4 @@
-import type { CanonicalValue, FaultEffect, FaultPoint, LessonOverlayPolicy, ScheduledFault } from "@distlab/contracts";
+import type { CanonicalValue, FaultEffect, FaultPoint, LessonOverlayPolicy, LessonParameter, ScheduledFault } from "@distlab/contracts";
 
 const component = (id: string, model: string, kind = "service", configuration = {}) => ({ id, model: `commerce.${model}`, kind, version: "1.0.0", configuration });
 const link = (source: string, target: string, timeout = 20) => ({ source, target, policy: { requestLatency: 1, responseLatency: 1, jitter: 0, timeout, failureRate: 0 } });
@@ -153,5 +153,38 @@ export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPo
   const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
     : family === "retry" || family === "cqrs" ? ["crash"] : [];
-  return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: [] };
+  return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name) };
+}
+
+const flag = (key: string, value: boolean, component: string, field: string): LessonParameter =>
+  ({ key, domain: { type: "boolean", default: value }, targets: [{ kind: "component", component, field }] });
+
+/**
+ * Design choices (#95): the parameters a student may override, as ADR-004
+ * declares them. Each default is the lesson's packaged value, so the empty
+ * overlay is the packaged lesson. Every pair exposes the switch that
+ * distinguishes it; setting that switch to the paired lesson's value gives the
+ * paired architecture, while the packaged assertions stay this lesson's.
+ */
+function commerceParameters(name: CommerceLessonName): readonly LessonParameter[] {
+  switch (name) {
+    case "retry-unsafe":
+    case "retry-idempotent":
+      return [
+        flag("idempotency", name === "retry-idempotent", "payments", "idempotent"),
+        { key: "timeout", domain: { type: "integer", default: 20, minimum: 1, maximum: 60 }, targets: [{ kind: "link", source: "client", target: "payments", field: "timeout" }] },
+      ];
+    case "saga-uncompensated":
+    case "saga-compensated":
+      return [flag("compensation", name === "saga-compensated", "orders", "compensate")];
+    case "dual-write":
+    case "outbox-unsafe-consumer":
+    case "outbox-idempotent":
+      return [flag("outbox", name !== "dual-write", "payments", "outbox"), flag("consumer-idempotency", name === "outbox-idempotent", "notifications", "idempotent")];
+    case "cqrs-delayed":
+      return [];
+    case "cascade-unprotected":
+    case "cascade-breaker":
+      return [flag("circuit-breaker", name === "cascade-breaker", "payments", "breaker")];
+  }
 }

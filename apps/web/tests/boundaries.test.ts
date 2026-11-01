@@ -31,7 +31,7 @@ function imports(file: string): { path: string; names: string[]; typeOnly: boole
 test("main-thread import graph uses application contracts and data, never runtime mutation ports", () => {
   const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "DatabaseDefinition", "KeyValueDefinition", "ComponentId", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent", "Observation", "ObservationFilter", "EntityRef", "SimulationTime",
     // Session overlay data shapes (ADR-004). Types only: no validation or application code.
-    "SessionIdentity", "SessionOverlay", "LessonOverlayPolicy", "FaultRule", "FaultEffect", "FaultPoint", "ScheduledFault", "OverlayScheduledFault", "ScenarioDiagnostic"]);
+    "SessionIdentity", "SessionOverlay", "LessonOverlayPolicy", "LessonParameter", "ParameterOverride", "FaultRule", "FaultEffect", "FaultPoint", "ScheduledFault", "OverlayScheduledFault", "ScenarioDiagnostic"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;

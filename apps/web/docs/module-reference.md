@@ -197,8 +197,43 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   is available when no command is outstanding and the simulation is not
   running; otherwise the applied faults stay listed read-only. A draft that
   differs from the applied overlay says that applying it replaces the session.
-- **Presentation/runtime separation:** Apply hands the draft overlay to the
-  shell, which sends an ordinary `load`. Nothing here edits a running simulation.
+- **Presentation/runtime separation:** Apply hands the draft overlay, including
+  the Design choices draft, to the shell, which sends an ordinary `load`.
+  Nothing here edits a running simulation.
+
+## `design-choices.ts`
+
+[Source](../src/design-choices.ts)
+
+- **Responsibility:** the Design choices panel's pure model (ADR-004 parameters,
+  #95): presentation copy keyed by parameter key, draft values with defaults
+  filled in, overrides in the worker's normalized form (sorted by key, defaults
+  removed), integer field checks, the run-header text (`idempotency=on ·
+  timeout=40`), and placement of `/parameters` diagnostics on a choice.
+- **Imports and boundaries:** contract types only. Parameters, domains, and
+  defaults come from the lesson policy in the data-only scenario modules.
+- **State and protocol:** an integer field accepts only a whole number inside
+  the declared range; the worker checks the same domain again and answers with
+  `INVALID_OVERLAY` paths under `/parameters`.
+- **Presentation/runtime separation:** never resolves a target, never applies an
+  overlay, and never sends a command.
+
+## `DesignChoicesPanel.tsx`
+
+[Source](../src/DesignChoicesPanel.tsx)
+
+- **Responsibility:** render “Design choices”: one control per declared
+  parameter (checkbox, number, or list) with a one-line hint and the lesson
+  default, the applied summary, inline errors, and Apply.
+- **Imports and boundaries:** React, contract types, and `design-choices.ts`.
+- **State and protocol:** owns the text of integer fields and their errors. The
+  draft and open state belong to `App.tsx`. Editing is available when no command
+  is outstanding and the simulation is not running. Apply sends the whole draft
+  overlay, so unapplied faults in Break the system go with it, and the panel
+  says so. A lesson without parameters shows no panel.
+- **Presentation/runtime separation:** Apply hands the draft to the shell, which
+  sends an ordinary `load`. Lesson checks are not edited, so the panel notes
+  that a check can FAIL under applied choices.
 
 ## `SimulationControls.tsx`
 
