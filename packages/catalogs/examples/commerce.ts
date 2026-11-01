@@ -15,7 +15,7 @@ if (!commerceLessonNames.includes(name as CommerceLessonName) || flags.some(flag
   const timeline = () => {
     const history = session.inspect().history.observations;
     for (const event of history.slice(cursor)) {
-      if (event.type === "runtime.log" || /fault\.|network\.(request.sent|request.timedout|response.dropped)|message\.(published|delivered)|database.transaction.committed|external.effect.committed/.test(event.type)) {
+      if (event.type === "runtime.log" || /fault\.|network\.(request.sent|request.timedout|response.dropped)|message\.(published|delivered)|database.transaction.committed|external.effect.committed|kv\.expired/.test(event.type)) {
         console.log(`t=${event.time} ${event.source} ${event.type} ${JSON.stringify(event.data)}`);
       }
     }

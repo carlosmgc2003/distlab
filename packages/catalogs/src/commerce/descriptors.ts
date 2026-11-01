@@ -80,8 +80,33 @@ export const notifySenderDescriptor: ModelDescriptor = {
 
 export const messagingDescriptor: ModelDescriptor = { ...none, model: "commerce.messaging-provider", version: VERSION, kind: "external", operations: ["POST /send"] };
 
+/**
+ * Catalog serves prices cache-aside from its store; `invalidate` deletes the cached
+ * key when a price changes. Configuration `ttl` (cache lifetime) is lesson data.
+ */
+export const cacheCatalogDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.cache-catalog", version: VERSION, kind: "service", endpoints: ["GET /price", "POST /price"],
+  storage: { ...tables("prices", "price-history"), store: true }, options: [flag("invalidate")],
+};
+
+/** Carts live in the store with a TTL. Configuration `ttl` (cart lifetime) is lesson data. */
+export const cacheCartDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.cache-cart", version: VERSION, kind: "service", endpoints: ["POST /cart", "GET /cart"], storage: { store: true },
+};
+
+/** Checks the cart, prices the order through Catalog, and records the price it used. */
+export const cacheOrdersDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.cache-orders", version: VERSION, kind: "service", endpoints: ["POST /checkout"],
+  peers: [
+    { name: "cart", kinds: ["service"], calls: ["GET /cart"], default: "cart" },
+    { name: "catalog", kinds: ["service"], calls: ["GET /price"], default: "catalog" },
+  ],
+  storage: tables("orders"),
+};
+
 export const commerceDescriptors: readonly ModelDescriptor[] = [
   clientDescriptor, retryDescriptor, carrierDescriptor, sagaDescriptor, sagaResourceDescriptor, notificationDescriptor,
   outboxDescriptor, orderReadDescriptor, orderWriteDescriptor, dependencyDescriptor, riskDescriptor,
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
+  cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor,
 ];
