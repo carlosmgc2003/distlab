@@ -102,7 +102,10 @@ export function commerceComponents(read: AssessmentRead & { readonly stores: Can
       const entries = stores[id];
       const state: CanonicalValue = kind === "service" ? {
         ...service(read.components, read.databases, id) as Record<string, CanonicalValue>,
-        store: Array.isArray(entries) ? entries.filter(isRecord).map(entry => ({ key: entry.key ?? null, value: entry.value ?? null })) : [],
+        // A live entry's absolute expiry is a business fact (cache lifetime, cart TTL); generations stay host-only.
+        store: Array.isArray(entries) ? entries.filter(isRecord).map(entry => ({
+          key: entry.key ?? null, value: entry.value ?? null, ...(typeof entry.expiresAt === "number" ? { expiresAt: entry.expiresAt } : {}),
+        })) : [],
       } : kind === "client" ? { role: "commerce-client", observed: runtime?.state ?? {}, assertions }
         : { role: "external-visible", availability: runtime?.availability ?? "UNKNOWN", visible: runtime?.visible ?? {} };
       return { componentId: id, visibility: "student", state };

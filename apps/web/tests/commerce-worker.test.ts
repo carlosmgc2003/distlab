@@ -82,3 +82,32 @@ test("notifications: the student projection shows delivery attempts, dead letter
   // Message bodies stay out of the delivery projection; only delivery facts reach the student.
   assert.ok(!JSON.stringify(bus).includes('"body"'));
 });
+
+test("cache: the student projection shows live KV entries with their absolute expiry and the price Orders used", async () => {
+  const events: WorkerEvent[] = [];
+  const adapter = new WorkerAdapter(event => events.push(event));
+  const latest = (): RuntimeProjectionSet => {
+    const event = events.filter(e => "projection" in e).at(-1);
+    assert.ok(event && "projection" in event);
+    return event.projection;
+  };
+  const state = (id: string) => latest().components.find(c => c.componentId === id && c.visibility === "student")!.state as Record<string, CanonicalValue>;
+  await adapter.receive({ version: 1, requestId: "load", type: "load", scenario: commerceScenario("cache-stale-price") });
+  for (let i = 0; i < 200 && (state("cart").store as CanonicalValue[]).length < 2; i++) await adapter.receive({ version: 1, requestId: `step-${i}`, type: "step" });
+  // Each live entry carries its key, value, and absolute expiry; store generations stay host-only.
+  assert.deepEqual(state("cart").store, [
+    { key: "cart:cart-1", value: { cartId: "cart-1", sku: "sku-1", quantity: 1, expiresAt: 31 }, expiresAt: 31 },
+    { key: "cart:cart-2", value: { cartId: "cart-2", sku: "sku-1", quantity: 1, expiresAt: 31 }, expiresAt: 31 },
+  ]);
+  assert.deepEqual(state("catalog").store, [{ key: "price:sku-1", value: { sku: "sku-1", price: 1000, version: 1 }, expiresAt: 101 }]);
+  assert.ok(!JSON.stringify(latest().components.filter(c => c.visibility === "student")).includes("generation"));
+  await adapter.receive({ version: 1, requestId: "run", type: "run" });
+  assert.equal(latest().simulation.status, "COMPLETED");
+  // Expired entries are absent from state; the expiry itself stays in Recorded history.
+  assert.deepEqual([state("cart").store, state("catalog").store], [[], []]);
+  assert.deepEqual(latest().history.observations.filter(o => o.type === "kv.expired").map(o => [o.time, o.source]), [[31, "cart"], [31, "cart"], [101, "catalog"]]);
+  const order = (state("orders").committed as Record<string, Record<string, Record<string, Record<string, CanonicalValue>>>>).tables!.orders!["order-1"];
+  assert.deepEqual([order!.price, order!.priceSource], [1000, "cache"]);
+  // The cache pair offers only the switch that distinguishes it.
+  assert.deepEqual(scenarios.find(s => s.id === "cache-stale-price")!.policy.parameters.map(p => p.key), ["cache-invalidation"]);
+});

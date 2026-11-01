@@ -22,7 +22,8 @@ export function CommerceFacts({ projection, componentId }: { projection: Runtime
     {Object.entries(tables).map(([table, value]) => <div key={table}><strong>{table}</strong>
       {Object.keys(object(value)).length ? <ul>{Object.entries(object(value)).map(([key, row]) => <li key={key}><code>{key}</code> — {fields(row)}</li>)}</ul> : <p>No committed rows.</p>}
     </div>)}
-    {store.map((entry, i) => <p key={i}><strong>{String(object(entry).key)}</strong> — {fields(object(entry).value ?? null)}</p>)}
+    {store.map((entry, i) => <p key={i}><strong>{String(object(entry).key)}</strong> — {fields(object(entry).value ?? null)}
+      {typeof object(entry).expiresAt === "number" ? ` · expires at t=${String(object(entry).expiresAt)}` : ""}</p>)}
     {Object.entries(observed).map(([key, value]) => <p key={key}><strong>{key}</strong> — {fields(value)}</p>)}
     {state.role === "commerce-client" && !Object.keys(observed).length ? <p>No response observed yet.</p> : null}
     {state.role === "external-visible" ? <p>{String(state.availability)} · {fields(state.visible ?? {})}</p> : null}
