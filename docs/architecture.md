@@ -1561,3 +1561,51 @@ runtime task handles and provider counters are not student-visible.
 boundary counters, independent of history visibility. Reading them does not
 advance time or record observations. See [ADR-003](spec/adr/003-boundary-counters.md).
 Existing scheduling, reset, and deterministic replay guarantees are unchanged.
+
+## Session overlays on packaged lessons
+
+A student changes a loaded packaged lesson through a **session overlay**: student
+fault rules, student scheduled faults, and overrides of parameters that the lesson
+declares in its data-only overlay policy. The overlay travels as an optional
+field of the worker's `load` command. The worker validates it against the policy
+from its own catalog, then appends the rules and scheduled faults after the
+packaged ones. It replaces parameter values only at declared targets, and only
+then runs the unchanged ScenarioEngine. Overlays apply at Load, never during a
+run, and Reset replays the applied overlay. The applied document enters
+`RunInputs.scenario`, so `runId` identifies the overlaid run. The empty overlay
+reproduces the packaged lesson exactly. Kernel and runtime models are unaware of
+overlays, and dependency direction is unchanged. See
+[ADR-004](spec/adr/004-session-overlays.md).
+
+## Student architecture editor scope
+
+Students design by composing prefabricated catalog models, never by authoring
+handlers. Each catalog model declares a data-only **model descriptor**: its
+endpoints, consumers, operations, published destinations, **peers** (the
+components it calls, held in configuration with a default), storage needs, and
+behavior options. Scenario validation uses the descriptors to prove that every
+called endpoint is reachable, that every publication has a destination, and that
+each service owns the storage it needs. Wiring mistakes are therefore caught
+before a run instead of ending it. A student's design travels as **architecture
+edits** in the session overlay: filling lesson-owned **slots**, binding peers,
+attaching or detaching owned resources, and subscribing consumers, each allowed
+by the lesson's architecture allowance. The overlay records the resulting
+design, not the gestures, and the applied document's `runId` identifies it.
+Packaged documents, golden digests, the kernel, and the dependency direction are
+unchanged. Adding and removing components with student-chosen IDs is a later
+sandbox increment. See [ADR-005](spec/adr/005-architecture-editor.md).
+
+## Instructor scenario documents
+
+An instructor writes a scenario as a **scenario document**: a JSON envelope
+around an unchanged `ScenarioDefinition`. The envelope names an exact hosted
+catalog and carries plain-text presentation and an optional overlay policy.
+Invariants are assertions on that catalog's versioned predicates. A document
+never contains code. A student opens a local file, and the main thread sends
+its text unparsed in `load`. The worker parses it strictly, applies size and
+count limits, resolves the catalog from its own registry, and runs the unchanged
+ScenarioEngine. Only the scenario and the resolved catalog versions enter
+`RunInputs`, so `runId` identifies the run. A document digest identifies the
+file. YAML, URL import, and browser storage are deferred. Kernel and runtime
+models are unchanged, and dependency direction is unchanged. See
+[ADR-006](spec/adr/006-scenario-documents.md).

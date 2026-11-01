@@ -36,7 +36,7 @@ async function emitProjection(page: Page, status: RuntimeProjectionSet["simulati
     const projection: RuntimeProjectionSet = JSON.parse(serialized);
     const requestId = window.controlFixture.commands.at(-1)!.requestId;
     window.controlFixture.emit(type === "loaded"
-      ? { version: 1, type, requestId, projection }
+      ? { version: 1, type, requestId, projection, session: { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] } } }
       : { version: 1, type, ...(correlated ? { requestId } : {}), projection });
   }, { serialized: JSON.stringify(projection(status)), type, correlated });
 }

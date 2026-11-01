@@ -78,8 +78,7 @@ test("worker rejects malformed commands and unsupported scenarios without a runn
   await adapter.receive({ version: 2, requestId: "bad", type: "step" });
   assert.deepEqual(events.at(-1), { version: 1, requestId: "bad", type: "error", error: { code: "INVALID_WORKER_COMMAND", message: "Expected a version 1 worker command.", context: null } });
   await adapter.receive({ version: 1, requestId: "ok", type: "load", scenario: normalCheckout });
-  // Experiment edits of a packaged scenario are loadable; an unknown scenario name is not.
-  for (const scenario of [{ version: 9 }, { ...(normalCheckout as object), name: "unknown-scenario@1", seed: "changed" }]) {
+  for (const scenario of [{ version: 9 }, { ...(normalCheckout as object), seed: "changed" }]) {
     await adapter.receive({ version: 1, requestId: "load", type: "load", scenario });
     const failure = events.at(-1)!;
     assert.ok(failure.type === "error"); assert.equal(failure.error.code, "INVALID_SCENARIO");

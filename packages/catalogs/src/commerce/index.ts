@@ -5,7 +5,7 @@ import { carrierModel, sagaModel, sagaResourceModel } from "./saga.js";
 import { notificationModel, outboxModel } from "./outbox.js";
 import { orderReadModel, orderWriteModel } from "./cqrs.js";
 import { dependencyModel, riskModel } from "./circuit.js";
-export { commerceScenario, commerceLessonNames } from "./scenarios.js";
+export { commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export type { CommerceLessonName } from "./scenarios.js";
 
 const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel];

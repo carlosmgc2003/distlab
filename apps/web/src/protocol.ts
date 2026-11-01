@@ -1,4 +1,4 @@
-import type { ApplicationError, CanonicalValue, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import type { ApplicationError, CanonicalValue, RuntimeProjectionSet, SessionIdentity, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 
 type RecordValue = Record<string, unknown>;
 const record = (value: unknown): value is RecordValue => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -45,7 +45,7 @@ export function isWorkerCommand(value: unknown): value is WorkerCommand {
   if (!isCanonical(value) || !record(value) || value.version !== 1 || !text(value.requestId)) return false;
   const base = ["version", "requestId", "type"];
   switch (value.type) {
-    case "load": return keys(value, [...base, "scenario"]);
+    case "load": return keys(value, [...base, "scenario"], ["overlay"]);
     case "run": return keys(value, base, ["maxEvents"]) && (!Object.hasOwn(value, "maxEvents") || count(value.maxEvents));
     case "pause": case "step": case "reset": return keys(value, base);
     default: return false;
@@ -76,6 +76,14 @@ function isProjection(value: unknown): value is RuntimeProjectionSet {
     && text(item.componentId) && oneOf(item.visibility, ["student", "assessment", "host"]));
 }
 
+/** Shape only: the worker already validated and normalized the overlay it applied. */
+function isSession(value: unknown): value is SessionIdentity {
+  if (!record(value) || !keys(value, ["lesson", "seed", "overlay"]) || !text(value.lesson) || !text(value.seed)) return false;
+  const overlay = value.overlay;
+  return record(overlay) && keys(overlay, ["version", "faults", "scheduledFaults", "parameters"]) && overlay.version === 1
+    && [overlay.faults, overlay.scheduledFaults, overlay.parameters].every(items => Array.isArray(items) && items.every(record));
+}
+
 export function isWorkerEvent(value: unknown): value is WorkerEvent {
   if (!isCanonical(value) || !record(value) || value.version !== 1) return false;
   if (value.type === "projection.updated") return keys(value, ["version", "type", "projection"], ["requestId"])
@@ -84,7 +92,7 @@ export function isWorkerEvent(value: unknown): value is WorkerEvent {
   const base = ["version", "requestId", "type"];
   switch (value.type) {
     case "accepted": return keys(value, base);
-    case "loaded": return keys(value, [...base, "projection"]) && isProjection(value.projection);
+    case "loaded": return keys(value, [...base, "projection", "session"]) && isProjection(value.projection) && isSession(value.session);
     case "run.finished": return keys(value, [...base, "status"]) && oneOf(value.status, ["PAUSED", "COMPLETED", "FAILED"]);
     case "error": return keys(value, [...base, "error"]) && record(value.error) && keys(value.error, ["code", "message", "context"]) && text(value.error.code) && typeof value.error.message === "string";
     default: return false;

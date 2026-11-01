@@ -50,31 +50,26 @@ async function graphFit(page: Page): Promise<GraphFit> {
   });
 }
 
-/**
- * Asserts the whole fit on one settled frame. A canvas resize (closing the inspector, a tab
- * switch, a window resize) triggers a refit; during it React Flow briefly renders edge labels
- * without text, so nothing is clipped yet labels are missing. Checking only `clipped` in the
- * poll and the rest once afterwards could sample that transitional frame, so every condition is
- * retried together until a single measurement satisfies all of them.
- */
 async function expectGraphFits(page: Page, context: string) {
-  let fit: GraphFit | undefined;
-  await expect(async () => {
+  // Wait for one settled frame (every node and connection label drawn, nothing clipped) and
+  // assert on that same frame, so a relayout between two measurements cannot be read half-done.
+  let fit = await graphFit(page);
+  await expect.poll(async () => {
     fit = await graphFit(page);
-    const label = `graph fits the canvas at ${context} (canvas ${fit.width}×${fit.height})`;
-    expect(fit.clipped, label).toEqual([]);
-    expect(fit.nodes, label).toHaveLength(5);
-    for (const node of fit.nodes) {
-      expect(node.label, `${label}: ${node.id} keeps a readable name`).not.toBe("");
-      // Comfortable padding means the graph is not flush against the canvas edge.
-      expect(node.left, `${label}: ${node.id} left padding`).toBeGreaterThan(1);
-      expect(node.top, `${label}: ${node.id} top padding`).toBeGreaterThan(1);
-      expect(fit.width - node.right, `${label}: ${node.id} right padding`).toBeGreaterThan(1);
-      expect(fit.height - node.bottom, `${label}: ${node.id} bottom padding`).toBeGreaterThan(1);
-    }
-    expect(fit.labels.length, `${label}: connection labels`).toBeGreaterThanOrEqual(4);
-  }, { message: `graph fits the canvas at ${context}` }).toPass({ timeout: 5_000 });
-  return fit!;
+    return { clipped: fit.clipped, nodes: fit.nodes.length, labels: Math.min(fit.labels.length, 4) };
+  }, { message: `graph fits the canvas at ${context}` }).toEqual({ clipped: [], nodes: 7, labels: 4 });
+  const label = `graph fits the canvas at ${context} (canvas ${fit.width}×${fit.height})`;
+  expect(fit.nodes, label).toHaveLength(7);
+  for (const node of fit.nodes) {
+    expect(node.label, `${label}: ${node.id} keeps a readable name`).not.toBe("");
+    // Comfortable padding means the graph is not flush against the canvas edge.
+    expect(node.left, `${label}: ${node.id} left padding`).toBeGreaterThan(1);
+    expect(node.top, `${label}: ${node.id} top padding`).toBeGreaterThan(1);
+    expect(fit.width - node.right, `${label}: ${node.id} right padding`).toBeGreaterThan(1);
+    expect(fit.height - node.bottom, `${label}: ${node.id} bottom padding`).toBeGreaterThan(1);
+  }
+  expect(fit.labels.length, `${label}: connection labels`).toBeGreaterThanOrEqual(4);
+  return fit;
 }
 
 async function expectFittedDefault(page: Page, context: string, transform: string) {
@@ -87,7 +82,7 @@ async function loadScenario(page: Page, scenario: string) {
   await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
   await page.getByRole("button", { name: "Load scenario" }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-  await expect(page.locator(".react-flow__node")).toHaveCount(5);
+  await expect(page.locator(".react-flow__node")).toHaveCount(7);
 }
 
 test("the default view shows the whole checkout graph at the supported desktop baselines", async ({ page }) => {
@@ -169,4 +164,40 @@ test("Reset and a new scenario return to the fitted default view", async ({ page
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expectFittedDefault(page, "1534x897 after loading the other scenario", defaultView.transform);
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-after-reset.png") });
+});
+
+test("the legend covers no node at the default fit of any packaged lesson", async ({ page }) => {
+  test.setTimeout(240_000);
+  const { scenarios } = await import("../src/scenarios.ts");
+  expect(scenarios).toHaveLength(12);
+  for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(size);
+    for (const scenario of scenarios) {
+      await page.goto("/");
+      await page.getByLabel("Scenario", { exact: true }).selectOption(scenario.id);
+      await page.getByRole("button", { name: "Load scenario" }).click();
+      await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+      const legend = page.getByRole("region", { name: "Architecture legend" });
+      await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
+      const covered = async () => page.evaluate(() => {
+        const box = document.querySelector(".graph-legend")!.getBoundingClientRect();
+        return [...document.querySelectorAll(".react-flow__node")].filter(node => {
+          const rect = node.getBoundingClientRect();
+          return rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top;
+        }).map(node => node.getAttribute("data-id"));
+      });
+      await expect.poll(covered, { message: `${scenario.id} at ${size.width}×${size.height}: no node under the legend` }).toEqual([]);
+      // The legend shares the left edge with the zoom controls. A real gap, not a near miss,
+      // keeps every control clickable whatever the platform's font metrics.
+      const clearance = await page.evaluate(() => {
+        const box = document.querySelector(".graph-legend")!.getBoundingClientRect();
+        return document.querySelector(".react-flow__controls")!.getBoundingClientRect().top - box.bottom;
+      });
+      expect(clearance, `${scenario.id} at ${size.width}×${size.height}: legend clears the zoom controls`).toBeGreaterThanOrEqual(8);
+    }
+  }
+  // A reader can still fold the legend away, and the fit follows it.
+  await page.getByRole("button", { name: "Hide legend" }).click();
+  await expect(page.getByRole("button", { name: "Show legend" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("region", { name: "Architecture legend" }).getByRole("heading", { name: "Nodes" })).toBeHidden();
 });

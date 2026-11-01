@@ -57,7 +57,12 @@ modules may import application contracts, the host client, and the data-only
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command.
 The host accepts only the two packaged checkout documents and ten packaged
-commerce lessons. Simulation exposes explicit pending-event, processed-event,
+commerce lessons, each optionally with a session overlay that the lesson's
+data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`). The
+main thread never sends an applied document. Reset replays the applied overlay.
+Imported scenario documents follow `docs/spec/adr/006-scenario-documents.md`:
+the main thread sends the file text unparsed, and only the worker parses and
+validates it. Until that ADR is implemented the host accepts packaged lessons only. Simulation exposes explicit pending-event, processed-event,
 and random-draw counters; never infer these from arbitrary/redacted history.
 Commerce student projections expose committed business rows, KV metrics, client
 outcomes, declared external-visible state, delivery facts, and assertion results;
@@ -67,7 +72,14 @@ over records the worker already published: a host timer may move the playback
 cursor and paint a movement token on a measured link path, and it must not
 advance virtual time, record observations, or send worker commands. Narration
 reads stored observation fields only, and a redacted or omitted payload is never
-reconstructed. Review navigation in `apps/web/src/review-navigation.ts` decides
+reconstructed. A token travels from the record's origin to its destination even
+when that runs against the drawn link. Component activity in
+`apps/web/src/activity.ts` is pure: it reads records at or before the cursor and
+nothing after it. The Break panel (`apps/web/src/BreakPanel.tsx`, `apps/web/src/break-faults.ts`)
+edits a draft overlay as UI state; only Apply, Load, and Compare send it, inside
+an ordinary `load`. It never validates or applies an overlay itself, and it is
+unavailable while a command is outstanding or the simulation runs.
+Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns
 scroll and focus as requests for the presentation to apply. Presentation playback

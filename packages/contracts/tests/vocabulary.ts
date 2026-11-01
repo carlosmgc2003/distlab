@@ -5,11 +5,14 @@
 import type {
   BusMessage,
   ComponentId,
+  LessonOverlayPolicy,
   NetworkRequest,
   Observation,
   ScenarioDefinition,
   ScheduledEvent,
   ServiceDefinition,
+  SessionIdentity,
+  SessionOverlay,
   Simulation,
   SimulationTime,
   VirtualClock,
@@ -26,6 +29,9 @@ type Vocabulary = {
   NetworkRequest: NetworkRequest;
   ServiceDefinition: ServiceDefinition;
   ScenarioDefinition: ScenarioDefinition;
+  SessionOverlay: SessionOverlay;
+  SessionIdentity: SessionIdentity;
+  LessonOverlayPolicy: LessonOverlayPolicy;
 };
 
 declare const vocabulary: Vocabulary;

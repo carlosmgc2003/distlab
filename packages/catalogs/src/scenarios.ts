@@ -1,4 +1,4 @@
-import type { CanonicalValue } from "@distlab/contracts";
+import type { CanonicalValue, LessonOverlayPolicy } from "@distlab/contracts";
 
 // Illustrative logical milliseconds: expose async boundaries while keeping
 // success quick; the lost-response case still hits the 1000 ms network timeout.
@@ -76,3 +76,27 @@ export const checkoutLesson = {
     explanation: "The processor commits one authorization, but its response is dropped. Payments observes NETWORK_TIMEOUT and records UNKNOWN without an authorization ID.",
   },
 } as const;
+
+/**
+ * Lesson overlay policies (ADR-004): the faults a student may add before Run.
+ * Data only; the worker enforces the same values it reads from this module.
+ * Scheduled external availability is not offered: the checkout payments model
+ * treats a provider error as a handler failure, which ends the run.
+ */
+export function checkoutOverlayPolicy(variant: "normal" | "response-lost"): LessonOverlayPolicy {
+  return {
+    version: 1,
+    lesson: variant === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1",
+    faults: {
+      rules: [
+        { point: "network.request", effects: ["delay", "drop", "disconnect"] },
+        { point: "network.response", effects: ["delay", "drop"] },
+        { point: "message.delivery", effects: ["delay", "drop", "duplicate"] },
+        { point: "database.commit", effects: ["fail"] },
+      ],
+      scheduled: ["crash"],
+      maxEntries: 4,
+    },
+    parameters: [],
+  };
+}

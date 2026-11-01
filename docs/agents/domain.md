@@ -24,7 +24,10 @@ This is a **single-context** repo. There is no `CONTEXT-MAP.md`.
 │   ├── spec/adr/            ← architecture decisions
 │   │   ├── 001-deterministic-execution.md
 │   │   ├── 002-runtime-model-semantics.md
-│   │   └── 003-boundary-counters.md
+│   │   ├── 003-boundary-counters.md
+│   │   ├── 004-session-overlays.md
+│   │   ├── 005-architecture-editor.md
+│   │   └── 006-scenario-documents.md
 │   ├── glossary.md
 │   └── architecture.md
 ├── packages/

@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-09-19 |
-| Related issues | None |
+| Last updated | 2026-11-01 |
+| Related issues | #99 |
 
 ## Responsibility
 
@@ -21,6 +21,9 @@ This refines [architecture §§28–30](../architecture.md#28-scenario-engine) a
 fixes setup ordering and assertion boundaries. Runtime code follows
 [ADR-001](adr/001-deterministic-execution.md). YAML parsing, UI editing, grading
 rubrics, full snapshots, and mid-run input edits are outside this baseline.
+[ADR-006](adr/006-scenario-documents.md) wraps a `ScenarioDefinition` in a JSON
+scenario document for instructors. The engine still receives only the
+`scenario` member.
 There are no unresolved baseline decisions.
 
 | Requirement / source | Contract section | Acceptance criteria |
@@ -146,6 +149,21 @@ User data cannot carry handler closures or arbitrary event types. Client actions
 create their own roots; administrative actions may be untraced and use the
 event-start observation as cause. An interactive fault edit must produce a new
 scenario/run input, not mutate the current run outside its recorded action list.
+[ADR-004](adr/004-session-overlays.md) defines how a student overlay produces that
+input. The engine receives the applied document and is unaware of overlays.
+[ADR-005](adr/005-architecture-editor.md) adds architecture composition rules
+to validation (peers, interfaces, peer links, published destinations, and
+required storage), checked against catalog model descriptors (#109).
+
+An imported scenario document ([ADR-006](adr/006-scenario-documents.md)) reaches
+the engine the same way. A pure document layer in this package parses the text,
+checks the envelope and limits, and resolves the referenced catalog before the
+engine is constructed. It then validates the `scenario` member with the
+unchanged `validate`. That layer prefixes engine diagnostic paths with
+`/scenario`. Assertions in a document reference predicates of the resolved
+assessment catalog by ID. A predicate's version is fixed by the catalog version,
+and `RunInputs.modelVersions` records it as `id@version`. A document never
+supplies predicate code or expressions.
 
 Assessment runs once after initialization and after each complete kernel event
 boundary, including synchronous controlled continuations. It does not subscribe
@@ -210,6 +228,8 @@ events. Sink failure stops the run without recursive reporting or rollback.
 ## Explicit non-responsibilities
 
 - UI parsing/editing, live topology mutation, grading policy, or prescribed patterns.
+- Scenario document envelopes, text parsing, and catalog resolution. The ADR-006
+  document layer owns them and hands the engine a `ScenarioDefinition` input.
 - Kernel time advancement, random draws, or direct business-state mutation after setup.
 - Snapshot restore, rewind, and real external infrastructure.
 

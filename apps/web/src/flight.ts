@@ -1,6 +1,7 @@
 import type { CanonicalValue, Observation, SimulationTime } from "@distlab/contracts";
 import {
   bodyFields,
+  edgeDirection,
   edgeFor,
   externalChanges,
   movementOf,
@@ -39,7 +40,20 @@ export function flightDelayMs(pace: FlightPace): number {
   return flightPace(pace).delayMs;
 }
 
-export type FlightGlyph = "→" | "←" | "⇢" | "⊘" | "◷";
+/**
+ * Direction-neutral token text. The direction of travel is carried by a
+ * separate heading mark that turns with the link path, so no glyph can point
+ * against the motion.
+ */
+export type FlightGlyph = "REQ" | "RES" | "MSG" | "ACK" | "⊘" | "◷";
+/**
+ * The part of one hop a record paints. A network hop is two records: `*.sent`
+ * departs and stops mid-link, `*.delivered` or `*.received` arrives, so one
+ * request or response crosses its link once. A drop stops on the link past the
+ * middle. A MessageBus record is a whole trip on its own. A timeout travels
+ * nowhere: it is the caller's deadline, painted at the caller's end.
+ */
+export type FlightLeg = "departure" | "arrival" | "interrupted" | "trip" | "timeout";
 /** Outline shape carries the same meaning as the movement glyph, without color. */
 export type FlightShape = "solid" | "dashed" | "dotted";
 
@@ -72,6 +86,22 @@ export interface FlightStep {
   readonly shape: FlightShape;
   /** True for a recorded drop or timeout: the token stops on the link instead of arriving. */
   readonly interrupted: boolean;
+  readonly leg: FlightLeg;
+  /**
+   * Where the token starts and stops, as a share of the link measured from
+   * `from` toward `to`. Presentation only: no duration or latency is implied.
+   */
+  readonly span: { readonly start: number; readonly end: number };
+  /** True when the movement runs against the drawn link, from its target to its source. */
+  readonly reversed: boolean;
+  /** True when the token carries a heading mark: everything except a timeout travels. */
+  readonly heading: boolean;
+  /** Stored id that pairs the legs of one network hop, when the payload stores one. */
+  readonly hopId?: string;
+  /** For an arrival, drop, or timeout: the departure record of the same hop, when it is recorded earlier. */
+  readonly departure?: { readonly observationId: string; readonly sequence: number; readonly time: SimulationTime };
+  /** One sentence naming the part of the trip this record paints. */
+  readonly transit: string;
 }
 
 const PATTERNS: Readonly<Record<string, string>> = {
@@ -160,9 +190,54 @@ const RELATIONSHIP_LABELS = {
 function glyphOf(observation: Observation, kind: Movement["kind"]): FlightGlyph {
   if (observation.type === "network.request.timedout") return "◷";
   if (observation.type === "network.request.dropped" || observation.type === "network.response.dropped") return "⊘";
-  if (kind === "request") return "→";
-  if (kind === "response") return "←";
-  return "⇢";
+  if (observation.type === "message.acknowledged") return "ACK";
+  if (kind === "request") return "REQ";
+  if (kind === "response") return "RES";
+  return "MSG";
+}
+
+const DEPARTURE_TYPES = new Set(["network.request.sent", "network.response.sent"]);
+const ARRIVAL_TYPES = new Set(["network.request.delivered", "network.response.received"]);
+
+function legOf(observation: Observation): FlightLeg {
+  if (observation.type === "network.request.timedout") return "timeout";
+  if (INTERRUPTED_TYPES.has(observation.type)) return "interrupted";
+  if (DEPARTURE_TYPES.has(observation.type)) return "departure";
+  if (ARRIVAL_TYPES.has(observation.type)) return "arrival";
+  return "trip";
+}
+
+/** Share of the link each leg paints, from `from` toward `to`. Together the two legs of a hop cross it once. */
+const LEG_SPANS = {
+  departure: { start: 0, end: 50 },
+  arrival: { start: 50, end: 100 },
+  interrupted: { start: 50, end: 64 },
+  trip: { start: 0, end: 100 },
+  timeout: { start: 8, end: 8 },
+} as const satisfies Record<FlightLeg, { readonly start: number; readonly end: number }>;
+
+/** The stored id that pairs the legs of one network hop: the request and its response share it. */
+function hopKey(observation: Observation, kind: Movement["kind"]): string | undefined {
+  if (kind === "message") return undefined;
+  const requestId = storedScalar(observation, "requestId");
+  return requestId === undefined ? undefined : `${kind}:${requestId}`;
+}
+
+function transitText(leg: FlightLeg, movement: Movement, departure: FlightStep["departure"]): string {
+  const to = movement.to ?? "its destination";
+  const left = departure !== undefined ? ` that left at virtual time ${departure.time} (observation #${departure.sequence})` : "";
+  switch (leg) {
+    case "departure":
+      return `Departure: the token leaves ${movement.from} and waits mid-link. A later record states whether it arrived at ${to}.`;
+    case "arrival":
+      return `Arrival: the token${left ? ` from the departure${left}` : ""} reaches ${to}.`;
+    case "interrupted":
+      return `Stopped: the trip${left} ends on the link and never reaches ${to}.`;
+    case "timeout":
+      return `Deadline: ${movement.from} stops waiting for the request${left}. Nothing travels; this is the caller's own record.`;
+    case "trip":
+      return `Trip: the token travels from ${movement.from} to ${to} in one record.`;
+  }
 }
 
 function shapeOf(observation: Observation, relationship: MovementEdge["relationship"]): FlightShape {
@@ -172,9 +247,20 @@ function shapeOf(observation: Observation, relationship: MovementEdge["relations
   return "solid";
 }
 
-/** One recorded movement, ready to animate. Reads stored fields and presentation link identity only. */
-export function flightStep(observation: Observation, movement: Movement, edges: readonly MovementEdge[]): FlightStep {
+/**
+ * One recorded movement, ready to animate. Reads stored fields and presentation
+ * link identity only. `departure` names the earlier record of the same hop, when
+ * the caller has paired one.
+ */
+export function flightStep(
+  observation: Observation,
+  movement: Movement,
+  edges: readonly MovementEdge[],
+  departure?: FlightStep["departure"],
+): FlightStep {
   const edge = edgeFor(movement, edges);
+  const leg = legOf(observation);
+  const hopId = hopKey(observation, movement.kind);
   const relationship = movement.relationship;
   const from = movement.from;
   const to = movement.to;
@@ -202,6 +288,13 @@ export function flightStep(observation: Observation, movement: Movement, edges: 
     glyph: glyphOf(observation, movement.kind),
     shape: shapeOf(observation, relationship),
     interrupted: INTERRUPTED_TYPES.has(observation.type),
+    leg,
+    span: LEG_SPANS[leg],
+    reversed: edge !== undefined && edgeDirection(movement, edge) === "reverse",
+    heading: leg !== "timeout",
+    ...(hopId !== undefined ? { hopId } : {}),
+    ...(departure !== undefined && leg !== "departure" && leg !== "trip" ? { departure } : {}),
+    transit: transitText(leg, movement, leg !== "departure" && leg !== "trip" ? departure : undefined),
   };
 }
 
@@ -211,9 +304,19 @@ export function flightStep(observation: Observation, movement: Movement, edges: 
  */
 export function flightSteps(observations: readonly Observation[], edges: readonly MovementEdge[]): readonly FlightStep[] {
   const steps: FlightStep[] = [];
+  // Departures seen so far, by hop id. Only earlier records pair: nothing is read ahead of a step.
+  const departures = new Map<string, NonNullable<FlightStep["departure"]>>();
   for (const observation of orderObservations(observations)) {
     const movement = movementOf(observation);
-    if (movement) steps.push(flightStep(observation, movement, edges));
+    if (!movement) continue;
+    const hop = hopKey(observation, movement.kind);
+    // An arrival, a drop, and a timeout share the stored request id of the departure they end.
+    const departure = hop !== undefined ? departures.get(hop) : undefined;
+    const step = flightStep(observation, movement, edges, departure);
+    if (step.leg === "departure" && hop !== undefined) {
+      departures.set(hop, { observationId: step.observationId, sequence: step.sequence, time: step.time });
+    }
+    steps.push(step);
   }
   return steps;
 }
@@ -227,6 +330,11 @@ export function flightIndexOf(steps: readonly FlightStep[], observationId: strin
 export interface FlightPosition {
   readonly text: string;
   readonly detail: string;
+  /**
+   * Set when virtual time advanced since the previous movement. It names the two
+   * recorded times only: playback never paints the interval as a duration.
+   */
+  readonly jump?: string;
 }
 
 /** Stated once for the playback cursor. Milestone position, virtual time, and the record's own facts. */
@@ -234,11 +342,22 @@ export function flightPosition(steps: readonly FlightStep[], cursor: number): Fl
   const total = steps.length;
   if (total === 0) return { text: "No recorded movements to replay.", detail: "Run the scenario, or open Recorded history and select a record." };
   if (cursor < 0) return { text: `0 of ${total} recorded movements. Nothing selected.`, detail: boundaryDetail(steps) };
-  const step = steps[Math.min(cursor, total - 1)]!;
+  const index = Math.min(cursor, total - 1);
+  const step = steps[index]!;
+  const jump = flightJump(steps, index);
   return {
-    text: `Movement ${cursor + 1} of ${total} · virtual time ${step.time} · observation #${step.sequence}.`,
-    detail: cursor >= total - 1 ? "At the last recorded movement. Playback waits for the run to record more." : boundaryDetail(steps),
+    text: `Movement ${index + 1} of ${total} · virtual time ${step.time} · observation #${step.sequence}.`,
+    detail: index >= total - 1 ? "At the last recorded movement. Playback waits for the run to record more." : boundaryDetail(steps),
+    ...(jump !== undefined ? { jump } : {}),
   };
+}
+
+/** The virtual-time jump into this movement from the previous one, or undefined when time did not advance. */
+export function flightJump(steps: readonly FlightStep[], index: number): string | undefined {
+  const step = steps[index];
+  const previous = index > 0 ? steps[index - 1] : undefined;
+  if (step === undefined || previous === undefined || step.time <= previous.time) return undefined;
+  return `Virtual time jumped t=${previous.time} → t=${step.time} with no recorded movement in between.`;
 }
 
 /** Recorded virtual-time boundaries of the movement list. No duration or latency is implied. */
@@ -357,15 +476,15 @@ export interface FlightLegendEntry {
 
 /** Legend of the tokens painted on the architecture graph. Text and shape carry the meaning. */
 export const FLIGHT_LEGEND: readonly FlightLegendEntry[] = [
-  { glyph: "→", shape: "solid", label: "Token: request", detail: "travelling from the caller to the callee" },
-  { glyph: "←", shape: "solid", label: "Token: response", detail: "travelling from the callee back to the caller" },
-  { glyph: "⇢", shape: "dashed", label: "Token: message", detail: "travelling through the MessageBus to or from a consumer" },
-  { glyph: "⊘", shape: "dotted", label: "Token: dropped", detail: "the record says this movement never arrived" },
-  { glyph: "◷", shape: "dotted", label: "Token: timed out", detail: "the record says the caller's deadline passed" },
+  { glyph: "REQ", shape: "solid", label: "Token: request", detail: "leaves the caller when sent, waits mid-link, and reaches the callee when delivered; its arrowhead points the way it travels" },
+  { glyph: "RES", shape: "solid", label: "Token: response", detail: "leaves the callee when sent and reaches the caller when received; its arrowhead points the way it travels" },
+  { glyph: "MSG", shape: "dashed", label: "Token: message", detail: "travels from the publisher to the MessageBus, or from the MessageBus to a consumer" },
+  { glyph: "ACK", shape: "dashed", label: "Token: acknowledgement", detail: "travels from the consumer back to the MessageBus" },
+  { glyph: "⊘", shape: "dotted", label: "Token: dropped", detail: "the record says this movement never arrived; the token stops on the link" },
+  { glyph: "◷", shape: "dotted", label: "Token: timed out", detail: "the record says the caller's deadline passed; the token rests at the caller" },
 ];
 
-/** Where a token stops, as a share of the link, read from the stored record type. */
+/** Where a token stops, as a share of the link measured from the movement's own origin. */
 export function flightStop(step: FlightStep): string {
-  if (!step.interrupted) return "100%";
-  return step.glyph === "◷" ? "78%" : "52%";
+  return `${step.span.end}%`;
 }

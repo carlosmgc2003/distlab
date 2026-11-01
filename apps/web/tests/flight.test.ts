@@ -10,6 +10,7 @@ import {
   flightDelayMs,
   flightFacts,
   flightIndexOf,
+  flightJump,
   flightPace,
   flightPosition,
   flightSteps,
@@ -24,6 +25,7 @@ import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import type { MovementEdge } from "../src/records.ts";
+import { edgeDirection, movementOf } from "../src/records.ts";
 
 const checkoutEdges: readonly MovementEdge[] = [
   { id: "request:customer-app:orders:0", source: "customer-app", target: "orders", relationship: "request" },
@@ -85,7 +87,8 @@ test("a step names its link, its route, and only stored fields", async () => {
   assert.equal(request.to, "orders");
   assert.equal(request.relationship, "request");
   assert.equal(request.route, "customer-app → orders · Request link");
-  assert.equal(request.glyph, "→");
+  assert.equal(request.glyph, "REQ");
+  assert.equal(request.leg, "departure");
   assert.equal(request.shape, "solid");
   assert.equal(request.interrupted, false);
   assert.equal(request.announcement, "Request sent from customer-app to orders at virtual time 0.");
@@ -99,7 +102,7 @@ test("a step names its link, its route, and only stored fields", async () => {
   const published = steps.find(step => step.headline === "Message published");
   assert.ok(published);
   assert.equal(published.relationship, "publication");
-  assert.equal(published.glyph, "⇢");
+  assert.equal(published.glyph, "MSG");
   assert.equal(published.shape, "dotted");
   assert.equal(published.route, "orders → OrderCreated · MessageBus publication");
   assert.equal(published.facts.find(fact => fact.label === "Message type")?.value, "OrderCreated");
@@ -120,14 +123,22 @@ test("a dropped response and a timeout are interrupted movements that stop on th
   assert.equal(dropped.glyph, "⊘");
   assert.equal(dropped.shape, "dotted");
   assert.equal(dropped.facts.find(fact => fact.label === "Stored reason")?.value, "fault");
-  assert.equal(flightStop(dropped), "52%");
+  // The drop continues the departure that stopped mid-link, then stops short of payments.
+  assert.equal(dropped.leg, "interrupted");
+  assert.deepEqual(dropped.span, { start: 50, end: 64 });
+  assert.equal(flightStop(dropped), "64%");
 
   const timedout = steps.find(step => step.headline === "Request timed out");
   assert.ok(timedout);
   assert.equal(timedout.interrupted, true);
   assert.equal(timedout.glyph, "◷");
-  assert.equal(flightStop(timedout), "78%");
-  assert.equal(flightStop(steps.find(step => step.headline === "Request sent")!), "100%");
+  // A timeout travels nowhere: it rests at the caller with no heading mark.
+  assert.equal(timedout.leg, "timeout");
+  assert.equal(timedout.heading, false);
+  assert.equal(timedout.from, "payments");
+  assert.equal(flightStop(timedout), "8%");
+  assert.equal(flightStop(steps.find(step => step.headline === "Request sent")!), "50%");
+  assert.equal(flightStop(steps.find(step => step.headline === "Request delivered")!), "100%");
   // A drop is stated; the pattern note asks a question rather than claiming an outcome.
   assert.match(dropped.pattern, /the caller do next/);
   assert.match(timedout.pattern, /what does the caller now know/i);
@@ -198,9 +209,11 @@ test("the token follows the measured link path and stops where the record says",
   const steps = flightSteps(projection.history.observations, checkoutEdges);
   const style = flightTokenStyle(steps[0]!, "M 0 0 L 10 10", 900);
   assert.equal(style["--flight-path"], 'path("M 0 0 L 10 10")');
-  assert.equal(style["--flight-end"], "100%");
+  assert.equal(style["--flight-start"], "0%");
+  assert.equal(style["--flight-end"], "50%");
+  assert.equal(style["--flight-rotate"], "auto");
   assert.equal(style["--flight-duration"], "900ms");
-  assert.deepEqual(Object.keys(style).sort(), ["--flight-duration", "--flight-end", "--flight-path"]);
+  assert.deepEqual(Object.keys(style).sort(), ["--flight-duration", "--flight-end", "--flight-path", "--flight-rotate", "--flight-start"]);
   const dropped = steps.find(step => step.interrupted)!;
   assert.equal(flightTokenStyle(dropped, "M 0 0", 0)["--flight-duration"], "1ms");
 });
@@ -263,4 +276,126 @@ test("recorded virtual-time boundaries are a list of times, not durations", asyn
   assert.equal(flightIndexOf(steps, steps[4]!.observationId), 4);
   assert.equal(flightIndexOf(steps, "not-a-record"), -1);
   assert.equal(flightIndexOf(steps, null), -1);
+});
+
+/** The link a step travels, as the edge list the architecture draws. */
+function reversedEdges(edges: readonly MovementEdge[]): MovementEdge[] {
+  return edges.map(edge => ({ ...edge, source: edge.target, target: edge.source }));
+}
+
+test("direction: every movement runs from its recorded origin, whichever way the link is drawn", () => {
+  const records = [
+    observation({ id: "q", time: 0, sequence: 1, type: "network.request.sent", source: "customer-app", target: "orders", data: { requestId: "r1" } }),
+    observation({ id: "s", time: 1, sequence: 2, type: "network.response.sent", source: "orders", target: "customer-app", data: { requestId: "r1" } }),
+    observation({ id: "p", time: 1, sequence: 3, type: "message.published", source: "orders", data: { destination: "OrderCreated" } }),
+    observation({ id: "d", time: 2, sequence: 4, type: "message.delivered", source: "payments", data: { consumer: "payments", deliveryId: "d1" },
+      entityRefs: [{ kind: "destination", id: "OrderCreated" }] }),
+    observation({ id: "a", time: 3, sequence: 5, type: "message.acknowledged", source: "payments", data: { consumer: "payments", deliveryId: "d1" },
+      entityRefs: [{ kind: "destination", id: "OrderCreated" }] }),
+  ];
+  const expected = {
+    q: ["customer-app", "orders"], s: ["orders", "customer-app"], p: ["orders", "OrderCreated"],
+    d: ["OrderCreated", "payments"], a: ["payments", "OrderCreated"],
+  } as const;
+  // Against the drawn links: a response and an acknowledgement run against their link.
+  const forward = flightSteps(records, checkoutEdges);
+  assert.deepEqual(Object.fromEntries(forward.map(step => [step.observationId, [step.from, step.to]])), expected);
+  assert.deepEqual(Object.fromEntries(forward.map(step => [step.observationId, step.reversed])), { q: false, s: true, p: false, d: false, a: true });
+  // Against links drawn the other way, the same records resolve the same origin and flip the direction.
+  const backward = flightSteps(records, reversedEdges(checkoutEdges));
+  assert.deepEqual(Object.fromEntries(backward.map(step => [step.observationId, [step.from, step.to]])), expected);
+  assert.deepEqual(Object.fromEntries(backward.map(step => [step.observationId, step.reversed])), { q: true, s: false, p: true, d: true, a: false });
+  // Invariant: the token leaves the link's source when forward and the link's target when reversed.
+  for (const [steps, edges] of [[forward, checkoutEdges], [backward, reversedEdges(checkoutEdges)]] as const) {
+    for (const step of steps) {
+      const edge = edges.find(item => item.id === step.edgeId);
+      assert.ok(edge, `${step.observationId} names the link it travels`);
+      assert.equal(step.reversed ? edge.target : edge.source, step.from);
+    }
+  }
+  // The acknowledgement leaves the consumer and travels back to the MessageBus.
+  const ack = movementOf(records[4]!)!;
+  assert.equal(ack.from, "payments");
+  assert.equal(ack.to, "OrderCreated");
+  assert.equal(ack.text, "Message acknowledged by payments on OrderCreated at virtual time 3.");
+  assert.equal(edgeDirection(ack, checkoutEdges[2]!), "reverse");
+});
+
+test("a movement that runs against its link animates from the far end and turns its heading", async () => {
+  const projection = await run(0);
+  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const sent = steps.find(step => step.headline === "Response sent" && step.from === "orders")!;
+  const received = steps.find(step => step.headline === "Response received" && step.to === "customer-app")!;
+  assert.equal(sent.reversed, true);
+  assert.equal(received.reversed, true);
+  // The SVG path runs customer-app → orders, so the response starts at 100% and ends at 0%.
+  const leaving = flightTokenStyle(sent, "M 0 0 L 10 0", 500);
+  const arriving = flightTokenStyle(received, "M 0 0 L 10 0", 500);
+  assert.deepEqual([leaving["--flight-start"], leaving["--flight-end"]], ["100%", "50%"]);
+  assert.deepEqual([arriving["--flight-start"], arriving["--flight-end"]], ["50%", "0%"]);
+  assert.equal(leaving["--flight-rotate"], "auto 180deg");
+  // A forward request keeps the path's own tangent.
+  const request = steps.find(step => step.headline === "Request sent")!;
+  assert.equal(flightTokenStyle(request, "M 0 0", 500)["--flight-rotate"], "auto");
+  // An acknowledgement runs against the subscription link: from payments back to the topic.
+  const ack = steps.find(step => step.headline === "Message acknowledged")!;
+  assert.equal(ack.glyph, "ACK");
+  assert.deepEqual([ack.from, ack.to, ack.reversed], ["payments", "OrderCreated", true]);
+  assert.deepEqual([flightTokenStyle(ack, "M 0 0", 500)["--flight-start"], flightTokenStyle(ack, "M 0 0", 500)["--flight-end"]], ["100%", "0%"]);
+  // Every glyph is direction-neutral: the heading mark, not the text, carries direction.
+  assert.ok(steps.every(step => !/[→←⇢]/.test(step.glyph)));
+});
+
+test("hop pairing: a sent leg and its delivered leg cross the link once, one record per cursor step", async () => {
+  for (const index of [0, 1]) {
+    const projection = await run(index);
+    const steps = flightSteps(projection.history.observations, checkoutEdges);
+    // The cursor stays one step per stored observation, so history selection and playback agree.
+    assert.equal(new Set(steps.map(step => step.observationId)).size, steps.length);
+    const hops = new Map<string, typeof steps[number][]>();
+    for (const step of steps) if (step.hopId !== undefined) hops.set(step.hopId, [...(hops.get(step.hopId) ?? []), step]);
+    assert.ok(hops.size >= 4);
+    for (const [hopId, legs] of hops) {
+      const departure = legs.find(leg => leg.leg === "departure");
+      assert.ok(departure, `${hopId} departs`);
+      const ends = legs.filter(leg => leg.leg === "arrival" || leg.leg === "interrupted");
+      for (const end of ends) {
+        // An arrival names the earlier departure it completes, and starts where the departure stopped.
+        assert.equal(end.departure?.observationId, departure.observationId);
+        assert.ok(end.sequence > departure.sequence);
+        assert.equal(end.span.start, departure.span.end);
+      }
+      const arrival = legs.find(leg => leg.leg === "arrival");
+      if (arrival) {
+        // Together the two legs cover the link exactly once.
+        assert.deepEqual([departure.span.start, departure.span.end, arrival.span.start, arrival.span.end], [0, 50, 50, 100]);
+        assert.match(arrival.transit, new RegExp(`left at virtual time ${departure.time} \\(observation #${departure.sequence}\\)`));
+      }
+    }
+  }
+  // A drop and a timeout on the lost-response run close their own hops.
+  const lost = flightSteps((await run(1)).history.observations, checkoutEdges);
+  const timeout = lost.find(step => step.leg === "timeout")!;
+  assert.equal(timeout.departure?.observationId, lost.find(step => step.hopId === timeout.hopId && step.leg === "departure")?.observationId);
+  // A record with a redacted payload stores no request id and pairs with nothing.
+  const redacted = flightSteps([
+    observation({ id: "x", time: 0, sequence: 1, type: "network.request.sent", source: "customer-app", target: "orders", data: { redacted: true } }),
+    observation({ id: "y", time: 5, sequence: 2, type: "network.request.delivered", source: "customer-app", target: "orders", data: { redacted: true } }),
+  ], checkoutEdges);
+  assert.equal(redacted[1]!.departure, undefined);
+  assert.equal(redacted[1]!.hopId, undefined);
+  // The span still comes from the stored type: the arrival leg still finishes the trip.
+  assert.deepEqual(redacted.map(step => step.span), [{ start: 0, end: 50 }, { start: 50, end: 100 }]);
+});
+
+test("a virtual-time jump names the two recorded times and nothing else", async () => {
+  const steps = flightSteps((await run(1)).history.observations, checkoutEdges);
+  const timeout = steps.findIndex(step => step.leg === "timeout");
+  assert.equal(flightJump(steps, timeout), "Virtual time jumped t=55 → t=1025 with no recorded movement in between.");
+  assert.equal(flightPosition(steps, timeout).jump, flightJump(steps, timeout));
+  // No jump at the first movement or between movements at the same virtual time.
+  assert.equal(flightJump(steps, 0), undefined);
+  const same = steps.findIndex((step, index) => index > 0 && step.time === steps[index - 1]!.time);
+  assert.equal(flightJump(steps, same), undefined);
+  assert.equal(flightPosition(steps, same).jump, undefined);
 });
