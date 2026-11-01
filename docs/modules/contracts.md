@@ -31,7 +31,8 @@ runtime models. Generator examples must run as controlled tasks in the simulator
 
 **Exported API:** The root barrel re-exports the kernel barrel, network,
 message bus, database, KV store, faults, logging, service/client/external
-contracts, scenario contracts, application protocol, and MVP catalog contracts.
+contracts, scenario contracts, application protocol, session overlay shapes,
+model descriptors, and MVP catalog contracts.
 It also exports `ObservationTypes` and `KnownObservationType` explicitly.
 
 **Invariants:** Importing the entry point must not load runtime implementations,
@@ -240,6 +241,29 @@ are supplied by normalization, not this module. Routing states describe records;
 
 **Dependency direction:** Kernel values, identities, operations, and time.
 Service handlers and scenario architecture depend on these broker contracts.
+
+## Source module: `model.ts`
+
+[Source](../../packages/contracts/src/model.ts) ·
+[Specification](../spec/adr/005-architecture-editor.md#contract-types).
+
+**Exported API:** `ModelDescriptor`, `ModelPeer`, `ModelOption`, and
+`ModelStorage`. A descriptor is the data-only interface of one catalog model
+version: its kind, actions, endpoints, consumers, operations, published
+destinations, peers, storage needs, and behavior options.
+
+**Invariants:** A peer's `name` is also the `ComponentInstance.configuration`
+field that holds the bound component ID; when the field is absent the peer is
+bound to `default`. A peer lists the component kinds it may bind to and the
+endpoints (service) or operations (external) the model calls on it. An option's
+`key` is also its configuration field, and its domain reuses
+`LessonParameterDomain`. Peer names and option keys of one model are disjoint.
+Peers are not kernel ports. Descriptors contain no code.
+
+**Dependency direction:** Kernel component IDs, database table definitions,
+component kinds, and overlay parameter domains. `ScenarioModel` in
+`@distlab/scenario` extends `ModelDescriptor`; catalogs publish descriptors in
+data-only modules that the browser main thread may import.
 
 ## Source module: `mvp-catalog.ts`
 

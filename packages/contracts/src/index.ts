@@ -20,6 +20,7 @@ export * from "./external.js";
 export * from "./scenario.js";
 export * from "./application.js";
 export * from "./overlay.js";
+export * from "./model.js";
 export * from "./mvp-catalog.js";
 export {
   ObservationTypes,
