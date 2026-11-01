@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
+import { commerceAssessment, commerceCatalog, commerceChecks, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
 import type { CommerceLessonName } from "@distlab/catalogs";
 import { compareExports, DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 
@@ -47,5 +47,15 @@ if (!commerceLessonNames.includes(name as CommerceLessonName) || flags.some(flag
     if (!flags.includes("--json")) console.log(`Replay verified: ${result.digest}`);
   }
   console.log(JSON.stringify(flags.includes("--json") ? result : { status: result.status, time: result.time, state: result.state, results: result.results, digest: result.digest }, null, 2));
-  if (result.status === "FAILED" || result.results.some(r => r.status === "FAIL")) process.exitCode = 1;
+  // A violated business invariant is the lesson's finding, not a runner failure.
+  // The runner fails only when the run fails or the lesson did not reproduce its setup.
+  const checks = commerceChecks(name as CommerceLessonName);
+  if (!flags.includes("--json")) {
+    for (const r of result.results) {
+      const check = checks.find(item => item.id === r.id);
+      const verdict = check?.kind === "invariant" ? (r.status === "PASS" ? "HOLDS" : r.status === "FAIL" ? "VIOLATED" : r.status) : r.status === "PASS" ? "reproduced" : r.status === "FAIL" ? "not reproduced" : r.status;
+      console.log(`${check?.kind === "invariant" ? "Invariant" : "Expectation"} ${verdict}: ${check?.label ?? r.id}`);
+    }
+  }
+  if (result.status === "FAILED" || result.results.some(r => r.status === "FAIL" && checks.find(item => item.id === r.id)?.kind !== "invariant")) process.exitCode = 1;
 }

@@ -279,7 +279,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
           {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
           {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
           {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
-        {commerce ? <CommerceState projection={projection} /> : null}
+        {loadedChoice?.family === "commerce" ? <CommerceState projection={projection} checks={loadedChoice.checks} onShowEvidence={showEvidence} /> : null}
       </section>
       <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
         aria-labelledby="tab-history" hidden={tab !== "history"}>

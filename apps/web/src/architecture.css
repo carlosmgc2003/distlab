@@ -476,6 +476,20 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .commerce-state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
 .commerce-state-grid > section { padding: 1rem; border: 1px solid var(--border-subtle, #dbe2ea); border-radius: 8px; }
 .commerce-facts { overflow-wrap: anywhere; font-size: .875rem; line-height: 1.5; }
+/* Lesson checks (#96): invariants lead; the setup group is de-emphasised. */
+.lesson-checks ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.lesson-checks > p { margin: 0 0 8px; color: var(--text-secondary); font-size: .85rem; }
+.lesson-checks.is-secondary { margin-top: 1rem; font-size: .875rem; }
+.lesson-checks.is-secondary h4 { color: var(--text-secondary); }
+.lesson-check { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 10px; border: 1px solid var(--border-subtle); border-left-width: 4px; border-radius: 6px; overflow-wrap: anywhere; }
+.lesson-check button { margin-left: auto; min-height: 32px; }
+.lesson-check.is-violated { border-color: var(--status-error); background: var(--status-error-bg); }
+.lesson-check.is-violated .lesson-check-verdict { color: var(--status-error); }
+.lesson-check.is-holds { border-left-color: var(--status-approved); }
+.lesson-check.is-holds .lesson-check-verdict { color: var(--status-approved); }
+.lesson-check.is-not-reproduced { border-left-color: var(--status-warning); background: var(--status-warning-bg); }
+.lesson-checks.is-secondary .lesson-check { border-left-color: var(--border-subtle); background: none; }
+.lesson-checks.is-secondary .lesson-check.is-not-reproduced { border-left-color: var(--status-warning); background: var(--status-warning-bg); }
 .commerce-facts ul { padding-left: 1.25rem; }
 .learning-prompt button { white-space: normal; }
 .learning-prompt strong { font-size: .95rem; }

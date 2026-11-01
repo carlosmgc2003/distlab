@@ -70,6 +70,19 @@ reader needs before changing code, and the vocabulary used when discussing them.
   of it in one `load`. A parameter's default is the packaged value, and a
   paired lesson's distinguishing switch is a declared parameter.
 
+## Lesson checks
+
+- A commerce lesson's packaged assertions are its **lesson checks**. Each is a
+  **business invariant** or a **scenario expectation** (#96); the data-only
+  classification is `commerceChecks` beside the documents.
+- A business invariant is stated identically in every lesson of a family, so its
+  verdict reads HOLDS (PASS) or VIOLATED (FAIL) for any design, including a
+  student's design choices. An unsafe lesson's finding is a VIOLATED invariant.
+- A scenario expectation confirms that the run reproduced the lesson's setup
+  ("Lesson setup reproduced"). It may differ between the lessons of a pair.
+- Students never see a bare PASS or FAIL. `apps/web/src/lesson-checks.ts` maps
+  stored verdicts only; it never re-evaluates a predicate.
+
 ## Architecture editor
 
 - Students compose catalog models; they never author handlers. See

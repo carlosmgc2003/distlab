@@ -26,13 +26,24 @@ scheduler event, not one whole business operation. All times below are virtual
 milliseconds. No wall-clock sleeps or real infrastructure are involved.
 
 Run paired names to compare equivalent workloads, fault schedules, and seeds.
-A PASS in an unsafe lesson means the **expected failure was observed**, not that
-the architecture is safe. Assertion evidence includes the relevant database rows.
+Each lesson check is a **business invariant** or a **scenario expectation**
+(#96). A business invariant is a property the system must keep whatever its
+design, and the lessons of a family state it identically: it reads **HOLDS**
+when its assertion passes and **VIOLATED** when it fails. An unsafe lesson's
+finding is therefore a VIOLATED invariant, and Compare shows VIOLATED → HOLDS
+for the same invariant. A scenario expectation confirms that the run reproduced
+the lesson's setup and may differ within a pair. The runner prints both groups
+and exits non-zero only when the run fails or an expectation is not reproduced.
+Assertion evidence includes the relevant database rows.
 
 In the browser, run `npm run dev`, choose a lesson in **Scenario**, and select
 **Load scenario**. Use **Step**, **Run**, and **Reset** as with checkout. The
 Architecture tab shows committed service state, client outcomes, KV metrics,
 and lesson checks below the graph; selecting a component also shows its facts.
+Business invariants come first, marked HOLDS or VIOLATED in words and a symbol
+as well as colour. The scenario expectations follow under **Lesson setup
+reproduced**. Each settled check has **Show evidence**, which opens Recorded
+history at its `scenario.assertion.evaluated` record.
 **Recorded history → Story** includes business logs such as compensation and
 breaker transitions, as well as network, DB, and fault milestones. Diagram and
 Table presentations select the same underlying observations.
@@ -64,8 +75,11 @@ Setting every choice back to its default gives the packaged run exactly.
 
 Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
 switch that distinguishes it: setting it to the paired lesson's value gives the
-paired architecture. The checks stay the loaded lesson's, so a check can FAIL
-under a choice; that shows the changed story, not a simulator error (#96).
+paired architecture. The checks stay the loaded lesson's. Business invariants
+report what the choice achieves: switching idempotency on in `retry-unsafe` makes
+"A retried payment request charges the order once" HOLD. A scenario expectation
+can read "not reproduced" under a choice; that shows the changed story, not a
+simulator error (#96).
 Compare drops the switch the pair compares and keeps the shared ones.
 
 ### Break the system
@@ -94,8 +108,9 @@ payment service already script their own crash and restart, so a student crash
 there would end the run instead of telling a story. The checkout payments model
 treats a provider error as a handler failure, so checkout does not offer
 external availability. A catalog test runs every offered kind to completion.
-Packaged lesson checks still run against the changed experiment and may FAIL:
-that means the faults changed the story, not that the simulator failed.
+Packaged lesson checks still run against the changed experiment. A business
+invariant may become VIOLATED and a scenario expectation "not reproduced": that
+means the faults changed the story, not that the simulator failed.
 
 ## 1. Timeout, retry, and idempotency
 
@@ -328,5 +343,6 @@ randomness, fetch, or external infrastructure.
 
 All documents carry explicit state/count or metric assertions. Tests validate each document,
 exercise the behavioral invariants, and compare complete fresh, reset, and stepped
-exports. Scenario pairs share their seed, workload, and faults; only the relevant
-policy configuration and expected results differ.
+exports. Scenario pairs share their seed, workload, faults, and business
+invariant assertions; only the relevant policy configuration and scenario
+expectations differ.

@@ -4,7 +4,7 @@ import type { CanonicalValue, LessonOverlayPolicy, LessonParameter, ScenarioDefi
 import { STUDENT_ID_PREFIX } from "@distlab/contracts";
 import { canonicalEncode } from "@distlab/kernel";
 import {
-  checkoutAssessment, checkoutCatalog, checkoutOverlayPolicy, commerceAssessment, commerceCatalog, commerceLessonNames,
+  checkoutAssessment, checkoutCatalog, checkoutOverlayPolicy, commerceAssessment, commerceCatalog, commerceChecks, commerceLessonNames,
   commerceOverlayPolicy, commerceScenario, normalCheckout, responseLostCheckout,
 } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, composeOverlay, inDomain, openHarness, resolveTarget } from "@distlab/scenario";
@@ -234,11 +234,31 @@ test("every declared parameter value at its domain edges runs its lesson to comp
 
 test("a design choice changes the lesson outcome without changing the packaged assertions", async () => {
   const lesson = lessons.find(item => item.id === "retry-unsafe")!;
+  const packaged = await run(lesson, { version: 1 });
   const result = await run(lesson, { version: 1, parameters: [{ key: "idempotency", value: true }] });
-  const verdict = result.results.find(item => item.id === "processed-payments");
-  // The packaged check expects the unsafe story (two payments); with idempotency on there is one.
-  assert.equal(verdict?.status, "FAIL");
+  // The packaged invariant states one payment per order: the unsafe lesson violates it, and
+  // switching idempotency on makes the same assertion hold (#96).
+  assert.equal(packaged.results.find(item => item.id === "one-payment-per-order")?.status, "FAIL");
+  assert.equal(result.results.find(item => item.id === "one-payment-per-order")?.status, "PASS");
   const outOfRange = composeOverlay(lesson.document, lesson.policy, { version: 1, parameters: [{ key: "timeout", value: 0 }] } as unknown as CanonicalValue, value => lesson.engine.validate(value));
   assert.ok(!outOfRange.ok && outOfRange.code === "INVALID_OVERLAY");
   assert.deepEqual(outOfRange.diagnostics, [{ path: "/parameters/0/value", code: "PARAMETER_VALUE" }]);
+});
+
+test("a pair's distinguishing design choice gives the paired lesson's business invariant verdicts", async () => {
+  const pairs = [["retry-unsafe", "retry-idempotent", "idempotency"], ["saga-uncompensated", "saga-compensated", "compensation"],
+    ["dual-write", "outbox-unsafe-consumer", "outbox"], ["outbox-unsafe-consumer", "outbox-idempotent", "consumer-idempotency"],
+    ["cascade-unprotected", "cascade-breaker", "circuit-breaker"]] as const;
+  const invariants = (name: typeof pairs[number][0 | 1], result: HarnessExport) => {
+    const ids = new Set(commerceChecks(name).filter(check => check.kind === "invariant").map(check => check.id));
+    return result.results.filter(item => ids.has(item.id)).map(item => `${item.id} ${item.status}`);
+  };
+  for (const [from, to, key] of pairs) {
+    const source = lessons.find(item => item.id === from)!, target = lessons.find(item => item.id === to)!;
+    const value = target.policy.parameters.find(parameter => parameter.key === key)!.domain.default;
+    const switched = await run(source, { version: 1, parameters: [{ key, value }] });
+    const paired = await run(target, { version: 1 });
+    assert.deepEqual(invariants(from, switched), invariants(to, paired), `${from} with ${key}=${String(value)}`);
+    assert.notDeepEqual(invariants(from, await run(source, { version: 1 })), invariants(to, paired), `${from} and ${to} differ`);
+  }
 });

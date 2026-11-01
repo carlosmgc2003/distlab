@@ -211,26 +211,34 @@ Every document has version 1, name `<lesson>@1`, seed `commerce-classroom-1`,
 start time 0, and explicit service startup actions. Configuration retains up to
 100000 observations with default visible history. Builders declare topology,
 owned resources, actions, faults, and assertions as data. Paired experiments
-share workloads, fault schedules, and seeds, changing model configuration and
-expected checks.
+share workloads, fault schedules, and seeds, changing model configuration.
 
-| Lesson name | Experiment and expected checks |
-| --- | --- |
-| `retry-unsafe` | Drop the first payment response, time out at 20 ms, and retry with the same key. Two payment rows exist at t=30. |
-| `retry-idempotent` | Same loss and retry with durable previous-result lookup; one payment row exists at t=30. |
-| `saga-uncompensated` | Drop the shipment request. At t=30 and t=60 the order needs compensation, inventory remains reserved, and payment remains unrefunded. |
-| `saga-compensated` | Same shipment failure and visible inconsistency at t=30; by t=60 the order is cancelled, inventory released, and payment refunded. Compensation uses separate local transactions. |
-| `dual-write` | Crash Payments at t=5 after its payment commit and before direct publication. The payment survives restart, but no outbox or notification exists at t=50. |
-| `outbox-unsafe-consumer` | Same crash, durable outbox, restart at t=15/16, and relay request at t=17. One injected duplicate produces two notification rows by t=50; the outbox row is marked sent. |
-| `outbox-idempotent` | Same durable relay and duplicate delivery; the consumer inbox leaves one notification row by t=50. |
-| `cqrs-delayed` | Delay the first `OrderUpdated` delivery by 40 ms. At t=10 Orders is `PAID` and Reporting is `PENDING`; at t=60 both are `PAID`. Early and late client reads expose the difference. |
-| `cascade-unprotected` | Delay Payments → Risk requests by 60 ms while the rule is active before t=60, beyond the 20 ms link timeout. Sixteen incoming checks cause 16 downstream calls, 13 failures, and peak active work of 10. |
-| `cascade-breaker` | Same workload and delay with Payments' breaker enabled. At t=120 it is closed and drained: 5 downstream calls, 3 failures, 2 successes, 11 rejections, and peak active work of 3. |
+`commerceChecks(name)` classifies every packaged assertion, in document order,
+as a **business invariant** or a **scenario expectation** with a student-facing
+label (#96). Every lesson of a family states each invariant identically (same
+ID, predicate, parameters, and time), so PASS means HOLDS and FAIL means
+VIOLATED whatever the design or design choice. Expectations confirm the setup
+and may differ within a pair. Catalog tests check that every assertion is
+classified and that each family shares its invariants.
 
-The cascade assertions also verify API work has drained at t=120. The outbox
-documents check the committed payment, pending outbox, and absent notifications
-at t=6 before checking recovery. A PASS in an unsafe lesson means its expected
-failure was observed; it is not a claim that the architecture is safe.
+| Lesson name | Experiment | Business invariants (VIOLATED in this lesson) |
+| --- | --- | --- |
+| `retry-unsafe` | Drop the first payment response, time out at 20 ms, and retry with the same key. Two payment rows exist at t=30. | `one-payment-per-order` (violated) |
+| `retry-idempotent` | Same loss and retry with durable previous-result lookup; one payment row exists at t=30. | `one-payment-per-order` |
+| `saga-uncompensated` | Drop the shipment request. At t=30 and t=60 the order needs compensation, inventory remains reserved, and payment remains unrefunded. | `failed-order-cancelled`, `failed-order-releases-inventory`, `failed-order-refunded` (all violated) |
+| `saga-compensated` | Same shipment failure and visible inconsistency at t=30; by t=60 the order is cancelled, inventory released, and payment refunded. Compensation uses separate local transactions. | The same three |
+| `dual-write` | Crash Payments at t=5 after its payment commit and before direct publication. The payment survives restart, but no outbox or notification exists at t=50. | `payment-survives-restart`, `one-notification-per-payment` (violated), `payment-event-published` (violated) |
+| `outbox-unsafe-consumer` | Same crash, durable outbox, restart at t=15/16, and relay request at t=17. One injected duplicate produces two notification rows by t=50; the outbox row is marked sent. | The same three; `one-notification-per-payment` violated |
+| `outbox-idempotent` | Same durable relay and duplicate delivery; the consumer inbox leaves one notification row by t=50. | The same three |
+| `cqrs-delayed` | Delay the first `OrderUpdated` delivery by 40 ms. At t=10 Orders is `PAID` and Reporting is `PENDING`; at t=60 both are `PAID`. Early and late client reads expose the difference. | `write-remains-paid`, `read-converged` |
+| `cascade-unprotected` | Delay Payments → Risk requests by 60 ms while the rule is active before t=60, beyond the 20 ms link timeout. Sixteen incoming checks cause 16 downstream calls, 13 failures, and peak active work of 10. | `bounded-waiting` (violated) |
+| `cascade-breaker` | Same workload and delay with Payments' breaker enabled. At t=120 it is closed and drained: 5 downstream calls, 3 failures, 2 successes, 11 rejections, and peak active work of 3. | `bounded-waiting` |
+
+The remaining checks are scenario expectations: the saga state at t=30, the
+outbox documents' committed payment, absent notification, and outbox row at
+t=6, the CQRS reads at t=10, and the cascade dependency and API metrics at
+t=120. `bounded-waiting` compares `peakActive` with 3 by equality, because
+`commerce.metrics` compares fields by equality.
 
 ### Commerce assessment
 

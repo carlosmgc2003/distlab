@@ -14,10 +14,17 @@ for (const name of commerceLessonNames) {
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
-    const checks = state.getByRole("list", { name: "Lesson checks", exact: true });
-    await expect(checks).toContainText("PASS");
-    await expect(checks).not.toContainText("FAIL");
+    const checks = state.getByRole("list", { name: "Business invariants", exact: true });
+    await expect(checks).toContainText(/HOLDS|VIOLATED/);
+    // A verdict is never a bare PASS or FAIL, and an unsafe lesson's violation is never green.
+    await expect(state).not.toContainText(/\b(PASS|FAIL)\b/);
     await expect(checks).not.toContainText("PENDING");
+    for (const item of await checks.getByRole("listitem").filter({ hasText: "VIOLATED" }).all()) {
+      expect(await item.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(await item.evaluate(node => getComputedStyle(node.ownerDocument.body).backgroundColor));
+      await expect(item).toHaveClass(/is-violated/);
+    }
+    const setup = state.getByRole("list", { name: "Scenario expectations", exact: true });
+    if (await setup.count()) await expect(state.getByRole("heading", { name: "Lesson setup reproduced: yes" })).toBeVisible();
     const recorded = await state.innerText();
     await page.getByRole("button", { name: "Reset", exact: true }).click();
     await expect(status).toHaveText("READY");
@@ -41,6 +48,34 @@ for (const name of commerceLessonNames) {
     await expect(page.locator(".story-table")).toBeVisible();
   });
 }
+
+test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each verdict links to its evidence", async ({ page }) => {
+  await page.goto("/");
+  const status = page.getByRole("status", { name: "Simulation status" });
+  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
+  await page.getByLabel("Scenario", { exact: true }).selectOption("saga-uncompensated");
+  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await expect(status).toHaveText("READY");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("COMPLETED");
+  const labels = ["A failed order is cancelled", "A failed order does not keep inventory reserved", "A failed order keeps no approved payment"];
+  for (const label of labels) await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText("VIOLATED");
+  await expect(state.getByRole("heading", { name: "Lesson setup reproduced: yes" })).toBeVisible();
+
+  // The evidence link opens Recorded history at that check's evaluation record.
+  await invariants.getByRole("button", { name: "Show evidence: A failed order keeps no approved payment", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Recorded history", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#history-panel")).toContainText("failed-order-refunded");
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
+
+  await page.getByRole("button", { name: "Compare: Saga: compensate", exact: true }).click();
+  await expect(status).toHaveText("READY");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("COMPLETED");
+  for (const label of labels) await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText("HOLDS");
+  await expect(invariants).not.toContainText("VIOLATED");
+});
 
 test("compare replaces the experiment; commerce state fits a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
