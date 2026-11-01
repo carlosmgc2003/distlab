@@ -32,7 +32,7 @@ runtime models. Generator examples must run as controlled tasks in the simulator
 **Exported API:** The root barrel re-exports the kernel barrel, network,
 message bus, database, KV store, faults, logging, service/client/external
 contracts, scenario contracts, application protocol, session overlay shapes,
-model descriptors, and MVP catalog contracts.
+model descriptors, scenario document shapes, and MVP catalog contracts.
 It also exports `ObservationTypes` and `KnownObservationType` explicitly.
 
 **Invariants:** Importing the entry point must not load runtime implementations,

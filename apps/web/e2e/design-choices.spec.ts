@@ -151,7 +151,7 @@ test("design choices are unavailable while the simulation runs", async ({ page }
   const emit = (state: RuntimeProjectionSet["simulation"]["status"], type: "loaded" | "projection.updated") => page.evaluate(({ serialized, type }) => {
     const projection = JSON.parse(serialized) as RuntimeProjectionSet;
     const requestId = window.choiceFixture.commands.at(-1)!.requestId;
-    const session = { lesson: "retry-unsafe@1", seed: "commerce-classroom-1", overlay: { version: 1 as const, faults: [], scheduledFaults: [], parameters: [] } };
+    const session = { lesson: "retry-unsafe@1", seed: "commerce-classroom-1", overlay: { version: 1 as const, faults: [], scheduledFaults: [], parameters: [] }, origin: { kind: "packaged" as const } };
     window.choiceFixture.emit(type === "loaded" ? { version: 1, type, requestId, projection, session } : { version: 1, type, projection });
   }, { serialized: JSON.stringify(projection(state)), type });
   await emit("READY", "loaded");

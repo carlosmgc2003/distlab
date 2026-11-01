@@ -37,7 +37,7 @@ test("load accepts a packaged lesson with an allowed overlay and returns the app
   const { send, latest } = harness();
   const [loaded] = await send({ type: "load", scenario: normalCheckout, overlay: dropResponse as unknown as CanonicalValue });
   assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
-  assert.deepEqual(loaded.session, { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: dropResponse });
+  assert.deepEqual(loaded.session, { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: dropResponse, origin: { kind: "packaged" } });
   const initial = latest();
   await send({ type: "run" });
   const finished = latest();
@@ -124,7 +124,7 @@ test("a design choice reaches the worker as a parameter override and Reset repla
   const overlay = { version: 1, faults: [], scheduledFaults: [], parameters: [{ key: "idempotency", value: true }] };
   const [loaded] = await send({ type: "load", scenario: commerceScenario("retry-unsafe"), overlay: overlay as unknown as CanonicalValue });
   assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
-  assert.deepEqual(loaded.session, { lesson: "retry-unsafe@1", seed: "commerce-classroom-1", overlay });
+  assert.deepEqual(loaded.session, { lesson: "retry-unsafe@1", seed: "commerce-classroom-1", overlay, origin: { kind: "packaged" } });
   const initial = latest();
   await send({ type: "run" });
   const finished = latest();

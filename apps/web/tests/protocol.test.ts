@@ -8,6 +8,7 @@ test("commands use exactly the specified discriminants, version and canonical pa
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {} }));
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, overlay: { version: 1 } }), "the overlay is an optional canonical field of load");
   for (const extra of [{ policy: {} }, { document: {} }]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, ...extra }), false);
+  assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", document: "{}" }), false, "the host accepts packaged lessons only until the ADR-006 load path lands");
   for (const type of ["run", "reset", "step", "pause"]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type, overlay: { version: 1 } }), false, `${type} takes no overlay`);
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "run", maxEvents: 0 }));
   for (const change of [{ version: 2 }, { requestId: "" }, { type: "status" }, { maxEvents: -1 }, { maxEvents: 1.5 }, { maxEvents: undefined }, { maxEvents: Infinity }, { sessionId: "invented" }]) {
@@ -32,6 +33,8 @@ test("events validate nested projections and reject extra capability fields", ()
   assert.ok(isWorkerEvent(event));
   assert.equal(isWorkerEvent({ version: 1, requestId: "x", type: "loaded", projection: projection() }), false, "loaded carries the applied session");
   assert.ok(isWorkerEvent({ version: 1, type: "projection.updated", projection: projection() }));
+  const imported = { kind: "imported", digest: "a".repeat(64), catalog: { id: "mvp.checkout", version: "1.0.0" } };
+  assert.ok(isWorkerEvent({ ...event, session: { ...session(), origin: imported } }), "an imported origin names its digest and catalog");
   for (const broken of [
     { ...event, version: 2 },
     { ...event, projection: { ...projection(), simulation: { ...projection().simulation, pendingEvents: -1 } } },
@@ -39,6 +42,11 @@ test("events validate nested projections and reject extra capability fields", ()
     { ...event, projection: { ...projection(), operations: {} } },
     { ...event, session: { ...session(), overlay: { ...session().overlay, version: 2 } } },
     { ...event, session: { ...session(), policy: {} } },
+    { ...event, session: { lesson: session().lesson, seed: session().seed, overlay: session().overlay } },
+    { ...event, session: { ...session(), origin: { kind: "uploaded" } } },
+    { ...event, session: { ...session(), origin: { kind: "packaged", digest: "abc" } } },
+    { ...event, session: { ...session(), origin: { kind: "imported", catalog: { id: "mvp.checkout", version: "1.0.0" } } } },
+    { ...event, session: { ...session(), origin: { kind: "imported", digest: "abc", catalog: { id: "mvp.checkout" } } } },
     { version: 1, requestId: "x", type: "run.finished", status: "READY" },
     { version: 1, requestId: "x", type: "error", error: { code: "BAD", message: "bad" } },
   ]) assert.equal(isWorkerEvent(broken), false);

@@ -12,7 +12,7 @@ export function projection(status: RuntimeProjectionSet["simulation"]["status"] 
 }
 
 export function session(): SessionIdentity {
-  return { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] } };
+  return { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] }, origin: { kind: "packaged" } };
 }
 
 export class FakeWorker extends EventTarget implements WorkerPort {
