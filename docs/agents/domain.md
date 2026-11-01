@@ -25,7 +25,8 @@ This is a **single-context** repo. There is no `CONTEXT-MAP.md`.
 │   │   ├── 001-deterministic-execution.md
 │   │   ├── 002-runtime-model-semantics.md
 │   │   ├── 003-boundary-counters.md
-│   │   └── 004-session-overlays.md
+│   │   ├── 004-session-overlays.md
+│   │   └── 005-scenario-documents.md
 │   ├── glossary.md
 │   └── architecture.md
 ├── packages/

@@ -39,6 +39,10 @@ orders, payments, inventory, carts, and reporting projections.
 **Cache invalidation** — The process of removing or refreshing cached data when
 its source changes so that stale values do not remain indefinitely.
 
+**Catalog reference** — The exact `id` and `version` of a hosted catalog that
+a scenario document runs against. A hosted catalog pairs runtime models with the
+assessment predicates the worker uses with them. See ADR-005.
+
 **Circuit breaker** — A resilience pattern that temporarily stops calls to a
 failing dependency and later probes whether it has recovered.
 
@@ -214,6 +218,12 @@ necessary, compensating actions rather than one global transaction.
 **Scenario** — A reproducible experiment that defines an architecture, initial
 business state, client actions, external behavior, network policies, faults,
 configuration, seed, assertions, and invariants as needed.
+
+**Scenario document** — An instructor's JSON file that wraps a
+`ScenarioDefinition` with a catalog reference, plain-text presentation, and an
+optional overlay policy. The worker validates it as untrusted data, and it never
+contains code. Its digest identifies the file, and `runId` identifies what ran.
+See ADR-005.
 
 **Scenario engine** — The application-layer component that interprets and runs
 scenarios independently of the UI.

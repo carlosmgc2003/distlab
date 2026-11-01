@@ -65,6 +65,19 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Say *parameter*, not *configuration*. `configuration` means
   `RunInputs.configuration`, which an overlay cannot change.
 
+## Scenario documents
+
+- A **scenario document** is an instructor's JSON file: a `ScenarioDefinition`
+  inside an envelope with a **catalog reference**, plain-text presentation, and
+  an optional overlay policy. See
+  [ADR-005](docs/spec/adr/005-scenario-documents.md).
+- The main thread sends the file text unparsed. The worker parses, bounds, and
+  validates it, and resolves the catalog from its own registry. Invariants are
+  catalog predicates referenced by ID, never code.
+- Say *imported* for a session from a scenario document and *packaged* for a
+  lesson from the catalogs. The **document digest** identifies the file, and
+  `runId` identifies the run.
+
 ## Naming
 
 Import shared types from `@distlab/contracts` or `@distlab/contracts/kernel`.
