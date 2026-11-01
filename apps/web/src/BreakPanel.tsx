@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import type { ArchitectureDefinition, LessonOverlayPolicy, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
+import type { ArchitectureDefinition, LessonOverlayPolicy, ParameterOverride, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import {
   buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, formFromEntry, isEmptyOverlay, nextStudentId,
@@ -14,6 +14,10 @@ export interface BreakPanelProps {
   readonly applied: SessionOverlay | null;
   readonly draft: readonly DraftEntry[];
   readonly onDraftChange: (draft: readonly DraftEntry[]) => void;
+  /** The design choices draft. Apply sends it with the faults, so one load carries the whole draft overlay. */
+  readonly parameters?: readonly ParameterOverride[];
+  /** True when the design choices also have unapplied changes, which Apply sends too. */
+  readonly choicesPending?: boolean;
   /** False while a command is outstanding or the simulation runs: the applied faults stay visible read-only. */
   readonly editable: boolean;
   /** Diagnostics from the last rejected load, and the overlay they point into. */
@@ -42,7 +46,7 @@ const fieldLabels: Readonly<Record<FormField, string>> = {
  * fault rules and scheduled faults that the lesson allows. Applying sends one
  * ordinary `load`; nothing here edits a running simulation.
  */
-export function BreakPanel({ policy, architecture, applied, draft, onDraftChange, editable, rejected, onApply, picking, onPickingChange, pick, open, onOpenChange, hidden = false }: BreakPanelProps) {
+export function BreakPanel({ policy, architecture, applied, draft, onDraftChange, parameters = [], choicesPending = false, editable, rejected, onApply, picking, onPickingChange, pick, open, onOpenChange, hidden = false }: BreakPanelProps) {
   const ids = useId();
   const [form, setForm] = useState<FaultForm>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
@@ -51,8 +55,10 @@ export function BreakPanel({ policy, architecture, applied, draft, onDraftChange
   const options = useMemo(() => faultKindOptions(policy), [policy]);
   const option = options.find(item => item.id === form.kind);
   const targets = useMemo(() => targetOptions(option, architecture), [option, architecture]);
-  const draftOverlay = useMemo(() => overlayFromDraft(draft), [draft]);
-  const pending = applied ? !sameOverlay(draftOverlay, applied) : !isEmptyOverlay(draftOverlay);
+  const draftOverlay = useMemo(() => overlayFromDraft(draft, parameters), [draft, parameters]);
+  // Pending compares faults only; the design choices panel reports its own changes.
+  const faultsOnly = useMemo(() => overlayFromDraft(draft, applied?.parameters ?? []), [draft, applied]);
+  const pending = applied ? !sameOverlay(faultsOnly, applied) : !isEmptyOverlay(faultsOnly);
   const placed = useMemo(() => rejected ? placeDiagnostics(rejected.diagnostics, rejected.overlay) : { entries: [], general: [] }, [rejected]);
   const appliedIds = new Set(applied ? [...applied.faults.map(rule => rule.id), ...applied.scheduledFaults.map(action => action.id)] : []);
   const remaining = policy.faults.maxEntries - draft.length;
@@ -149,7 +155,7 @@ export function BreakPanel({ policy, architecture, applied, draft, onDraftChange
       })}
     </ul> : null}
     {pending ? <div className="break-pending" role="note">
-      <p>The draft is not applied yet. Applying it replaces the session and starts again from the lesson’s start time. Reset keeps replaying the applied faults.</p>
+      <p>The draft is not applied yet. Applying it replaces the session and starts again from the lesson’s start time. Reset keeps replaying the applied faults.{choicesPending ? " Unapplied design choices are applied too." : ""}</p>
       <div className="break-actions">
         <button type="button" className="primary" disabled={!editable} onClick={() => onApply(draftOverlay)}>
           {draft.length ? "Apply faults and reload" : "Remove all faults and reload"}

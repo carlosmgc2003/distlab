@@ -86,6 +86,11 @@ successfully after the applicable delivery or retry policy.
 **Deduplication** — Detecting repeated requests or messages and preventing
 their effects from being applied more than intended.
 
+**Design choice** — The student-facing name for a parameter a lesson's overlay
+policy declares, such as `idempotency` or `timeout`. A design choice is applied
+as a parameter override in the session overlay, never during a run. See
+ADR-004.
+
 **Deterministic simulation** — Execution that produces the same result and
 history for the same architecture, scenario, configuration, and seed.
 

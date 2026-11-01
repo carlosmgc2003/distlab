@@ -119,6 +119,41 @@ test("a disallowed or invalid overlay is rejected with overlay paths and exposes
   assert.ok(!events.some(event => event.type === "loaded" && event.requestId !== "r1"));
 });
 
+test("a design choice reaches the worker as a parameter override and Reset replays it", async () => {
+  const { send, latest } = harness();
+  const overlay = { version: 1, faults: [], scheduledFaults: [], parameters: [{ key: "idempotency", value: true }] };
+  const [loaded] = await send({ type: "load", scenario: commerceScenario("retry-unsafe"), overlay: overlay as unknown as CanonicalValue });
+  assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
+  assert.deepEqual(loaded.session, { lesson: "retry-unsafe@1", seed: "commerce-classroom-1", overlay });
+  const initial = latest();
+  await send({ type: "run" });
+  const finished = latest();
+  assert.equal(finished.simulation.status, "COMPLETED");
+  // Idempotency on: the retry returns the stored result, so the packaged check (two payments) reports FAIL.
+  const client = finished.components.find(item => item.componentId === "client" && item.visibility === "student");
+  const verdicts = (client?.state as { assertions?: { id: string; status: string }[] } | undefined)?.assertions ?? [];
+  assert.deepEqual(verdicts.map(item => `${item.id} ${item.status}`), ["processed-payments FAIL"]);
+  await send({ type: "reset" });
+  assert.deepEqual(latest(), initial);
+  await send({ type: "run" });
+  assert.deepEqual(latest(), finished);
+
+  // Setting the choice back to its default is the packaged lesson: the same runId as no overlay.
+  const fresh = harness();
+  await fresh.send({ type: "load", scenario: commerceScenario("retry-unsafe") });
+  const packagedRun = fresh.latest().simulation.runId;
+  const [restored] = await fresh.send({ type: "load", scenario: commerceScenario("retry-unsafe"), overlay: { version: 1, parameters: [{ key: "idempotency", value: false }] } });
+  assert.ok(restored?.type === "loaded");
+  assert.deepEqual(restored.session.overlay.parameters, [], "a default override is normalized away");
+  assert.equal(fresh.latest().simulation.runId, packagedRun);
+  assert.notEqual(initial.simulation.runId, packagedRun);
+
+  // Out-of-range values are rejected with the overlay path.
+  const [rejected] = await fresh.send({ type: "load", scenario: commerceScenario("retry-unsafe"), overlay: { version: 1, parameters: [{ key: "timeout", value: 0 }] } });
+  assert.ok(rejected?.type === "error" && rejected.error.code === "INVALID_OVERLAY");
+  assert.deepEqual((rejected.error.context as { diagnostics: unknown }).diagnostics, [{ path: "/parameters/0/value", code: "PARAMETER_VALUE" }]);
+});
+
 test("the host sends the draft overlay inside load and exposes the applied session with the projection", async () => {
   const worker = new FakeWorker();
   const host = new SimulationHost(() => worker);
