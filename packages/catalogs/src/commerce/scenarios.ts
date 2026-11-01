@@ -32,7 +32,7 @@ export function commerceScenario(name: CommerceLessonName): CanonicalValue {
     architecture: { components, links: [link("client", "payments")], databases: [database("payments", ["payments", "results"])], stores: [], destinations: [], subscriptions: [] },
     external: [], faults: [fault("lost-payment-response", "network.response", "payments", "client", "POST /pay", { kind: "drop" })],
     actions: [{ id: "start-payments", at: 0, kind: "service", target: "payments", state: "RUNNING" }, request("pay", 0, "payments", "POST /pay", { idempotencyKey: "order-1" }, true)],
-    assertions: [assertion("processed-payments", 30, "payments", "payments", safe ? 1 : 2)],
+    assertions: [assertion("one-payment-per-order", 30, "payments", "payments", 1)],
   } as CanonicalValue;
 }
 
@@ -51,9 +51,9 @@ function sagaScenario(name: CommerceLessonName): CanonicalValue {
       assertion("inconsistent-order", 30, "orders", "orders", 1, "order-1", { status: "NEEDS_COMPENSATION" }),
       assertion("inventory-still-reserved", 30, "inventory", "state", 1, "order-1", { reserved: true }),
       assertion("payment-still-approved", 30, "payments", "state", 1, "order-1", { status: "APPROVED", refunded: false }),
-      assertion("final-order", 60, "orders", "orders", 1, "order-1", { status: compensate ? "CANCELLED" : "NEEDS_COMPENSATION" }),
-      assertion("final-inventory", 60, "inventory", "state", 1, "order-1", { reserved: !compensate }),
-      assertion("final-payment", 60, "payments", "state", 1, "order-1", { refunded: compensate }),
+      assertion("failed-order-cancelled", 60, "orders", "orders", 1, "order-1", { status: "CANCELLED" }),
+      assertion("failed-order-releases-inventory", 60, "inventory", "state", 1, "order-1", { reserved: false }),
+      assertion("failed-order-refunded", 60, "payments", "state", 1, "order-1", { status: "REFUNDED", refunded: true }),
     ],
   } as CanonicalValue;
 }
@@ -81,8 +81,8 @@ function outboxScenario(name: CommerceLessonName): CanonicalValue {
       assertion("nothing-published-yet", 6, "notifications", "notifications", 0),
       assertion("durable-outbox", 6, "payments", "outbox", outbox ? 1 : 0, outbox ? "payment-approved-1" : "", outbox ? { sent: false } : {}),
       assertion("payment-survives-restart", 50, "payments", "payments", 1, "order-1", { status: "APPROVED" }),
-      assertion("notification-effects", 50, "notifications", "notifications", outbox ? (idempotent ? 1 : 2) : 0),
-      assertion("outbox-published", 50, "payments", "outbox", outbox ? 1 : 0, outbox ? "payment-approved-1" : "", outbox ? { sent: true } : {}),
+      assertion("one-notification-per-payment", 50, "notifications", "notifications", 1),
+      assertion("payment-event-published", 50, "payments", "outbox", 1, "payment-approved-1", { sent: true }),
     ],
   } as CanonicalValue;
 }
@@ -125,12 +125,69 @@ function circuitScenario(name: CommerceLessonName): CanonicalValue {
       ...["api", "orders", "payments"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
       ...[0, 1, 2, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 65, 65, 90].map((at, i) => request(`check-${i}`, at, "api", "POST /check")),
     ], assertions: [
-      { id: "dependency-recovered", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "payments", expected: { state: "CLOSED", active: 0, calls: breaker ? 5 : 16, failed: breaker ? 3 : 13, succeeded: breaker ? 2 : 3, rejected: breaker ? 11 : 0, peakActive: breaker ? 3 : 10 } } },
+      { id: "dependency-recovered", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "payments", expected: { state: "CLOSED", active: 0, calls: breaker ? 5 : 16, failed: breaker ? 3 : 13, succeeded: breaker ? 2 : 3, rejected: breaker ? 11 : 0 } } },
+      { id: "bounded-waiting", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "payments", expected: { peakActive: 3 } } },
       { id: "upstream-drained", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "api", expected: { active: 0, calls: 16, succeeded: breaker ? 2 : 3 } } },
     ],
   } as CanonicalValue;
 }
+/**
+ * A lesson check is one packaged assertion, classified for students (#96).
+ * A business invariant states the property that must hold whatever the design,
+ * so every lesson of a family carries the identical assertion and its verdict
+ * reads HOLDS (PASS) or VIOLATED (FAIL). A scenario expectation confirms that
+ * the lesson reproduced its setup; it may differ between the lessons of a pair.
+ */
+export interface CommerceCheck {
+  readonly id: string;
+  readonly kind: "invariant" | "expectation";
+  readonly label: string;
+}
 
+const invariant = (id: string, label: string): CommerceCheck => ({ id, kind: "invariant", label });
+const expectation = (id: string, label: string): CommerceCheck => ({ id, kind: "expectation", label });
+
+/** Data-only classification of every packaged assertion, in document order. */
+export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck[] {
+  switch (name.split("-")[0]) {
+    case "retry":
+      return [invariant("one-payment-per-order", "A retried payment request charges the order once")];
+    case "saga":
+      return [
+        expectation("inconsistent-order", "The shipment failed after the order was placed, so it needs compensation (t=30)"),
+        expectation("inventory-still-reserved", "Inventory was reserved when the shipment failed (t=30)"),
+        expectation("payment-still-approved", "Payment was approved when the shipment failed (t=30)"),
+        invariant("failed-order-cancelled", "A failed order is cancelled"),
+        invariant("failed-order-releases-inventory", "A failed order does not keep inventory reserved"),
+        invariant("failed-order-refunded", "A failed order keeps no approved payment"),
+      ];
+    case "dual":
+    case "outbox":
+      return [
+        expectation("committed-before-crash", "The payment committed before Payments crashed (t=6)"),
+        expectation("nothing-published-yet", "No notification existed when Payments crashed (t=6)"),
+        expectation("durable-outbox", name === "dual-write" ? "No outbox row recorded the event (t=6)" : "The outbox recorded the unsent event with the payment (t=6)"),
+        invariant("payment-survives-restart", "An approved payment survives a crash and restart"),
+        invariant("one-notification-per-payment", "An approved payment produces exactly one notification"),
+        invariant("payment-event-published", "An approved payment's event is recorded and published"),
+      ];
+    case "cqrs":
+      return [
+        expectation("write-paid", "Orders recorded the payment (t=10)"),
+        expectation("read-stale", "Reporting still showed PENDING while the update was delayed (t=10)"),
+        invariant("write-remains-paid", "The write model keeps the payment"),
+        invariant("read-converged", "The read model converges to the write model"),
+      ];
+    default:
+      return [
+        expectation("dependency-recovered", name === "cascade-breaker"
+          ? "Payments' dependency recovered: 5 risk calls, 3 failures, 2 successes, 11 rejections (t=120)"
+          : "Payments' dependency recovered: 16 risk calls, 13 failures, 3 successes (t=120)"),
+        invariant("bounded-waiting", "Payment requests waiting on the slow risk provider peak at 3"),
+        expectation("upstream-drained", "All 16 checks reached the API and drained (t=120)"),
+      ];
+  }
+}
 
 const network: { point: FaultPoint; effects: FaultEffect["kind"][] }[] = [
   { point: "network.request", effects: ["delay", "drop", "disconnect"] },

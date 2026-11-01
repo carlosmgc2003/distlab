@@ -27,7 +27,7 @@ async function captureCommands(page: Page) {
 const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
 const status = (page: Page) => page.getByRole("status", { name: "Simulation status" });
 const panel = (page: Page) => page.getByRole("region", { name: "Design choices" });
-const checks = (page: Page) => page.getByRole("region", { name: "Commerce lesson state", exact: true }).getByRole("list", { name: "Lesson checks", exact: true });
+const checks = (page: Page) => page.getByRole("region", { name: "Commerce lesson state", exact: true }).getByRole("list", { name: "Business invariants", exact: true });
 const runId = (page: Page) => page.getByLabel("Run identity").innerText().then(text => /run (\w+)$/.exec(text)?.[1]);
 
 async function load(page: Page, scenario: string) {
@@ -50,7 +50,7 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
   await load(page, "retry-unsafe");
   const packagedRun = await runId(page);
   await runToEnd(page);
-  await expect(checks(page)).toContainText("PASS — processed-payments");
+  await expect(checks(page)).toContainText("VIOLATED — A retried payment request charges the order once");
 
   await expect(panel(page).getByLabel("Idempotency key")).toBeHidden();
   await openChoices(page);
@@ -71,9 +71,9 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
   expect(last?.type === "load" && last.overlay).toEqual({ version: 1, faults: [], scheduledFaults: [], parameters: [{ key: "idempotency", value: true }] });
 
   await runToEnd(page);
-  // The packaged check expects the unsafe story's two payments; idempotency leaves one.
-  await expect(checks(page)).toContainText("FAIL — processed-payments");
-  await expect(panel(page)).toContainText("a check can FAIL under your choices");
+  // The packaged invariant is one payment per order: idempotency makes it hold.
+  await expect(checks(page)).toContainText("HOLDS — A retried payment request charges the order once");
+  await expect(panel(page)).toContainText("Business invariants report what your choices achieve.");
   await page.screenshot({ path: testInfo.outputPath("design-choices-applied.png") });
 
   // Reset replays the applied choice.
@@ -82,7 +82,7 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
   await expect(status(page)).toHaveText("READY");
   expect(await runId(page)).toBe(modifiedRun);
   await runToEnd(page);
-  await expect(checks(page)).toContainText("FAIL — processed-payments");
+  await expect(checks(page)).toContainText("HOLDS — A retried payment request charges the order once");
 
   // Back to the default: the overlay is empty again and the run is the packaged run.
   await idempotency.uncheck();

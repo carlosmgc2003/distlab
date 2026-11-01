@@ -3,7 +3,7 @@ import type { LessonOverlayPolicy, ScenarioDefinition } from "@distlab/contracts
 import { detached } from "./protocol.ts";
 import { checkoutLesson, checkoutOverlayPolicy, normalCheckout, responseLostCheckout } from "../../../packages/catalogs/src/scenarios.ts";
 
-import { commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import { commerceChecks, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 
 export { checkoutLesson };
 
@@ -28,7 +28,7 @@ const commerceCopy = {
 export const scenarios = [
   { id: "normal", family: "checkout", title: checkoutLesson.normal.title, description: checkoutLesson.normal.explanation, compare: "response-lost", scenario: detached(normalCheckout), policy: checkoutOverlayPolicy("normal") as LessonOverlayPolicy },
   { id: "response-lost", family: "checkout", title: checkoutLesson["response-lost"].title, description: checkoutLesson["response-lost"].explanation, compare: "normal", scenario: detached(responseLostCheckout), policy: checkoutOverlayPolicy("response-lost") as LessonOverlayPolicy },
-  ...commerceLessonNames.map(id => ({ id, family: "commerce" as const, title: commerceCopy[id][0], description: commerceCopy[id][1], compare: commerceCopy[id][2], scenario: detached(commerceScenario(id)), policy: commerceOverlayPolicy(id) })),
+  ...commerceLessonNames.map(id => ({ id, family: "commerce" as const, title: commerceCopy[id][0], description: commerceCopy[id][1], compare: commerceCopy[id][2], scenario: detached(commerceScenario(id)), policy: commerceOverlayPolicy(id), checks: commerceChecks(id) })),
 ] as const;
 
 export type PackagedScenario = (typeof scenarios)[number];

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import type { CanonicalValue } from "@distlab/contracts";
 import type { HarnessExport } from "@distlab/scenario";
 import assert from "node:assert/strict";
-import { commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
+import { commerceAssessment, commerceCatalog, commerceChecks, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
 import { compareExports, DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 
 function object(value: CanonicalValue): Record<string, CanonicalValue> {
@@ -35,6 +35,50 @@ test("paired lessons use equivalent fault schedules, workloads, and seeds", () =
   }
 });
 
+const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"]] as const;
+/** The business invariants each packaged lesson is meant to violate; every other check passes. */
+const violated: Record<typeof commerceLessonNames[number], readonly string[]> = {
+  "retry-unsafe": ["one-payment-per-order"],
+  "retry-idempotent": [],
+  "saga-uncompensated": ["failed-order-cancelled", "failed-order-releases-inventory", "failed-order-refunded"],
+  "saga-compensated": [],
+  "dual-write": ["one-notification-per-payment", "payment-event-published"],
+  "outbox-unsafe-consumer": ["one-notification-per-payment"],
+  "outbox-idempotent": [],
+  "cqrs-delayed": [],
+  "cascade-unprotected": ["bounded-waiting"],
+  "cascade-breaker": [],
+};
+const assertionsOf = (name: typeof commerceLessonNames[number]) => object(commerceScenario(name)).assertions as Record<string, CanonicalValue>[];
+
+test("every check in the 10 commerce lessons is classified as a business invariant or a scenario expectation", () => {
+  assert.equal(families.flat().length, commerceLessonNames.length);
+  for (const name of commerceLessonNames) {
+    const checks = commerceChecks(name);
+    assert.deepEqual(checks.map(check => check.id), assertionsOf(name).map(assertion => assertion.id), name);
+    for (const check of checks) {
+      assert.ok(check.kind === "invariant" || check.kind === "expectation", `${name} ${check.id}`);
+      assert.ok(check.label.length > 0 && !check.label.includes(check.id), `${name} ${check.id} has a student-facing label`);
+    }
+    assert.ok(checks.some(check => check.kind === "invariant"), `${name} assesses at least one business invariant`);
+    for (const id of violated[name]) assert.equal(checks.find(check => check.id === id)?.kind, "invariant", `${name} ${id}`);
+  }
+});
+
+test("each lesson family shares its invariant IDs and states each invariant identically", () => {
+  for (const family of families) {
+    const invariantsOf = (name: typeof family[number]) => {
+      const ids = new Set(commerceChecks(name).filter(check => check.kind === "invariant").map(check => check.id));
+      return assertionsOf(name).filter(assertion => ids.has(String(assertion.id)));
+    };
+    const [first, ...rest] = family;
+    for (const name of rest) {
+      assert.deepEqual(invariantsOf(name), invariantsOf(first), `${name} and ${first} assert the same invariants`);
+      assert.deepEqual(commerceChecks(name).filter(check => check.kind === "invariant"), commerceChecks(first).filter(check => check.kind === "invariant"));
+    }
+  }
+});
+
 test("circuit breaker reduces downstream load and upstream accumulated waiting", async () => {
   const unsafe = await execute("cascade-unprotected"), safe = await execute("cascade-breaker");
   for (const owner of ["api", "orders", "payments"]) {
@@ -46,6 +90,8 @@ test("circuit breaker reduces downstream load and upstream accumulated waiting",
   const callsToRisk = (result: HarnessExport) => result.history.observations.filter(o => o.type === "network.request.sent" && o.source === "payments").length;
   assert.equal(callsToRisk(unsafe), 16);
   assert.equal(callsToRisk(safe), 5);
+  assert.equal(object(metrics(unsafe, "payments")).peakActive, 10);
+  assert.equal(object(metrics(safe, "payments")).peakActive, 3);
 });
 
 test("outbox and payment roll back together when the local commit fails", async () => {
@@ -71,7 +117,8 @@ for (const name of commerceLessonNames) {
     const result = session.inspect();
     assert.equal(result.status, "COMPLETED");
     assert.ok(result.results.length > 0);
-    assert.ok(result.results.every(r => r.status === "PASS"), JSON.stringify(result.results));
+    // Unsafe lessons violate their invariants; every lesson reproduces its setup.
+    assert.deepEqual(result.results.filter(r => r.status !== "PASS").map(r => `${r.id} ${r.status}`), violated[name].map(id => `${id} FAIL`), JSON.stringify(result.results));
     assert.ok(result.history.observations.some(o => o.type === "fault.effect.selected" || o.type === "fault.applied"));
     const fresh = openHarness(engine.create(document));
     await fresh.run();
@@ -99,6 +146,15 @@ for (const name of commerceLessonNames) {
       assert.equal(object(delivered[0]!.data!).messageId, object(delivered[1]!.data!).messageId);
       assert.equal(logs(result, "notification.created").length, name === "outbox-idempotent" ? 1 : 2);
       assert.equal(logs(result, "consumer.duplicate-ignored").length, name === "outbox-idempotent" ? 1 : 0);
+    }
+    if (name === "dual-write") {
+      assert.equal(logs(result, "notification.created").length, 0);
+      assert.equal(result.history.observations.filter(o => o.type === "message.published").length, 0);
+    }
+    if (name === "saga-uncompensated") {
+      const tables = (owner: string) => object(object(object(object(result.state).databases!)[owner]!).tables!);
+      assert.deepEqual({ ...object(object(tables("orders").orders!)["order-1"]!) }, { status: "NEEDS_COMPENSATION" });
+      assert.deepEqual({ ...object(object(tables("payments").state!)["order-1"]!) }, { status: "APPROVED", refunded: false });
     }
     if (name === "saga-compensated") {
       assert.deepEqual(logs(result, "saga.compensation").map(entry => entry.component), ["payments", "inventory", "orders"]);

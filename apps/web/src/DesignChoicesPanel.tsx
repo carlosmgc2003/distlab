@@ -101,6 +101,6 @@ export function DesignChoicesPanel({ policy, applied, draft, onDraftChange, edit
         <button type="button" disabled={!editable} onClick={() => reset(applied ?? [])}>Discard choice changes</button>
       </div>
     </div> : null}
-    {applied?.length ? <p className="field-help">Lesson checks still describe the packaged lesson, so a check can FAIL under your choices. That shows how your change altered the story, not a simulator error.</p> : null}
+    {applied?.length ? <p className="field-help">Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read "not reproduced" under your choices. That shows how your change altered the story, not a simulator error.</p> : null}
   </section>;
 }

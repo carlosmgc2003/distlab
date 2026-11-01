@@ -250,6 +250,11 @@ optional overlay policy. The worker validates it as untrusted data, and it never
 contains code. Its digest identifies the file, and `runId` identifies what ran.
 See ADR-006.
 
+**Scenario expectation** — A lesson check that confirms a run reproduced the
+lesson's setup, such as a lost response or a delayed update. It says nothing
+about whether the system is safe and may differ between the lessons of a pair.
+Compare **Business invariant**.
+
 **Scenario engine** — The application-layer component that interprets and runs
 scenarios independently of the UI.
 

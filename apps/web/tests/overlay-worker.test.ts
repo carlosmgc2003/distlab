@@ -129,10 +129,10 @@ test("a design choice reaches the worker as a parameter override and Reset repla
   await send({ type: "run" });
   const finished = latest();
   assert.equal(finished.simulation.status, "COMPLETED");
-  // Idempotency on: the retry returns the stored result, so the packaged check (two payments) reports FAIL.
+  // Idempotency on: the retry returns the stored result, so the packaged invariant (one payment per order) holds.
   const client = finished.components.find(item => item.componentId === "client" && item.visibility === "student");
   const verdicts = (client?.state as { assertions?: { id: string; status: string }[] } | undefined)?.assertions ?? [];
-  assert.deepEqual(verdicts.map(item => `${item.id} ${item.status}`), ["processed-payments FAIL"]);
+  assert.deepEqual(verdicts.map(item => `${item.id} ${item.status}`), ["one-payment-per-order PASS"]);
   await send({ type: "reset" });
   assert.deepEqual(latest(), initial);
   await send({ type: "run" });
