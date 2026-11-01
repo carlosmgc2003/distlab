@@ -12,7 +12,9 @@ headless simulation runner and deterministic virtual request/response network.
 `@distlab/catalogs` provides versioned checkout
 models, two checkout scenarios, and ten commerce lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
-deterministic event boundaries. Golden scenarios 01, 02, 04, 05, 06, and 07
+deterministic event boundaries. In the browser, **Break the system** lets a student add
+deterministic faults to a loaded lesson before Run, as a session overlay that the lesson's
+policy allows ([ADR-004](docs/spec/adr/004-session-overlays.md)). Golden scenarios 01, 02, 04, 05, 06, and 07
 are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
 
 ## Goals

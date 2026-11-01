@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { detached, isCanonical, isWorkerCommand, isWorkerEvent } from "../src/protocol.ts";
-import { projection } from "./support.ts";
+import { projection, session } from "./support.ts";
 
 test("commands use exactly the specified discriminants, version and canonical payloads", () => {
   for (const type of ["pause", "step", "reset"]) assert.ok(isWorkerCommand({ version: 1, requestId: "x", type }));
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {} }));
+  assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, overlay: { version: 1 } }), "the overlay is an optional canonical field of load");
+  for (const extra of [{ policy: {} }, { document: {} }]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, ...extra }), false);
+  for (const type of ["run", "reset", "step", "pause"]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type, overlay: { version: 1 } }), false, `${type} takes no overlay`);
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "run", maxEvents: 0 }));
   for (const change of [{ version: 2 }, { requestId: "" }, { type: "status" }, { maxEvents: -1 }, { maxEvents: 1.5 }, { maxEvents: undefined }, { maxEvents: Infinity }, { sessionId: "invented" }]) {
     assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "run", ...change }), false);
@@ -25,14 +28,17 @@ test("canonical transport rejects getters without invoking them, cycles, sparse 
 });
 
 test("events validate nested projections and reject extra capability fields", () => {
-  const event = { version: 1, requestId: "x", type: "loaded", projection: projection() };
+  const event = { version: 1, requestId: "x", type: "loaded", projection: projection(), session: session() };
   assert.ok(isWorkerEvent(event));
+  assert.equal(isWorkerEvent({ version: 1, requestId: "x", type: "loaded", projection: projection() }), false, "loaded carries the applied session");
   assert.ok(isWorkerEvent({ version: 1, type: "projection.updated", projection: projection() }));
   for (const broken of [
     { ...event, version: 2 },
     { ...event, projection: { ...projection(), simulation: { ...projection().simulation, pendingEvents: -1 } } },
     { ...event, projection: { ...projection(), architecture: { components: [{ id: "x", kind: "mutable", label: "x" }], links: [] } } },
     { ...event, projection: { ...projection(), operations: {} } },
+    { ...event, session: { ...session(), overlay: { ...session().overlay, version: 2 } } },
+    { ...event, session: { ...session(), policy: {} } },
     { version: 1, requestId: "x", type: "run.finished", status: "READY" },
     { version: 1, requestId: "x", type: "error", error: { code: "BAD", message: "bad" } },
   ]) assert.equal(isWorkerEvent(broken), false);

@@ -29,7 +29,9 @@ function imports(file: string): { path: string; names: string[]; typeOnly: boole
 }
 
 test("main-thread import graph uses application contracts and data, never runtime mutation ports", () => {
-  const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "DatabaseDefinition", "KeyValueDefinition", "ComponentId", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent", "Observation", "ObservationFilter", "EntityRef", "SimulationTime"]);
+  const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "DatabaseDefinition", "KeyValueDefinition", "ComponentId", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent", "Observation", "ObservationFilter", "EntityRef", "SimulationTime",
+    // Session overlay data shapes (ADR-004). Types only: no validation or application code.
+    "SessionIdentity", "SessionOverlay", "LessonOverlayPolicy", "FaultRule", "FaultEffect", "FaultPoint", "ScheduledFault", "OverlayScheduledFault", "ScenarioDiagnostic"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;
@@ -61,4 +63,21 @@ test("kernel and contracts have no upward application, catalog or browser depend
       for (const dependency of imports(file)) assert.ok(dependency.path.startsWith(".") || dependency.path.startsWith("@distlab/contracts"), `${file}: ${dependency.path}`);
     }
   }
+});
+
+test("OVL-AC-5 the main thread reads overlay policies from data-only modules and never applies an overlay", () => {
+  const mainThread = files(app).filter(file => !file.startsWith(resolve(app, "worker")));
+  for (const file of mainThread) {
+    const text = readFileSync(file, "utf8");
+    for (const name of ["composeOverlay", "applyOverlay", "validateOverlay", "resolveTarget", "@distlab/scenario", "@distlab/catalogs\""]) {
+      assert.ok(!text.includes(name), `${file} must not reference ${name}`);
+    }
+  }
+  const policies = imports(resolve(app, "scenarios.ts")).filter(item => item.path.startsWith(".") && item.names.some(name => name.endsWith("OverlayPolicy")));
+  assert.deepEqual(policies.map(item => resolve(app, item.path)).sort(), [commerceDataModule, dataModule].sort());
+  // The worker resolves the policy from its own catalog, never from a command.
+  const adapter = imports(resolve(app, "worker/adapter.ts"));
+  const catalog = adapter.find(item => item.path === "@distlab/catalogs");
+  assert.ok(catalog?.names.includes("checkoutOverlayPolicy") && catalog.names.includes("commerceOverlayPolicy"));
+  assert.ok(adapter.some(item => item.path === "@distlab/scenario" && item.names.includes("composeOverlay")));
 });

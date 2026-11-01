@@ -569,3 +569,62 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .panel-history { min-height: 36rem; }
   .history-layout { min-height: 36rem; }
 }
+
+/* Break the system (ADR-004): a draft overlay of student faults. The panel never
+   edits a running simulation; Apply is an ordinary load. */
+.break-panel[hidden] { display: none; }
+.break-panel { flex: none; overflow: auto; padding: 8px 16px; border: 1px solid var(--border-subtle); border-left: 3px solid var(--status-error); border-radius: 0 10px 10px 0; background: var(--surface-panel); }
+.investigation-workspace > .break-panel:only-child { max-height: none; flex: 1 1 auto; }
+/* The open editor takes a column beside the graph, so the architecture keeps its height. */
+.investigation-workspace.break-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem); grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "prompt break" "nav break" "panel break"; column-gap: 12px; }
+.investigation-workspace.break-open > .learning-prompt { grid-area: prompt; }
+.investigation-workspace.break-open > .break-panel { grid-area: break; min-height: 0; }
+.investigation-workspace.break-open > .workspace-navigation { grid-area: nav; }
+.investigation-workspace.break-open > .panel-architecture, .investigation-workspace.break-open > .panel-history { grid-area: panel; }
+.break-panel.is-open .break-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); }
+@media (max-width: 1100px) {
+  .investigation-workspace.break-open { display: flex; flex-direction: column; }
+  .investigation-workspace.break-open > .break-panel { max-height: 50%; }
+}
+.break-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.break-header h2 { margin: 0; font-size: 1rem; }
+.break-summary { color: var(--text-secondary); font-size: .85rem; flex: 1 1 auto; }
+.break-header button { min-height: 36px; padding: 4px 10px; }
+.fault-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; }
+.fault-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 4px 4px 10px; border: 1.5px dashed var(--status-error); border-radius: 12px; background: var(--status-error-bg); font-size: .85rem; max-width: 100%; }
+.fault-chip.is-applied { border-style: solid; }
+.fault-chip.has-error { border-color: var(--status-error); border-width: 2px; }
+.fault-chip-text { overflow-wrap: anywhere; }
+.fault-chip-state { color: var(--text-secondary); }
+.fault-chip-actions { display: inline-flex; gap: 4px; }
+.fault-chip-actions button { min-height: 32px; padding: 2px 8px; font-size: .8rem; }
+.fault-chip-errors { flex-basis: 100%; margin: 0; padding-left: 1.1rem; color: var(--status-error); }
+.break-pending { margin-top: 8px; padding: 6px 10px; border-radius: 8px; background: var(--status-warning-bg); color: var(--status-warning); }
+.break-pending p { margin: 0 0 6px; font-size: .85rem; }
+.break-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.break-actions button.primary { background: var(--action-primary); border-color: var(--action-primary); color: #fff; }
+.break-actions button.primary:hover { background: var(--action-primary-hover); }
+.break-actions button.primary:disabled { background: var(--surface-subtle); color: var(--text-disabled); border-color: var(--border-subtle); }
+.break-body h3 { margin: 10px 0 2px; font-size: .95rem; }
+.break-locked { color: var(--status-warning); font-size: .85rem; }
+.break-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 8px 12px; margin-top: 6px; }
+.break-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.break-field label { font-size: .8rem; font-weight: 650; color: var(--text-secondary); }
+.break-field input { font: inherit; padding: 8px 10px; min-height: 40px; border: 1px solid var(--border-default); border-radius: 6px; }
+.break-field input[aria-invalid="true"], .break-field select[aria-invalid="true"] { border-color: var(--status-error); border-width: 2px; }
+.break-field input:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.break-field:has(.break-target) { grid-column: 1 / -1; }
+.break-target { display: flex; gap: 6px; min-width: 0; }
+.break-target select { flex: 1 1 auto; min-width: 0; }
+.break-target button { min-height: 40px; padding: 4px 8px; white-space: nowrap; }
+.break-target button[aria-pressed="true"] { background: var(--selection-bg); border-color: var(--selection-border); }
+.field-help { font-size: .75rem; color: var(--text-secondary); }
+.field-error { font-size: .8rem; color: var(--status-error); font-weight: 600; }
+.run-identity { font-variant-numeric: tabular-nums; }
+.architecture-layout.is-picking .graph-canvas { outline: 3px dashed var(--status-error); outline-offset: -3px; cursor: crosshair; }
+.architecture-layout.is-picking .react-flow__edge { cursor: crosshair; }
+/* A student fault on a component, a resource, or a link. */
+.fault-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1.5px solid var(--status-error); border-radius: 999px; background: var(--status-error-bg); color: var(--status-error); font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.resource-body .fault-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); margin: 0; }
+.react-flow__edge.has-fault .react-flow__edge-text { fill: var(--status-error); font-weight: 700; }

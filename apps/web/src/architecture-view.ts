@@ -36,6 +36,8 @@ export type ArchitectureNode = Node<{
   roleLabel?: string;
   /** Set while the playback cursor is on a record: idle, processing, or waiting, read from records at or before it. */
   activity?: ComponentActivity;
+  /** Applied student faults that target this component. */
+  faults?: readonly string[];
 }, "component">;
 export type ArchitectureEdge = Edge<{
   relationship: "request" | "subscription" | "publication";

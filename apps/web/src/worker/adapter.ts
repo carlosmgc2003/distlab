@@ -1,10 +1,28 @@
-import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
+import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, LessonOverlayPolicy, RuntimeProjectionSet, ScenarioDiagnostic, SessionIdentity, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { checkoutAssessment, checkoutCatalog, checkoutOverlayPolicy, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
-import { DeterministicScenarioEngine, normalizeScenario } from "@distlab/scenario";
+import { DeterministicScenarioEngine, composeOverlay, normalizeScenario } from "@distlab/scenario";
 import type { DeterministicScenarioSession } from "@distlab/scenario";
 import { applicationError, detached, isCanonical, isWorkerCommand, requestIdOf } from "../protocol.ts";
 import { commerceComponents, studentComponents } from "./student-projection.ts";
+
+interface PackagedLesson {
+  readonly scenario: CanonicalValue;
+  readonly policy: LessonOverlayPolicy;
+  readonly commerce: boolean;
+}
+
+/** The only documents the host accepts, each with the overlay policy from the worker's own catalog. */
+const packagedLessons: readonly PackagedLesson[] = [
+  { scenario: normalCheckout, policy: checkoutOverlayPolicy("normal"), commerce: false },
+  { scenario: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), commerce: false },
+  ...commerceLessonNames.map(name => ({ scenario: commerceScenario(name), policy: commerceOverlayPolicy(name), commerce: true })),
+];
+
+class OverlayRejected {
+  readonly diagnostics: readonly ScenarioDiagnostic[];
+  constructor(diagnostics: readonly ScenarioDiagnostic[]) { this.diagnostics = diagnostics; }
+}
 
 /** The sole runtime composition root. The transport delegates every control to Simulation. */
 export class WorkerAdapter {
@@ -47,22 +65,25 @@ export class WorkerAdapter {
       if (command.type === "load") {
         // Construction is atomic from the host's perspective: failures expose no old session.
         this.#session = undefined; this.#architecture = undefined;
+        // ADR-004 order: command shape (checked on receive), packaged document, overlay, applied document.
         const encoded = canonicalEncode(command.scenario);
-        this.#commerce = commerceLessonNames.some(name => canonicalEncode(commerceScenario(name)) === encoded);
-        if (!this.#commerce && ![normalCheckout, responseLostCheckout].some(scenario => canonicalEncode(scenario) === encoded)) {
-          throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
-        }
+        const lesson = packagedLessons.find(item => canonicalEncode(item.scenario) === encoded);
+        if (!lesson) throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
+        this.#commerce = lesson.commerce;
         const catalog = this.#commerce ? commerceCatalog : checkoutCatalog;
         const assessment = this.#commerce ? commerceAssessment : checkoutAssessment;
         const engine = new DeterministicScenarioEngine({ catalog, assessment });
-        const diagnostics = engine.validate(command.scenario);
-        if (diagnostics.length) throw { code: "INVALID_SCENARIO", context: diagnostics };
-        const session = engine.create(command.scenario);
-        const normalized = normalizeScenario(command.scenario, catalog, assessment).scenario!;
+        // The policy comes from this catalog, never from the command.
+        const composed = composeOverlay(lesson.scenario, lesson.policy, command.overlay, document => engine.validate(document));
+        if (!composed.ok && composed.code === "INVALID_OVERLAY") throw new OverlayRejected(composed.diagnostics);
+        if (!composed.ok) throw { code: "INVALID_SCENARIO", context: composed.diagnostics };
+        const session = engine.create(composed.document);
+        const normalized = normalizeScenario(composed.document, catalog, assessment).scenario!;
         this.#definition = normalized.architecture;
         this.#architecture = architectureProjection(normalized.architecture);
         this.#session = session;
-        this.#emit({ version: 1, requestId: command.requestId, type: "loaded", projection: this.#project() });
+        const identity: SessionIdentity = { lesson: normalized.name, seed: normalized.seed, overlay: composed.overlay };
+        this.#emit({ version: 1, requestId: command.requestId, type: "loaded", projection: this.#project(), session: identity });
         return;
       }
       if (!this.#session) { this.#noSession(command.requestId); return; }
@@ -81,6 +102,14 @@ export class WorkerAdapter {
         this.#publish(command.requestId);
       }
     } catch (error) {
+      if (error instanceof OverlayRejected) {
+        // A rejected load follows the atomic rule: no session stays exposed. The draft lives on the main thread.
+        this.#session = undefined; this.#architecture = undefined;
+        this.#emit({ version: 1, requestId: command.requestId, type: "error", error: applicationError("INVALID_OVERLAY",
+          "The session overlay is not allowed for this lesson or makes the lesson invalid.",
+          { diagnostics: detached(error.diagnostics) as unknown as CanonicalValue }) });
+        return;
+      }
       const failed = this.#session?.simulation.status === "FAILED";
       const failure = failed && this.#session ? this.#session.simulation.history.export().terminalFailure : undefined;
       if (command.type === "load") { this.#session = undefined; this.#architecture = undefined; }
