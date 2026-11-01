@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Accepted |
 | Date | 2026-11-01 |
-| Scope | Scenario document format, application boundary, worker protocol; contracts and implementation follow in the issues listed under [Follow-up work](#follow-up-work) |
-| Related issues | #99, #93, #96, #97, #98, #104 |
+| Scope | Scenario document format, application boundary, worker protocol; contracts and implementation follow in #113, #114, #115, #116 |
+| Related issues | #99, #93, #96, #97, #98, #104, #113, #114, #115, #116 |
 
 ## Context
 
@@ -574,17 +574,17 @@ The implementation must pass these tests:
 
 These issues implement the decision. They are linked to #104.
 
-1. **Contracts:** add `scenario-document.ts`, the `load` document variant,
+1. **Contracts (#113):** add `scenario-document.ts`, the `load` document variant,
    `loaded.document`, and `SessionIdentity.origin`.
-2. **Scenario layer:** add the strict parser, envelope and limit validation,
+2. **Scenario layer (#114):** add the strict parser, envelope and limit validation,
    policy integrity checks, the hosted catalog registry, the vision §19 fixture,
    and a headless `npm run scenario -- check <file>` for instructors.
    This covers DOC-AC-1 to DOC-AC-4, DOC-AC-6, and DOC-AC-7.
-3. **Browser import:** add the worker load path, "Open scenario file…", the
+3. **Browser import (#115):** add the worker load path, "Open scenario file…", the
    imported run header, the diagnostics list, an architecture-driven checkout
    projection, and the Break panel from the document policy. This covers
    DOC-AC-5 and an end-to-end import.
-4. **Starter files (optional):** add "Save as scenario file" for a packaged
+4. **Starter files, optional (#116):** add "Save as scenario file" for a packaged
    lesson. It builds the document from data-only modules.
 
 ## Verification and traceability

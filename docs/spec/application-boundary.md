@@ -76,8 +76,8 @@ code. An overlay on an imported session is checked against the document's own
 validated policy. Without a policy, only the empty overlay is accepted. Student
 projections are chosen by catalog reference and derived from the normalized
 architecture. Imported sessions have no paired lesson, so Compare is
-unavailable. The decision is accepted, and the follow-up issues of ADR-005
-implement it. Until then the worker accepts packaged lessons only.
+unavailable. The decision is accepted, and #113, #114, and #115 implement it.
+Until then the worker accepts packaged lessons only.
 
 Engine counters use the read-only properties documented in
 [ADR-003](adr/003-boundary-counters.md), not observation counting or a hardcoded
