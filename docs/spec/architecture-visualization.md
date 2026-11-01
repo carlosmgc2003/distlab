@@ -269,8 +269,10 @@ existing `mapArchitecture` style):
 3. **Grouping by owner**: a fixture with two same-kind definitions for one
    owner emits a single node whose `definition` is the last one; an owner
    with both a database and a key-value store emits two nodes at plus
-   `(50, 120)` and `(173, 120)`; a companion assertion verifies no packaged
-   lesson declares both kinds for one owner.
+   `(50, 120)` and `(173, 120)`; a companion assertion verifies that every
+   packaged owner with both kinds (the cache lessons' Catalog) gets those two
+   positions, and that no satellite of any packaged lesson overlaps another
+   satellite or a component node.
 4. **Id stability**: two calls on detached inputs deep-equal; reversing
    `projection.components` and the `metadata.databases`/`stores` arrays
    changes nothing; ids are exactly `resource:db:<owner>` /

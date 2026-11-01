@@ -24,7 +24,7 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/peer.ts`](../../packages/catalogs/src/peer.ts) | Resolves a declared peer from component configuration or the descriptor default. |
 | [`src/assessment.ts`](../../packages/catalogs/src/assessment.ts) | Six checkout predicates and `checkoutAssessment`. |
 | [`src/scenarios.ts`](../../packages/catalogs/src/scenarios.ts) | Data-only checkout documents, document builder, and lesson copy. |
-| [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers fourteen commerce models, defines commerce assessment, and re-exports commerce scenario data. |
+| [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers seventeen commerce models, defines commerce assessment, and re-exports commerce scenario data. |
 | [`src/commerce/common.ts`](../../packages/catalogs/src/commerce/common.ts) | Shared payload/reply/transaction helpers and the commerce client factory. |
 | [`src/commerce/retry.ts`](../../packages/catalogs/src/commerce/retry.ts) | Payment model with optional durable request idempotency. |
 | [`src/commerce/saga.ts`](../../packages/catalogs/src/commerce/saga.ts) | Saga coordinator, configurable resource service, and external carrier. |
@@ -32,8 +32,9 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/cqrs.ts`](../../packages/catalogs/src/commerce/cqrs.ts) | Order write model and asynchronous reporting read model. |
 | [`src/commerce/circuit.ts`](../../packages/catalogs/src/commerce/circuit.ts) | Dependency service with optional circuit breaker and external risk provider. |
 | [`src/commerce/notify.ts`](../../packages/catalogs/src/commerce/notify.ts) | Orders that confirms at checkout or after `NotificationSent`, a notification sender, and an external Messaging Provider. |
-| [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for twelve commerce documents. |
-| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the fourteen commerce models. |
+| [`src/commerce/cache.ts`](../../packages/catalogs/src/commerce/cache.ts) | Catalog with a cache-aside price cache and optional invalidation, a TTL cart, and Orders that records the price it used. |
+| [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for fourteen commerce documents. |
+| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the seventeen commerce models. |
 | [`examples/commerce.ts`](../../packages/catalogs/examples/commerce.ts) | Headless CLI lesson runner with timeline, stepping, JSON export, and replay. |
 
 The two `scenarios.ts` modules import only contract types from
@@ -64,7 +65,7 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `commerceCatalog` | `ScenarioCatalog` with ID `commerce.lessons`, version `1.0.0`. |
 | `commerceAssessment` | `ScenarioAssessment` with version `1.0.0`. |
 | `commerceScenario(name)` | Returns a `CanonicalValue` document for a `CommerceLessonName`. |
-| `commerceLessonNames` | Ordered tuple of the twelve supported commerce names. |
+| `commerceLessonNames` | Ordered tuple of the fourteen supported commerce names. |
 | `CommerceLessonName` | Type-only union derived from that tuple. |
 
 Both catalogs implement `find(name, version)` with an exact model-name/version
@@ -168,7 +169,7 @@ mode. Unknown predicate IDs resolve to `undefined`.
 
 ## Commerce models
 
-`src/commerce/index.ts` registers the following fourteen models. Repeated service
+`src/commerce/index.ts` registers the following seventeen models. Repeated service
 instances share a model definition but receive fresh factory-created handlers.
 
 | Source | Model | Interface and behavior |
@@ -187,6 +188,9 @@ instances share a model definition but receive fresh factory-created handlers.
 | `notify.ts` | `commerce.notify-orders` | Service `POST /checkout` and consumer `NotificationSent`; commits the order and publishes `OrderPlaced`. Configuration `decoupled` commits `CONFIRMED` at checkout; otherwise the order stays `PENDING` until `NotificationSent` confirms it. |
 | `notify.ts` | `commerce.notify-sender` | Service consumer `OrderPlaced`; sends through peer `provider` (default `messaging`), then commits a `SENT` row and publishes `NotificationSent`. It does not catch a send timeout, so the uncaught `NETWORK_TIMEOUT` NACKs the delivery and the destination's `maxAttempts` bounds the retries. |
 | `notify.ts` | `commerce.messaging-provider` | External `POST /send`; appends the order ID to its `sent` list, which is also its visible state, and returns `SENT`. |
+| `cache.ts` | `commerce.cache-catalog` | Service `GET /price` and `POST /price`; owns tables `prices` and `price-history` and a KeyValueStore. A read returns the cached `price:<sku>` entry, or reads the database and caches it for configuration `ttl` (default 100). A change commits the current price and a history row with `validFrom` in one transaction. Configuration `invalidate` then deletes the cached key. |
+| `cache.ts` | `commerce.cache-cart` | Service `POST /cart` and `GET /cart`; keeps `cart:<id>` in its KeyValueStore for configuration `ttl` (default 30) and records that deadline in the cart as `expiresAt`. A read of an expired cart returns `EXPIRED`. |
+| `cache.ts` | `commerce.cache-orders` | Service `POST /checkout`; reads the cart through peer `cart` and the price through peer `catalog`. It commits a `REJECTED` row for an expired cart, or a `PLACED` row with the price, its version and source, the cart's `expiresAt`, and `checkedOutAt`. A timed-out or failed call returns `UNAVAILABLE` without a row. |
 
 `common.ts` also exports `record` and `text` validation helpers, `timeout` for
 recognizing `NETWORK_TIMEOUT`, `ok` for successful replies, and generator helper
@@ -239,16 +243,19 @@ classified and that each family shares its invariants.
 | `cascade-breaker` | Same workload and delay with Payments' breaker enabled. At t=120 it is closed and drained: 5 downstream calls, 3 failures, 2 successes, 11 rejections, and peak active work of 3. | `bounded-waiting` |
 | `notifications-unbounded` | Drop every Notifications → Messaging send before t=80, beyond the 10 ms link timeout. Orders waits for `NotificationSent`, and `OrderPlaced` allows 50 attempts. The sixth attempt succeeds at t=83, and the order is confirmed at t=85. | `order-confirmed-despite-notification-failure`, `failed-notification-dead-lettered`, `bounded-notification-retries` (all violated) |
 | `notifications-dlq` | Same outage. Orders confirms at checkout, and `OrderPlaced` allows 3 attempts. The third NACK moves the message to DEAD at t=44, where it stays in the dead-letter queue. | The same three |
+| `cache-stale-price` | No injected fault. The price read at t=1 is cached until t=101. The back office raises it from 1000 to 1200 at t=11, but checkout at t=25 is served the cached 1000. Both carts expire at t=31, so cart-2's checkout at t=43 is rejected. | `order-priced-at-checkout` (violated), `no-expired-cart-checkout` |
+| `cache-invalidated` | Same workload. The price change deletes the cached key, so checkout misses the cache and charges 1200. | The same two |
 
 The remaining checks are scenario expectations: the saga state at t=30, the
 outbox documents' committed payment, absent notification, and outbox row at
 t=6, the CQRS reads at t=10, the cascade dependency and API metrics at
-t=120, and the empty Notifications table at t=60. `bounded-waiting` compares `peakActive` with 3 by equality, because
+t=120, the empty Notifications table at t=60, and the cache lessons' raised
+price at t=15 and rejected cart-2 checkout at t=60. `bounded-waiting` compares `peakActive` with 3 by equality, because
 `commerce.metrics` compares fields by equality.
 
 ### Commerce assessment
 
-`commerceAssessment.find` resolves only four version-`1.0.0` predicates:
+`commerceAssessment.find` resolves only six version-`1.0.0` predicates:
 
 - `commerce.rows` takes `owner`, `table`, `count`, `key`, and `expected`. It
   requires the exact table row count and compares each expected field against
@@ -263,6 +270,13 @@ t=120, and the empty Notifications table at t=60. `bounded-waiting` compares `pe
 - `commerce.dead-letters` takes `destination` and `attempts`. Every record that
   reached `attempts` without an ACK must be `DEAD` and listed among the bus's
   dead letters. Evidence lists those records and the dead-lettered message IDs.
+- `commerce.pricing` takes `owner`, `table`, `catalog`, and `history`. Each
+  `PLACED` order row must carry the price of the `catalog` owner's `history`
+  row for its SKU with the latest `validFrom` at or before the order's
+  `checkedOutAt`. Evidence lists each order's charged and valid price.
+- `commerce.live-carts` takes `owner` and `table`. Each `PLACED` order row must
+  have `checkedOutAt` before the `cartExpiresAt` of the cart it used. Evidence
+  lists both times per order.
 
 Commerce documents use `at` assertions at their declared virtual times. The
 assessment component in `@distlab/scenario` owns scheduling, statuses, and
@@ -298,9 +312,10 @@ FAIL results also set exit code 1, and replay mismatch throws.
 The [checkout tests](../../packages/catalogs/tests/checkout.test.ts) cover model
 versions, both documents, authorization outcomes, commit/drop/timeout ordering,
 and fresh/reset/step equivalence. The [commerce
-tests](../../packages/catalogs/tests/commerce.test.ts) cover all twelve documents,
+tests](../../packages/catalogs/tests/commerce.test.ts) cover all fourteen documents,
 paired inputs, compensation order, duplicate handling, CQRS convergence,
-breaker load reduction, bounded and unbounded notification retries, atomic payment/outbox commit rejection, and replay.
+breaker load reduction, bounded and unbounded notification retries, stale and
+invalidated cached prices with cart TTL expiry, atomic payment/outbox commit rejection, and replay.
 
 ## Extending a catalog or lesson
 
@@ -329,9 +344,9 @@ breaker load reduction, bounded and unbounded notification retries, atomic payme
    lessons, also verify equal seeds, workloads, and fault schedules.
 6. Browser support requires explicit host admission and student projection work;
    adding a catalog document alone does not authorize it. The host accepts only
-   the two packaged checkout documents and twelve packaged commerce lessons.
+   the two packaged checkout documents and fourteen packaged commerce lessons.
    Keep factory imports in the worker and data-only imports on the main thread.
-   Student projections expose business rows, KV metrics, client outcomes,
+   Student projections expose business rows, live KV entries with their expiry, client outcomes,
    declared external-visible facts, delivery records, and assertions; raw tasks
    and provider counters stay host-only. Read simulation counters directly as
    required by [ADR-003](../spec/adr/003-boundary-counters.md).

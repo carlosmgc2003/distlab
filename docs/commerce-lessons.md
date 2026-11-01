@@ -1,6 +1,6 @@
 # Commerce failure and resilience lessons
 
-These twelve browser and headless scenarios build on the same commerce vocabulary: `order-1`,
+These fourteen browser and headless scenarios build on the same commerce vocabulary: `order-1`,
 a 5000-unit payment, service-owned databases, and explicit network/message
 boundaries. Each lesson uses only the topology needed for its teaching point.
 They are independent experiments, not successive mutations of one running system.
@@ -38,7 +38,8 @@ Assertion evidence includes the relevant database rows.
 
 In the browser, run `npm run dev`, choose a lesson in **Scenario**, and select
 **Load scenario**. Use **Step**, **Run**, and **Reset** as with checkout. The
-Architecture tab shows committed service state, client outcomes, KV metrics,
+Architecture tab shows committed service state, client outcomes, live KV entries
+with their expiry time,
 and lesson checks below the graph; selecting a component also shows its facts.
 Business invariants come first, marked HOLDS or VIOLATED in words and a symbol
 as well as colour. The scenario expectations follow under **Lesson setup
@@ -73,6 +74,7 @@ Setting every choice back to its default gives the packaged run exactly.
 | `dual-write`, `outbox-*` | `outbox` (payments `outbox`), `consumer-idempotency` (notifications `idempotent`) |
 | `cascade-*` | `circuit-breaker` (payments `breaker`) |
 | `notifications-*` | `decoupled-confirmation` (orders `decoupled`), `max-attempts` 1–50 (`OrderPlaced` destination `maxAttempts`) |
+| `cache-*` | `cache-invalidation` (catalog `invalidate`) |
 
 Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
 switch that distinguishes it: setting it to the paired lesson's value gives the
@@ -105,6 +107,7 @@ faults its architecture has and its models survive:
 | `cqrs-delayed` | request, response, message delivery, database commit | crash |
 | `cascade-*` | request, response | crash, external availability |
 | `notifications-*` | request, response, message delivery, database commit | crash |
+| `cache-*` | request, response, database commit | crash |
 
 Every lesson allows up to four student faults. Saga resources and the outbox
 payment service already script their own crash and restart, so a student crash
@@ -382,6 +385,67 @@ checkout with an unbounded budget still retries without a bound, and a budget
 of 3 with a waiting Orders dead-letters the notification and leaves the order
 `PENDING` for good.
 
+## 7. Cache invalidation and cart TTL
+
+**Pattern:** cache-aside reads with a TTL, invalidation on write, and
+ephemeral session state that expires.
+
+**Problem:** a cached price stays live after the price of record changes, so an
+order can be charged a price that was no longer valid. A cart that expired must
+not be checked out.
+
+**Topology:** the Customer client and a Backoffice client. Catalog owns the
+`prices` and `price-history` tables and a KeyValueStore that caches prices.
+Cart keeps carts in its own KeyValueStore. Orders reads the cart from Cart and
+the price from Catalog, then commits the order.
+
+**Initial state:** sku-1 costs 1000 (version 1, valid from t=0). Both stores
+are empty.
+
+**Injected fault:** none. An ordinary price change and the TTLs tell the story.
+
+**Expected timeline:**
+
+- At t=1 the customer views sku-1. Catalog misses the cache, reads 1000 from its
+  database, and caches it until t=101. Cart saves cart-1 and cart-2 until t=31.
+- At t=11 the back office's price change commits 1200 (version 2, valid from
+  t=11) and a history row in one transaction.
+- `cache-stale-price`: the cached 1000 is still live. Checkout of cart-1 reads it
+  at t=24 (`price.cache-hit`), and Orders commits order-1 at 1000 at t=25. The
+  stale entry expires at t=101.
+- `cache-invalidated`: the price change deletes `price:sku-1` at t=11
+  (`price.cache-invalidated`). Checkout misses the cache at t=24 and commits
+  order-1 at 1200.
+- Both carts expire at t=31 (`kv.expired`). Checkout of cart-2 at t=40 finds no
+  cart, and Orders commits order-2 as `REJECTED` with reason `CART_EXPIRED`.
+
+**Expected checks:**
+
+| Run | order-1 price | Priced at checkout | Expired cart checked out |
+| --- | ---: | --- | --- |
+| `npm run lesson -- cache-stale-price` | 1000 from cache | VIOLATED | no (HOLDS) |
+| `npm run lesson -- cache-invalidated` | 1200 from database | HOLDS | no (HOLDS) |
+
+"An order is priced with the catalog price valid at checkout" compares each
+placed order's price with the history row valid at its `checkedOutAt`. "An
+expired cart cannot be checked out" requires each placed order to commit before
+its cart's `expiresAt`. The scenario expectations confirm the price change at
+t=15 and the rejected cart-2 checkout at t=60.
+
+In the browser, each service's state lists its live KV entries with their key,
+value, and `expires at t=…`. Step to t=2 to see both carts and the cached price;
+after expiry the entries are gone from state, and Recorded history keeps each
+`kv.expired` record. Orders' rows show the price used, its version, and whether
+it came from the cache or the database. The headless timeline prints
+`kv.expired` too.
+
+**Concept:** a TTL bounds how long a cache can be stale; it does not make it
+correct. Invalidation on write removes the stale entry at the price change. A
+TTL is enough for a cart, because its expiry is the business rule. The cart
+check and the commit are separate steps: delay Orders' price request with
+**Break the system**, and a checkout that saw a live cart can commit after the
+cart expired, which violates the cart invariant.
+
 ## Extension points and boundaries
 
 The implementation uses versioned `ScenarioModel` factories in
@@ -389,8 +453,8 @@ The implementation uses versioned `ScenarioModel` factories in
 and the existing `DeterministicScenarioEngine`/`openHarness`. The existing checkout
 catalog is unchanged. Models use controlled generator tasks, VirtualClock,
 VirtualNetwork, Database, MessageBus, Fault Engine, and `runtime.log`.
-KeyValueStore holds atomic circuit metrics; durable payment and consumer
-deduplication use local DB transactions.
+KeyValueStore holds atomic circuit metrics, cached prices, and carts; durable
+payment and consumer deduplication use local DB transactions.
 
 The headless lessons required no new simulation semantics. Browser integration
 adds read-only Simulation counters because the initial host inferred counts from
