@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-10-31 |
-| Related issues | #3, #46, #47, #69, #93 |
+| Last updated | 2026-11-01 |
+| Related issues | #3, #46, #47, #69, #93, #98 |
 
 ## Responsibility
 
@@ -247,10 +247,24 @@ unavailable on the last.
 
 ## Deferred capabilities
 
-The MVP does not include a general architecture editor, YAML authoring format,
+The MVP does not include a free-form architecture editor, YAML authoring format,
 save/load persistence, rewind, full snapshots, server execution, collaborative
 sessions, or direct mutation from inspectors. Session overlays do not include
 seed choice, service restart actions, assertion editing, or overlay persistence.
+
+[ADR-005](adr/005-architecture-editor.md) decides the scope of the student
+architecture editor. Students compose prefabricated catalog models and choose
+their declared behavior options; they never author handlers. Architecture
+edits travel in the session overlay and are governed by the lesson's
+architecture allowance, so the host rule above is unchanged. The first
+increment edits lesson-declared slots, peer bindings, owned resources, and
+subscriptions (#108 to #112). These remain deferred:
+
+- adding components with student-chosen IDs and removing components (the
+  sandbox increment, whose rules ADR-005 already fixes)
+- editing client workload, assertions, or external behavior
+- validating a design on the main thread, or a dry-run command
+- persisting designs or graph layouts
 
 ## Acceptance coverage
 
@@ -273,5 +287,6 @@ seed choice, service restart actions, assertion editing, or overlay persistence.
 
 - [Shared contracts](contracts.md)
 - [ADR-004: Session overlays](adr/004-session-overlays.md)
+- [ADR-005: Architecture editor scope](adr/005-architecture-editor.md)
 - [Scenario Engine](scenario-engine.md)
 - [Observability](observability.md)
