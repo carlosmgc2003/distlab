@@ -236,7 +236,7 @@ async function stubWorker(page: Page, mode: "empty" | "invalid" | "error" | "pri
         } as unknown as RuntimeProjectionSet;
         queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", { data: mode === "error"
           ? { version: 1, type: "error", requestId: command.requestId, error: { code: "INVALID_SCENARIO", message: "The scenario could not be loaded.", context: null } }
-          : { version: 1, type: "loaded", requestId: command.requestId, projection, session: { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] } } } })));
+          : { version: 1, type: "loaded", requestId: command.requestId, projection, session: { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay: { version: 1, faults: [], scheduledFaults: [], parameters: [] }, origin: { kind: "packaged" as const } } } })));
       }
       terminate() {}
     } as unknown as typeof Worker;
