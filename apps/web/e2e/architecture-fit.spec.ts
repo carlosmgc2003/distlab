@@ -51,8 +51,13 @@ async function graphFit(page: Page): Promise<GraphFit> {
 }
 
 async function expectGraphFits(page: Page, context: string) {
-  await expect.poll(async () => (await graphFit(page)).clipped, { message: `graph fits the canvas at ${context}` }).toEqual([]);
-  const fit = await graphFit(page);
+  // Wait for one settled frame (every node and connection label drawn, nothing clipped) and
+  // assert on that same frame, so a relayout between two measurements cannot be read half-done.
+  let fit = await graphFit(page);
+  await expect.poll(async () => {
+    fit = await graphFit(page);
+    return { clipped: fit.clipped, nodes: fit.nodes.length, labels: Math.min(fit.labels.length, 4) };
+  }, { message: `graph fits the canvas at ${context}` }).toEqual({ clipped: [], nodes: 7, labels: 4 });
   const label = `graph fits the canvas at ${context} (canvas ${fit.width}×${fit.height})`;
   expect(fit.nodes, label).toHaveLength(7);
   for (const node of fit.nodes) {
