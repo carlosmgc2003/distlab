@@ -65,15 +65,30 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Say *parameter*, not *configuration*. `configuration` means
   `RunInputs.configuration`, which an overlay cannot change.
 
+## Architecture editor
+
+- Students compose catalog models; they never author handlers. See
+  [ADR-005](docs/spec/adr/005-architecture-editor.md).
+- A **model descriptor** is a catalog model's data-only interface. A **peer** is
+  a component a model calls, bound through configuration with a default. Say
+  *peer*, not *port*: a port is an injected kernel capability.
+- A **slot** is a lesson-owned component whose model the student chooses. A
+  **placeholder model** fills an empty slot and answers `NOT_IMPLEMENTED`.
+- **Architecture edits** are part of the session overlay and record the
+  resulting design, not the gestures. The lesson's **architecture allowance**
+  says which edits are allowed. The worker is the only validator; the editor's
+  draft **preview** is presentation and is never sent.
+
 ## Scenario documents
 
 - A **scenario document** is an instructor's JSON file: a `ScenarioDefinition`
   inside an envelope with a **catalog reference**, plain-text presentation, and
   an optional overlay policy. See
-  [ADR-005](docs/spec/adr/005-scenario-documents.md).
+  [ADR-006](docs/spec/adr/006-scenario-documents.md).
 - The main thread sends the file text unparsed. The worker parses, bounds, and
   validates it, and resolves the catalog from its own registry. Invariants are
-  catalog predicates referenced by ID, never code.
+  catalog predicates referenced by ID, never code. An imported session's
+  overlay policy comes from its validated document, not from a catalog.
 - Say *imported* for a session from a scenario document and *packaged* for a
   lesson from the catalogs. The **document digest** identifies the file, and
   `runId` identifies the run.

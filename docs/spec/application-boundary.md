@@ -5,7 +5,7 @@
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
 | Last updated | 2026-11-01 |
-| Related issues | #3, #46, #47, #69, #93, #99 |
+| Related issues | #3, #46, #47, #69, #93, #98, #99 |
 
 ## Responsibility
 
@@ -63,7 +63,7 @@ paired lesson's values.
 
 ### Imported scenario documents
 
-[ADR-005](adr/005-scenario-documents.md) adds a second accepted input: an
+[ADR-006](adr/006-scenario-documents.md) adds a second accepted input: an
 instructor's **scenario document**. It is a JSON envelope around an unchanged
 `ScenarioDefinition`, with an exact catalog reference, plain-text presentation,
 and an optional overlay policy. The main thread reads a local file, checks its
@@ -190,7 +190,7 @@ renders imported presentation, resource nodes, and Break choices from that
 value. Packaged sessions report the origin `{ kind: "packaged" }`. `reset`
 reconstructs an imported session from the same normalized document. The
 `document` variant, `loaded.document`, and `SessionIdentity.origin` are accepted
-by ADR-005 and not implemented yet.
+by ADR-006 and not implemented yet.
 
 The `overlay` field and `loaded.session` are accepted by ADR-004 and implemented
 by #94. The contract types (`SessionOverlay`, `SessionIdentity`,
@@ -223,7 +223,7 @@ command shape first, then the packaged document, then the overlay. A failed
 its envelope, catalog resolution, scenario validation, or its policy checks
 returns `INVALID_DOCUMENT` with `{ diagnostics }`. Paths are JSON pointers into
 the document, and diagnostics are sorted by path, then code
-([ADR-005](adr/005-scenario-documents.md#validation)). Runtime terminal failures
+([ADR-006](adr/006-scenario-documents.md#validation)). Runtime terminal failures
 return `SIMULATION_FAILED` with the simulation error context. A failed subscriber or UI render path is host-only and
 cannot alter canonical history.
 
@@ -283,13 +283,27 @@ unavailable on the last.
 
 ## Deferred capabilities
 
-The MVP does not include a general architecture editor, rewind, full snapshots,
-server execution, collaborative sessions, or direct mutation from inspectors.
-Session overlays do not include seed choice, service restart actions, assertion
-editing, or overlay persistence. ADR-005 decides JSON scenario documents
-imported from a local file. It defers a YAML authoring format, import from a
-URL, storing documents in the browser, sharing or hosting documents, a visual
-authoring UI, and signed documents.
+The MVP does not include a free-form architecture editor, rewind, full
+snapshots, server execution, collaborative sessions, or direct mutation from
+inspectors. Session overlays do not include seed choice, service restart
+actions, assertion editing, or overlay persistence. ADR-006 decides JSON
+scenario documents imported from a local file. It defers a YAML authoring
+format, import from a URL, storing documents in the browser, sharing or hosting
+documents, a visual authoring UI, and signed documents.
+
+[ADR-005](adr/005-architecture-editor.md) decides the scope of the student
+architecture editor. Students compose prefabricated catalog models and choose
+their declared behavior options; they never author handlers. Architecture
+edits travel in the session overlay and are governed by the lesson's
+architecture allowance, so the host rule above is unchanged. The first
+increment edits lesson-declared slots, peer bindings, owned resources, and
+subscriptions (#108 to #112). These remain deferred:
+
+- adding components with student-chosen IDs and removing components (the
+  sandbox increment, whose rules ADR-005 already fixes)
+- editing client workload, assertions, or external behavior
+- validating a design on the main thread, or a dry-run command
+- persisting designs or graph layouts
 
 ## Acceptance coverage
 
@@ -320,6 +334,7 @@ authoring UI, and signed documents.
 
 - [Shared contracts](contracts.md)
 - [ADR-004: Session overlays](adr/004-session-overlays.md)
-- [ADR-005: Scenario documents](adr/005-scenario-documents.md)
+- [ADR-005: Architecture editor scope](adr/005-architecture-editor.md)
+- [ADR-006: Scenario documents](adr/006-scenario-documents.md)
 - [Scenario Engine](scenario-engine.md)
 - [Observability](observability.md)

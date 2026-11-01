@@ -1,11 +1,11 @@
-# ADR-005: Instructor scenario documents and import
+# ADR-006: Instructor scenario documents and import
 
 | Field | Value |
 | --- | --- |
 | Status | Accepted |
 | Date | 2026-11-01 |
 | Scope | Scenario document format, application boundary, worker protocol; contracts and implementation follow in #113, #114, #115, #116 |
-| Related issues | #99, #93, #96, #97, #98, #104, #113, #114, #115, #116 |
+| Related issues | #99, #93, #96, #97, #98, #104, #109, #110, #113, #114, #115, #116 |
 
 ## Context
 
@@ -32,6 +32,11 @@ Two facts shape the decision:
 - `RunInputs.modelVersions` already records the catalog ID and version, the
   assessment version, and each assertion's predicate as `id@version`. So
   `runId` already changes when a catalog, model, or predicate version changes.
+- [ADR-005](005-architecture-editor.md) gives every catalog model a data-only
+  descriptor and adds composition rules to `ScenarioEngine.validate` for every
+  document (#109). It also adds an optional architecture allowance to
+  `LessonOverlayPolicy` (#110). It leaves client-workload authoring to the
+  instructor documents decided here.
 
 Architecture §40 requires an ADR because the change touches the host's accepted
 inputs, the worker protocol, and how a run's inputs are identified.
@@ -224,7 +229,11 @@ first stage that fails. Each stage reports all of its diagnostics.
    `scenario.name`. Each target resolves to exactly one location. Each default
    lies in its domain and equals the document's value at every target. No two
    parameters share a target. These are the checks that ADR-004's OVL-AC-6 runs
-   on packaged policies, applied at import.
+   on packaged policies, applied at import. If the policy has an `architecture`
+   allowance, ADR-005's ARCH-AC-6 allowance checks also run: each allowed slot
+   model substituted alone gives a valid scenario, every binding candidate
+   exists, no parameter targets a slot component, and each model's peer names
+   and option keys are disjoint.
 
 Failures in stages 2 to 5 return `INVALID_DOCUMENT` with context
 `{ diagnostics: ScenarioDiagnostic[] }`. Paths are JSON pointers into the
@@ -234,12 +243,20 @@ Diagnostics are sorted by path, then code. Scenario codes keep their existing
 names. The document codes are `DOCUMENT_SIZE`, `DOCUMENT_SYNTAX`,
 `DOCUMENT_DEPTH`, `DUPLICATE_KEY`, `RESERVED_KEY`, `FORMAT`, `FORMAT_VERSION`,
 `UNKNOWN_CATALOG`, `CATALOG_VERSION`, `DOCUMENT_LIMIT`, `RESERVED_NAME`,
-`RESERVED_ID`, `POLICY_TARGET`, and `POLICY_DEFAULT`. The envelope also uses the
-existing `REQUIRED`, `TYPE`, `UNSUPPORTED`, and `REFERENCE` codes.
+`RESERVED_ID`, `POLICY_TARGET`, `POLICY_DEFAULT`, and `POLICY_ALLOWANCE`. The
+envelope also uses the existing `REQUIRED`, `TYPE`, `UNSUPPORTED`, and
+`REFERENCE` codes.
 
 After the document is valid, an overlay is validated and applied exactly as in
-ADR-004. The policy comes from the validated document that the worker holds. A
-rejected overlay returns `INVALID_OVERLAY`.
+ADR-004 and ADR-005, including architecture edits that the document's allowance
+permits. The policy comes from the validated document that the worker holds. A
+rejected overlay returns `INVALID_OVERLAY`. The document was already validated
+on its own, so ADR-005's stage 4 attribution reports every remaining
+diagnostic against the overlay, never as a catalog defect.
+
+Once #109 lands, `ScenarioEngine.validate` includes ADR-005's composition rules.
+An imported document's wiring mistakes, such as an unbound peer or a missing
+link, are therefore stage 4 diagnostics under `/scenario` and never end a run.
 
 Validation is pure. It creates no model, uses no simulation identity, and draws
 no randomness. A rejected `load` follows the existing atomic rule, so no earlier
@@ -511,8 +528,9 @@ The implementation must pass these tests:
   from its registry.
 - **DOC-AC-6 Imported overlays.** A document with `overlayPolicy` accepts an
   allowed overlay and rejects a disallowed one with `INVALID_OVERLAY`. A
-  document without a policy accepts only the empty overlay. Each policy
-  integrity code has a rejection test.
+  document without a policy accepts only the empty overlay. With an
+  `architecture` allowance, an allowed edit loads and a disallowed edit returns
+  `INVALID_OVERLAY`. Each policy integrity code has a rejection test.
 - **DOC-AC-7 Versioning.** An unsupported `formatVersion` returns
   `FORMAT_VERSION`. An unknown key at any level returns `UNSUPPORTED`. An
   unknown catalog returns `UNKNOWN_CATALOG`, and an unhosted version of a known
@@ -561,7 +579,11 @@ The implementation must pass these tests:
   policy comes from the validated document, not from the worker's catalog. The
   ADR-004 rule still holds in its intent: a `load` never carries a policy apart
   from the document it governs, and a packaged lesson's policy is never taken
-  from a command.
+  from a command. The same holds for ADR-005's architecture allowance, which is
+  part of that policy.
+- Instructors define client workload in a document. Students still cannot edit
+  workload, so ADR-005's rule that workload editing stays out of the overlay is
+  unchanged.
 - Hosted catalog versions become a compatibility promise. Changing a released
   model or predicate requires a new version.
 - The checkout student projection is keyed to fixed component IDs today. It
@@ -598,6 +620,6 @@ instructor-defined scenarios (§19), examinations (§4, §21), reproducibility
 
 - [Scenario Engine](../scenario-engine.md), [Application boundary](../application-boundary.md)
 - [ADR-001](001-deterministic-execution.md), [ADR-002](002-runtime-model-semantics.md),
-  [ADR-004](004-session-overlays.md)
+  [ADR-004](004-session-overlays.md), [ADR-005](005-architecture-editor.md)
 - [Architecture: change policy](../../architecture.md#40-architectural-change-policy)
 - [Vision](../../vision.md)
