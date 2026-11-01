@@ -15,6 +15,30 @@ Infer the repo from `git remote -v`; `gh` does this automatically when run insid
 repo template lives in `.github/ISSUE_TEMPLATE/distlab-task.yml`, so prefer `gh issue create` over
 a hand-written body that ignores it.
 
+## In Claude cloud sessions
+
+Cloud sessions may have no authenticated `gh` for writes; they reach GitHub
+through the GitHub MCP tools instead. Use these equivalents:
+
+| Operation | Tool |
+| --- | --- |
+| Read an issue, its comments, labels, parent, or sub-issues | `issue_read` (`get`, `get_comments`, `get_labels`, `get_parent`, `get_sub_issues`) |
+| List issues by label or state | `list_issues` |
+| Create an issue, edit labels or assignees, close | `issue_write` (`create`, `update`; set `state_reason` when closing) |
+| Comment on an issue or pull request | `add_issue_comment` |
+| Attach a child to an epic | `sub_issue_write` |
+| Open a pull request | `create_pull_request` |
+| Read a pull request, its diff, checks, or reviews | `pull_request_read` |
+| Follow CI and review activity | `subscribe_pr_activity` |
+
+Setting labels with `issue_write` replaces the issue's whole label list, so read
+the current labels first and send them back with the change.
+
+The MCP tools cannot add native issue dependencies. Sessions read blocking from
+the issue's *Dependencies* section and from `issue_dependencies_summary` in
+`get_sub_issues`; the maintainer adds native edges in the GitHub UI when wanted.
+The full agent workflow is in [workflow.md](workflow.md).
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
