@@ -1,6 +1,7 @@
 import type { CanonicalValue, ClientDefinition, ComponentInstance, DatabaseRow, NetworkReply, ServiceContext } from "@distlab/contracts";
 import { duration, ErrorCodes } from "@distlab/contracts/kernel";
 import type { ScenarioModel } from "@distlab/scenario";
+import { clientDescriptor } from "./descriptors.js";
 
 export function record(value: CanonicalValue): Record<string, CanonicalValue> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Expected object");
@@ -42,4 +43,4 @@ export function client(instance: ComponentInstance): ClientDefinition {
     },
   } };
 }
-export const clientModel: ScenarioModel = { model: "commerce.client", version: "1.0.0", kind: "client", actions: ["request"], endpoints: [], consumers: [], operations: [], checks: {}, instantiate: client };
+export const clientModel: ScenarioModel = { ...clientDescriptor, checks: {}, instantiate: client };

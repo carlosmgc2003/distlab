@@ -1,9 +1,10 @@
 import type { ServiceDefinition } from "@distlab/contracts";
 import type { ScenarioModel } from "@distlab/scenario";
+import { retryDescriptor } from "./descriptors.js";
 import { ok, record, text } from "./common.js";
 
 export const retryModel: ScenarioModel = {
-  model: "commerce.payment", version: "1.0.0", kind: "service", actions: [], endpoints: ["POST /pay"], consumers: [], operations: [], checks: {},
+  ...retryDescriptor, checks: {},
   instantiate(instance): ServiceDefinition {
     const configuration = record(instance.configuration);
     return { id: instance.id, version: instance.version, background: {}, consumers: {}, endpoints: {

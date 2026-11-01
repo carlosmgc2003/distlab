@@ -54,9 +54,12 @@ exports and are not exposed through the package entry point. Import shared
 
 [`types.ts`](../../packages/scenario/src/types.ts) defines the injection seams:
 
-- `ScenarioModel` identifies an exact `model`, `version`, and component `kind`.
-  Its `actions`, `endpoints`, `consumers`, and `operations` describe supported
-  names; `checks` supplies trusted database row constraints. `instantiate`
+- `ScenarioModel` extends the data-only `ModelDescriptor` from
+  `@distlab/contracts` ([ADR-005](../spec/adr/005-architecture-editor.md)): it
+  identifies an exact `model`, `version`, and component `kind`, and its
+  `actions`, `endpoints`, `consumers`, `operations`, `publishes`, `peers`,
+  `storage`, and `options` declare the model's interface. It adds `checks`,
+  which supplies trusted database row constraints. `instantiate`
   receives a shared `ComponentInstance` and returns a `ClientDefinition`,
   `ServiceDefinition`, or `ExternalDefinition` appropriate to the kind.
 - `ScenarioCatalog` has its own `id` and `version`, resolves exact model versions

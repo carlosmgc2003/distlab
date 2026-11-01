@@ -1,9 +1,10 @@
 import type { ServiceDefinition } from "@distlab/contracts";
 import type { ScenarioModel } from "@distlab/scenario";
+import { orderReadDescriptor, orderWriteDescriptor } from "./descriptors.js";
 import { ok, record, save } from "./common.js";
 
 export const orderWriteModel: ScenarioModel = {
-  model: "commerce.order-write", version: "1.0.0", kind: "service", actions: [], endpoints: ["POST /paid", "GET /order"], consumers: [], operations: [], checks: {},
+  ...orderWriteDescriptor, checks: {},
   instantiate: instance => ({ id: instance.id, version: instance.version, consumers: {}, background: {}, endpoints: {
     "POST /paid": function* (_body, ctx) {
       yield* save(ctx, "orders", "order-1", { status: "PAID", version: 1 });
@@ -20,7 +21,7 @@ export const orderWriteModel: ScenarioModel = {
   } } satisfies ServiceDefinition),
 };
 export const orderReadModel: ScenarioModel = {
-  model: "commerce.order-read", version: "1.0.0", kind: "service", actions: [], endpoints: ["GET /order"], consumers: ["OrderUpdated"], operations: [], checks: {},
+  ...orderReadDescriptor, checks: {},
   instantiate: instance => ({ id: instance.id, version: instance.version, background: {}, endpoints: {
     "GET /order": (_body, ctx) => {
       const tx = ctx.db!.begin();

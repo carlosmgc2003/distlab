@@ -20,6 +20,10 @@ export function model(partial: Partial<ScenarioModel> & Pick<ScenarioModel, "mod
     endpoints: partial.endpoints ?? [],
     consumers: partial.consumers ?? [],
     operations: partial.operations ?? [],
+    publishes: partial.publishes ?? [],
+    peers: partial.peers ?? [],
+    storage: partial.storage ?? {},
+    options: partial.options ?? [],
     checks: partial.checks ?? {},
     instantiate: partial.instantiate ?? (instance => instantiate(partial.kind, instance)),
   };

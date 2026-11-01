@@ -1,16 +1,12 @@
-import type { ClientDefinition, DatabaseRow, ExternalDefinition, ServiceDefinition } from "@distlab/contracts";
+import type { ClientDefinition, DatabaseRow, ExternalDefinition, ModelDescriptor, ServiceDefinition } from "@distlab/contracts";
 import type { CanonicalValue, ComponentId, SimulationStatus, SimulationTime } from "@distlab/contracts/kernel";
 import type { ComponentInstance } from "@distlab/contracts";
 
-/** Versioned catalog entry. `instantiate` runs only while composing a session. */
-export interface ScenarioModel {
-  readonly model: string;
-  readonly version: string;
-  readonly kind: "client" | "service" | "external";
-  readonly actions: readonly string[];
-  readonly endpoints: readonly string[];
-  readonly consumers: readonly string[];
-  readonly operations: readonly string[];
+/**
+ * Versioned catalog entry: its data-only descriptor (ADR-005) plus trusted code.
+ * `instantiate` runs only while composing a session.
+ */
+export interface ScenarioModel extends ModelDescriptor {
   readonly checks: Readonly<Record<string, (row: DatabaseRow) => boolean>>;
   instantiate(instance: ComponentInstance): ClientDefinition | ServiceDefinition | ExternalDefinition;
 }

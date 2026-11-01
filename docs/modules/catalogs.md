@@ -20,6 +20,8 @@ All paths in this table are relative to `packages/catalogs/`.
 | --- | --- |
 | [`src/index.ts`](../../packages/catalogs/src/index.ts) | Public package barrel for checkout exports and the commerce barrel. |
 | [`src/models.ts`](../../packages/catalogs/src/models.ts) | Four checkout runtime factories and `checkoutCatalog`. |
+| [`src/descriptors.ts`](../../packages/catalogs/src/descriptors.ts) | Data-only model descriptors of the four checkout models. |
+| [`src/peer.ts`](../../packages/catalogs/src/peer.ts) | Resolves a declared peer from component configuration or the descriptor default. |
 | [`src/assessment.ts`](../../packages/catalogs/src/assessment.ts) | Six checkout predicates and `checkoutAssessment`. |
 | [`src/scenarios.ts`](../../packages/catalogs/src/scenarios.ts) | Data-only checkout documents, document builder, and lesson copy. |
 | [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers eleven commerce models, defines commerce assessment, and re-exports commerce scenario data. |
@@ -30,12 +32,14 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/cqrs.ts`](../../packages/catalogs/src/commerce/cqrs.ts) | Order write model and asynchronous reporting read model. |
 | [`src/commerce/circuit.ts`](../../packages/catalogs/src/commerce/circuit.ts) | Dependency service with optional circuit breaker and external risk provider. |
 | [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for ten commerce documents. |
+| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the eleven commerce models. |
 | [`examples/commerce.ts`](../../packages/catalogs/examples/commerce.ts) | Headless CLI lesson runner with timeline, stepping, JSON export, and replay. |
 
-The two `scenarios.ts` modules import only the `CanonicalValue` type from
+The two `scenarios.ts` modules import only contract types from
 `@distlab/contracts`. Their functions construct serializable inputs; they do not
-instantiate models or run simulations. Main-thread browser code may import these
-modules directly. The package root and `commerce/index.ts` also reach runtime
+instantiate models or run simulations. The two `descriptors.ts` modules import
+only the `ModelDescriptor` type and export plain descriptor values. Main-thread
+browser code may import these four modules directly. The package root and `commerce/index.ts` also reach runtime
 factories and belong in the worker or headless composition path.
 
 The [package manifest](../../packages/catalogs/package.json) declares only the
@@ -55,6 +59,7 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `checkoutScenario(variant)` | Returns a `CanonicalValue` document for `"normal"` or `"response-lost"`. |
 | `normalCheckout`, `responseLostCheckout` | Preconstructed checkout documents. |
 | `checkoutLesson` | Read-only title and explanation strings indexed by checkout variant. |
+| `checkoutDescriptors`, `commerceDescriptors` | Data-only `ModelDescriptor` lists, one per registered model version. |
 | `commerceCatalog` | `ScenarioCatalog` with ID `commerce.lessons`, version `1.0.0`. |
 | `commerceAssessment` | `ScenarioAssessment` with version `1.0.0`. |
 | `commerceScenario(name)` | Returns a `CanonicalValue` document for a `CommerceLessonName`. |
@@ -65,7 +70,33 @@ Both catalogs implement `find(name, version)` with an exact model-name/version
 match and `versions(name)` with the available versions. An unknown model or
 version resolves to `undefined`; an unknown name has an empty version list.
 Every registered component model currently has version `1.0.0` and an empty
-`checks` registry. The individual commerce model constants and helpers are not
+`checks` registry. Each catalog model is its data-only descriptor plus `checks`
+and `instantiate` ([ADR-005](../spec/adr/005-architecture-editor.md#model-descriptors-and-peers)),
+and the [descriptor tests](../../packages/catalogs/tests/descriptors.test.ts)
+prove that each model equals its descriptor.
+
+### Peers and options
+
+A model never names the components it calls in code. Each outbound dependency is
+a declared **peer**: the model reads the bound component ID from the
+configuration field named after the peer and falls back to the descriptor
+default. The defaults equal the IDs the packaged documents use, and those
+documents omit the fields, so no packaged document or export changed.
+
+| Model | Peer: kinds, calls, default | Options (boolean, default `false`) |
+| --- | --- | --- |
+| `distlab.customer-app` | `orders`: service, `POST /orders`, `orders` | — |
+| `distlab.payments` | `processor`: external, `POST /authorize`, `payment-processor` | — |
+| `commerce.saga` | `inventory` and `payments`: service, `POST /apply` and `POST /compensate`, same ID; `carrier`: external, `POST /ship`, `carrier` | `compensate` |
+| `commerce.dependency` | `target`: service or external, `POST /check`, `risk` | `breaker` |
+| `commerce.payment` | — | `idempotent` |
+| `commerce.outbox-payment` | — | `outbox` |
+| `commerce.notifications` | — | `idempotent` |
+
+`commerce.client` declares no peers: each `request` action names its own target
+and endpoint in the workload. `commerce.saga-resource` reads `forward` and
+`compensated` rows from configuration; they are lesson data, not behavior
+options, because no `LessonParameterDomain` describes a row. The individual commerce model constants and helpers are not
 re-exported by the package root.
 
 ## Checkout models
@@ -257,9 +288,11 @@ breaker load reduction, atomic payment/outbox commit rejection, and replay.
    and an explicit name/variant. Keep behavior choices in recorded configuration,
    actions, and fault rules. Use finite assertion times/deadlines and explicit
    service startup actions; document the expected failure as well as recovery.
-2. For new behavior, define a versioned `ScenarioModel` with accurate kind,
-   actions, endpoints, consumers, operations, and checks, then register it in
-   the appropriate catalog. Keep per-process mutable state inside `instantiate`
+2. For new behavior, add a data-only `ModelDescriptor` with accurate kind,
+   actions, endpoints, consumers, operations, publications, peers, storage, and
+   options to a `descriptors.ts` module. Build the `ScenarioModel` from it plus
+   `checks` and `instantiate`, and register it in the appropriate catalog. Read
+   every called component through `peer()`, never as a literal ID. Keep per-process mutable state inside `instantiate`
    so restarts/reset construct fresh handlers. Use the service-owned DB or KV
    for state that must survive a process crash.
 3. Use shared types from `@distlab/contracts` and `@distlab/scenario`. Handlers
