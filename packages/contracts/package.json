@@ -19,6 +19,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit && node --test --experimental-strip-types tests/time.test.ts"
+    "test": "tsc -p tsconfig.json && tsc -p tsconfig.test.json --noEmit && node --test --experimental-strip-types tests/time.test.ts tests/scenario-document.test.ts"
   }
 }

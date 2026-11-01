@@ -4,6 +4,7 @@ import type { Observation } from "./kernel/observability.js";
 import type { SimulationStatus } from "./kernel/simulation.js";
 import type { SimulationTime } from "./kernel/time.js";
 import type { SessionIdentity } from "./overlay.js";
+import type { ScenarioDocument } from "./scenario-document.js";
 
 export interface ComponentNodeProjection {
   readonly id: ComponentId;
@@ -60,8 +61,20 @@ export type WorkerCommand =
       readonly version: 1;
       readonly requestId: string;
       readonly type: "load";
+      /** An exact packaged document. */
       readonly scenario: CanonicalValue;
+      readonly document?: never;
       /** Validated in the worker into a SessionOverlay. Absent means the empty overlay. */
+      readonly overlay?: CanonicalValue;
+    }
+  | {
+      readonly version: 1;
+      readonly requestId: string;
+      readonly type: "load";
+      readonly scenario?: never;
+      /** The raw text of an imported scenario document (ADR-006). Only the worker parses it. */
+      readonly document: string;
+      /** Validated in the worker against the document's own policy. Absent means the empty overlay. */
       readonly overlay?: CanonicalValue;
     }
   | { readonly version: 1; readonly requestId: string; readonly type: "run"; readonly maxEvents?: number }
@@ -76,8 +89,10 @@ export type WorkerEvent =
       readonly requestId: string;
       readonly type: "loaded";
       readonly projection: RuntimeProjectionSet;
-      /** The lesson, seed, and normalized overlay the worker applied. */
+      /** The lesson, seed, normalized overlay, and origin the worker applied. */
       readonly session: SessionIdentity;
+      /** Present only for imported sessions: the normalized document the worker validated. */
+      readonly document?: ScenarioDocument;
     }
   | { readonly version: 1; readonly requestId?: string; readonly type: "projection.updated"; readonly projection: RuntimeProjectionSet }
   | { readonly version: 1; readonly requestId: string; readonly type: "run.finished"; readonly status: "PAUSED" | "COMPLETED" | "FAILED" }

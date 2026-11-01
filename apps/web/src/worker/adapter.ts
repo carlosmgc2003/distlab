@@ -66,6 +66,8 @@ export class WorkerAdapter {
         // Construction is atomic from the host's perspective: failures expose no old session.
         this.#session = undefined; this.#architecture = undefined;
         // ADR-004 order: command shape (checked on receive), packaged document, overlay, applied document.
+        // Imported documents (ADR-006) fail the command-shape check on receive until the worker load path lands.
+        if (command.scenario === undefined) throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
         const encoded = canonicalEncode(command.scenario);
         const lesson = packagedLessons.find(item => canonicalEncode(item.scenario) === encoded);
         if (!lesson) throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
@@ -82,7 +84,7 @@ export class WorkerAdapter {
         this.#definition = normalized.architecture;
         this.#architecture = architectureProjection(normalized.architecture);
         this.#session = session;
-        const identity: SessionIdentity = { lesson: normalized.name, seed: normalized.seed, overlay: composed.overlay };
+        const identity: SessionIdentity = { lesson: normalized.name, seed: normalized.seed, overlay: composed.overlay, origin: { kind: "packaged" } };
         this.#emit({ version: 1, requestId: command.requestId, type: "loaded", projection: this.#project(), session: identity });
         return;
       }

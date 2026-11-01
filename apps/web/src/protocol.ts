@@ -78,10 +78,19 @@ function isProjection(value: unknown): value is RuntimeProjectionSet {
 
 /** Shape only: the worker already validated and normalized the overlay it applied. */
 function isSession(value: unknown): value is SessionIdentity {
-  if (!record(value) || !keys(value, ["lesson", "seed", "overlay"]) || !text(value.lesson) || !text(value.seed)) return false;
-  const overlay = value.overlay;
+  if (!record(value) || !keys(value, ["lesson", "seed", "overlay", "origin"]) || !text(value.lesson) || !text(value.seed)) return false;
+  const { overlay, origin } = value;
   return record(overlay) && keys(overlay, ["version", "faults", "scheduledFaults", "parameters"]) && overlay.version === 1
-    && [overlay.faults, overlay.scheduledFaults, overlay.parameters].every(items => Array.isArray(items) && items.every(record));
+    && [overlay.faults, overlay.scheduledFaults, overlay.parameters].every(items => Array.isArray(items) && items.every(record))
+    && isOrigin(origin);
+}
+
+function isOrigin(value: unknown): boolean {
+  if (!record(value)) return false;
+  if (value.kind === "packaged") return keys(value, ["kind"]);
+  const catalog = value.catalog;
+  return value.kind === "imported" && keys(value, ["kind", "digest", "catalog"]) && text(value.digest)
+    && record(catalog) && keys(catalog, ["id", "version"]) && text(catalog.id) && text(catalog.version);
 }
 
 export function isWorkerEvent(value: unknown): value is WorkerEvent {
