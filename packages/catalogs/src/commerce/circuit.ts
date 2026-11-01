@@ -1,12 +1,15 @@
 import type { NetworkReply, ServiceDefinition } from "@distlab/contracts";
 import type { ScenarioModel } from "@distlab/scenario";
-import { ok, record, text, timeout } from "./common.js";
+import { peer } from "../peer.js";
+import { dependencyDescriptor, riskDescriptor } from "./descriptors.js";
+import { ok, record, timeout } from "./common.js";
 
 /** A catalog policy, not a new network primitive. One half-open probe at a time. */
 export const dependencyModel: ScenarioModel = {
-  model: "commerce.dependency", version: "1.0.0", kind: "service", actions: [], endpoints: ["POST /check"], consumers: [], operations: [], checks: {},
+  ...dependencyDescriptor, checks: {},
   instantiate(instance): ServiceDefinition {
     const config = record(instance.configuration);
+    const target = peer(dependencyDescriptor, instance, "target");
     const protectedDependency = config.breaker === true;
     let state: "CLOSED" | "OPEN" | "HALF_OPEN" = "CLOSED";
     let openedAt = 0, failures = 0, active = 0, peakActive = 0, calls = 0, rejected = 0, failed = 0, succeeded = 0, totalWait = 0;
@@ -28,10 +31,10 @@ export const dependencyModel: ScenarioModel = {
         active++;
         peakActive = Math.max(peakActive, active);
         ctx.kv!.set("dependency", metrics());
-        ctx.log.write("info", "dependency.waiting", { active, peakActive, target: text(config.target) });
+        ctx.log.write("info", "dependency.waiting", { active, peakActive, target });
         let result: NetworkReply;
         try {
-          result = (yield ctx.http.request({ target: text(config.target), endpoint: "POST /check", body: {} })) as unknown as NetworkReply;
+          result = (yield ctx.http.request({ target, endpoint: "POST /check", body: {} })) as unknown as NetworkReply;
         } catch (error) {
           if (!timeout(error)) throw error;
           result = ok({ status: "UNAVAILABLE", reason: "TIMEOUT" });
@@ -64,7 +67,7 @@ export const dependencyModel: ScenarioModel = {
   },
 };
 export const riskModel: ScenarioModel = {
-  model: "commerce.risk", version: "1.0.0", kind: "external", actions: [], endpoints: [], consumers: [], operations: ["POST /check"], checks: {},
+  ...riskDescriptor, checks: {},
   instantiate: instance => ({ id: instance.id, version: instance.version, initialState: {}, operations: {
     "POST /check": { apply: () => ({ nextState: {}, visibleChanges: {}, reply: ok({ status: "APPROVED" }), callbacks: [] }) },
   } }),

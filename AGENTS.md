@@ -53,7 +53,9 @@ Chromium system dependencies with
 `npm exec -w @distlab/web -- playwright install --with-deps chromium` if needed.
 `apps/web/src/worker/` is the browser runtime composition root. Main-thread
 modules may import application contracts, the host client, and the data-only
-`packages/catalogs/src/scenarios.ts` and `packages/catalogs/src/commerce/scenarios.ts` modules; they must not import runtime model
+`packages/catalogs/src/scenarios.ts`, `packages/catalogs/src/commerce/scenarios.ts`,
+`packages/catalogs/src/descriptors.ts`, and `packages/catalogs/src/commerce/descriptors.ts`
+modules; they must not import runtime model
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command.
 The host accepts only the two packaged checkout documents and ten packaged

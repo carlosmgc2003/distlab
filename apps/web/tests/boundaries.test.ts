@@ -9,6 +9,9 @@ const root = fileURLToPath(new URL("../../..", import.meta.url));
 const app = resolve(root, "apps/web/src");
 const dataModule = resolve(root, "packages/catalogs/src/scenarios.ts");
 const commerceDataModule = resolve(root, "packages/catalogs/src/commerce/scenarios.ts");
+// Data-only model descriptors (ADR-005): the main thread may import them.
+const descriptorModules = [resolve(root, "packages/catalogs/src/descriptors.ts"), resolve(root, "packages/catalogs/src/commerce/descriptors.ts")];
+const dataModules = new Set([dataModule, commerceDataModule, ...descriptorModules]);
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(resolve(directory, entry.name)) : /\.tsx?$/.test(entry.name) ? [resolve(directory, entry.name)] : []);
 }
@@ -31,7 +34,9 @@ function imports(file: string): { path: string; names: string[]; typeOnly: boole
 test("main-thread import graph uses application contracts and data, never runtime mutation ports", () => {
   const allowed = new Set(["ArchitectureDefinition", "ArchitectureProjection", "ComponentNodeProjection", "DatabaseDefinition", "KeyValueDefinition", "ComponentId", "ScenarioDefinition", "ApplicationError", "CanonicalValue", "RuntimeProjectionSet", "WorkerCommand", "WorkerEvent", "Observation", "ObservationFilter", "EntityRef", "SimulationTime",
     // Session overlay data shapes (ADR-004). Types only: no validation or application code.
-    "SessionIdentity", "SessionOverlay", "LessonOverlayPolicy", "LessonParameter", "ParameterOverride", "FaultRule", "FaultEffect", "FaultPoint", "ScheduledFault", "OverlayScheduledFault", "ScenarioDiagnostic"]);
+    "SessionIdentity", "SessionOverlay", "LessonOverlayPolicy", "LessonParameter", "ParameterOverride", "FaultRule", "FaultEffect", "FaultPoint", "ScheduledFault", "OverlayScheduledFault", "ScenarioDiagnostic",
+    // Model descriptor data shapes (ADR-005). Types only: no composition code.
+    "ModelDescriptor", "ModelPeer", "ModelOption", "ModelStorage"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;
@@ -43,7 +48,7 @@ test("main-thread import graph uses application contracts and data, never runtim
         assert.ok(dependency.names.every(name => allowed.has(name)), `Low-level contract in ${file}`);
       } else if (dependency.path.startsWith(".")) {
         const target = resolve(dirname(file), dependency.path);
-        assert.ok(target.startsWith(app) || target === dataModule || target === commerceDataModule, `Only the catalog's data-only source may cross a source boundary: ${target}`);
+        assert.ok(target.startsWith(app) || dataModules.has(target), `Only the catalog's data-only source may cross a source boundary: ${target}`);
         if (!target.endsWith(".css")) walk(target);
       } else assert.ok(["react", "react-dom/client", "@xyflow/react", "@xyflow/react/dist/style.css"].includes(dependency.path), `Runtime dependency ${dependency.path} in ${file}`);
     }
@@ -52,6 +57,8 @@ test("main-thread import graph uses application contracts and data, never runtim
   assert.ok(visited.has(resolve(app, "host.ts")));
   assert.ok(visited.has(dataModule));
   assert.ok(visited.has(commerceDataModule));
+  // Descriptor modules obey the same data-only rules whether or not the app imports them yet.
+  for (const module of descriptorModules) walk(module);
 });
 
 test("kernel and contracts have no upward application, catalog or browser dependencies", () => {

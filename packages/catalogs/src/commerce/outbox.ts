@@ -1,10 +1,11 @@
 import type { ServiceDefinition } from "@distlab/contracts";
 import { duration } from "@distlab/contracts/kernel";
 import type { ScenarioModel } from "@distlab/scenario";
+import { notificationDescriptor, outboxDescriptor } from "./descriptors.js";
 import { ok, record, text } from "./common.js";
 
 export const outboxModel: ScenarioModel = {
-  model: "commerce.outbox-payment", version: "1.0.0", kind: "service", actions: [], endpoints: ["POST /pay", "POST /relay"], consumers: [], operations: [], checks: {},
+  ...outboxDescriptor, checks: {},
   instantiate(instance): ServiceDefinition {
     const useOutbox = record(instance.configuration).outbox === true;
     return { id: instance.id, version: instance.version, consumers: {}, endpoints: {
@@ -40,7 +41,7 @@ export const outboxModel: ScenarioModel = {
   },
 };
 export const notificationModel: ScenarioModel = {
-  model: "commerce.notifications", version: "1.0.0", kind: "service", actions: [], endpoints: [], consumers: ["PaymentApproved"], operations: [], checks: {},
+  ...notificationDescriptor, checks: {},
   instantiate(instance): ServiceDefinition {
     return { id: instance.id, version: instance.version, endpoints: {}, background: {}, consumers: {
       PaymentApproved: function* (delivery, ctx) {

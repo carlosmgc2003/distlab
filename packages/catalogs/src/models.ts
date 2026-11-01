@@ -1,6 +1,8 @@
 import type { CanonicalValue, ClientDefinition, ComponentInstance, DatabaseRow, ExternalDefinition, NetworkReply, ServiceDefinition } from "@distlab/contracts";
 import { ErrorCodes } from "@distlab/contracts/kernel";
 import type { ScenarioCatalog, ScenarioModel } from "@distlab/scenario";
+import { peer } from "./peer.js";
+import { customerAppDescriptor, ordersDescriptor, paymentProcessorDescriptor, paymentsDescriptor } from "./descriptors.js";
 
 const VERSION = "1.0.0";
 
@@ -24,12 +26,13 @@ function dbRow(value: DatabaseRow | undefined): Record<string, CanonicalValue> {
 }
 
 function customerApp(instance: ComponentInstance): ClientDefinition {
+  const ordersPeer = peer(customerAppDescriptor, instance, "orders");
   return { id: instance.id, version: instance.version, callbacks: {}, initialState: { request: null, outcome: null }, actions: {
     checkout: function* (data, ctx) {
       const request = object(data);
       const body = { cartId: field(request, "cartId"), customerId: field(request, "customerId"), amount: amount(request) };
       ctx.state.set("request", body);
-      const reply = (yield ctx.http.request({ target: "orders", endpoint: "POST /orders", body })) as unknown as NetworkReply;
+      const reply = (yield ctx.http.request({ target: ordersPeer, endpoint: "POST /orders", body })) as unknown as NetworkReply;
       ctx.state.set("outcome", reply.body);
       return reply.body;
     },
@@ -57,6 +60,7 @@ function orders(instance: ComponentInstance): ServiceDefinition {
 }
 
 function payments(instance: ComponentInstance): ServiceDefinition {
+  const processor = peer(paymentsDescriptor, instance, "processor");
   let nextPayment = 0;
   return { id: instance.id, version: instance.version, endpoints: {}, background: {}, consumers: {
     OrderCreated: function* (delivery, ctx) {
@@ -74,7 +78,7 @@ function payments(instance: ComponentInstance): ServiceDefinition {
       let authorizationId: string | null = null;
       let outcome: string;
       try {
-        const reply = (yield ctx.http.request({ target: "payment-processor", endpoint: "POST /authorize", body: { paymentId, orderId, amount: total } })) as unknown as NetworkReply;
+        const reply = (yield ctx.http.request({ target: processor, endpoint: "POST /authorize", body: { paymentId, orderId, amount: total } })) as unknown as NetworkReply;
         if (reply.status !== "ok") throw new Error("Processor rejected authorization");
         const response = object(reply.body);
         if (response.status !== "APPROVED") throw new Error("Processor did not approve");
@@ -111,10 +115,10 @@ function processor(instance: ComponentInstance): ExternalDefinition {
 }
 
 const models: readonly ScenarioModel[] = [
-  { model: "distlab.customer-app", version: VERSION, kind: "client", actions: ["checkout"], endpoints: [], consumers: [], operations: [], checks: {}, instantiate: customerApp },
-  { model: "distlab.orders", version: VERSION, kind: "service", actions: [], endpoints: ["POST /orders"], consumers: [], operations: [], checks: {}, instantiate: orders },
-  { model: "distlab.payments", version: VERSION, kind: "service", actions: [], endpoints: [], consumers: ["OrderCreated"], operations: [], checks: {}, instantiate: payments },
-  { model: "distlab.payment-processor", version: VERSION, kind: "external", actions: [], endpoints: [], consumers: [], operations: ["POST /authorize"], checks: {}, instantiate: processor },
+  { ...customerAppDescriptor, checks: {}, instantiate: customerApp },
+  { ...ordersDescriptor, checks: {}, instantiate: orders },
+  { ...paymentsDescriptor, checks: {}, instantiate: payments },
+  { ...paymentProcessorDescriptor, checks: {}, instantiate: processor },
 ];
 
 export const checkoutCatalog: ScenarioCatalog = {
