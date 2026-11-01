@@ -3,6 +3,7 @@ import type { ComponentId } from "./kernel/identities.js";
 import type { FaultEffect, FaultPoint, FaultRule, ScheduledFault } from "./fault.js";
 import type { NetworkPolicy } from "./network.js";
 import type { ScenarioAction } from "./scenario.js";
+import type { SessionOrigin } from "./scenario-document.js";
 
 /**
  * Session overlays on packaged lessons (docs/spec/adr/004-session-overlays.md).
@@ -79,4 +80,6 @@ export interface SessionIdentity {
   readonly lesson: string;
   readonly seed: string;
   readonly overlay: SessionOverlay;
+  /** `{ kind: "packaged" }` for packaged lessons; digest and catalog for imported documents (ADR-006). */
+  readonly origin: SessionOrigin;
 }
