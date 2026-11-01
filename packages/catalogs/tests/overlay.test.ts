@@ -200,7 +200,7 @@ test("lessons offer only the fault points their architecture has", () => {
 
 const pairs = [
   ["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer"],
-  ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"],
+  ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"],
 ] as const;
 
 test("every paired lesson exposes the design choice that distinguishes the pair", () => {
@@ -245,20 +245,38 @@ test("a design choice changes the lesson outcome without changing the packaged a
   assert.deepEqual(outOfRange.diagnostics, [{ path: "/parameters/0/value", code: "PARAMETER_VALUE" }]);
 });
 
+test("a notifications design choice changes only the invariants it is about", async () => {
+  const lesson = lessons.find(item => item.id === "notifications-unbounded")!;
+  const verdicts = async (parameters: { key: string; value: CanonicalValue }[]) =>
+    Object.fromEntries((await run(lesson, { version: 1, parameters })).results.map(item => [item.id, item.status]));
+  // Confirming at checkout keeps the order confirmed, but the notification still retries without a bound.
+  assert.deepEqual(await verdicts([{ key: "decoupled-confirmation", value: true }]), {
+    "nothing-sent-during-outage": "PASS", "order-confirmed-despite-notification-failure": "PASS",
+    "failed-notification-dead-lettered": "FAIL", "bounded-notification-retries": "FAIL",
+  });
+  // A bounded budget dead-letters the notification, but a coupled Orders then never confirms the order.
+  assert.deepEqual(await verdicts([{ key: "max-attempts", value: 3 }]), {
+    "nothing-sent-during-outage": "PASS", "order-confirmed-despite-notification-failure": "FAIL",
+    "failed-notification-dead-lettered": "PASS", "bounded-notification-retries": "PASS",
+  });
+});
+
 test("a pair's distinguishing design choice gives the paired lesson's business invariant verdicts", async () => {
-  const pairs = [["retry-unsafe", "retry-idempotent", "idempotency"], ["saga-uncompensated", "saga-compensated", "compensation"],
-    ["dual-write", "outbox-unsafe-consumer", "outbox"], ["outbox-unsafe-consumer", "outbox-idempotent", "consumer-idempotency"],
-    ["cascade-unprotected", "cascade-breaker", "circuit-breaker"]] as const;
+  // A pair may differ in more than one design choice; the notifications pair needs both to reach the paired verdicts.
+  const pairs = [["retry-unsafe", "retry-idempotent", ["idempotency"]], ["saga-uncompensated", "saga-compensated", ["compensation"]],
+    ["dual-write", "outbox-unsafe-consumer", ["outbox"]], ["outbox-unsafe-consumer", "outbox-idempotent", ["consumer-idempotency"]],
+    ["cascade-unprotected", "cascade-breaker", ["circuit-breaker"]],
+    ["notifications-unbounded", "notifications-dlq", ["decoupled-confirmation", "max-attempts"]]] as const;
   const invariants = (name: typeof pairs[number][0 | 1], result: HarnessExport) => {
     const ids = new Set(commerceChecks(name).filter(check => check.kind === "invariant").map(check => check.id));
     return result.results.filter(item => ids.has(item.id)).map(item => `${item.id} ${item.status}`);
   };
-  for (const [from, to, key] of pairs) {
+  for (const [from, to, keys] of pairs) {
     const source = lessons.find(item => item.id === from)!, target = lessons.find(item => item.id === to)!;
-    const value = target.policy.parameters.find(parameter => parameter.key === key)!.domain.default;
-    const switched = await run(source, { version: 1, parameters: [{ key, value }] });
+    const parameters = keys.map(key => ({ key, value: target.policy.parameters.find(parameter => parameter.key === key)!.domain.default }));
+    const switched = await run(source, { version: 1, parameters });
     const paired = await run(target, { version: 1 });
-    assert.deepEqual(invariants(from, switched), invariants(to, paired), `${from} with ${key}=${String(value)}`);
+    assert.deepEqual(invariants(from, switched), invariants(to, paired), `${from} with ${JSON.stringify(parameters)}`);
     assert.notDeepEqual(invariants(from, await run(source, { version: 1 })), invariants(to, paired), `${from} and ${to} differ`);
   }
 });
