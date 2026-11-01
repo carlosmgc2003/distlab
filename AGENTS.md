@@ -112,10 +112,20 @@ History currently contains only `Initial commit`, so no established convention e
 
 ## Agent skills
 
+### Unattended workflow
+
+Agent sessions that implement an issue without supervision follow
+`docs/agents/workflow.md`: how to pick and claim work, when to stop and ask in
+the issue, what to verify, and what the pull request must contain
+(`.github/pull_request_template.md`). Agents never merge.
+
+Cloud sessions install dependencies through the SessionStart hook in
+`.claude/hooks/session-start.sh`, which runs `npm ci` only when a manifest changes.
+
 ### Issue tracker
 
-Issues live in GitHub Issues for `carlosmgc2003/distlab`; use the `gh` CLI.
-See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for `carlosmgc2003/distlab`; use the `gh` CLI, or
+the GitHub MCP tools in Claude cloud sessions. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -52,6 +52,7 @@ DistLab models the semantics that matter for learning rather than emulating spec
   - [Service Runtime](docs/spec/service-runtime.md), [Client Runtime](docs/spec/client-runtime.md), and [External Service Runtime](docs/spec/external-service-runtime.md)
   - [Fault Engine](docs/spec/fault-engine.md) and [Scenario Engine](docs/spec/scenario-engine.md)
 - [Architecture decisions](docs/spec/adr/) records significant decisions about simulation semantics.
+- [Unattended agent workflow](docs/agents/workflow.md) describes how agent sessions pick, implement, and hand over issues for review. Claude Code cloud sessions install dependencies with the SessionStart hook in `.claude/hooks/session-start.sh`.
 
 The documentation is evolving while the remaining design decisions are made.
 
