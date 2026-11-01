@@ -5,7 +5,7 @@
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
 | Last updated | 2026-11-01 |
-| Related issues | #3, #46, #47, #69, #93, #98 |
+| Related issues | #3, #46, #47, #69, #93, #98, #99 |
 
 ## Responsibility
 
@@ -42,7 +42,8 @@ The main thread may derive presentation-only resource nodes from packaged
 
 The host accepts an exact packaged checkout or commerce document, optionally
 with a session overlay that the lesson's overlay policy allows
-([ADR-004](adr/004-session-overlays.md)). It accepts no other document.
+([ADR-004](adr/004-session-overlays.md)). The only other input it accepts is
+an imported scenario document, described below.
 The overlay adds student fault rules, student scheduled faults, and parameter
 overrides at declared targets. It never edits assertions, workload, topology,
 seed, start time, or `RunInputs.configuration`. The worker resolves the policy
@@ -59,6 +60,24 @@ Compare carries the student's fault entries and every parameter override whose
 key the paired lesson declares with the same domain and default. It drops and
 lists the others. The pair's distinguishing parameters therefore take the
 paired lesson's values.
+
+### Imported scenario documents
+
+[ADR-006](adr/006-scenario-documents.md) adds a second accepted input: an
+instructor's **scenario document**. It is a JSON envelope around an unchanged
+`ScenarioDefinition`, with an exact catalog reference, plain-text presentation,
+and an optional overlay policy. The main thread reads a local file, checks its
+byte size, and sends the text unparsed as `load.document`. It never parses,
+validates, or interprets the document. The worker parses the text strictly,
+applies the document limits, resolves the catalog from its own hosted catalog
+registry, and runs the unchanged ScenarioEngine validation. Invariants are
+assertions on that catalog's versioned predicates. A document never carries
+code. An overlay on an imported session is checked against the document's own
+validated policy. Without a policy, only the empty overlay is accepted. Student
+projections are chosen by catalog reference and derived from the normalized
+architecture. Imported sessions have no paired lesson, so Compare is
+unavailable. The decision is accepted, and #113, #114, and #115 implement it.
+Until then the worker accepts packaged lessons only.
 
 Engine counters use the read-only properties documented in
 [ADR-003](adr/003-boundary-counters.md), not observation counting or a hardcoded
@@ -138,6 +157,8 @@ host-generated `requestId`; every terminal response echoes it.
 type WorkerCommand =
   | { version: 1; requestId: string; type: "load"; scenario: CanonicalValue;
       overlay?: CanonicalValue }
+  | { version: 1; requestId: string; type: "load"; document: string;
+      overlay?: CanonicalValue }
   | { version: 1; requestId: string; type: "run"; maxEvents?: number }
   | { version: 1; requestId: string; type: "pause" }
   | { version: 1; requestId: string; type: "step" }
@@ -146,7 +167,7 @@ type WorkerCommand =
 type WorkerEvent =
   | { version: 1; requestId: string; type: "accepted" }
   | { version: 1; requestId: string; type: "loaded"; projection: RuntimeProjectionSet;
-      session: SessionIdentity }
+      session: SessionIdentity; document?: ScenarioDocument }
   | { version: 1; requestId?: string; type: "projection.updated"; projection: RuntimeProjectionSet }
   | { version: 1; requestId: string; type: "run.finished"; status: "PAUSED" | "COMPLETED" | "FAILED" }
   | { version: 1; requestId: string; type: "error"; error: ApplicationError };
@@ -160,6 +181,16 @@ until completion, pause, failure, or the optional event limit. `pause` requests 
 boundary pause and does not finalize assertions. `step` processes at most one
 scheduled event. `reset` reconstructs the current loaded scenario with the same
 normalized inputs, including the applied overlay. It never takes an overlay.
+
+A `load` carries exactly one of `scenario` (a packaged document) and `document`
+(the text of an imported scenario document). For an imported document,
+`loaded.document` returns the normalized document that the worker validated,
+and `loaded.session.origin` carries its digest and catalog reference. The UI
+renders imported presentation, resource nodes, and Break choices from that
+value. Packaged sessions report the origin `{ kind: "packaged" }`. `reset`
+reconstructs an imported session from the same normalized document. The
+`document` variant, `loaded.document`, and `SessionIdentity.origin` are accepted
+by ADR-006 and not implemented yet.
 
 The `overlay` field and `loaded.session` are accepted by ADR-004 and implemented
 by #94. The contract types (`SessionOverlay`, `SessionIdentity`,
@@ -188,8 +219,12 @@ makes the applied document invalid, returns `INVALID_OVERLAY` with
 `{ diagnostics }`. Each diagnostic path is a JSON pointer into the submitted
 overlay, and diagnostics are sorted by path, then code. The worker checks the
 command shape first, then the packaged document, then the overlay. A failed
-`load` exposes no session. Runtime terminal failures return `SIMULATION_FAILED` with the
-simulation error context. A failed subscriber or UI render path is host-only and
+`load` exposes no session. An imported document that fails parsing, its limits,
+its envelope, catalog resolution, scenario validation, or its policy checks
+returns `INVALID_DOCUMENT` with `{ diagnostics }`. Paths are JSON pointers into
+the document, and diagnostics are sorted by path, then code
+([ADR-006](adr/006-scenario-documents.md#validation)). Runtime terminal failures
+return `SIMULATION_FAILED` with the simulation error context. A failed subscriber or UI render path is host-only and
 cannot alter canonical history.
 
 ## Shell action matrix
@@ -227,6 +262,7 @@ and it takes effect at an event boundary.
 | Pause | Unavailable | Unavailable | Request a pause at the next event boundary | Unavailable | Unavailable because the run is not in progress | Unavailable |
 | Step | Unavailable | Process one scheduled event | Unavailable | Process one scheduled event | Unavailable because the run has finished | Unavailable |
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
+| Open scenario file | Read a local file and load it | Replace the session | Unavailable | Replace the session | Replace the session | After `INVALID_DOCUMENT` the diagnostics stay listed, and choosing a file loads again |
 | Break and design choices (draft overlay) | Not shown | Edit the draft. Apply sends `load` with the packaged document and the draft, which replaces the session | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
 | Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
@@ -247,10 +283,13 @@ unavailable on the last.
 
 ## Deferred capabilities
 
-The MVP does not include a free-form architecture editor, YAML authoring format,
-save/load persistence, rewind, full snapshots, server execution, collaborative
-sessions, or direct mutation from inspectors. Session overlays do not include
-seed choice, service restart actions, assertion editing, or overlay persistence.
+The MVP does not include a free-form architecture editor, rewind, full
+snapshots, server execution, collaborative sessions, or direct mutation from
+inspectors. Session overlays do not include seed choice, service restart
+actions, assertion editing, or overlay persistence. ADR-006 decides JSON
+scenario documents imported from a local file. It defers a YAML authoring
+format, import from a URL, storing documents in the browser, sharing or hosting
+documents, a visual authoring UI, and signed documents.
 
 [ADR-005](adr/005-architecture-editor.md) decides the scope of the student
 architecture editor. Students compose prefabricated catalog models and choose
@@ -281,12 +320,21 @@ subscriptions (#108 to #112). These remain deferred:
   `runId` and export. The same lesson and overlay reproduce identical history
   across fresh loads and Reset (OVL-AC-1, OVL-AC-2).
 - **APP-AC-7:** The main thread sends no applied document and imports no overlay
-  application code. The worker takes overlay policies only from its catalog.
+  application code. The worker takes overlay policies for packaged lessons only
+  from its catalog.
+- **APP-AC-8:** `load` with `document` accepts a valid scenario document against
+  a hosted catalog, and it rejects an invalid one with `INVALID_DOCUMENT` and
+  document-relative diagnostics. No session stays exposed after a rejection
+  (DOC-AC-4, DOC-AC-7).
+- **APP-AC-9:** The main thread sends imported text unparsed and imports no
+  document parser, validator, or catalog registry. The same document and overlay
+  reproduce identical history across fresh loads and Reset (DOC-AC-3, DOC-AC-5).
 
 ## References
 
 - [Shared contracts](contracts.md)
 - [ADR-004: Session overlays](adr/004-session-overlays.md)
 - [ADR-005: Architecture editor scope](adr/005-architecture-editor.md)
+- [ADR-006: Scenario documents](adr/006-scenario-documents.md)
 - [Scenario Engine](scenario-engine.md)
 - [Observability](observability.md)

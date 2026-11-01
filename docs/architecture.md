@@ -1594,3 +1594,18 @@ design, not the gestures, and the applied document's `runId` identifies it.
 Packaged documents, golden digests, the kernel, and the dependency direction are
 unchanged. Adding and removing components with student-chosen IDs is a later
 sandbox increment. See [ADR-005](spec/adr/005-architecture-editor.md).
+
+## Instructor scenario documents
+
+An instructor writes a scenario as a **scenario document**: a JSON envelope
+around an unchanged `ScenarioDefinition`. The envelope names an exact hosted
+catalog and carries plain-text presentation and an optional overlay policy.
+Invariants are assertions on that catalog's versioned predicates. A document
+never contains code. A student opens a local file, and the main thread sends
+its text unparsed in `load`. The worker parses it strictly, applies size and
+count limits, resolves the catalog from its own registry, and runs the unchanged
+ScenarioEngine. Only the scenario and the resolved catalog versions enter
+`RunInputs`, so `runId` identifies the run. A document digest identifies the
+file. YAML, URL import, and browser storage are deferred. Kernel and runtime
+models are unchanged, and dependency direction is unchanged. See
+[ADR-006](spec/adr/006-scenario-documents.md).
