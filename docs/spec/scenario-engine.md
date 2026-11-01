@@ -148,6 +148,9 @@ event-start observation as cause. An interactive fault edit must produce a new
 scenario/run input, not mutate the current run outside its recorded action list.
 [ADR-004](adr/004-session-overlays.md) defines how a student overlay produces that
 input. The engine receives the applied document and is unaware of overlays.
+[ADR-005](adr/005-architecture-editor.md) adds architecture composition rules
+to validation (peers, interfaces, peer links, published destinations, and
+required storage), checked against catalog model descriptors (#109).
 
 Assessment runs once after initialization and after each complete kernel event
 boundary, including synchronous controlled continuations. It does not subscribe

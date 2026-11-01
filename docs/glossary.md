@@ -18,6 +18,12 @@ payment even when its response is lost.
 architectural decision and its rationale. DistLab requires an ADR for changes
 to fundamental simulation semantics.
 
+**Architecture edit** — A student's change to a packaged lesson's
+architecture, carried in the session overlay: filling a slot, binding a peer,
+attaching or detaching an owned resource, or adding or removing a
+subscription. The overlay records the resulting design, not the gestures. See
+ADR-005.
+
 **Architecture state** — The definition of the distributed system: clients,
 services, connections, resources, subscriptions, configuration, and network
 policies. It is separate from the state of a particular execution.
@@ -139,7 +145,8 @@ compare-and-set, idempotency keys, locks, and leases.
 **Lesson overlay policy** — The data-only allow-list a packaged lesson declares
 for session overlays: the fault points, effects, and scheduled-fault kinds a
 student may add, an entry limit, and the parameters a student may override. See
-ADR-004.
+ADR-004. ADR-005 adds an optional architecture allowance: the slots, peer
+bindings, resources, and subscriptions a student may edit.
 
 **Latency** — Simulated elapsed time between communication events. Network and
 external-service policies can add fixed or variable latency without causing a
@@ -158,6 +165,10 @@ topic and delivered to one or more consumers by the `MessageBus`.
 **MessageBus** — A generic asynchronous messaging model supporting publish and
 subscribe, queues, topics, acknowledgements, redelivery, competing consumers,
 duplicates, delays, drops, and ordering changes.
+
+**Model descriptor** — The data-only statement of a catalog model's interface:
+its kind, actions, endpoints, consumers, operations, published destinations,
+peers, storage needs, and behavior options. See ADR-005.
 
 **Negative acknowledgement (NACK)** — A consumer's indication that a delivered
 message was not processed successfully. The bus may redeliver or dead-letter
@@ -189,6 +200,15 @@ advance.
 declares. It replaces the packaged value at the parameter's declared targets.
 It is distinct from run configuration (`RunInputs.configuration`), which a
 student cannot change.
+
+**Peer** — A named outbound dependency that a model declares: the component
+kinds it may bind to, the endpoints or operations it calls there, and a default
+component. The bound component ID is held in the instance configuration. Not
+to be confused with a kernel port, which is an injected capability.
+
+**Placeholder model** — A catalog model that fills an empty slot. It exposes a
+configured interface, answers every request with `NOT_IMPLEMENTED`, and holds
+no state.
 
 **Projection** — A derived read model built from system activity, commonly by
 consuming events. A projection can lag behind its source state.
@@ -248,6 +268,10 @@ messages, faults, and random-generator state.
 
 **Simulation time** — Logical time controlled by `VirtualClock`; it can advance
 without waiting for the equivalent amount of wall-clock time.
+
+**Slot** — A lesson-owned component whose model a student may choose from the
+lesson's allowed models. Its ID never changes, so the lesson's workload,
+assertions, and faults keep referring to it.
 
 **Snapshot** — A serializable capture of the simulation state that can support
 future replay, rewind, execution forks, comparisons, and save/load operations.

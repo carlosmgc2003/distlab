@@ -65,6 +65,20 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Say *parameter*, not *configuration*. `configuration` means
   `RunInputs.configuration`, which an overlay cannot change.
 
+## Architecture editor
+
+- Students compose catalog models; they never author handlers. See
+  [ADR-005](docs/spec/adr/005-architecture-editor.md).
+- A **model descriptor** is a catalog model's data-only interface. A **peer** is
+  a component a model calls, bound through configuration with a default. Say
+  *peer*, not *port*: a port is an injected kernel capability.
+- A **slot** is a lesson-owned component whose model the student chooses. A
+  **placeholder model** fills an empty slot and answers `NOT_IMPLEMENTED`.
+- **Architecture edits** are part of the session overlay and record the
+  resulting design, not the gestures. The lesson's **architecture allowance**
+  says which edits are allowed. The worker is the only validator; the editor's
+  draft **preview** is presentation and is never sent.
+
 ## Naming
 
 Import shared types from `@distlab/contracts` or `@distlab/contracts/kernel`.
