@@ -65,7 +65,23 @@ export const dependencyDescriptor: ModelDescriptor = {
 
 export const riskDescriptor: ModelDescriptor = { ...none, model: "commerce.risk", version: VERSION, kind: "external", operations: ["POST /check"] };
 
+/** Orders either confirms at checkout (`decoupled`) or waits for `NotificationSent`. */
+export const notifyOrdersDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.notify-orders", version: VERSION, kind: "service", endpoints: ["POST /checkout"], consumers: ["NotificationSent"],
+  publishes: ["OrderPlaced"], storage: tables("orders"), options: [flag("decoupled")],
+};
+
+/** Sends through the Messaging Provider. An uncaught send timeout NACKs; the destination bounds the retries. */
+export const notifySenderDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.notify-sender", version: VERSION, kind: "service", consumers: ["OrderPlaced"], publishes: ["NotificationSent"],
+  peers: [{ name: "provider", kinds: ["external"], calls: ["POST /send"], default: "messaging" }],
+  storage: tables("notifications"),
+};
+
+export const messagingDescriptor: ModelDescriptor = { ...none, model: "commerce.messaging-provider", version: VERSION, kind: "external", operations: ["POST /send"] };
+
 export const commerceDescriptors: readonly ModelDescriptor[] = [
   clientDescriptor, retryDescriptor, carrierDescriptor, sagaDescriptor, sagaResourceDescriptor, notificationDescriptor,
   outboxDescriptor, orderReadDescriptor, orderWriteDescriptor, dependencyDescriptor, riskDescriptor,
+  notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
 ];

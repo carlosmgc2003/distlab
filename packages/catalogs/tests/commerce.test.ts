@@ -27,7 +27,7 @@ function metrics(result: HarnessExport, owner: string) {
 }
 
 test("paired lessons use equivalent fault schedules, workloads, and seeds", () => {
-  for (const [left, right] of [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-idempotent"], ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"]] as const) {
+  for (const [left, right] of [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-idempotent"], ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"]] as const) {
     const a = object(commerceScenario(left)), b = object(commerceScenario(right));
     assert.equal(a.seed, b.seed);
     assert.deepEqual(a.faults, b.faults);
@@ -35,7 +35,7 @@ test("paired lessons use equivalent fault schedules, workloads, and seeds", () =
   }
 });
 
-const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"]] as const;
+const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"]] as const;
 /** The business invariants each packaged lesson is meant to violate; every other check passes. */
 const violated: Record<typeof commerceLessonNames[number], readonly string[]> = {
   "retry-unsafe": ["one-payment-per-order"],
@@ -48,10 +48,12 @@ const violated: Record<typeof commerceLessonNames[number], readonly string[]> = 
   "cqrs-delayed": [],
   "cascade-unprotected": ["bounded-waiting"],
   "cascade-breaker": [],
+  "notifications-unbounded": ["order-confirmed-despite-notification-failure", "failed-notification-dead-lettered", "bounded-notification-retries"],
+  "notifications-dlq": [],
 };
 const assertionsOf = (name: typeof commerceLessonNames[number]) => object(commerceScenario(name)).assertions as Record<string, CanonicalValue>[];
 
-test("every check in the 10 commerce lessons is classified as a business invariant or a scenario expectation", () => {
+test("every check in the 12 commerce lessons is classified as a business invariant or a scenario expectation", () => {
   assert.equal(families.flat().length, commerceLessonNames.length);
   for (const name of commerceLessonNames) {
     const checks = commerceChecks(name);
@@ -92,6 +94,39 @@ test("circuit breaker reduces downstream load and upstream accumulated waiting",
   assert.equal(callsToRisk(safe), 5);
   assert.equal(object(metrics(unsafe, "payments")).peakActive, 10);
   assert.equal(object(metrics(safe, "payments")).peakActive, 3);
+});
+
+test("a failing Messaging Provider: unbounded retry blocks the order, bounded retry dead-letters the notification", async () => {
+  const unsafe = await execute("notifications-unbounded"), safe = await execute("notifications-dlq");
+  const of = (result: HarnessExport, type: string) => result.history.observations.filter(o => o.type === type);
+  const orderPlaced = (result: HarnessExport) => object(object(result.state).messageBus!).records as Record<string, CanonicalValue>[];
+  const order = (result: HarnessExport) => object(object(object(object(object(result.state).databases!).orders!).tables!).orders!)["order-1"];
+  // Every send while the provider is unreachable is lost, times out, and NACKs the delivery.
+  for (const result of [unsafe, safe]) {
+    const sends = of(result, "network.request.sent").filter(o => o.source === "notifications");
+    assert.equal(of(result, "network.request.timedout").filter(o => o.source === "notifications").length, Math.min(sends.length, 5));
+    assert.equal(of(result, "message.nacked").length, of(result, "network.request.timedout").filter(o => o.source === "notifications").length);
+  }
+  // Unsafe: six attempts, success only after recovery at t=80, and Orders confirms only after that.
+  assert.deepEqual(logs(unsafe, "notification.sending").map(entry => entry.attempt), [1, 2, 3, 4, 5, 6]);
+  assert.equal(of(unsafe, "message.dead").length, 0);
+  assert.deepEqual(orderPlaced(unsafe).filter(r => r.destination === "OrderPlaced").map(r => [r.state, r.attempt]), [["ACKED", 6]]);
+  const confirmed = unsafe.history.observations.find(o => o.type === "runtime.log" && object(o.data!).message === "order.confirmed-after-notification");
+  assert.ok(confirmed && confirmed.time > 80);
+  assert.deepEqual({ ...object(order(unsafe)!) }, { status: "CONFIRMED" });
+  assert.deepEqual(JSON.parse(JSON.stringify(object(object(object(unsafe.state).components!).messaging!).visible)), { sent: [{ orderId: "order-1" }] });
+  // Safe: the order is confirmed at checkout; three attempts, then DEAD and held for inspection.
+  assert.deepEqual(logs(safe, "client.result").map(entry => object(entry.result!).status), ["CONFIRMED"]);
+  assert.deepEqual(logs(safe, "notification.sending").map(entry => entry.attempt), [1, 2, 3]);
+  const dead = of(safe, "message.dead");
+  assert.equal(dead.length, 1);
+  assert.equal(dead[0]!.time, 44);
+  assert.deepEqual(orderPlaced(safe).filter(r => r.destination === "OrderPlaced").map(r => [r.state, r.attempt]), [["DEAD", 3]]);
+  const letters = object(object(safe.state).messageBus!).deadLetters as Record<string, CanonicalValue>[];
+  assert.deepEqual(JSON.parse(JSON.stringify(letters.map(letter => [letter.destination, letter.attempts, letter.reason, object(letter.message!).body]))), [["OrderPlaced", 3, "nack", { orderId: "order-1" }]]);
+  assert.equal(of(safe, "external.effect.committed").length, 0);
+  assert.equal(logs(safe, "order.notified").length, 0);
+  assert.deepEqual({ ...object(order(safe)!) }, { status: "CONFIRMED" });
 });
 
 test("outbox and payment roll back together when the local commit fails", async () => {

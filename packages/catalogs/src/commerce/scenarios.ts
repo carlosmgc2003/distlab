@@ -16,12 +16,14 @@ export const commerceLessonNames = [
   "saga-uncompensated", "saga-compensated",
   "dual-write", "outbox-unsafe-consumer", "outbox-idempotent",
   "cqrs-delayed", "cascade-unprotected", "cascade-breaker",
+  "notifications-unbounded", "notifications-dlq",
 ] as const;
 export type CommerceLessonName = typeof commerceLessonNames[number];
 
 /** Data-only documents; paired experiments deliberately share a seed and faults. */
 export function commerceScenario(name: CommerceLessonName): CanonicalValue {
   if (name.startsWith("cascade-")) return circuitScenario(name);
+  if (name.startsWith("notifications-")) return notificationScenario(name);
   if (name === "cqrs-delayed") return cqrsScenario(name);
   if (name.startsWith("saga-")) return sagaScenario(name);
   if (name === "dual-write" || name.startsWith("outbox-")) return outboxScenario(name);
@@ -132,6 +134,40 @@ function circuitScenario(name: CommerceLessonName): CanonicalValue {
   } as CanonicalValue;
 }
 /**
+ * The Messaging Provider is unreachable until t=80: each send is lost and times
+ * out, and the uncaught timeout NACKs the `OrderPlaced` delivery. The pair
+ * differs in two design choices: whether Orders waits for `NotificationSent`
+ * before confirming, and the destination's retry budget (50 stands in for
+ * "retry until it works"; 3 sends the message to the dead-letter queue).
+ */
+function notificationScenario(name: CommerceLessonName): CanonicalValue {
+  const safe = name === "notifications-dlq";
+  return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
+    architecture: {
+      components: [component("client", "client", "client"), component("orders", "notify-orders", "service", { decoupled: safe }),
+        component("notifications", "notify-sender"), component("messaging", "messaging-provider", "external")],
+      links: [link("client", "orders"), link("notifications", "messaging", 10)],
+      databases: [database("orders", ["orders"]), database("notifications", ["notifications"])], stores: [],
+      destinations: [
+        { id: "OrderPlaced", kind: "topic", deliveryDelay: 1, ackTimeout: 20, retryDelay: 5, maxAttempts: safe ? 3 : 50, capacity: 100 },
+        { id: "NotificationSent", kind: "topic", deliveryDelay: 1, ackTimeout: 10, retryDelay: 1, maxAttempts: 3, capacity: 100 },
+      ],
+      subscriptions: [{ destination: "OrderPlaced", consumer: "notifications" }, { destination: "NotificationSent", consumer: "orders" }],
+    }, external: [],
+    faults: [{ ...fault("messaging-unreachable", "network.request", "notifications", "messaging", "POST /send", { kind: "drop" }), until: 80, maxApplications: 100 }],
+    actions: [
+      ...["orders", "notifications"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
+      request("checkout", 0, "orders", "POST /checkout", { orderId: "order-1" }),
+    ], assertions: [
+      assertion("nothing-sent-during-outage", 60, "notifications", "notifications", 0),
+      assertion("order-confirmed-despite-notification-failure", 50, "orders", "orders", 1, "order-1", { status: "CONFIRMED" }),
+      { id: "failed-notification-dead-lettered", predicate: "commerce.dead-letters", mode: "at", at: 60, parameters: { destination: "OrderPlaced", attempts: 3 } },
+      { id: "bounded-notification-retries", predicate: "commerce.attempts", mode: "at", at: 120, parameters: { destination: "OrderPlaced", maximum: 3 } },
+    ],
+  } as CanonicalValue;
+}
+
+/**
  * A lesson check is one packaged assertion, classified for students (#96).
  * A business invariant states the property that must hold whatever the design,
  * so every lesson of a family carries the identical assertion and its verdict
@@ -178,6 +214,13 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
         invariant("write-remains-paid", "The write model keeps the payment"),
         invariant("read-converged", "The read model converges to the write model"),
       ];
+    case "notifications":
+      return [
+        expectation("nothing-sent-during-outage", "No notification reached the unreachable Messaging Provider (t=60)"),
+        invariant("order-confirmed-despite-notification-failure", "An order is confirmed while its notification is failing"),
+        invariant("failed-notification-dead-lettered", "A notification that used all 3 attempts is held in the dead-letter queue"),
+        invariant("bounded-notification-retries", "No notification is attempted more than 3 times"),
+      ];
     default:
       return [
         expectation("dependency-recovered", name === "cascade-breaker"
@@ -205,11 +248,11 @@ const commit = { point: "database.commit" as const, effects: ["fail"] as FaultEf
 export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPolicy {
   const family = name.split("-")[0];
   const rules = family === "cascade" ? network
-    : family === "cqrs" || family === "outbox" || family === "dual" ? [...network, delivery, commit]
+    : family === "cqrs" || family === "outbox" || family === "dual" || family === "notifications" ? [...network, delivery, commit]
     : [...network, commit];
   const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
-    : family === "retry" || family === "cqrs" ? ["crash"] : [];
+    : family === "retry" || family === "cqrs" || family === "notifications" ? ["crash"] : [];
   return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name) };
 }
 
@@ -243,5 +286,12 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
     case "cascade-unprotected":
     case "cascade-breaker":
       return [flag("circuit-breaker", name === "cascade-breaker", "payments", "breaker")];
+    case "notifications-unbounded":
+    case "notifications-dlq":
+      return [
+        flag("decoupled-confirmation", name === "notifications-dlq", "orders", "decoupled"),
+        { key: "max-attempts", domain: { type: "integer", default: name === "notifications-dlq" ? 3 : 50, minimum: 1, maximum: 50 },
+          targets: [{ kind: "destination", destination: "OrderPlaced", field: "maxAttempts" }] },
+      ];
   }
 }

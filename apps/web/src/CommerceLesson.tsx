@@ -27,6 +27,9 @@ export function CommerceFacts({ projection, componentId }: { projection: Runtime
     {state.role === "commerce-client" && !Object.keys(observed).length ? <p>No response observed yet.</p> : null}
     {state.role === "external-visible" ? <p>{String(state.availability)} · {fields(state.visible ?? {})}</p> : null}
     {Array.isArray(state.records) ? <ul>{state.records.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : null}
+    {Array.isArray(state.deadLetters) ? <div><strong>Dead-letter queue</strong>
+      {state.deadLetters.length ? <ul aria-label={`${componentId} dead-letter queue`}>{state.deadLetters.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : <p>No dead-lettered messages.</p>}
+    </div> : null}
   </div>;
 }
 

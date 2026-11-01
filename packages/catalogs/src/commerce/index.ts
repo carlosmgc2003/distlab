@@ -1,3 +1,4 @@
+import type { CanonicalValue } from "@distlab/contracts";
 import type { ScenarioAssessment, ScenarioCatalog } from "@distlab/scenario";
 import { clientModel, record, text } from "./common.js";
 import { retryModel } from "./retry.js";
@@ -5,21 +6,43 @@ import { carrierModel, sagaModel, sagaResourceModel } from "./saga.js";
 import { notificationModel, outboxModel } from "./outbox.js";
 import { orderReadModel, orderWriteModel } from "./cqrs.js";
 import { dependencyModel, riskModel } from "./circuit.js";
+import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.js";
 export { commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
 export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
 
-const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel];
+const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel,
+  notifyOrdersModel, notifySenderModel, messagingModel];
 export const commerceCatalog: ScenarioCatalog = {
   id: "commerce.lessons", version: "1.0.0",
   find: (name, version) => models.find(model => model.model === name && model.version === version),
   versions: name => models.filter(model => model.model === name).map(model => model.version),
 };
+/** Routing records of one destination as delivery facts: message, state, and attempt. */
+function deliveries(messageBus: CanonicalValue, destination: string) {
+  const records = record(messageBus).records;
+  return (Array.isArray(records) ? records : []).map(item => record(item)).filter(item => item.destination === destination)
+    .map(item => ({ messageId: text(item.messageId), state: text(item.state), attempt: item.attempt as number }));
+}
+
 export const commerceAssessment: ScenarioAssessment = {
   version: "1.0.0",
-  find: id => !["commerce.rows", "commerce.metrics"].includes(id) ? undefined : {
+  find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters"].includes(id) ? undefined : {
     id, version: "1.0.0", evaluate({ parameters, projection }) {
       const p = record(parameters);
+      if (id === "commerce.attempts") {
+        // No message of the destination was delivered more often than the retry budget allows.
+        const records = deliveries(projection.messageBus, text(p.destination));
+        return { pass: records.every(item => item.attempt <= (p.maximum as number)), evidence: records };
+      }
+      if (id === "commerce.dead-letters") {
+        // A message that used its whole retry budget without an ACK is held in the dead-letter queue.
+        const records = deliveries(projection.messageBus, text(p.destination));
+        const exhausted = records.filter(item => item.attempt >= (p.attempts as number) && item.state !== "ACKED");
+        const dead = record(projection.messageBus).deadLetters;
+        const held = new Set((Array.isArray(dead) ? dead : []).map(item => text(record(item).messageId)));
+        return { pass: exhausted.every(item => item.state === "DEAD" && held.has(item.messageId)), evidence: { exhausted, deadLetters: [...held] } };
+      }
       if (id === "commerce.metrics") {
         const entries = record(projection.stores)[text(p.owner)];
         const entry = Array.isArray(entries) ? entries.find(item => record(item).key === "dependency") : undefined;

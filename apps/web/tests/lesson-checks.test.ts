@@ -34,7 +34,7 @@ test("every commerce lesson's checks reach the student as invariants or expectat
     assert.deepEqual(result.expectations.map(row => row.id), classified.filter(check => check.kind === "expectation").map(check => check.id), name);
     // Every packaged lesson reproduces its setup; an unsafe lesson's finding is a VIOLATED invariant.
     assert.ok(result.reproduced === null || result.reproduced === "yes", `${name} reproduced its setup`);
-    const unsafe = ["retry-unsafe", "saga-uncompensated", "dual-write", "outbox-unsafe-consumer", "cascade-unprotected"].includes(name);
+    const unsafe = ["retry-unsafe", "saga-uncompensated", "dual-write", "outbox-unsafe-consumer", "cascade-unprotected", "notifications-unbounded"].includes(name);
     assert.equal(result.invariants.some(row => row.verdict === "VIOLATED"), unsafe, name);
     for (const row of [...result.invariants, ...result.expectations]) {
       assert.ok(!/^PASS|^FAIL/.test(row.verdict), `${name} ${row.id}`);

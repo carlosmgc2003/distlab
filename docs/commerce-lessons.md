@@ -1,6 +1,6 @@
 # Commerce failure and resilience lessons
 
-These ten browser and headless scenarios build on the same commerce vocabulary: `order-1`,
+These twelve browser and headless scenarios build on the same commerce vocabulary: `order-1`,
 a 5000-unit payment, service-owned databases, and explicit network/message
 boundaries. Each lesson uses only the topology needed for its teaching point.
 They are independent experiments, not successive mutations of one running system.
@@ -72,10 +72,12 @@ Setting every choice back to its default gives the packaged run exactly.
 | `saga-*` | `compensation` (orders `compensate`) |
 | `dual-write`, `outbox-*` | `outbox` (payments `outbox`), `consumer-idempotency` (notifications `idempotent`) |
 | `cascade-*` | `circuit-breaker` (payments `breaker`) |
+| `notifications-*` | `decoupled-confirmation` (orders `decoupled`), `max-attempts` 1–50 (`OrderPlaced` destination `maxAttempts`) |
 
 Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
 switch that distinguishes it: setting it to the paired lesson's value gives the
-paired architecture. The checks stay the loaded lesson's. Business invariants
+paired architecture. The notifications pair differs in both of its choices, and
+each one decides different invariants, so either one alone gives a mixed result. The checks stay the loaded lesson's. Business invariants
 report what the choice achieves: switching idempotency on in `retry-unsafe` makes
 "A retried payment request charges the order once" HOLD. A scenario expectation
 can read "not reproduced" under a choice; that shows the changed story, not a
@@ -102,12 +104,15 @@ faults its architecture has and its models survive:
 | `dual-write`, `outbox-*` | request, response, message delivery, database commit | none |
 | `cqrs-delayed` | request, response, message delivery, database commit | crash |
 | `cascade-*` | request, response | crash, external availability |
+| `notifications-*` | request, response, message delivery, database commit | crash |
 
 Every lesson allows up to four student faults. Saga resources and the outbox
 payment service already script their own crash and restart, so a student crash
 there would end the run instead of telling a story. The checkout payments model
 treats a provider error as a handler failure, so checkout does not offer
-external availability. A catalog test runs every offered kind to completion.
+external availability, and neither does the notifications pair: its sender NACKs
+only a modeled failure such as a send timeout, so a provider rejection reply
+would end the run. A catalog test runs every offered kind to completion.
 Packaged lesson checks still run against the changed experiment. A business
 invariant may become VIOLATED and a scenario expectation "not reproduced": that
 means the faults changed the story, not that the simulator failed.
@@ -323,6 +328,59 @@ across calls, not wall-clock time or a percentile.
 does not magically turn rejected requests into successful business operations.
 The simulation models accumulating in-flight handlers, not CPU/thread-pool
 exhaustion. The breaker does not cancel calls already in flight.
+
+## 6. Notifications, bounded retry, and the dead-letter queue
+
+**Pattern:** non-critical side effect decoupled from the order, bounded
+redelivery, and a dead-letter queue (DLQ).
+
+**Problem:** a notification provider outage must not hold an order hostage, and
+retrying a failing message without a bound hides the failure and keeps load on
+the provider.
+
+**Topology:** Client → Orders; Orders publishes `OrderPlaced` to Notifications,
+which sends through the external Messaging Provider and publishes
+`NotificationSent` back to Orders.
+
+**Initial state:** empty Orders and Notifications tables. The provider has sent
+nothing. `OrderPlaced` delivers after 1 ms, waits 20 ms for an ACK, and retries
+5 ms after a NACK.
+
+**Injected fault:** until t=80, Fault Engine drops every Notifications →
+Messaging send. Each send times out after 10 ms. Notifications does not catch the
+timeout, so the delivery is NACKed and the bus schedules a retry.
+
+**Expected timeline:**
+
+- `notifications-unbounded`: Orders commits `PENDING` and waits for
+  `NotificationSent`. `OrderPlaced` allows 50 attempts, a stand-in for "retry
+  until it works". Attempts at t=2, 18, 34, 50, and 66 time out. The sixth, at
+  t=82, reaches the recovered provider. Orders confirms the order at t=85.
+- `notifications-dlq`: Orders commits `CONFIRMED` at checkout. `OrderPlaced`
+  allows 3 attempts. The third NACK at t=44 records `message.dead`, and the
+  message stays in the dead-letter queue. The provider recovers at t=80, but
+  nothing re-drives the message: an operator can inspect it.
+
+**Expected checks:**
+
+| Run | Order at t=50 | Dead-lettered by t=60 | Attempts by t=120 |
+| --- | --- | --- | ---: |
+| `npm run lesson -- notifications-unbounded` | `PENDING` (VIOLATED) | no (VIOLATED) | 6 (VIOLATED) |
+| `npm run lesson -- notifications-dlq` | `CONFIRMED` | yes | 3 |
+
+The scenario expectation confirms that no notification reached the provider
+before t=60. In the browser, the `OrderPlaced` state shows each delivery's state
+and attempt and a **Dead-letter queue** list with the message ID, attempts used,
+and reason. The `messaging` state shows the provider's availability and the
+messages it accepted. Recorded history shows each `message.nacked`,
+`message.retry.scheduled`, and `message.dead`.
+
+**Concept:** the bus already bounds redelivery; the design decides the budget
+and what the order waits for. A dead letter is a recorded failure that someone
+can inspect, not a lost message. The two choices are independent: confirming at
+checkout with an unbounded budget still retries without a bound, and a budget
+of 3 with a waiting Orders dead-letters the notification and leaves the order
+`PENDING` for good.
 
 ## Extension points and boundaries
 
