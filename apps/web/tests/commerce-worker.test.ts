@@ -31,7 +31,8 @@ for (const name of commerceLessonNames) test(`${name}: browser worker matches he
   assert.deepEqual(result.history.observations, JSON.parse(JSON.stringify(headless.simulation.history.export().observations)));
   assert.equal(result.simulation.processedEvents, headless.simulation.processedEvents);
   assert.equal(result.simulation.randomDrawCount, headless.simulation.randomDrawCount);
-  const client = result.components.find(c => c.componentId === "client" && c.visibility === "student")!;
+  // Like the lesson panel, find the client by its role: a lesson may name its clients (customer-app, partner-api).
+  const client = result.components.find(c => c.visibility === "student" && (c.state as Record<string, CanonicalValue>).role === "commerce-client")!;
   const state = client.state as Record<string, CanonicalValue>;
   assert.deepEqual(state.assertions, JSON.parse(JSON.stringify(headless.results())));
   const visible = JSON.stringify(result.components.filter(c => c.visibility === "student"));
@@ -110,4 +111,32 @@ test("cache: the student projection shows live KV entries with their absolute ex
   assert.deepEqual([order!.price, order!.priceSource], [1000, "cache"]);
   // The cache pair offers only the switch that distinguishes it.
   assert.deepEqual(scenarios.find(s => s.id === "cache-stale-price")!.policy.parameters.map(p => p.key), ["cache-invalidation"]);
+});
+
+test("inventory: the student projection shows stock with its version, the reservations, and each client's outcome", async () => {
+  const states = async (name: "inventory-oversell" | "inventory-optimistic") => {
+    const events: WorkerEvent[] = [];
+    const adapter = new WorkerAdapter(event => events.push(event));
+    await adapter.receive({ version: 1, requestId: "load", type: "load", scenario: commerceScenario(name) });
+    await adapter.receive({ version: 1, requestId: "run", type: "run" });
+    const event = events.filter(e => "projection" in e).at(-1);
+    assert.ok(event && "projection" in event);
+    assert.equal(event.projection.simulation.status, "COMPLETED");
+    const state = (id: string) => event.projection.components.find(c => c.componentId === id && c.visibility === "student")!.state as Record<string, CanonicalValue>;
+    const tables = JSON.parse(JSON.stringify((state("inventory").committed as Record<string, CanonicalValue>).tables));
+    const outcome = (id: string) => JSON.parse(JSON.stringify(Object.values(state(id).observed as Record<string, CanonicalValue>)));
+    return { tables, customer: outcome("customer-app"), partner: outcome("partner-api"), history: event.projection.history.observations };
+  };
+  const unsafe = await states("inventory-oversell");
+  assert.deepEqual(unsafe.tables.stock, { "sku-1": { sku: "sku-1", units: 1, stock: -1, version: 3 } });
+  assert.deepEqual(Object.keys(unsafe.tables.reservations), ["res-customer-app", "res-partner-api"]);
+  assert.deepEqual([unsafe.customer[0].status, unsafe.partner[0].status], ["RESERVED", "RESERVED"]);
+  const safe = await states("inventory-optimistic");
+  assert.deepEqual(safe.tables.stock, { "sku-1": { sku: "sku-1", units: 1, stock: 0, version: 2 } });
+  assert.deepEqual(Object.keys(safe.tables.reservations), ["res-customer-app"]);
+  assert.deepEqual([safe.customer[0].status, safe.partner[0].status], ["RESERVED", "OUT_OF_STOCK"]);
+  // The rejected commit stays in Recorded history; committed state never shows its staged write.
+  assert.deepEqual(safe.history.filter(o => o.type === "database.transaction.rejected").map(o => [o.time, (o.data as Record<string, CanonicalValue>).code]), [[7, "TRANSACTION_CONFLICT"]]);
+  // The pair offers only the switch that distinguishes it.
+  assert.deepEqual(scenarios.find(s => s.id === "inventory-oversell")!.policy.parameters.map(p => p.key), ["optimistic-concurrency"]);
 });

@@ -22,6 +22,8 @@ const commerceCopy = {
   "notifications-dlq": ["Notifications: bounded retry and dead-letter queue", "The order is confirmed at checkout. After 3 failed attempts the notification goes to the dead-letter queue for inspection.", "notifications-unbounded"],
   "cache-stale-price": ["Cache: stale price after a price change", "The back office raises the price at t=10, but Catalog serves the price it cached at t=1 until t=101, so the order placed at t=25 is charged the old price. Cart cart-2 expires at t=31.", "cache-invalidated"],
   "cache-invalidated": ["Cache: invalidate on price change", "The price change deletes the cached price, so checkout reads the new price from the database. The expired cart is still rejected.", "cache-stale-price"],
+  "inventory-oversell": ["Inventory: oversell the last unit", "The Customer App and the Partner API both reserve the last unit at t=0. Both checks read stock=1 before either write, and each write is a separate transaction, so both commit and stock ends at -1.", "inventory-optimistic"],
+  "inventory-optimistic": ["Inventory: optimistic concurrency", "The same race, but the check and the write share one transaction. The partner's commit fails the version check at t=7, Inventory re-reads stock=0, and the partner gets OUT_OF_STOCK.", "inventory-oversell"],
 } as const;
 
 /**
