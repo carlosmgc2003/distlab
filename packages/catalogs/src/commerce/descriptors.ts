@@ -104,9 +104,19 @@ export const cacheOrdersDescriptor: ModelDescriptor = {
   storage: tables("orders"),
 };
 
+/**
+ * Reserves the last units of a SKU. `optimistic` keeps the stock check and the
+ * write in one transaction, so a concurrent commit rejects it; otherwise the
+ * check and the write are separate transactions (check-then-act).
+ */
+export const inventoryDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.inventory", version: VERSION, kind: "service", endpoints: ["POST /reserve"],
+  storage: tables("stock", "reservations"), options: [flag("optimistic")],
+};
+
 export const commerceDescriptors: readonly ModelDescriptor[] = [
   clientDescriptor, retryDescriptor, carrierDescriptor, sagaDescriptor, sagaResourceDescriptor, notificationDescriptor,
   outboxDescriptor, orderReadDescriptor, orderWriteDescriptor, dependencyDescriptor, riskDescriptor,
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
-  cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor,
+  cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor, inventoryDescriptor,
 ];
