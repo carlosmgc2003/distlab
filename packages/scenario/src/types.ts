@@ -69,6 +69,10 @@ export const DiagnosticCodes = {
   STATE: "STATE",
   CONSTRAINT: "CONSTRAINT",
   REFERENCE: "REFERENCE",
+  PEER: "PEER",
+  INTERFACE: "INTERFACE",
+  PUBLISH: "PUBLISH",
+  STORAGE: "STORAGE",
 } as const;
 
 export type DiagnosticCode = (typeof DiagnosticCodes)[keyof typeof DiagnosticCodes];

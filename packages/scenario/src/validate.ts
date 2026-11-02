@@ -18,6 +18,7 @@ import type { CanonicalValue, SimulationTime } from "@distlab/contracts/kernel";
 import { duration, simulationTime } from "@distlab/contracts/kernel";
 import { canonicalCopy, canonicalEncode } from "@distlab/kernel";
 import { DiagnosticCodes, type DiagnosticCode, type ScenarioAssessment, type ScenarioCatalog, type ScenarioModel } from "./types.js";
+import { checkComposition } from "./composition.js";
 
 const componentKinds = new Set<string>(["client", "service", "external"]);
 const serviceStates = new Set<string>(["STARTING", "RUNNING", "PAUSED", "CRASHED", "STOPPED"]);
@@ -199,7 +200,9 @@ interface ArchitectureDraft {
   readonly databaseOwners: ReadonlySet<string>;
 }
 
-function readArchitecture(value: unknown, catalog: ScenarioCatalog, push: (path: string, code: DiagnosticCode) => void): ArchitectureDraft | undefined {
+function readArchitecture(value: unknown, catalog: ScenarioCatalog, report: (path: string, code: DiagnosticCode) => void): ArchitectureDraft | undefined {
+  let reported = 0;
+  const push = (path: string, code: DiagnosticCode): void => { reported += 1; report(path, code); };
   if (value === undefined) { push("/architecture", DiagnosticCodes.REQUIRED); return undefined; }
   const record = object(value, "/architecture", architectureKeys, push);
   if (!record) return undefined;
@@ -213,8 +216,11 @@ function readArchitecture(value: unknown, catalog: ScenarioCatalog, push: (path:
   const destinations = readDestinations(record.destinations, push);
   const subscriptions = readSubscriptions(record.subscriptions, destinations, components, catalog, push);
   if (!links || !databases || !stores || !destinations || !subscriptions) return undefined;
+  const definition = { components, links, databases: databases.definitions, stores, destinations, subscriptions };
+  // Composition (ADR-005) needs a clean architecture: no cascades, and document indexes.
+  if (reported === 0) checkComposition(definition, catalog, push);
   return {
-    definition: { components, links, databases: databases.definitions, stores, destinations, subscriptions },
+    definition,
     components, byId, serviceIds, databaseOwners: databases.owners,
   };
 }

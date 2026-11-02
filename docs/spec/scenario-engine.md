@@ -152,8 +152,25 @@ scenario/run input, not mutate the current run outside its recorded action list.
 [ADR-004](adr/004-session-overlays.md) defines how a student overlay produces that
 input. The engine receives the applied document and is unaware of overlays.
 [ADR-005](adr/005-architecture-editor.md) adds architecture composition rules
-to validation (peers, interfaces, peer links, published destinations, and
-required storage), checked against catalog model descriptors (#109).
+to validation, checked against the catalog model descriptors, so that every
+endpoint or operation a component calls is reachable before the run starts.
+They apply to every scenario document, packaged or not:
+
+| Rule | Code | Path |
+| --- | --- | --- |
+| Each peer of each component resolves (its configuration field, else the descriptor default) to an existing component of an allowed kind | `PEER` | `/architecture/components/i/configuration/<peer>` |
+| A configured peer value is a nonempty component ID string | `TYPE` | same |
+| The bound component exposes every endpoint (service) or operation (external) the peer declares; a placeholder exposes its configured `interface` | `INTERFACE` | same |
+| A link exists from the component to each bound peer | `LINK` | same |
+| Every destination a model publishes to exists | `PUBLISH` | `/architecture/components/i` |
+| A service whose model needs a database owns one with each required table name | `STORAGE` | `/architecture/databases/j/tables`, or the component when it owns no database |
+| A service whose model needs a key-value store owns one | `STORAGE` | `/architecture/components/i` |
+
+The existing ownership (`OWNERSHIP`), single-resource (`DUPLICATE`), and
+subscription (`SUBSCRIPTION`) checks complete the ADR-005 rule set. Composition
+rules run only when the architecture otherwise read without diagnostics, so one
+mistake does not cascade. Reachability of a component from a client is not
+required: an unreached component is legal and idle.
 
 An imported scenario document ([ADR-006](adr/006-scenario-documents.md)) reaches
 the engine the same way. A pure document layer in this package parses the text,
