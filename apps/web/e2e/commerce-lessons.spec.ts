@@ -120,3 +120,51 @@ test("the notifications pair shows the dead-letter queue only when the retry bud
     }
   }
 });
+
+test("the cache pair shows live KV entries with their expiry, the price Orders used, and TTL expiry in history", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto("/");
+  const status = page.getByRole("status", { name: "Simulation status" });
+  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const cart = state.getByRole("region", { name: "cart state", exact: true });
+  const catalog = state.getByRole("region", { name: "catalog state", exact: true });
+  const orders = state.getByRole("region", { name: "orders state", exact: true });
+  const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
+  for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
+    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
+    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await expect(status).toHaveText("READY");
+    // Step until both carts are live: each entry shows its absolute expiry.
+    const step = page.getByRole("button", { name: "Step", exact: true });
+    for (let i = 0; i < 80 && !(await cart.innerText()).includes("cart:cart-2"); i++) {
+      await step.click();
+      await expect(status).toHaveText("PAUSED");
+    }
+    await expect(cart).toContainText("cart:cart-1");
+    await expect(cart).toContainText("expires at t=31");
+    await expect(catalog).toContainText("price:sku-1");
+    await expect(catalog).toContainText("expires at t=101");
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+    await expect(status).toHaveText("COMPLETED");
+    // Every entry has expired by the end of the run; the committed rows remain.
+    await expect(cart).not.toContainText("cart:cart-1");
+    await expect(orders).toContainText(`price: ${price}`);
+    await expect(orders).toContainText(`priceSource: ${source}`);
+    await expect(orders).toContainText("reason: CART_EXPIRED");
+    await expect(catalog).toContainText("validFrom: 11");
+    await expect(invariants.getByRole("listitem").filter({ hasText: "An order is priced with the catalog price valid at checkout" })).toContainText(verdict);
+    await expect(invariants.getByRole("listitem").filter({ hasText: "An expired cart cannot be checked out" })).toContainText("HOLDS");
+  }
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  // Raw renders a window of rows, so narrow it to the expiry records with the Type filter.
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
+  const filterDrawer = page.locator(".history-filter-drawer");
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
+  await page.locator(".timeline-filter-disclosure summary").click();
+  await page.getByLabel("Type", { exact: true }).fill("kv.expired");
+  const rows = page.locator("#timeline-rows");
+  await expect(page.locator(".timeline-count")).toHaveText(/^3 of \d+ observations/);
+  await expect(rows).toContainText("cart");
+  await expect(rows).toContainText("catalog");
+});

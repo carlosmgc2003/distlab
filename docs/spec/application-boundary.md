@@ -51,7 +51,8 @@ from its own catalog after the document matches, applies the overlay, and only
 then calls ScenarioEngine. The main thread never sends an applied document.
 Catalog factories and ScenarioEngine stay in the worker. The main thread imports
 the data-only scenario modules, never runtime code. Commerce student projections
-include committed DB rows, atomic KV metrics, client-observed outcomes, declared
+include committed DB rows, live KV entries with their absolute expiry (never the
+store's generations), client-observed outcomes, declared
 external-visible facts, delivery records, and assessment verdicts. The commerce
 client projection carries those verdicts in its canonical `assertions` field;
 no worker command or top-level protocol variant is added. Raw runtime tasks and

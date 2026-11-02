@@ -58,7 +58,7 @@ modules may import application contracts, the host client, and the data-only
 modules; they must not import runtime model
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command.
-The host accepts only the two packaged checkout documents and twelve packaged
+The host accepts only the two packaged checkout documents and fourteen packaged
 commerce lessons, each optionally with a session overlay that the lesson's
 data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`). The
 main thread never sends an applied document. Reset replays the applied overlay.
@@ -66,7 +66,7 @@ Imported scenario documents follow `docs/spec/adr/006-scenario-documents.md`:
 the main thread sends the file text unparsed, and only the worker parses and
 validates it. Until that ADR is implemented the host accepts packaged lessons only. Simulation exposes explicit pending-event, processed-event,
 and random-draw counters; never infer these from arbitrary/redacted history.
-Commerce student projections expose committed business rows, KV metrics, client
+Commerce student projections expose committed business rows, live KV entries with their expiry, client
 outcomes, declared external-visible state, delivery facts, dead letters, and
 assertion results; runtime tasks and provider counters remain host-only. Architecture playback in
 `apps/web/src/flight.ts` and `apps/web/src/flight-playback.ts` is presentation

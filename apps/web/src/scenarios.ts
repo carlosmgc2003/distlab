@@ -20,6 +20,8 @@ const commerceCopy = {
   "cascade-breaker": ["Cascading failure: circuit breaker", "Follow CLOSED → OPEN → HALF_OPEN → CLOSED. Risk calls fall from 16 to 5; rejected calls are not successes.", "cascade-unprotected"],
   "notifications-unbounded": ["Notifications: retry until it works", "The Messaging Provider is unreachable until t=80. Orders waits for the notification, so the order stays PENDING while the send is retried 6 times.", "notifications-dlq"],
   "notifications-dlq": ["Notifications: bounded retry and dead-letter queue", "The order is confirmed at checkout. After 3 failed attempts the notification goes to the dead-letter queue for inspection.", "notifications-unbounded"],
+  "cache-stale-price": ["Cache: stale price after a price change", "The back office raises the price at t=10, but Catalog serves the price it cached at t=1 until t=101, so the order placed at t=25 is charged the old price. Cart cart-2 expires at t=31.", "cache-invalidated"],
+  "cache-invalidated": ["Cache: invalidate on price change", "The price change deletes the cached price, so checkout reads the new price from the database. The expired cart is still rejected.", "cache-stale-price"],
 } as const;
 
 /**

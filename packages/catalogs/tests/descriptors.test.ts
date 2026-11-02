@@ -148,5 +148,5 @@ test("ARCH-AC-5 models read every peer from configuration, never from a literal 
       }
     }
   }
-  assert.equal(rebindings, 18);
+  assert.equal(rebindings, 22);
 });

@@ -151,7 +151,7 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
     normal: [2, 2], "response-lost": [2, 2], "retry-unsafe": [1, 1], "retry-idempotent": [1, 1],
     "saga-uncompensated": [3, 3], "saga-compensated": [3, 3], "dual-write": [2, 2], "outbox-unsafe-consumer": [2, 2], "outbox-idempotent": [2, 2],
     "cqrs-delayed": [2, 2], "cascade-unprotected": [3, 3], "cascade-breaker": [3, 3],
-    "notifications-unbounded": [2, 2], "notifications-dlq": [2, 2],
+    "notifications-unbounded": [2, 2], "notifications-dlq": [2, 2], "cache-stale-price": [4, 4], "cache-invalidated": [4, 4],
   };
   for (const [index, choice] of scenarios.entries()) {
     const projection = await load(index);
@@ -222,11 +222,30 @@ test("resource grouping is last-wins, stable, owner-gated, and placed in the res
   assert.equal(withoutMetadata.nodes.length, architecture.components.length);
   assert.deepEqual(withoutMetadata.resourceNodes, []);
   assert.deepEqual(withoutMetadata.resourceEdges, []);
-  assert.ok(scenarios.every((item, index) => {
+  // A packaged owner may declare both kinds (the cache lessons' Catalog). Its two satellites sit side by side,
+  // and no satellite in any packaged lesson overlaps another satellite or a component node (215×90, 115×56 boxes).
+  const box = (position: { x: number; y: number }, width: number, height: number) => ({ ...position, width, height });
+  const overlaps = (a: ReturnType<typeof box>, b: ReturnType<typeof box>) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  let shared = 0;
+  for (const [index, item] of scenarios.entries()) {
     const meta = packagedMetadata(item).architecture;
-    const owners = new Set(meta.databases.map(value => value.owner));
-    return meta.stores.every(value => !owners.has(value.owner));
-  }));
+    const graph = mapArchitecture((await load(index)).architecture, meta, item.id);
+    const satellites = graph.resourceNodes.map(node => box(node.position, 115, 56));
+    const components = graph.nodes.map(node => box(node.position, 215, 90));
+    satellites.forEach((a, i) => {
+      assert.ok(!components.some(b => overlaps(a, b)), `${item.id} ${graph.resourceNodes[i]!.id} covers a component`);
+      assert.ok(!satellites.some((b, j) => j !== i && overlaps(a, b)), `${item.id} ${graph.resourceNodes[i]!.id} covers a satellite`);
+    });
+    for (const store of meta.stores.filter(value => meta.databases.some(database => database.owner === value.owner))) {
+      const owner = graph.nodes.find(node => node.id === store.owner)!.position;
+      const at = (id: string) => graph.resourceNodes.find(node => node.id === id)!.position;
+      assert.deepEqual([at(`resource:db:${store.owner}`), at(`resource:kv:${store.owner}`)],
+        [{ x: owner.x + 50, y: owner.y + 120 }, { x: owner.x + 173, y: owner.y + 120 }], item.id);
+      shared++;
+    }
+  }
+  assert.equal(shared, 2);
 
   const mismatch = { ...architecture, components: architecture.components.map(item => item.id === "orders" ? { ...item, version: "2.0.0" } : item) };
   const gated = mapArchitecture(mismatch, source);

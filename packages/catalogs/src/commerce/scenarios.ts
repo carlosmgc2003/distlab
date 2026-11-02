@@ -17,6 +17,7 @@ export const commerceLessonNames = [
   "dual-write", "outbox-unsafe-consumer", "outbox-idempotent",
   "cqrs-delayed", "cascade-unprotected", "cascade-breaker",
   "notifications-unbounded", "notifications-dlq",
+  "cache-stale-price", "cache-invalidated",
 ] as const;
 export type CommerceLessonName = typeof commerceLessonNames[number];
 
@@ -24,6 +25,7 @@ export type CommerceLessonName = typeof commerceLessonNames[number];
 export function commerceScenario(name: CommerceLessonName): CanonicalValue {
   if (name.startsWith("cascade-")) return circuitScenario(name);
   if (name.startsWith("notifications-")) return notificationScenario(name);
+  if (name.startsWith("cache-")) return cacheScenario(name);
   if (name === "cqrs-delayed") return cqrsScenario(name);
   if (name.startsWith("saga-")) return sagaScenario(name);
   if (name === "dual-write" || name.startsWith("outbox-")) return outboxScenario(name);
@@ -168,6 +170,42 @@ function notificationScenario(name: CommerceLessonName): CanonicalValue {
 }
 
 /**
+ * A customer views sku-1 at t=0, which caches its price (1000) for 100 ms, and
+ * fills two carts that live for 30 ms. The back office raises the price to 1200
+ * at t=10. The customer checks out cart-1 at t=20 and cart-2, by then expired,
+ * at t=40. The pair differs only in whether the price change invalidates the
+ * cached key.
+ */
+function cacheScenario(name: CommerceLessonName): CanonicalValue {
+  const invalidate = name === "cache-invalidated";
+  const price = { sku: "sku-1", price: 1000, version: 1, validFrom: 0 };
+  return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
+    architecture: {
+      components: [component("client", "client", "client"), component("backoffice", "client", "client"),
+        component("catalog", "cache-catalog", "service", { invalidate, ttl: 100 }), component("cart", "cache-cart", "service", { ttl: 30 }),
+        component("orders", "cache-orders")],
+      links: [link("client", "catalog"), link("client", "cart"), link("client", "orders"), link("backoffice", "catalog"), link("orders", "cart"), link("orders", "catalog")],
+      databases: [database("catalog", ["prices", "price-history"], { prices: { "sku-1": price }, "price-history": { "sku-1@1": price } }), database("orders", ["orders"])],
+      stores: [{ owner: "catalog", initial: [] }, { owner: "cart", initial: [] }], destinations: [], subscriptions: [],
+    }, external: [], faults: [],
+    actions: [
+      ...["catalog", "cart", "orders"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
+      request("view-price", 0, "catalog", "GET /price", { sku: "sku-1" }),
+      request("fill-cart-1", 0, "cart", "POST /cart", { cartId: "cart-1", sku: "sku-1", quantity: 1 }),
+      request("fill-cart-2", 0, "cart", "POST /cart", { cartId: "cart-2", sku: "sku-1", quantity: 1 }),
+      { ...request("raise-price", 10, "catalog", "POST /price", { sku: "sku-1", price: 1200 }), target: "backoffice" },
+      request("checkout-cart-1", 20, "orders", "POST /checkout", { orderId: "order-1", cartId: "cart-1" }),
+      request("checkout-cart-2", 40, "orders", "POST /checkout", { orderId: "order-2", cartId: "cart-2" }),
+    ], assertions: [
+      assertion("price-raised", 15, "catalog", "prices", 1, "sku-1", { price: 1200, version: 2 }),
+      assertion("expired-cart-rejected", 60, "orders", "orders", 2, "order-2", { status: "REJECTED", reason: "CART_EXPIRED" }),
+      { id: "order-priced-at-checkout", predicate: "commerce.pricing", mode: "at", at: 60, parameters: { owner: "orders", table: "orders", catalog: "catalog", history: "price-history" } },
+      { id: "no-expired-cart-checkout", predicate: "commerce.live-carts", mode: "at", at: 60, parameters: { owner: "orders", table: "orders" } },
+    ],
+  } as CanonicalValue;
+}
+
+/**
  * A lesson check is one packaged assertion, classified for students (#96).
  * A business invariant states the property that must hold whatever the design,
  * so every lesson of a family carries the identical assertion and its verdict
@@ -221,6 +259,13 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
         invariant("failed-notification-dead-lettered", "A notification that used all 3 attempts is held in the dead-letter queue"),
         invariant("bounded-notification-retries", "No notification is attempted more than 3 times"),
       ];
+    case "cache":
+      return [
+        expectation("price-raised", "The back office raised sku-1's price from 1000 to 1200 (t=15)"),
+        expectation("expired-cart-rejected", "Cart cart-2 expired at t=31, so its checkout at t=40 was rejected (t=60)"),
+        invariant("order-priced-at-checkout", "An order is priced with the catalog price valid at checkout"),
+        invariant("no-expired-cart-checkout", "An expired cart cannot be checked out"),
+      ];
     default:
       return [
         expectation("dependency-recovered", name === "cascade-breaker"
@@ -252,7 +297,7 @@ export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPo
     : [...network, commit];
   const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
-    : family === "retry" || family === "cqrs" || family === "notifications" ? ["crash"] : [];
+    : family === "retry" || family === "cqrs" || family === "notifications" || family === "cache" ? ["crash"] : [];
   return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name) };
 }
 
@@ -293,5 +338,8 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
         { key: "max-attempts", domain: { type: "integer", default: name === "notifications-dlq" ? 3 : 50, minimum: 1, maximum: 50 },
           targets: [{ kind: "destination", destination: "OrderPlaced", field: "maxAttempts" }] },
       ];
+    case "cache-stale-price":
+    case "cache-invalidated":
+      return [flag("cache-invalidation", name === "cache-invalidated", "catalog", "invalidate")];
   }
 }

@@ -7,12 +7,13 @@ import { notificationModel, outboxModel } from "./outbox.js";
 import { orderReadModel, orderWriteModel } from "./cqrs.js";
 import { dependencyModel, riskModel } from "./circuit.js";
 import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.js";
+import { cacheCartModel, cacheCatalogModel, cacheOrdersModel } from "./cache.js";
 export { commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
 export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
 
 const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel,
-  notifyOrdersModel, notifySenderModel, messagingModel];
+  notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel];
 export const commerceCatalog: ScenarioCatalog = {
   id: "commerce.lessons", version: "1.0.0",
   find: (name, version) => models.find(model => model.model === name && model.version === version),
@@ -25,11 +26,38 @@ function deliveries(messageBus: CanonicalValue, destination: string) {
     .map(item => ({ messageId: text(item.messageId), state: text(item.state), attempt: item.attempt as number }));
 }
 
+/** Committed rows of one table, or none when the owner or table is absent. */
+function tableRows(databases: CanonicalValue, owner: string, table: string): Record<string, CanonicalValue> {
+  const db = record(databases)[owner];
+  const tables = db && typeof db === "object" && !Array.isArray(db) ? record(db).tables : undefined;
+  const found = tables && typeof tables === "object" && !Array.isArray(tables) ? record(tables)[table] : undefined;
+  return found && typeof found === "object" && !Array.isArray(found) ? record(found) : {};
+}
+const placed = (orders: Record<string, CanonicalValue>) =>
+  Object.entries(orders).map(([key, row]) => [key, record(row)] as const).filter(([, row]) => row.status === "PLACED");
+
 export const commerceAssessment: ScenarioAssessment = {
   version: "1.0.0",
-  find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters"].includes(id) ? undefined : {
+  find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters", "commerce.pricing", "commerce.live-carts"].includes(id) ? undefined : {
     id, version: "1.0.0", evaluate({ parameters, projection }) {
       const p = record(parameters);
+      if (id === "commerce.pricing") {
+        // Each placed order's price equals the catalog price valid when the order was placed:
+        // the history row of its SKU with the latest `validFrom` at or before `checkedOutAt`.
+        const history = Object.values(tableRows(projection.databases, text(p.catalog), text(p.history))).map(row => record(row));
+        const evidence = placed(tableRows(projection.databases, text(p.owner), text(p.table))).map(([orderId, order]) => {
+          const valid = history.filter(row => row.sku === order.sku && (row.validFrom as number) <= (order.checkedOutAt as number))
+            .reduce<Record<string, CanonicalValue> | undefined>((best, row) => !best || (row.validFrom as number) > (best.validFrom as number) ? row : best, undefined);
+          return { orderId, sku: order.sku!, checkedOutAt: order.checkedOutAt!, charged: order.price!, valid: valid?.price ?? null };
+        });
+        return { pass: evidence.every(item => item.charged === item.valid), evidence };
+      }
+      if (id === "commerce.live-carts") {
+        // Every placed order committed before the cart it relied on expired.
+        const evidence = placed(tableRows(projection.databases, text(p.owner), text(p.table))).map(([orderId, order]) =>
+          ({ orderId, cartId: order.cartId!, checkedOutAt: order.checkedOutAt!, cartExpiresAt: order.cartExpiresAt! }));
+        return { pass: evidence.every(item => (item.checkedOutAt as number) < (item.cartExpiresAt as number)), evidence };
+      }
       if (id === "commerce.attempts") {
         // No message of the destination was delivered more often than the retry budget allows.
         const records = deliveries(projection.messageBus, text(p.destination));

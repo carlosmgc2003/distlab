@@ -27,7 +27,7 @@ function metrics(result: HarnessExport, owner: string) {
 }
 
 test("paired lessons use equivalent fault schedules, workloads, and seeds", () => {
-  for (const [left, right] of [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-idempotent"], ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"]] as const) {
+  for (const [left, right] of [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-idempotent"], ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"]] as const) {
     const a = object(commerceScenario(left)), b = object(commerceScenario(right));
     assert.equal(a.seed, b.seed);
     assert.deepEqual(a.faults, b.faults);
@@ -35,7 +35,7 @@ test("paired lessons use equivalent fault schedules, workloads, and seeds", () =
   }
 });
 
-const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"]] as const;
+const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"]] as const;
 /** The business invariants each packaged lesson is meant to violate; every other check passes. */
 const violated: Record<typeof commerceLessonNames[number], readonly string[]> = {
   "retry-unsafe": ["one-payment-per-order"],
@@ -50,10 +50,12 @@ const violated: Record<typeof commerceLessonNames[number], readonly string[]> = 
   "cascade-breaker": [],
   "notifications-unbounded": ["order-confirmed-despite-notification-failure", "failed-notification-dead-lettered", "bounded-notification-retries"],
   "notifications-dlq": [],
+  "cache-stale-price": ["order-priced-at-checkout"],
+  "cache-invalidated": [],
 };
 const assertionsOf = (name: typeof commerceLessonNames[number]) => object(commerceScenario(name)).assertions as Record<string, CanonicalValue>[];
 
-test("every check in the 12 commerce lessons is classified as a business invariant or a scenario expectation", () => {
+test("every check in the 14 commerce lessons is classified as a business invariant or a scenario expectation", () => {
   assert.equal(families.flat().length, commerceLessonNames.length);
   for (const name of commerceLessonNames) {
     const checks = commerceChecks(name);
@@ -129,6 +131,53 @@ test("a failing Messaging Provider: unbounded retry blocks the order, bounded re
   assert.deepEqual({ ...object(order(safe)!) }, { status: "CONFIRMED" });
 });
 
+test("a cached price outlives a price change unless the change invalidates it; an expired cart cannot be checked out", async () => {
+  const unsafe = await execute("cache-stale-price"), safe = await execute("cache-invalidated");
+  const of = (result: HarnessExport, type: string) => result.history.observations.filter(o => o.type === type);
+  const tables = (result: HarnessExport, owner: string) => object(object(object(object(result.state).databases!)[owner]!).tables!);
+  const order = (result: HarnessExport, key: string) => JSON.parse(JSON.stringify(object(tables(result, "orders").orders!)[key]));
+  const result = (r: HarnessExport, id: string) => r.results.find(item => item.id === id)!;
+  for (const r of [unsafe, safe]) {
+    // The price change commits the current price and its history row together at t=11.
+    assert.deepEqual(JSON.parse(JSON.stringify(tables(r, "catalog"))), {
+      prices: { "sku-1": { sku: "sku-1", price: 1200, version: 2, validFrom: 11 } },
+      "price-history": { "sku-1@1": { sku: "sku-1", price: 1000, version: 1, validFrom: 0 }, "sku-1@2": { sku: "sku-1", price: 1200, version: 2, validFrom: 11 } },
+    });
+    // Both carts expire by TTL at t=31; cart-2's checkout at t=40 finds no cart and is rejected.
+    const carts = of(r, "kv.expired").filter(o => o.source === "cart");
+    assert.deepEqual(carts.map(o => [o.time, object(o.data!).key]), [[31, "cart:cart-1"], [31, "cart:cart-2"]]);
+    assert.deepEqual(order(r, "order-2"), { status: "REJECTED", reason: "CART_EXPIRED", cartId: "cart-2", checkedOutAt: 43 });
+    assert.equal(result(r, "no-expired-cart-checkout").status, "PASS");
+    assert.equal(r.status, "COMPLETED");
+  }
+  // Unsafe: the price cached at t=1 is still live at t=24, so order-1 is charged the old price.
+  assert.deepEqual(logs(unsafe, "price.cache-hit").map(entry => entry.price), [1000]);
+  assert.equal(logs(unsafe, "price.cache-invalidated").length, 0);
+  assert.deepEqual([order(unsafe, "order-1").price, order(unsafe, "order-1").priceSource, order(unsafe, "order-1").checkedOutAt], [1000, "cache", 25]);
+  assert.deepEqual(JSON.parse(JSON.stringify(result(unsafe, "order-priced-at-checkout").evidence)),
+    [{ orderId: "order-1", sku: "sku-1", checkedOutAt: 25, charged: 1000, valid: 1200 }]);
+  assert.equal(result(unsafe, "order-priced-at-checkout").status, "FAIL");
+  // The stale entry stays in the store until its TTL ends at t=101.
+  assert.deepEqual(of(unsafe, "kv.expired").filter(o => o.source === "catalog").map(o => [o.time, object(object(o.data!).value!).price]), [[101, 1000]]);
+  // Safe: the change deletes the cached key, so checkout misses the cache and reads 1200 from the database.
+  assert.deepEqual(JSON.parse(JSON.stringify(logs(safe, "price.cache-invalidated"))), [{ sku: "sku-1", removed: true }]);
+  assert.equal(logs(safe, "price.cache-hit").length, 0);
+  assert.deepEqual([order(safe, "order-1").price, order(safe, "order-1").priceSource], [1200, "database"]);
+  assert.equal(result(safe, "order-priced-at-checkout").status, "PASS");
+  // A checkout that commits after the cart's deadline violates the cart invariant, even if the cart was live when checked.
+  const doc = object(commerceScenario("cache-invalidated"));
+  const slow = { ...doc, faults: [fault("slow-price", "orders", "catalog", 10)] };
+  const session = openHarness(engine.create(slow));
+  await session.run();
+  const late = session.inspect();
+  assert.deepEqual([order(late, "order-1").checkedOutAt, order(late, "order-1").cartExpiresAt], [35, 31]);
+  assert.equal(result(late, "no-expired-cart-checkout").status, "FAIL");
+});
+
+function fault(id: string, source: string, target: string, duration: number) {
+  return { id, point: "network.request", source, target, name: "GET /price", from: 15, until: 30, probability: 1, maxApplications: 1, effect: { kind: "delay", duration } };
+}
+
 test("outbox and payment roll back together when the local commit fails", async () => {
   const doc = object(commerceScenario("outbox-idempotent"));
   const modified = { ...doc, assertions: [], faults: [{ id: "reject-payment-commit", point: "database.commit", source: "payments", target: "payments", name: "payments", from: 0, probability: 1, maxApplications: 1, effect: { kind: "fail" } }] };
@@ -154,7 +203,9 @@ for (const name of commerceLessonNames) {
     assert.ok(result.results.length > 0);
     // Unsafe lessons violate their invariants; every lesson reproduces its setup.
     assert.deepEqual(result.results.filter(r => r.status !== "PASS").map(r => `${r.id} ${r.status}`), violated[name].map(id => `${id} FAIL`), JSON.stringify(result.results));
-    assert.ok(result.history.observations.some(o => o.type === "fault.effect.selected" || o.type === "fault.applied"));
+    // The cache pair needs no injected fault: an ordinary price change and a TTL tell its story.
+    const faulted = result.history.observations.some(o => o.type === "fault.effect.selected" || o.type === "fault.applied");
+    assert.equal(faulted, !name.startsWith("cache-"), name);
     const fresh = openHarness(engine.create(document));
     await fresh.run();
     assert.ok(compareExports(result, fresh.inspect()));
