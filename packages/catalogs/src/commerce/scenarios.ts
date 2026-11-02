@@ -18,6 +18,7 @@ export const commerceLessonNames = [
   "cqrs-delayed", "cascade-unprotected", "cascade-breaker",
   "notifications-unbounded", "notifications-dlq",
   "cache-stale-price", "cache-invalidated",
+  "inventory-oversell", "inventory-optimistic",
 ] as const;
 export type CommerceLessonName = typeof commerceLessonNames[number];
 
@@ -26,6 +27,7 @@ export function commerceScenario(name: CommerceLessonName): CanonicalValue {
   if (name.startsWith("cascade-")) return circuitScenario(name);
   if (name.startsWith("notifications-")) return notificationScenario(name);
   if (name.startsWith("cache-")) return cacheScenario(name);
+  if (name.startsWith("inventory-")) return inventoryScenario(name);
   if (name === "cqrs-delayed") return cqrsScenario(name);
   if (name.startsWith("saga-")) return sagaScenario(name);
   if (name === "dual-write" || name.startsWith("outbox-")) return outboxScenario(name);
@@ -206,6 +208,33 @@ function cacheScenario(name: CommerceLessonName): CanonicalValue {
 }
 
 /**
+ * The Customer App and a Partner API client both ask Inventory for the last unit
+ * of sku-1 at t=0. The partner's request travels one millisecond longer, so the
+ * checks read stock=1 at t=1 and t=2 and the writes follow at t=6 and t=7.
+ * Inventory validates for 5 ms between reading and writing. The pair differs
+ * only in whether the check and the write share one transaction, so the
+ * database's version check can reject the second commit.
+ */
+function inventoryScenario(name: CommerceLessonName): CanonicalValue {
+  const optimistic = name === "inventory-optimistic";
+  const reserve = (client: string) => ({ ...request(`reserve-${client}`, 0, "inventory", "POST /reserve", { reservationId: `res-${client}`, sku: "sku-1", client }), target: client });
+  return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
+    architecture: {
+      components: [component("customer-app", "client", "client"), component("partner-api", "client", "client"), component("inventory", "inventory", "service", { optimistic })],
+      links: [link("customer-app", "inventory"), { ...link("partner-api", "inventory"), policy: { ...link("partner-api", "inventory").policy, requestLatency: 2 } }],
+      databases: [database("inventory", ["stock", "reservations"], { stock: { "sku-1": { sku: "sku-1", units: 1, stock: 1, version: 1 } }, reservations: {} })],
+      stores: [], destinations: [], subscriptions: [],
+    }, external: [], faults: [],
+    actions: [{ id: "start-inventory", at: 0, kind: "service", target: "inventory", state: "RUNNING" }, reserve("customer-app"), reserve("partner-api")],
+    assertions: [
+      assertion("last-unit-contended", 3, "inventory", "stock", 1, "sku-1", { stock: 1, version: 1 }),
+      { id: "stock-never-negative", predicate: "commerce.stock", mode: "at", at: 30, parameters: { owner: "inventory", table: "stock" } },
+      { id: "one-reservation-per-unit", predicate: "commerce.reservations", mode: "at", at: 30, parameters: { owner: "inventory", stock: "stock", reservations: "reservations" } },
+    ],
+  } as CanonicalValue;
+}
+
+/**
  * A lesson check is one packaged assertion, classified for students (#96).
  * A business invariant states the property that must hold whatever the design,
  * so every lesson of a family carries the identical assertion and its verdict
@@ -266,6 +295,12 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
         invariant("order-priced-at-checkout", "An order is priced with the catalog price valid at checkout"),
         invariant("no-expired-cart-checkout", "An expired cart cannot be checked out"),
       ];
+    case "inventory":
+      return [
+        expectation("last-unit-contended", "sku-1 still had its last unit while both reservations were being validated (t=3)"),
+        invariant("stock-never-negative", "Stock is never negative"),
+        invariant("one-reservation-per-unit", "A unit has at most one active reservation"),
+      ];
     default:
       return [
         expectation("dependency-recovered", name === "cascade-breaker"
@@ -297,7 +332,7 @@ export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPo
     : [...network, commit];
   const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
-    : family === "retry" || family === "cqrs" || family === "notifications" || family === "cache" ? ["crash"] : [];
+    : family === "retry" || family === "cqrs" || family === "notifications" || family === "cache" || family === "inventory" ? ["crash"] : [];
   return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name) };
 }
 
@@ -341,5 +376,8 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
     case "cache-stale-price":
     case "cache-invalidated":
       return [flag("cache-invalidation", name === "cache-invalidated", "catalog", "invalidate")];
+    case "inventory-oversell":
+    case "inventory-optimistic":
+      return [flag("optimistic-concurrency", name === "inventory-optimistic", "inventory", "optimistic")];
   }
 }

@@ -168,3 +168,38 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   await expect(rows).toContainText("cart");
   await expect(rows).toContainText("catalog");
 });
+
+test("the inventory pair shows stock with its version and each client's outcome, and the rejected commit in history", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto("/");
+  const status = page.getByRole("status", { name: "Simulation status" });
+  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const inventory = state.getByRole("region", { name: "inventory state", exact: true });
+  const partner = state.getByRole("region", { name: "partner-api state", exact: true });
+  const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
+  for (const [name, stock, version, outcome, verdict] of [["inventory-oversell", -1, 3, "RESERVED", "VIOLATED"], ["inventory-optimistic", 0, 2, "OUT_OF_STOCK", "HOLDS"]] as const) {
+    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
+    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await expect(status).toHaveText("READY");
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+    await expect(status).toHaveText("COMPLETED");
+    await expect(inventory).toContainText(`stock: ${stock}`);
+    await expect(inventory).toContainText(`version: ${version}`);
+    await expect(inventory).toContainText("res-customer-app");
+    await expect(partner).toContainText(`status: ${outcome}`);
+    for (const label of ["Stock is never negative", "A unit has at most one active reservation"]) {
+      await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText(verdict);
+    }
+  }
+  // The optimistic run is loaded: its rejected commit is in Recorded history.
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await page.getByRole("button", { name: "Show simulation controls" }).click();
+  const filterDrawer = page.locator(".history-filter-drawer");
+  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
+  await page.locator(".timeline-filter-disclosure summary").click();
+  await page.getByLabel("Type", { exact: true }).fill("database.transaction.rejected");
+  await expect(page.locator(".timeline-count")).toHaveText(/^1 of \d+ observations/);
+  await page.locator("#timeline-rows").getByRole("button", { name: /database.transaction.rejected inventory/ }).click();
+  await expect(page.locator("#inspection-panel")).toContainText("TRANSACTION_CONFLICT");
+});

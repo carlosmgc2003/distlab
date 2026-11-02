@@ -1551,7 +1551,7 @@ DistLab should remain intentionally smaller than the distributed systems it teac
 
 ## Packaged browser lessons and boundary counters
 
-The browser hosts the two checkout documents and fourteen commerce lessons through
+The browser hosts the two checkout documents and sixteen commerce lessons through
 worker-only catalog composition. Main-thread imports are limited to contracts
 and data-only scenario documents. Committed business facts, live KV entries and
 their expiry, client

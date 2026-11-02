@@ -23,6 +23,7 @@ const copy: Readonly<Record<string, ChoiceCopy>> = {
   "circuit-breaker": { label: "Circuit breaker", hint: "Payments stops calling the risk provider after repeated failures and probes it later." },
   "decoupled-confirmation": { label: "Confirm before notifying", hint: "Orders confirms the order at checkout instead of waiting for NotificationSent." },
   "max-attempts": { label: "Notification delivery attempts", hint: "How many times the bus delivers OrderPlaced before it moves the message to the dead-letter queue." },
+  "optimistic-concurrency": { label: "Optimistic concurrency", hint: "Inventory checks the stock and writes the reservation in one transaction, so the database rejects a commit whose stock version changed since it was read." },
   "cache-invalidation": { label: "Invalidate cache on price change", hint: "Catalog deletes the cached price when the back office changes it, instead of letting it live until its TTL ends." },
 };
 

@@ -8,12 +8,13 @@ import { orderReadModel, orderWriteModel } from "./cqrs.js";
 import { dependencyModel, riskModel } from "./circuit.js";
 import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.js";
 import { cacheCartModel, cacheCatalogModel, cacheOrdersModel } from "./cache.js";
+import { inventoryModel } from "./inventory.js";
 export { commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
 export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
 
 const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel,
-  notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel];
+  notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel, inventoryModel];
 export const commerceCatalog: ScenarioCatalog = {
   id: "commerce.lessons", version: "1.0.0",
   find: (name, version) => models.find(model => model.model === name && model.version === version),
@@ -38,7 +39,8 @@ const placed = (orders: Record<string, CanonicalValue>) =>
 
 export const commerceAssessment: ScenarioAssessment = {
   version: "1.0.0",
-  find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters", "commerce.pricing", "commerce.live-carts"].includes(id) ? undefined : {
+  find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters", "commerce.pricing", "commerce.live-carts",
+    "commerce.stock", "commerce.reservations"].includes(id) ? undefined : {
     id, version: "1.0.0", evaluate({ parameters, projection }) {
       const p = record(parameters);
       if (id === "commerce.pricing") {
@@ -51,6 +53,22 @@ export const commerceAssessment: ScenarioAssessment = {
           return { orderId, sku: order.sku!, checkedOutAt: order.checkedOutAt!, charged: order.price!, valid: valid?.price ?? null };
         });
         return { pass: evidence.every(item => item.charged === item.valid), evidence };
+      }
+      if (id === "commerce.stock") {
+        // No SKU's available stock is negative: an oversold unit is a negative count.
+        const evidence = Object.entries(tableRows(projection.databases, text(p.owner), text(p.table)))
+          .map(([sku, row]) => ({ sku, stock: record(row).stock ?? null, version: record(row).version ?? null }));
+        return { pass: evidence.every(item => typeof item.stock === "number" && item.stock >= 0), evidence };
+      }
+      if (id === "commerce.reservations") {
+        // A SKU never has more ACTIVE reservations than physical units on hand.
+        const reservations = Object.entries(tableRows(projection.databases, text(p.owner), text(p.reservations)))
+          .map(([reservationId, row]) => [reservationId, record(row)] as const).filter(([, row]) => row.status === "ACTIVE");
+        const evidence = Object.entries(tableRows(projection.databases, text(p.owner), text(p.stock))).map(([sku, row]) => ({
+          sku, units: record(row).units ?? null,
+          active: reservations.filter(([, reservation]) => reservation.sku === sku).map(([reservationId]) => reservationId),
+        }));
+        return { pass: evidence.every(item => typeof item.units === "number" && item.active.length <= item.units), evidence };
       }
       if (id === "commerce.live-carts") {
         // Every placed order committed before the cart it relied on expired.

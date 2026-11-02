@@ -152,6 +152,7 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
     "saga-uncompensated": [3, 3], "saga-compensated": [3, 3], "dual-write": [2, 2], "outbox-unsafe-consumer": [2, 2], "outbox-idempotent": [2, 2],
     "cqrs-delayed": [2, 2], "cascade-unprotected": [3, 3], "cascade-breaker": [3, 3],
     "notifications-unbounded": [2, 2], "notifications-dlq": [2, 2], "cache-stale-price": [4, 4], "cache-invalidated": [4, 4],
+    "inventory-oversell": [1, 1], "inventory-optimistic": [1, 1],
   };
   for (const [index, choice] of scenarios.entries()) {
     const projection = await load(index);
