@@ -1,6 +1,6 @@
 # Commerce failure and resilience lessons
 
-These fourteen browser and headless scenarios build on the same commerce vocabulary: `order-1`,
+These sixteen browser and headless scenarios build on the same commerce vocabulary: `order-1`,
 a 5000-unit payment, service-owned databases, and explicit network/message
 boundaries. Each lesson uses only the topology needed for its teaching point.
 They are independent experiments, not successive mutations of one running system.
@@ -75,6 +75,7 @@ Setting every choice back to its default gives the packaged run exactly.
 | `cascade-*` | `circuit-breaker` (payments `breaker`) |
 | `notifications-*` | `decoupled-confirmation` (orders `decoupled`), `max-attempts` 1–50 (`OrderPlaced` destination `maxAttempts`) |
 | `cache-*` | `cache-invalidation` (catalog `invalidate`) |
+| `inventory-*` | `optimistic-concurrency` (inventory `optimistic`) |
 
 Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
 switch that distinguishes it: setting it to the paired lesson's value gives the
@@ -108,6 +109,7 @@ faults its architecture has and its models survive:
 | `cascade-*` | request, response | crash, external availability |
 | `notifications-*` | request, response, message delivery, database commit | crash |
 | `cache-*` | request, response, database commit | crash |
+| `inventory-*` | request, response, database commit | crash |
 
 Every lesson allows up to four student faults. Saga resources and the outbox
 payment service already script their own crash and restart, so a student crash
@@ -445,6 +447,68 @@ TTL is enough for a cart, because its expiry is the business rule. The cart
 check and the commit are separate steps: delay Orders' price request with
 **Break the system**, and a checkout that saw a live cart can commit after the
 cart expired, which violates the cart invariant.
+
+## 8. Concurrent stock reservation and optimistic concurrency
+
+**Pattern:** optimistic concurrency control: read a version, and commit only if
+it is unchanged.
+
+**Problem:** two clients reserve the last unit at the same virtual time. If the
+stock check and the write are separate steps, both checks can pass before
+either write lands, and the unit is sold twice (check-then-act).
+
+**Topology:** two clients, the Customer App and a Partner API client, call
+Inventory's `POST /reserve`. Inventory owns the `stock` and `reservations`
+tables. The partner's link has a request latency of 2 ms instead of 1 ms.
+
+**Initial state:** sku-1 has `units: 1` (physical units on hand), `stock: 1`
+(units still available), and `version: 1`. There are no reservations.
+
+**Injected fault:** none. Two concurrent requests and a validation step tell
+the story.
+
+**Expected timeline:**
+
+- At t=0 both clients send a reservation for sku-1.
+- At t=1 (customer) and t=2 (partner) Inventory reads stock=1, version 1
+  (`stock.checked`), then validates for 5 ms.
+- At t=6 the customer's write commits stock=0, version 2, and the
+  `res-customer-app` reservation in one transaction.
+- `inventory-oversell`: each write is a fresh transaction that decrements the
+  stock it finds now. At t=7 the partner's write commits stock=-1, version 3,
+  and a second ACTIVE reservation. Both clients get `RESERVED`.
+- `inventory-optimistic`: the check and the write share one transaction. The
+  partner's transaction read version 1, and the customer's commit moved the
+  database past it, so at t=7 the commit is rejected with
+  `TRANSACTION_CONFLICT` (`database.transaction.rejected`,
+  `reservation.conflict`). Inventory re-reads stock=0 and answers
+  `OUT_OF_STOCK` (`reservation.out-of-stock`).
+
+**Expected checks:**
+
+| Run | Final stock | Partner outcome | Stock never negative | One reservation per unit |
+| --- | ---: | --- | --- | --- |
+| `npm run lesson -- inventory-oversell` | -1 | `RESERVED` | VIOLATED | VIOLATED |
+| `npm run lesson -- inventory-optimistic` | 0 | `OUT_OF_STOCK` | HOLDS | HOLDS |
+
+"Stock is never negative" checks every stock row. "A unit has at most one
+active reservation" compares each SKU's ACTIVE reservations with its `units`.
+The scenario expectation confirms that the last unit was still available at
+t=3, while both reservations were being validated.
+
+In the browser, Inventory's state shows the stock row with its version and the
+reservations, and each client shows its outcome. In Recorded history, each
+`database.write.staged` and `database.transaction.committed` record carries the
+row's before and after values. In the optimistic run, the partner's staged
+write (stock 1 → 0) is followed by `database.transaction.rejected` at t=7 and
+never reaches committed state. The headless timeline prints the rejection too.
+
+**Concept:** the database detects a stale snapshot only when the read and the
+write are in the same transaction. Its version check is coarse: any write
+commit since the transaction began causes a conflict
+([ADR-002](spec/adr/002-runtime-model-semantics.md)). Optimistic concurrency
+does not block the second client. It makes the loser find out at commit time,
+and the loser must re-read and decide again; here it retries once.
 
 ## Extension points and boundaries
 

@@ -24,7 +24,7 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/peer.ts`](../../packages/catalogs/src/peer.ts) | Resolves a declared peer from component configuration or the descriptor default. |
 | [`src/assessment.ts`](../../packages/catalogs/src/assessment.ts) | Six checkout predicates and `checkoutAssessment`. |
 | [`src/scenarios.ts`](../../packages/catalogs/src/scenarios.ts) | Data-only checkout documents, document builder, and lesson copy. |
-| [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers seventeen commerce models, defines commerce assessment, and re-exports commerce scenario data. |
+| [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers eighteen commerce models, defines commerce assessment, and re-exports commerce scenario data. |
 | [`src/commerce/common.ts`](../../packages/catalogs/src/commerce/common.ts) | Shared payload/reply/transaction helpers and the commerce client factory. |
 | [`src/commerce/retry.ts`](../../packages/catalogs/src/commerce/retry.ts) | Payment model with optional durable request idempotency. |
 | [`src/commerce/saga.ts`](../../packages/catalogs/src/commerce/saga.ts) | Saga coordinator, configurable resource service, and external carrier. |
@@ -33,8 +33,9 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/circuit.ts`](../../packages/catalogs/src/commerce/circuit.ts) | Dependency service with optional circuit breaker and external risk provider. |
 | [`src/commerce/notify.ts`](../../packages/catalogs/src/commerce/notify.ts) | Orders that confirms at checkout or after `NotificationSent`, a notification sender, and an external Messaging Provider. |
 | [`src/commerce/cache.ts`](../../packages/catalogs/src/commerce/cache.ts) | Catalog with a cache-aside price cache and optional invalidation, a TTL cart, and Orders that records the price it used. |
-| [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for fourteen commerce documents. |
-| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the seventeen commerce models. |
+| [`src/commerce/inventory.ts`](../../packages/catalogs/src/commerce/inventory.ts) | Inventory that reserves the last unit with check-then-act or with optimistic concurrency. |
+| [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for sixteen commerce documents. |
+| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the eighteen commerce models. |
 | [`examples/commerce.ts`](../../packages/catalogs/examples/commerce.ts) | Headless CLI lesson runner with timeline, stepping, JSON export, and replay. |
 
 The two `scenarios.ts` modules import only contract types from
@@ -65,7 +66,7 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `commerceCatalog` | `ScenarioCatalog` with ID `commerce.lessons`, version `1.0.0`. |
 | `commerceAssessment` | `ScenarioAssessment` with version `1.0.0`. |
 | `commerceScenario(name)` | Returns a `CanonicalValue` document for a `CommerceLessonName`. |
-| `commerceLessonNames` | Ordered tuple of the fourteen supported commerce names. |
+| `commerceLessonNames` | Ordered tuple of the sixteen supported commerce names. |
 | `CommerceLessonName` | Type-only union derived from that tuple. |
 
 Both catalogs implement `find(name, version)` with an exact model-name/version
@@ -169,7 +170,7 @@ mode. Unknown predicate IDs resolve to `undefined`.
 
 ## Commerce models
 
-`src/commerce/index.ts` registers the following seventeen models. Repeated service
+`src/commerce/index.ts` registers the following eighteen models. Repeated service
 instances share a model definition but receive fresh factory-created handlers.
 
 | Source | Model | Interface and behavior |
@@ -191,6 +192,7 @@ instances share a model definition but receive fresh factory-created handlers.
 | `cache.ts` | `commerce.cache-catalog` | Service `GET /price` and `POST /price`; owns tables `prices` and `price-history` and a KeyValueStore. A read returns the cached `price:<sku>` entry, or reads the database and caches it for configuration `ttl` (default 100). A change commits the current price and a history row with `validFrom` in one transaction. Configuration `invalidate` then deletes the cached key. |
 | `cache.ts` | `commerce.cache-cart` | Service `POST /cart` and `GET /cart`; keeps `cart:<id>` in its KeyValueStore for configuration `ttl` (default 30) and records that deadline in the cart as `expiresAt`. A read of an expired cart returns `EXPIRED`. |
 | `cache.ts` | `commerce.cache-orders` | Service `POST /checkout`; reads the cart through peer `cart` and the price through peer `catalog`. It commits a `REJECTED` row for an expired cart, or a `PLACED` row with the price, its version and source, the cart's `expiresAt`, and `checkedOutAt`. A timed-out or failed call returns `UNAVAILABLE` without a row. |
+| `inventory.ts` | `commerce.inventory` | Service `POST /reserve`; owns tables `stock` and `reservations`. It reads the SKU's stock row and answers `OUT_OF_STOCK` when `stock` is below 1, waits 5 ms, then decrements `stock`, increments `version`, and inserts an `ACTIVE` reservation in one commit. Without configuration `optimistic`, the read is a closed snapshot and the write is a fresh transaction that decrements the stock it finds then. With `optimistic`, the read and the write share one transaction; on `TRANSACTION_CONFLICT` it re-reads once. |
 
 `common.ts` also exports `record` and `text` validation helpers, `timeout` for
 recognizing `NETWORK_TIMEOUT`, `ok` for successful replies, and generator helper
@@ -245,17 +247,20 @@ classified and that each family shares its invariants.
 | `notifications-dlq` | Same outage. Orders confirms at checkout, and `OrderPlaced` allows 3 attempts. The third NACK moves the message to DEAD at t=44, where it stays in the dead-letter queue. | The same three |
 | `cache-stale-price` | No injected fault. The price read at t=1 is cached until t=101. The back office raises it from 1000 to 1200 at t=11, but checkout at t=25 is served the cached 1000. Both carts expire at t=31, so cart-2's checkout at t=43 is rejected. | `order-priced-at-checkout` (violated), `no-expired-cart-checkout` |
 | `cache-invalidated` | Same workload. The price change deletes the cached key, so checkout misses the cache and charges 1200. | The same two |
+| `inventory-oversell` | No injected fault. The Customer App and the Partner API (one more millisecond of request latency) reserve the last unit of sku-1 at t=0. Both checks read stock=1, and the separate writes commit at t=6 and t=7, leaving stock -1 and two ACTIVE reservations. | `stock-never-negative`, `one-reservation-per-unit` (both violated) |
+| `inventory-optimistic` | Same workload. The partner's commit at t=7 is rejected with `TRANSACTION_CONFLICT`; it re-reads stock=0 and answers `OUT_OF_STOCK`. | The same two |
 
 The remaining checks are scenario expectations: the saga state at t=30, the
 outbox documents' committed payment, absent notification, and outbox row at
 t=6, the CQRS reads at t=10, the cascade dependency and API metrics at
 t=120, the empty Notifications table at t=60, and the cache lessons' raised
-price at t=15 and rejected cart-2 checkout at t=60. `bounded-waiting` compares `peakActive` with 3 by equality, because
+price at t=15 and rejected cart-2 checkout at t=60, and the inventory lessons'
+unchanged last unit at t=3. `bounded-waiting` compares `peakActive` with 3 by equality, because
 `commerce.metrics` compares fields by equality.
 
 ### Commerce assessment
 
-`commerceAssessment.find` resolves only six version-`1.0.0` predicates:
+`commerceAssessment.find` resolves only eight version-`1.0.0` predicates:
 
 - `commerce.rows` takes `owner`, `table`, `count`, `key`, and `expected`. It
   requires the exact table row count and compares each expected field against
@@ -277,6 +282,11 @@ price at t=15 and rejected cart-2 checkout at t=60. `bounded-waiting` compares `
 - `commerce.live-carts` takes `owner` and `table`. Each `PLACED` order row must
   have `checkedOutAt` before the `cartExpiresAt` of the cart it used. Evidence
   lists both times per order.
+- `commerce.stock` takes `owner` and `table`. Every row's `stock` must be a
+  number of at least 0. Evidence lists each SKU's stock and version.
+- `commerce.reservations` takes `owner`, `stock`, and `reservations`. Each
+  stock row's SKU may have at most `units` reservations with status `ACTIVE`.
+  Evidence lists each SKU's units and active reservation IDs.
 
 Commerce documents use `at` assertions at their declared virtual times. The
 assessment component in `@distlab/scenario` owns scheduling, statuses, and
@@ -312,10 +322,11 @@ FAIL results also set exit code 1, and replay mismatch throws.
 The [checkout tests](../../packages/catalogs/tests/checkout.test.ts) cover model
 versions, both documents, authorization outcomes, commit/drop/timeout ordering,
 and fresh/reset/step equivalence. The [commerce
-tests](../../packages/catalogs/tests/commerce.test.ts) cover all fourteen documents,
+tests](../../packages/catalogs/tests/commerce.test.ts) cover all sixteen documents,
 paired inputs, compensation order, duplicate handling, CQRS convergence,
 breaker load reduction, bounded and unbounded notification retries, stale and
-invalidated cached prices with cart TTL expiry, atomic payment/outbox commit rejection, and replay.
+invalidated cached prices with cart TTL expiry, concurrent reservations that
+oversell or lose a commit conflict, atomic payment/outbox commit rejection, and replay.
 
 ## Extending a catalog or lesson
 
@@ -344,7 +355,7 @@ invalidated cached prices with cart TTL expiry, atomic payment/outbox commit rej
    lessons, also verify equal seeds, workloads, and fault schedules.
 6. Browser support requires explicit host admission and student projection work;
    adding a catalog document alone does not authorize it. The host accepts only
-   the two packaged checkout documents and fourteen packaged commerce lessons.
+   the two packaged checkout documents and sixteen packaged commerce lessons.
    Keep factory imports in the worker and data-only imports on the main thread.
    Student projections expose business rows, live KV entries with their expiry, client outcomes,
    declared external-visible facts, delivery records, and assertions; raw tasks
