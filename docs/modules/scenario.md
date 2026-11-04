@@ -74,7 +74,8 @@ exports and are not exposed through the package entry point. Import shared
   canonical data; there are no scheduler, controller, or mutation ports.
 
 `DiagnosticCodes` names schema, canonical-data, version, reference, ownership,
-timing, constraint, and fault failures. Shared `ScenarioDiagnostic` retains the
+composition (`PEER`, `INTERFACE`, `PUBLISH`, `STORAGE`), timing, constraint,
+and fault failures. Shared `ScenarioDiagnostic` retains the
 specification's `{ path: string, code: string }` shape.
 
 ### `validate.ts`: normalization and diagnostics
@@ -119,6 +120,19 @@ The readers enforce the following relationships and constraints:
 - Destinations have unique IDs and valid queue/topic policies. Subscriptions
   reference existing destinations and service consumers, have no duplicate pair,
   and match the consumer names declared by the model in both directions.
+- Composition rules ([ADR-005](../spec/adr/005-architecture-editor.md),
+  [`composition.ts`](../../packages/scenario/src/composition.ts)) run only over
+  an architecture that read without diagnostics, so they never cascade. Using the
+  catalog model descriptors, each peer resolves (configuration field, else the
+  descriptor default) to an existing component of an allowed kind (`PEER`;
+  `TYPE` for a configured value that is not a nonempty string), which exposes
+  every declared call (`INTERFACE`; a placeholder exposes its configured
+  `interface`) and is reached by a link from the caller (`LINK`). These three
+  point at `/architecture/components/i/configuration/<peer>`. Every published
+  destination exists (`PUBLISH`, at the component). A model that needs storage
+  has its owner's database with each required table name (`STORAGE`, at the
+  database's `tables`, or at the component when it owns no database) and a KV
+  store when declared (`STORAGE`, at the component).
 - Initial external behaviors have unique target/operation pairs, target external
   components, and use catalog operation names. Behavior fields include latency,
   degraded extra latency, response-drop policy, and canonical parameters.
@@ -287,6 +301,8 @@ Existing validation tests live in
 [`validate.test.ts`](../../packages/scenario/tests/validate.test.ts); scenario
 composition, boundary assessment, and replay checks live in
 [`scenario-engine.test.ts`](../../packages/scenario/tests/scenario-engine.test.ts).
+[`composition.test.ts`](../../packages/scenario/tests/composition.test.ts)
+covers each composition rule and its path.
 [`dependency.test.ts`](../../packages/scenario/tests/dependency.test.ts) checks
 dependency direction. The shared test fixtures are in
 [`support.ts`](../../packages/scenario/tests/support.ts).

@@ -150,3 +150,22 @@ test("ARCH-AC-5 models read every peer from configuration, never from a literal 
   }
   assert.equal(rebindings, 22);
 });
+
+test("ARCH-AC-1 every packaged document passes the composition rules, and each peer link is required", () => {
+  let removed = 0;
+  for (const lesson of lessons) {
+    const engine = new DeterministicScenarioEngine({ catalog: lesson.catalog, assessment: lesson.assessment });
+    assert.deepEqual(engine.validate(lesson.document), [], lesson.name);
+    const architecture = object(lesson.document.architecture);
+    const links = architecture.links as unknown as { source: string; target: string }[];
+    components(lesson.document).forEach((component, index) => {
+      for (const peer of descriptorOf(lesson, component).peers) {
+        const target = bound(component, peer);
+        const without = { ...lesson.document, architecture: { ...architecture, links: links.filter(link => link.source !== component.id || link.target !== target) as unknown as CanonicalValue } };
+        assert.deepEqual(engine.validate(without).map(item => `${item.path} ${item.code}`), [`/architecture/components/${index}/configuration/${peer.name} LINK`], `${lesson.name}: ${component.id}.${peer.name}`);
+        removed += 1;
+      }
+    });
+  }
+  assert.ok(removed > 0);
+});
