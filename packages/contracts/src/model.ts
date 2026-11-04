@@ -47,3 +47,10 @@ export interface ModelDescriptor {
   /** Placeholder models read their endpoints or operations from `configuration.interface`. */
   readonly placeholder?: true;
 }
+
+/**
+ * Error code in the body of every reply a placeholder model gives. A
+ * placeholder fills an empty slot: it answers each request with
+ * `{ status: "error", body: { code: NOT_IMPLEMENTED } }`.
+ */
+export const NOT_IMPLEMENTED = "NOT_IMPLEMENTED";

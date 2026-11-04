@@ -9,12 +9,14 @@ import { dependencyModel, riskModel } from "./circuit.js";
 import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.js";
 import { cacheCartModel, cacheCatalogModel, cacheOrdersModel } from "./cache.js";
 import { inventoryModel } from "./inventory.js";
+import { placeholderExternalModel, placeholderServiceModel } from "./placeholder.js";
 export { commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
 export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
 
 const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel,
-  notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel, inventoryModel];
+  notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel, inventoryModel,
+  placeholderServiceModel, placeholderExternalModel];
 export const commerceCatalog: ScenarioCatalog = {
   id: "commerce.lessons", version: "1.0.0",
   find: (name, version) => models.find(model => model.model === name && model.version === version),
