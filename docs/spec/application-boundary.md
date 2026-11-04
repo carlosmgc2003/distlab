@@ -45,10 +45,25 @@ with a session overlay that the lesson's overlay policy allows
 ([ADR-004](adr/004-session-overlays.md)). The only other input it accepts is
 an imported scenario document, described below.
 The overlay adds student fault rules, student scheduled faults, and parameter
-overrides at declared targets. It never edits assertions, workload, topology,
-seed, start time, or `RunInputs.configuration`. The worker resolves the policy
-from its own catalog after the document matches, applies the overlay, and only
-then calls ScenarioEngine. The main thread never sends an applied document.
+overrides at declared targets. It may also carry **architecture edits**
+([ADR-005](adr/005-architecture-editor.md)): filled slots, peer bindings,
+attached or detached resources, and added or removed subscriptions, each only
+where the lesson's architecture allowance permits it. A lesson without an
+allowance accepts no architecture edit. The overlay never edits assertions,
+workload, seed, start time, external behavior, or `RunInputs.configuration`, and
+it never adds or removes a component. The worker resolves the policy, including
+the allowance, from its own catalog after the document matches. It checks the
+edits against the allowance and the catalog's model descriptors, normalizes
+them (sorted lists, default options and no-op entries removed, an empty
+`architecture` omitted), and applies them in the fixed order slots, resources,
+subscriptions, bindings (a binding adds a link with the allowance's link policy
+when none exists), before the ADR-004 composition. Only then does it call
+ScenarioEngine, whose composition rules validate the applied document. A
+diagnostic that the packaged document alone also has is a catalog defect
+(`INVALID_SCENARIO`). Any other is `INVALID_OVERLAY`, at the path of the edit
+that produced the location, else of the first edit that changed a component the
+location names, else at `/architecture`. Reset replays the applied edits. The
+main thread never sends an applied document or a design preview.
 Catalog factories and ScenarioEngine stay in the worker. The main thread imports
 the data-only scenario modules, never runtime code. Commerce student projections
 include committed DB rows, live KV entries with their absolute expiry (never the
@@ -58,9 +73,10 @@ client projection carries those verdicts in its canonical `assertions` field;
 no worker command or top-level protocol variant is added. Raw runtime tasks and
 provider counters remain host-only. Paired comparisons replace the worker session.
 Compare carries the student's fault entries and every parameter override whose
-key the paired lesson declares with the same domain and default. It drops and
-lists the others. The pair's distinguishing parameters therefore take the
-paired lesson's values.
+key the paired lesson declares with the same domain and default. It carries an
+architecture edit only when the paired lesson's allowance permits the same edit.
+It drops and lists the others. The pair's distinguishing parameters therefore
+take the paired lesson's values.
 
 ### Imported scenario documents
 
