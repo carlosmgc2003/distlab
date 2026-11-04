@@ -10,7 +10,7 @@ history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
 `apps/web` provides the React lesson backed by a Web Worker.
 `@distlab/catalogs` provides versioned checkout
-models, two checkout scenarios, and sixteen commerce lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
+models, two checkout scenarios, and seventeen commerce lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
 deterministic event boundaries. In the browser, **Break the system** lets a student add
 deterministic faults to a loaded lesson before Run, as a session overlay that the lesson's
@@ -163,6 +163,7 @@ npm run lesson -- retry-unsafe   # run a commerce lesson with textual timeline
 npm run lesson -- retry-idempotent --replay # verify deterministic reset/replay
 npm run lesson -- saga-compensated --step  # interactive event stepping
 npm run --silent lesson -- outbox-idempotent --json # full state/history export
+npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
 npm exec -w @distlab/web -- playwright test checkout-lesson.spec.ts # focused lesson E2E
 ```
 
@@ -202,7 +203,7 @@ boundaries, and the kernel yields every 16 events so pause messages can arrive.
 Projections are copied and recursively frozen on both sides of structured clone.
 Component state labeled `host` stays on the projection for assessment comparison and is not rendered. The shell renders a separate `student` projection: committed Orders and Payments rows, service lifecycle, bus delivery state, the client-observed checkout outcome, and Payment Processor authorization facts. Provider counters and runtime handles are omitted from that projection.
 
-The host accepts the two packaged checkout documents and sixteen packaged commerce
+The host accepts the two packaged checkout documents and seventeen packaged commerce
 lessons. Choose them in the Scenario picker; commerce lessons show service-owned
 state and assertion verdicts below the graph, business events in Story, and a
 Compare button for paired experiments. Compare loads a fresh session rather than
