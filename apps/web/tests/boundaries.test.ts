@@ -36,7 +36,9 @@ test("main-thread import graph uses application contracts and data, never runtim
     // Session overlay data shapes (ADR-004). Types only: no validation or application code.
     "SessionIdentity", "SessionOverlay", "LessonOverlayPolicy", "LessonParameter", "ParameterOverride", "FaultRule", "FaultEffect", "FaultPoint", "ScheduledFault", "OverlayScheduledFault", "ScenarioDiagnostic",
     // Model descriptor data shapes (ADR-005). Types only: no composition code.
-    "ModelDescriptor", "ModelPeer", "ModelOption", "ModelStorage"]);
+    "ModelDescriptor", "ModelPeer", "ModelOption", "ModelStorage",
+    // Architecture edit and allowance shapes (ADR-005). Types only: no validation or application code.
+    "ArchitectureEdits", "SlotEdit", "BindingEdit", "ResourceEdit", "SubscriptionEdit", "LessonArchitectureAllowance"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;
@@ -72,11 +74,11 @@ test("kernel and contracts have no upward application, catalog or browser depend
   }
 });
 
-test("OVL-AC-5 the main thread reads overlay policies from data-only modules and never applies an overlay", () => {
+test("OVL-AC-5 and ARCH-AC-7: the main thread reads overlay policies from data-only modules and never applies an overlay or a design", () => {
   const mainThread = files(app).filter(file => !file.startsWith(resolve(app, "worker")));
   for (const file of mainThread) {
     const text = readFileSync(file, "utf8");
-    for (const name of ["composeOverlay", "applyOverlay", "validateOverlay", "resolveTarget", "@distlab/scenario", "@distlab/catalogs\""]) {
+    for (const name of ["composeOverlay", "applyOverlay", "validateOverlay", "resolveTarget", "applyArchitectureEdits", "readArchitectureEdits", "attributeDiagnostic", "@distlab/scenario", "@distlab/catalogs\""]) {
       assert.ok(!text.includes(name), `${file} must not reference ${name}`);
     }
   }
@@ -87,4 +89,6 @@ test("OVL-AC-5 the main thread reads overlay policies from data-only modules and
   const catalog = adapter.find(item => item.path === "@distlab/catalogs");
   assert.ok(catalog?.names.includes("checkoutOverlayPolicy") && catalog.names.includes("commerceOverlayPolicy"));
   assert.ok(adapter.some(item => item.path === "@distlab/scenario" && item.names.includes("composeOverlay")));
+  // Architecture edits are validated against the allowance in that same policy; the worker passes its own catalog's descriptors.
+  assert.match(readFileSync(resolve(app, "worker/adapter.ts"), "utf8"), /composeOverlay\(lesson\.scenario, lesson\.policy, command\.overlay, [^)]*\), catalog\)/);
 });

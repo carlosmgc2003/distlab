@@ -3,7 +3,7 @@ import { CommerceFacts, CommerceState } from "./CommerceLesson.tsx";
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import { BreakPanel } from "./BreakPanel.tsx";
-import { carryOverlay, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
+import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
 import { DesignChoicesPanel } from "./DesignChoicesPanel.tsx";
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
@@ -162,7 +162,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
     // Compare carries the applied overlay; the paired lesson's policy may still reject a fault.
     const carried = carryOverlay(applied ?? { version: 1, faults: [], scheduledFaults: [], parameters: [] }, loadedChoice.policy, target.policy);
     const faults = carried.overlay.faults.length + carried.overlay.scheduledFaults.length;
-    const kept = carried.overlay.parameters.length ? `, kept ${describeChoices(carried.overlay.parameters)}` : "";
+    const edits = designEdits(carried.overlay.architecture);
+    const kept = `${carried.overlay.parameters.length ? `, kept ${describeChoices(carried.overlay.parameters)}` : ""}${edits ? `, kept ${edits} design edit${edits === 1 ? "" : "s"}` : ""}`;
     // A dropped design choice is the one the pair compares: the paired lesson's own value applies.
     setCarryNotice(faults || kept || carried.dropped.length
       ? `Compare kept ${faults} student fault${faults === 1 ? "" : "s"}${kept}${carried.dropped.length ? ` and dropped ${carried.dropped.join(", ")}` : ""}.` : "");

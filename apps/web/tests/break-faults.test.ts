@@ -4,8 +4,8 @@ import type { ArchitectureDefinition, LessonOverlayPolicy, ScenarioDefinition } 
 import { STUDENT_ID_PREFIX } from "@distlab/contracts";
 import { checkoutOverlayPolicy, commerceOverlayPolicy, commerceScenario, normalCheckout } from "@distlab/catalogs";
 import {
-  STUDENT_PREFIX, buildEntry, carryOverlay, describeEntry, draftFromOverlay, emptyForm, faultKindOptions, faultMarks,
-  formFromEntry, nextStudentId, overlayFromDraft, pickTarget, placeDiagnostics, sameOverlay, targetOptions,
+  STUDENT_PREFIX, buildEntry, carryOverlay, describeEntry, designEdits, draftFromOverlay, emptyForm, faultKindOptions, faultMarks,
+  formFromEntry, isEmptyOverlay, nextStudentId, overlayFromDraft, pickTarget, placeDiagnostics, sameOverlay, targetOptions,
 } from "../src/break-faults.ts";
 import type { DraftEntry, FaultForm } from "../src/break-faults.ts";
 
@@ -168,6 +168,36 @@ test("Compare carries fault entries and only overrides the paired lesson declare
   assert.deepEqual(carried.overlay.scheduledFaults, overlay.scheduledFaults);
   assert.deepEqual(carried.overlay.parameters, [{ key: "timeout", value: 40 }]);
   assert.deepEqual(carried.dropped, ["idempotency"]);
+});
+
+test("Compare carries an architecture edit only when the paired allowance permits the same edit, and lists the others", () => {
+  const base = commerceOverlayPolicy("notifications-unbounded");
+  const allowance: NonNullable<LessonOverlayPolicy["architecture"]> = {
+    slots: [{ component: "notifications", models: [{ model: "commerce.notifications", version: "1" }] }],
+    bindings: [{ component: "payments", peer: "provider", candidates: ["provider-a"] }],
+    resources: [{ owner: "payments", resource: "store" }],
+    subscriptions: [{ consumer: "notifications", destination: "PaymentApproved" }],
+    linkPolicy: { requestLatency: 1, responseLatency: 1, jitter: 0, timeout: 50, failureRate: 0 } as never,
+    maxEdits: 4,
+  };
+  const architecture = {
+    slots: [{ component: "notifications", model: "commerce.notifications", version: "1", options: [] }],
+    bindings: [{ component: "payments", peer: "provider", target: "provider-b" }],
+    resources: [{ owner: "payments", resource: "store" as const, change: "attach" as const }],
+    subscriptions: [{ consumer: "notifications", destination: "PaymentApproved", change: "unsubscribe" as const }],
+  };
+  const overlay = { version: 1 as const, faults: [], scheduledFaults: [], parameters: [], architecture };
+  const left = { ...base, architecture: { ...allowance, bindings: [{ component: "payments", peer: "provider", candidates: ["provider-a", "provider-b"] }] } };
+  const carried = carryOverlay(overlay, left, { ...base, architecture: { ...allowance, resources: [] } });
+  assert.deepEqual(carried.overlay.architecture, { ...architecture, bindings: [], resources: [] });
+  assert.deepEqual(carried.dropped, ["payments.provider binding", "payments store"]);
+  // A paired lesson without an allowance drops every edit, and the carried overlay has no architecture.
+  const closed = carryOverlay(overlay, left, base);
+  assert.equal(Object.hasOwn(closed.overlay, "architecture"), false);
+  assert.deepEqual(closed.dropped, ["notifications slot", "payments.provider binding", "payments store", "notifications subscription to PaymentApproved"]);
+  assert.equal(designEdits(architecture), 4);
+  assert.equal(isEmptyOverlay(overlay), false);
+  assert.equal(isEmptyOverlay(closed.overlay), true);
 });
 
 test("applied faults mark the links, destinations, databases, and components they target", () => {

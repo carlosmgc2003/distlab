@@ -75,8 +75,8 @@ export class WorkerAdapter {
         const catalog = this.#commerce ? commerceCatalog : checkoutCatalog;
         const assessment = this.#commerce ? commerceAssessment : checkoutAssessment;
         const engine = new DeterministicScenarioEngine({ catalog, assessment });
-        // The policy comes from this catalog, never from the command.
-        const composed = composeOverlay(lesson.scenario, lesson.policy, command.overlay, document => engine.validate(document));
+        // The policy, including any architecture allowance, comes from this catalog, never from the command.
+        const composed = composeOverlay(lesson.scenario, lesson.policy, command.overlay, document => engine.validate(document), catalog);
         if (!composed.ok && composed.code === "INVALID_OVERLAY") throw new OverlayRejected(composed.diagnostics);
         if (!composed.ok) throw { code: "INVALID_SCENARIO", context: composed.diagnostics };
         const session = engine.create(composed.document);

@@ -80,9 +80,16 @@ function isProjection(value: unknown): value is RuntimeProjectionSet {
 function isSession(value: unknown): value is SessionIdentity {
   if (!record(value) || !keys(value, ["lesson", "seed", "overlay", "origin"]) || !text(value.lesson) || !text(value.seed)) return false;
   const { overlay, origin } = value;
-  return record(overlay) && keys(overlay, ["version", "faults", "scheduledFaults", "parameters"]) && overlay.version === 1
+  return record(overlay) && keys(overlay, ["version", "faults", "scheduledFaults", "parameters"], ["architecture"]) && overlay.version === 1
     && [overlay.faults, overlay.scheduledFaults, overlay.parameters].every(items => Array.isArray(items) && items.every(record))
+    && (!Object.hasOwn(overlay, "architecture") || isArchitectureEdits(overlay.architecture))
     && isOrigin(origin);
+}
+
+/** ADR-005: present only when the applied overlay carries architecture edits. */
+function isArchitectureEdits(value: unknown): boolean {
+  return record(value) && keys(value, ["slots", "bindings", "resources", "subscriptions"])
+    && [value.slots, value.bindings, value.resources, value.subscriptions].every(items => Array.isArray(items) && items.every(record));
 }
 
 function isOrigin(value: unknown): boolean {
