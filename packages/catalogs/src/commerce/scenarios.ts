@@ -1,4 +1,4 @@
-import type { CanonicalValue, FaultEffect, FaultPoint, LessonOverlayPolicy, LessonParameter, ScheduledFault } from "@distlab/contracts";
+import type { CanonicalValue, FaultEffect, FaultPoint, LessonArchitectureAllowance, LessonOverlayPolicy, LessonParameter, ScheduledFault } from "@distlab/contracts";
 
 const component = (id: string, model: string, kind = "service", configuration = {}) => ({ id, model: `commerce.${model}`, kind, version: "1.0.0", configuration });
 const link = (source: string, target: string, timeout = 20) => ({ source, target, policy: { requestLatency: 1, responseLatency: 1, jitter: 0, timeout, failureRate: 0 } });
@@ -14,7 +14,7 @@ const configuration = { startTime: 0, historyLimit: 100000, visibility: { defaul
 export const commerceLessonNames = [
   "retry-unsafe", "retry-idempotent",
   "saga-uncompensated", "saga-compensated",
-  "dual-write", "outbox-unsafe-consumer", "outbox-idempotent",
+  "dual-write", "outbox-unsafe-consumer", "outbox-idempotent", "outbox-notifications-gap",
   "cqrs-delayed", "cascade-unprotected", "cascade-breaker",
   "notifications-unbounded", "notifications-dlq",
   "cache-stale-price", "cache-invalidated",
@@ -64,15 +64,24 @@ function sagaScenario(name: CommerceLessonName): CanonicalValue {
   } as CanonicalValue;
 }
 
+/**
+ * `outbox-notifications-gap` is a "fill the gap" design lesson (ADR-005): the
+ * same outbox story, but `notifications` is a placeholder slot with no database
+ * and no subscription. The student fills the slot, gives it a database, and
+ * subscribes it to `PaymentApproved`.
+ */
 function outboxScenario(name: CommerceLessonName): CanonicalValue {
   const outbox = name !== "dual-write";
   const idempotent = name === "outbox-idempotent";
+  const gap = name === "outbox-notifications-gap";
   return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
     architecture: {
-      components: [component("client", "client", "client"), component("payments", "outbox-payment", "service", { outbox }), component("notifications", "notifications", "service", { idempotent })],
-      links: [link("client", "payments", 40)], databases: [database("payments", ["payments", "outbox"]), database("notifications", ["notifications", "inbox"])], stores: [],
+      components: [component("client", "client", "client"), component("payments", "outbox-payment", "service", { outbox }),
+        gap ? component("notifications", "placeholder-service") : component("notifications", "notifications", "service", { idempotent })],
+      links: [link("client", "payments", 40)],
+      databases: [database("payments", ["payments", "outbox"]), ...gap ? [] : [database("notifications", ["notifications", "inbox"])]], stores: [],
       destinations: [{ id: "PaymentApproved", kind: "topic", deliveryDelay: 1, ackTimeout: 10, retryDelay: 1, maxAttempts: 3, capacity: 100 }],
-      subscriptions: [{ destination: "PaymentApproved", consumer: "notifications" }],
+      subscriptions: gap ? [] : [{ destination: "PaymentApproved", consumer: "notifications" }],
     }, external: [],
     faults: [fault("duplicate-approved", "message.delivery", "payments", "notifications", "PaymentApproved", { kind: "duplicate", additionalCopies: 1, spacing: 3 })],
     actions: [
@@ -333,7 +342,27 @@ export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPo
   const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
     : family === "retry" || family === "cqrs" || family === "notifications" || family === "cache" || family === "inventory" ? ["crash"] : [];
-  return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name) };
+  const architecture = commerceArchitecture(name);
+  return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name), ...architecture ? { architecture } : {} };
+}
+
+/**
+ * Architecture allowances (ADR-005). Only the gap lesson accepts design edits:
+ * fill the `notifications` slot, give it a database, and subscribe it to
+ * `PaymentApproved`. The slot's ID is the lesson's, so the packaged duplicate
+ * delivery fault and assertions keep naming it whatever fills it.
+ */
+function commerceArchitecture(name: CommerceLessonName): LessonArchitectureAllowance | undefined {
+  if (name !== "outbox-notifications-gap") return undefined;
+  return {
+    slots: [{ component: "notifications", models: [{ model: "commerce.notifications", version: "1.0.0" }] }],
+    bindings: [],
+    resources: [{ owner: "notifications", resource: "database" }],
+    subscriptions: [{ consumer: "notifications", destination: "PaymentApproved" }],
+    // The packaged link policy; the data-only module casts numbers to the branded durations instead of importing runtime helpers.
+    linkPolicy: link("notifications", "payments").policy as unknown as LessonArchitectureAllowance["linkPolicy"],
+    maxEdits: 3,
+  };
 }
 
 const flag = (key: string, value: boolean, component: string, field: string): LessonParameter =>
@@ -361,6 +390,9 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
     case "outbox-unsafe-consumer":
     case "outbox-idempotent":
       return [flag("outbox", name !== "dual-write", "payments", "outbox"), flag("consumer-idempotency", name === "outbox-idempotent", "notifications", "idempotent")];
+    case "outbox-notifications-gap":
+      // The slot's own behavior option belongs to the slot edit; no parameter targets a slot component.
+      return [flag("outbox", true, "payments", "outbox")];
     case "cqrs-delayed":
       return [];
     case "cascade-unprotected":

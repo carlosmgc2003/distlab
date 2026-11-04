@@ -15,6 +15,7 @@ const commerceCopy = {
   "dual-write": ["Dual write: lost event", "The payment survives a crash, but no downstream notification is created.", "outbox-unsafe-consumer"],
   "outbox-unsafe-consumer": ["Outbox: duplicate consumer effects", "The durable outbox recovers publication, but duplicate delivery creates two notifications.", "outbox-idempotent"],
   "outbox-idempotent": ["Outbox: idempotent consumer", "Two deliveries produce one notification: outbox and inbox solve different problems.", "outbox-unsafe-consumer"],
+  "outbox-notifications-gap": ["Outbox: design the notifications consumer", "Payments' outbox publishes PaymentApproved, but Notifications is an empty slot: nothing receives the event, so no notification is created. Fill the slot, give it a database, and subscribe it.", "outbox-idempotent"],
   "cqrs-delayed": ["CQRS: delayed read model", "At t=10 Orders is PAID while Reporting is PENDING. At t=60 both are PAID.", ""],
   "cascade-unprotected": ["Cascading failure: unprotected", "A slow risk provider causes 13 dependency timeouts and a peak of 10 waiting payment requests.", "cascade-breaker"],
   "cascade-breaker": ["Cascading failure: circuit breaker", "Follow CLOSED → OPEN → HALF_OPEN → CLOSED. Risk calls fall from 16 to 5; rejected calls are not successes.", "cascade-unprotected"],

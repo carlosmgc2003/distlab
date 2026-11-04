@@ -149,7 +149,7 @@ test("empty and invalid graphs have explicit presentation states", () => {
 test("emits packaged owned resources as presentation-only satellite nodes and ownership edges", async () => {
   const expected: Record<string, [number, number]> = {
     normal: [2, 2], "response-lost": [2, 2], "retry-unsafe": [1, 1], "retry-idempotent": [1, 1],
-    "saga-uncompensated": [3, 3], "saga-compensated": [3, 3], "dual-write": [2, 2], "outbox-unsafe-consumer": [2, 2], "outbox-idempotent": [2, 2],
+    "saga-uncompensated": [3, 3], "saga-compensated": [3, 3], "dual-write": [2, 2], "outbox-unsafe-consumer": [2, 2], "outbox-idempotent": [2, 2], "outbox-notifications-gap": [1, 1],
     "cqrs-delayed": [2, 2], "cascade-unprotected": [3, 3], "cascade-breaker": [3, 3],
     "notifications-unbounded": [2, 2], "notifications-dlq": [2, 2], "cache-stale-price": [4, 4], "cache-invalidated": [4, 4],
     "inventory-oversell": [1, 1], "inventory-optimistic": [1, 1],

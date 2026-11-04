@@ -98,8 +98,8 @@ export const commerceAssessment: ScenarioAssessment = {
         const pass = Object.entries(record(p.expected!)).every(([key, value]) => actual[key] === value);
         return { pass, evidence: actual };
       }
-      const db = record(record(projection.databases)[text(p.owner)]!);
-      const rows = record(record(db.tables!)[text(p.table)]!);
+      // An owner without the database (an unfilled design slot) has no rows.
+      const rows = tableRows(projection.databases, text(p.owner), text(p.table));
       const expected = record(p.expected!);
       const row = rows[text(p.key)] ?? {};
       const pass = Object.keys(rows).length === p.count && Object.entries(expected).every(([key, value]) => record(row)[key] === value);
