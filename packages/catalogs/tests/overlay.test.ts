@@ -8,27 +8,28 @@ import {
   commerceOverlayPolicy, commerceScenario, normalCheckout, responseLostCheckout,
 } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, composeOverlay, inDomain, openHarness, resolveTarget } from "@distlab/scenario";
-import type { HarnessExport } from "@distlab/scenario";
+import type { HarnessExport, ScenarioCatalog } from "@distlab/scenario";
 
 interface Lesson {
   readonly id: string;
   readonly document: CanonicalValue;
   readonly policy: LessonOverlayPolicy;
   readonly engine: DeterministicScenarioEngine;
+  readonly catalog: ScenarioCatalog;
 }
 
 const checkoutEngine = new DeterministicScenarioEngine({ catalog: checkoutCatalog, assessment: checkoutAssessment });
 const commerceEngine = new DeterministicScenarioEngine({ catalog: commerceCatalog, assessment: commerceAssessment });
 const lessons: readonly Lesson[] = [
-  { id: "normal", document: normalCheckout, policy: checkoutOverlayPolicy("normal"), engine: checkoutEngine },
-  { id: "response-lost", document: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), engine: checkoutEngine },
-  ...commerceLessonNames.map(name => ({ id: name, document: commerceScenario(name), policy: commerceOverlayPolicy(name), engine: commerceEngine })),
+  { id: "normal", document: normalCheckout, policy: checkoutOverlayPolicy("normal"), engine: checkoutEngine, catalog: checkoutCatalog },
+  { id: "response-lost", document: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), engine: checkoutEngine, catalog: checkoutCatalog },
+  ...commerceLessonNames.map(name => ({ id: name, document: commerceScenario(name), policy: commerceOverlayPolicy(name), engine: commerceEngine, catalog: commerceCatalog })),
 ];
 const definition = (lesson: Lesson) => lesson.document as unknown as ScenarioDefinition;
 const encode = (value: unknown) => canonicalEncode(value as CanonicalValue);
 
 function compose(lesson: Lesson, overlay: unknown) {
-  const result = composeOverlay(lesson.document, lesson.policy, overlay as CanonicalValue | undefined, value => lesson.engine.validate(value));
+  const result = composeOverlay(lesson.document, lesson.policy, overlay as CanonicalValue | undefined, value => lesson.engine.validate(value), lesson.catalog);
   assert.ok(result.ok, `${lesson.id}: ${JSON.stringify(result)}`);
   return result;
 }
@@ -79,6 +80,37 @@ test("OVL-AC-1 absent, empty, and all-default overlays reproduce every packaged 
       assert.equal(actual.digest, expected.digest, lesson.id);
       assert.equal(encode(actual), encode(expected), lesson.id);
     }
+  }
+});
+
+test("ARCH-AC-1 overlays without architecture edits reproduce every packaged lesson's document, runId, and export", async () => {
+  for (const lesson of lessons) {
+    const packaged = openHarness(lesson.engine.create(lesson.document));
+    await packaged.run();
+    const expected = packaged.inspect();
+    const empty = { slots: [], bindings: [], resources: [], subscriptions: [] };
+    for (const overlay of [undefined, { version: 1 }, { version: 1, architecture: {} }, { version: 1, architecture: empty }]) {
+      const result = compose(lesson, overlay);
+      assert.equal(Object.hasOwn(result.overlay, "architecture"), false, `${lesson.id}: an empty architecture normalizes to absent`);
+      assert.equal(encode(result.document), encode(lesson.document), lesson.id);
+      const actual = await run(lesson, overlay);
+      assert.equal(actual.history.runId, expected.history.runId, lesson.id);
+      assert.equal(encode(actual), encode(expected), lesson.id);
+    }
+    // Every packaged component satisfies the composition rules, so ADR-005 stage 4 adds no diagnostic.
+    assert.deepEqual(lesson.engine.validate(lesson.document), [], lesson.id);
+  }
+});
+
+test("a lesson whose policy declares no architecture allowance rejects every architecture edit", () => {
+  for (const lesson of lessons.filter(item => item.policy.architecture === undefined)) {
+    const doc = definition(lesson);
+    const service = doc.architecture.components.find(item => item.kind === "service")!;
+    const result = composeOverlay(lesson.document, lesson.policy, {
+      version: 1, architecture: { resources: [{ owner: service.id, resource: "store", change: "attach" }] },
+    } as unknown as CanonicalValue, value => lesson.engine.validate(value), lesson.catalog);
+    assert.ok(!result.ok, lesson.id);
+    assert.deepEqual(result.diagnostics.map(item => `${item.path} ${item.code}`), ["/architecture/resources/0 OVERLAY_LIMIT", "/architecture/resources/0 OVERLAY_NOT_ALLOWED"], lesson.id);
   }
 });
 
