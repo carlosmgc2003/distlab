@@ -36,6 +36,44 @@ export interface SessionOverlay {
   readonly faults: readonly FaultRule[];
   readonly scheduledFaults: readonly OverlayScheduledFault[];
   readonly parameters: readonly ParameterOverride[];
+  /** Absent when empty, so every ADR-004 overlay keeps its identity (ADR-005). */
+  readonly architecture?: ArchitectureEdits;
+}
+
+/**
+ * Architecture edits (docs/spec/adr/005-architecture-editor.md). They record the
+ * resulting design, not the gestures.
+ */
+export interface SlotEdit {
+  readonly component: ComponentId;
+  readonly model: string;
+  readonly version: string;
+  readonly options: readonly ParameterOverride[];
+}
+
+export interface BindingEdit {
+  readonly component: ComponentId;
+  readonly peer: string;
+  readonly target: ComponentId;
+}
+
+export interface ResourceEdit {
+  readonly owner: ComponentId;
+  readonly resource: "database" | "store";
+  readonly change: "attach" | "detach";
+}
+
+export interface SubscriptionEdit {
+  readonly consumer: ComponentId;
+  readonly destination: string;
+  readonly change: "subscribe" | "unsubscribe";
+}
+
+export interface ArchitectureEdits {
+  readonly slots: readonly SlotEdit[];
+  readonly bindings: readonly BindingEdit[];
+  readonly resources: readonly ResourceEdit[];
+  readonly subscriptions: readonly SubscriptionEdit[];
 }
 
 export type LessonParameterDomain =
@@ -68,12 +106,33 @@ export interface LessonFaultAllowance {
   readonly maxEntries: number;
 }
 
+/** Which architecture edits a lesson allows (ADR-005). */
+export interface LessonArchitectureAllowance {
+  readonly slots: readonly {
+    readonly component: ComponentId;
+    readonly models: readonly { readonly model: string; readonly version: string }[];
+  }[];
+  readonly bindings: readonly {
+    readonly component: ComponentId;
+    readonly peer: string;
+    readonly candidates: readonly ComponentId[];
+  }[];
+  readonly resources: readonly { readonly owner: ComponentId; readonly resource: "database" | "store" }[];
+  readonly subscriptions: readonly { readonly consumer: ComponentId; readonly destination: string }[];
+  /** Policy of a link that a binding creates. */
+  readonly linkPolicy: NetworkPolicy;
+  /** Maximum number of architecture edits, separate from the fault entry limit. */
+  readonly maxEdits: number;
+}
+
 export interface LessonOverlayPolicy {
   readonly version: 1;
   /** Packaged scenario `name`, for example "retry-unsafe@1". */
   readonly lesson: string;
   readonly faults: LessonFaultAllowance;
   readonly parameters: readonly LessonParameter[];
+  /** Absent: the lesson accepts no architecture edits. */
+  readonly architecture?: LessonArchitectureAllowance;
 }
 
 export interface SessionIdentity {
