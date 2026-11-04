@@ -10,6 +10,10 @@ import { OverlayDiagnosticCodes, STUDENT_ID_PREFIX } from "@distlab/contracts";
 import type { CanonicalValue } from "@distlab/contracts/kernel";
 import { canonicalCopy, canonicalEncode } from "@distlab/kernel";
 import { DiagnosticCodes } from "./types.js";
+import {
+  applyArchitectureEdits, attributeDiagnostic, readArchitectureEdits, valueInDomain,
+  type ArchitectureProvenance, type DescriptorSource, type EditSources, type OverlayContext,
+} from "./architecture-edits.js";
 
 /**
  * Session overlays (ADR-004). Pure functions of the packaged document, its policy
@@ -35,26 +39,40 @@ type Push = (path: string, code: string) => void;
 type Doc = Record<string, CanonicalValue>;
 
 const faultPoints = new Set<string>(["network.request", "network.response", "message.delivery", "database.commit"]);
-const overlayKeys = ["version", "faults", "scheduledFaults", "parameters"];
+const overlayKeys = ["version", "faults", "scheduledFaults", "parameters", "architecture"];
 const scheduledKeys = ["id", "at", "kind", "fault"];
 const parameterKeys = ["key", "value"];
 
 /**
  * Stage 3: the overlay against the lesson policy. Checks the schema, allowed
  * point and effect pairs, scheduled-fault kinds, the entry limit, the student
- * ID prefix and parameter keys and values, then normalizes. Field details such
- * as times and probability bounds are left to the applied-document stage.
+ * ID prefix and parameter keys and values, and architecture edits against the
+ * lesson's allowance (ADR-005), then normalizes. Field details such as times
+ * and probability bounds are left to the applied-document stage. Architecture
+ * edits that the policy allows need `context`: the packaged document and the
+ * catalog descriptors.
  */
-export function validateOverlay(input: CanonicalValue | undefined, policy: LessonOverlayPolicy | undefined): OverlayValidation {
-  if (input === undefined) return { diagnostics: Object.freeze([]), overlay: EMPTY_OVERLAY };
-  const found: ScenarioDiagnostic[] = [];
-  const push: Push = (path, code) => { found.push({ path, code }); };
-  const overlay = readOverlay(input, policy, push);
-  const diagnostics = sortDiagnostics(found);
-  return diagnostics.length === 0 && overlay ? { diagnostics, overlay } : { diagnostics };
+export function validateOverlay(input: CanonicalValue | undefined, policy: LessonOverlayPolicy | undefined, context?: OverlayContext): OverlayValidation {
+  const checked = checkOverlay(input, policy, context);
+  return checked.overlay ? { diagnostics: checked.diagnostics, overlay: checked.overlay } : { diagnostics: checked.diagnostics };
 }
 
-function readOverlay(input: CanonicalValue, policy: LessonOverlayPolicy | undefined, push: Push): SessionOverlay | undefined {
+interface OverlayCheck extends OverlayValidation {
+  readonly sources: EditSources;
+}
+
+const noSources: EditSources = { slots: [], bindings: [], resources: [], subscriptions: [] };
+
+function checkOverlay(input: CanonicalValue | undefined, policy: LessonOverlayPolicy | undefined, context: OverlayContext | undefined): OverlayCheck {
+  if (input === undefined) return { diagnostics: Object.freeze([]), overlay: EMPTY_OVERLAY, sources: noSources };
+  const found: ScenarioDiagnostic[] = [];
+  const push: Push = (path, code) => { found.push({ path, code }); };
+  const read = readOverlay(input, policy, context, push);
+  const diagnostics = sortDiagnostics(found);
+  return diagnostics.length === 0 && read ? { diagnostics, overlay: read.overlay, sources: read.sources } : { diagnostics, sources: noSources };
+}
+
+function readOverlay(input: CanonicalValue, policy: LessonOverlayPolicy | undefined, context: OverlayContext | undefined, push: Push): { overlay: SessionOverlay; sources: EditSources } | undefined {
   const root = record(input, "", overlayKeys, push);
   if (!root) return undefined;
   if (root.version === undefined) push("/version", DiagnosticCodes.REQUIRED);
@@ -63,17 +81,21 @@ function readOverlay(input: CanonicalValue, policy: LessonOverlayPolicy | undefi
   const faults = list(root.faults, "/faults", push)?.map((item, index) => readRule(item, `/faults/${index}`, allowance, push));
   const scheduled = list(root.scheduledFaults, "/scheduledFaults", push)?.map((item, index) => readScheduled(item, `/scheduledFaults/${index}`, allowance, push));
   const parameters = readParameters(root.parameters, policy?.parameters ?? [], push);
+  const architecture = readArchitectureEdits(root.architecture, policy?.architecture, context, push);
   if (faults && scheduled) {
     const entries = [...faults.map((_, index) => `/faults/${index}`), ...scheduled.map((_, index) => `/scheduledFaults/${index}`)];
     for (const path of entries.slice(allowance.maxEntries)) push(path, OverlayDiagnosticCodes.OVERLAY_LIMIT);
   }
-  if (!faults || !scheduled || !parameters || faults.some(item => !item) || scheduled.some(item => !item)) return undefined;
-  return Object.freeze({
+  if (!faults || !scheduled || !parameters || !architecture || faults.some(item => !item) || scheduled.some(item => !item)) return undefined;
+  const overlay: SessionOverlay = Object.freeze({
     version: 1,
     faults: Object.freeze(faults as Doc[]) as unknown as SessionOverlay["faults"],
     scheduledFaults: Object.freeze(scheduled as Doc[]) as unknown as SessionOverlay["scheduledFaults"],
     parameters,
+    // An absent and an empty `architecture` both normalize to absent.
+    ...(architecture.edits ? { architecture: architecture.edits } : {}),
   });
+  return { overlay, sources: architecture.sources };
 }
 
 function readRule(value: CanonicalValue, path: string, allowance: LessonOverlayPolicy["faults"], push: Push): Doc | undefined {
@@ -137,10 +159,7 @@ function readParameters(value: CanonicalValue | undefined, declared: readonly Le
 }
 
 export function inDomain(value: CanonicalValue, parameter: LessonParameter): boolean {
-  const domain = parameter.domain;
-  if (domain.type === "boolean") return typeof value === "boolean";
-  if (domain.type === "integer") return typeof value === "number" && Number.isSafeInteger(value) && value >= domain.minimum && value <= domain.maximum;
-  return typeof value === "string" && domain.choices.includes(value);
+  return valueInDomain(value, parameter.domain);
 }
 
 function studentId(value: CanonicalValue | undefined, path: string, push: Push): void {
@@ -150,14 +169,22 @@ function studentId(value: CanonicalValue | undefined, path: string, push: Push):
 }
 
 /**
- * Applies a normalized overlay. Packaged faults and actions come first, so
- * packaged rules compose before student rules and packaged actions dispatch
- * first at equal virtual time. The empty overlay returns the packaged document.
+ * Applies a normalized overlay. Architecture edits come first (ADR-005: slots,
+ * resources, subscriptions, bindings), then ADR-004 composition. Packaged
+ * faults and actions come first, so packaged rules compose before student rules
+ * and packaged actions dispatch first at equal virtual time. The empty overlay
+ * returns the packaged document. Architecture edits need the catalog
+ * descriptors, for the tables of an attached database.
  */
-export function applyOverlay(packaged: CanonicalValue, policy: LessonOverlayPolicy | undefined, overlay: SessionOverlay): CanonicalValue {
+export function applyOverlay(packaged: CanonicalValue, policy: LessonOverlayPolicy | undefined, overlay: SessionOverlay, catalog?: DescriptorSource): CanonicalValue {
+  return composeDocument(packaged, policy, overlay, catalog).document;
+}
+
+function composeDocument(packaged: CanonicalValue, policy: LessonOverlayPolicy | undefined, overlay: SessionOverlay, catalog: DescriptorSource | undefined): { document: CanonicalValue; provenance?: ArchitectureProvenance } {
   const source = packaged as Doc;
-  if (!overlay.faults.length && !overlay.scheduledFaults.length && !overlay.parameters.length) return packaged;
+  if (!overlay.faults.length && !overlay.scheduledFaults.length && !overlay.parameters.length && !overlay.architecture) return { document: packaged };
   const document = structuredClone(canonicalCopy(source)) as Doc;
+  const provenance = overlay.architecture ? applyArchitectureEdits(document, overlay.architecture, policy?.architecture, catalog) : undefined;
   if (overlay.faults.length) document.faults = [...((source.faults ?? []) as CanonicalValue[]), ...(overlay.faults as unknown as CanonicalValue[])];
   if (overlay.scheduledFaults.length) document.actions = [...((source.actions ?? []) as CanonicalValue[]), ...(overlay.scheduledFaults as unknown as CanonicalValue[])];
   for (const override of overlay.parameters) {
@@ -169,7 +196,7 @@ export function applyOverlay(packaged: CanonicalValue, policy: LessonOverlayPoli
       location.container[location.field] = override.value;
     }
   }
-  return canonicalCopy(document);
+  return { document: canonicalCopy(document), ...(provenance ? { provenance } : {}) };
 }
 
 export interface TargetLocation {
@@ -221,22 +248,33 @@ export type OverlayComposition =
 /**
  * Stages 3 and 4 of ADR-004 validation. `validate` is the unchanged, pure
  * `ScenarioEngine.validate`. Diagnostics inside overlay-originated entries or
- * parameter targets are translated to overlay paths; any other diagnostic is a
- * catalog defect.
+ * parameter targets are translated to overlay paths. Without architecture
+ * edits any other diagnostic is a catalog defect. With them, ADR-005's refined
+ * rule applies: a diagnostic that also occurs for the packaged document alone
+ * is a catalog defect; any other is attributed to the edit that produced or
+ * changed what it names, else to `/architecture`. `catalog` gives the model
+ * descriptors that architecture edits need.
  */
 export function composeOverlay(
   packaged: CanonicalValue,
   policy: LessonOverlayPolicy | undefined,
   input: CanonicalValue | undefined,
   validate: (document: CanonicalValue) => readonly ScenarioDiagnostic[],
+  catalog?: DescriptorSource,
 ): OverlayComposition {
-  const checked = validateOverlay(input, policy);
+  const checked = checkOverlay(input, policy, catalog ? { packaged, catalog } : undefined);
   if (!checked.overlay) return { ok: false, code: "INVALID_OVERLAY", diagnostics: checked.diagnostics };
-  const document = applyOverlay(packaged, policy, checked.overlay);
+  const { document, provenance } = composeDocument(packaged, policy, checked.overlay, catalog);
   const diagnostics = validate(document);
   if (diagnostics.length === 0) return { ok: true, overlay: checked.overlay, document };
   const translate = translator(packaged, policy, input);
-  const translated = diagnostics.map(item => ({ item, path: translate(item.path) }));
+  const edits = checked.overlay.architecture;
+  let packagedDiagnostics: ReadonlySet<string> | undefined;
+  const alone = () => packagedDiagnostics ??= new Set(validate(packaged).map(item => `${item.path}\u0000${item.code}`));
+  const translated = diagnostics.map(item => ({
+    item,
+    path: translate(item.path) ?? (edits && provenance ? attributeDiagnostic(item, document, edits, checked.sources, provenance, alone, catalog) : undefined),
+  }));
   if (translated.some(entry => entry.path === undefined)) return { ok: false, code: "INVALID_SCENARIO", diagnostics };
   return { ok: false, code: "INVALID_OVERLAY", diagnostics: sortDiagnostics(translated.map(entry => ({ path: entry.path!, code: entry.item.code }))) };
 }

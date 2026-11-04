@@ -35,7 +35,11 @@ test("events validate nested projections and reject extra capability fields", ()
   assert.ok(isWorkerEvent({ version: 1, type: "projection.updated", projection: projection() }));
   const imported = { kind: "imported", digest: "a".repeat(64), catalog: { id: "mvp.checkout", version: "1.0.0" } };
   assert.ok(isWorkerEvent({ ...event, session: { ...session(), origin: imported } }), "an imported origin names its digest and catalog");
+  const architecture = { slots: [{ component: "notify", model: "demo.mailer", version: "1", options: [] }], bindings: [], resources: [], subscriptions: [] };
+  assert.ok(isWorkerEvent({ ...event, session: { ...session(), overlay: { ...session().overlay, architecture } } }), "an applied overlay may carry architecture edits");
   for (const broken of [
+    { ...event, session: { ...session(), overlay: { ...session().overlay, architecture: { slots: [] } } } },
+    { ...event, session: { ...session(), overlay: { ...session().overlay, architecture: { ...architecture, links: [] } } } },
     { ...event, version: 2 },
     { ...event, projection: { ...projection(), simulation: { ...projection().simulation, pendingEvents: -1 } } },
     { ...event, projection: { ...projection(), architecture: { components: [{ id: "x", kind: "mutable", label: "x" }], links: [] } } },

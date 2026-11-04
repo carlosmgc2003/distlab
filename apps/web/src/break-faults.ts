@@ -1,5 +1,6 @@
 import type {
   ArchitectureDefinition,
+  ArchitectureEdits,
   CanonicalValue,
   FaultEffect,
   FaultPoint,
@@ -344,8 +345,9 @@ export function placeDiagnostics(diagnostics: readonly ScenarioDiagnostic[], ove
 
 /**
  * Compare carries every student fault entry. A parameter override survives only
- * when the paired lesson declares the same key, domain, and default; the others
- * are dropped and listed, never removed silently.
+ * when the paired lesson declares the same key, domain, and default. An
+ * architecture edit (ADR-005) survives only when the paired lesson's allowance
+ * permits the same edit. The others are dropped and listed, never removed silently.
  */
 export function carryOverlay(overlay: SessionOverlay, from: LessonOverlayPolicy | undefined, to: LessonOverlayPolicy | undefined): { readonly overlay: SessionOverlay; readonly dropped: readonly string[] } {
   const dropped: string[] = [];
@@ -356,11 +358,31 @@ export function carryOverlay(overlay: SessionOverlay, from: LessonOverlayPolicy 
     if (!keep) dropped.push(override.key);
     return keep;
   });
-  return { overlay: { ...overlay, parameters }, dropped };
+  const { architecture: edits, ...rest } = overlay;
+  if (!edits) return { overlay: { ...rest, parameters }, dropped };
+  const allowance = to?.architecture;
+  const keep = <T>(items: readonly T[], allowed: (item: T) => boolean, label: (item: T) => string): T[] =>
+    items.filter(item => { const kept = allowed(item); if (!kept) dropped.push(label(item)); return kept; });
+  const architecture: ArchitectureEdits = {
+    slots: keep(edits.slots, edit => allowance?.slots.some(slot => slot.component === edit.component
+      && slot.models.some(model => model.model === edit.model && model.version === edit.version)) === true, edit => `${edit.component} slot`),
+    bindings: keep(edits.bindings, edit => allowance?.bindings.some(binding => binding.component === edit.component && binding.peer === edit.peer
+      && binding.candidates.includes(edit.target)) === true, edit => `${edit.component}.${edit.peer} binding`),
+    resources: keep(edits.resources, edit => allowance?.resources.some(resource => resource.owner === edit.owner && resource.resource === edit.resource) === true,
+      edit => `${edit.owner} ${edit.resource}`),
+    subscriptions: keep(edits.subscriptions, edit => allowance?.subscriptions.some(subscription => subscription.consumer === edit.consumer
+      && subscription.destination === edit.destination) === true, edit => `${edit.consumer} subscription to ${edit.destination}`),
+  };
+  return { overlay: { ...rest, parameters, ...(designEdits(architecture) ? { architecture } : {}) }, dropped };
+}
+
+/** Number of architecture edits in an overlay (ADR-005). */
+export function designEdits(edits: ArchitectureEdits | undefined): number {
+  return edits ? edits.slots.length + edits.bindings.length + edits.resources.length + edits.subscriptions.length : 0;
 }
 
 export function isEmptyOverlay(overlay: SessionOverlay): boolean {
-  return !overlay.faults.length && !overlay.scheduledFaults.length && !overlay.parameters.length;
+  return !overlay.faults.length && !overlay.scheduledFaults.length && !overlay.parameters.length && !designEdits(overlay.architecture);
 }
 
 /** Graph marks for applied faults: a broken-link mark on links and a fault mark on components. */

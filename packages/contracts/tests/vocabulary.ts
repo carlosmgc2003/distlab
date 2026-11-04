@@ -3,11 +3,16 @@
  * typechecked, not executed.
  */
 import type {
+  ArchitectureEdits,
+  BindingEdit,
   BusMessage,
   CatalogReference,
   ComponentId,
+  LessonArchitectureAllowance,
   LessonOverlayPolicy,
+  ModelDescriptor,
   NetworkRequest,
+  ResourceEdit,
   Observation,
   ScenarioDefinition,
   ScenarioDocument,
@@ -19,6 +24,8 @@ import type {
   SessionOverlay,
   Simulation,
   SimulationTime,
+  SlotEdit,
+  SubscriptionEdit,
   VirtualClock,
   WorkerCommand,
   WorkerEvent,
@@ -42,6 +49,13 @@ type Vocabulary = {
   ScenarioDocumentPresentation: ScenarioDocumentPresentation;
   ScenarioDocument: ScenarioDocument;
   SessionOrigin: SessionOrigin;
+  ModelDescriptor: ModelDescriptor;
+  SlotEdit: SlotEdit;
+  BindingEdit: BindingEdit;
+  ResourceEdit: ResourceEdit;
+  SubscriptionEdit: SubscriptionEdit;
+  ArchitectureEdits: ArchitectureEdits;
+  LessonArchitectureAllowance: LessonArchitectureAllowance;
 };
 
 declare const vocabulary: Vocabulary;
@@ -58,6 +72,21 @@ const neitherLoad: WorkerCommand = { version: 1, requestId: "r4", type: "load" }
 // @ts-expect-error An imported document is sent as raw text, never as a parsed value.
 const parsedLoad: WorkerCommand = { version: 1, requestId: "r5", type: "load", document: {} };
 void [packagedLoad, documentLoad, bothLoad, neitherLoad, parsedLoad];
+
+/** ADR-005: architecture edits are optional, so every ADR-004 overlay and policy keeps its shape. */
+const adr004Overlay: SessionOverlay = overlay;
+const designed: SessionOverlay = {
+  ...overlay,
+  architecture: {
+    slots: [{ component: "notifications", model: "commerce.inbox-notifications", version: "1", options: [] }],
+    bindings: [{ component: "orders", peer: "processor", target: "gateway" }],
+    resources: [{ owner: "orders", resource: "database", change: "attach" }],
+    subscriptions: [{ consumer: "orders", destination: "OrderCreated", change: "unsubscribe" }],
+  },
+};
+// @ts-expect-error A resource edit is an attach or a detach.
+const renamed: ResourceEdit = { owner: "orders", resource: "database", change: "rename" };
+void [adr004Overlay, designed, renamed];
 
 /** ADR-006: every session states its origin; packaged sessions report `{ kind: "packaged" }`. */
 const packagedSession: SessionIdentity = { lesson: "checkout-normal@1", seed: "mvp-normal-001", overlay, origin: { kind: "packaged" } };

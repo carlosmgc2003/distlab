@@ -154,6 +154,47 @@ test("a design choice reaches the worker as a parameter override and Reset repla
   assert.deepEqual((rejected.error.context as { diagnostics: unknown }).diagnostics, [{ path: "/parameters/0/value", code: "PARAMETER_VALUE" }]);
 });
 
+test("ARCH-AC-1: an overlay without architecture edits, or with empty ones, loads and resets every lesson kind as before", async () => {
+  for (const scenario of [normalCheckout, commerceScenario("notifications-dlq")]) {
+    const plain = harness();
+    await plain.send({ type: "load", scenario });
+    await plain.send({ type: "run" });
+    const expected = plain.latest();
+    for (const architecture of [{}, { slots: [], bindings: [], resources: [], subscriptions: [] }]) {
+      const { send, latest } = harness();
+      const [loaded] = await send({ type: "load", scenario, overlay: { version: 1, architecture } });
+      assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
+      assert.equal(Object.hasOwn(loaded.session.overlay, "architecture"), false, "an empty architecture normalizes to absent");
+      const initial = latest();
+      await send({ type: "run" });
+      assert.deepEqual(latest(), expected);
+      await send({ type: "reset" });
+      assert.deepEqual(latest(), initial);
+    }
+  }
+});
+
+test("ARCH-AC-4/7: the worker checks architecture edits against its own catalog's allowance and a rejected design exposes no session", async () => {
+  const { send } = harness();
+  await send({ type: "load", scenario: normalCheckout });
+  const [failure] = await send({ type: "load", scenario: normalCheckout, overlay: {
+    version: 1, architecture: { bindings: [{ component: "payments", peer: "processor", target: "payment-processor" }] },
+  } });
+  assert.ok(failure?.type === "error", JSON.stringify(failure));
+  assert.equal(failure.error.code, "INVALID_OVERLAY");
+  const diagnostics = (failure.error.context as { diagnostics: { path: string; code: string }[] }).diagnostics;
+  assert.deepEqual(diagnostics.map(item => `${item.path} ${item.code}`), ["/architecture/bindings/0 OVERLAY_LIMIT", "/architecture/bindings/0/component OVERLAY_NOT_ALLOWED"]);
+  const [step] = await send({ type: "step" });
+  assert.ok(step?.type === "error" && step.error.code === "INVALID_WORKER_COMMAND", "no old session stays exposed");
+  // An allowance never travels in a command: neither beside the overlay nor inside it.
+  const allowance = { slots: [], bindings: [{ component: "payments", peer: "processor", candidates: ["payment-processor"] }], resources: [], subscriptions: [], linkPolicy: {}, maxEdits: 5 };
+  const [beside] = await send({ type: "load", scenario: normalCheckout, policy: { architecture: allowance } });
+  assert.ok(beside?.type === "error" && beside.error.code === "INVALID_WORKER_COMMAND");
+  const [inside] = await send({ type: "load", scenario: normalCheckout, overlay: { version: 1, policy: { architecture: allowance } } });
+  assert.ok(inside?.type === "error" && inside.error.code === "INVALID_OVERLAY");
+  assert.deepEqual((inside.error.context as { diagnostics: unknown }).diagnostics, [{ path: "/policy", code: "UNSUPPORTED" }]);
+});
+
 test("the host sends the draft overlay inside load and exposes the applied session with the projection", async () => {
   const worker = new FakeWorker();
   const host = new SimulationHost(() => worker);
