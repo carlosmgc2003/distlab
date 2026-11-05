@@ -170,7 +170,10 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   diagnostics. An imported session takes its architecture, overlay policy, and
   family (by catalog reference) from the validated document, shows
   `ImportedHeader` and `ImportedChecks`, and offers no Compare. Choosing a
-  packaged scenario discards the imported file.
+  packaged scenario discards the imported file. **Save as scenario file**, in
+  the lesson drawer and offered only when no imported session is loaded,
+  downloads `starterFile` for the chosen packaged lesson through a Blob URL; it
+  sends no command.
 - **Presentation/runtime separation:** owns `useFlightPlayback` outside the tab
   panels so playback survives tab switches. Explicit history selection releases
   the playback cursor; automatic live cues do not. Evidence links activate
@@ -583,6 +586,23 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   `errorDiagnostics` reads `{ diagnostics }` from an error context.
 - **Presentation/runtime separation:** pure. It never reads, parses, or
   interprets document text.
+
+## `starter-file.ts`
+
+[Source](../src/starter-file.ts)
+
+- **Responsibility:** build a starter scenario document from a packaged lesson
+  (#116, ADR-006 follow-up item 4).
+- **Imports and boundaries:** contract types only. Its input is a
+  `scenarios.ts` entry, which carries the data-only scenario, catalog reference,
+  overlay policy, copy, and assertion labels.
+- **State and protocol:** `starterDocument` wraps the unchanged packaged
+  scenario under `starterName` (`retry-unsafe@1` becomes `retry-unsafe-copy@1`)
+  with the lesson's catalog reference, a `presentation` of its title,
+  explanation, and check labels, and its overlay policy renamed to the new
+  scenario. `starterFile` returns the pretty-printed JSON and its file name.
+- **Presentation/runtime separation:** pure. It never parses, validates, or runs
+  a document; the worker validates the file when it is opened.
 
 ## `ImportedScenario.tsx`
 
