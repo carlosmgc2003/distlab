@@ -39,8 +39,10 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
 /**
  * The only place the layout thresholds are written.
  *
- * Recorded on `main` (November 2026) with the production build, with at most 5% tolerance rounded toward the
- * measured value: a 202 px top bar allows 212, a 267 px canvas requires 254, and counts below 20 allow no slack.
+ * Recorded on `main` (November 2026) with the production build, from the lower of two readings: a Linux
+ * container and CI (`ubuntu-latest`), whose fonts differ. Each bound has at most 5% tolerance rounded toward
+ * the measured value: a 202 px top bar allows 212, the checkout canvas at 1366×768 (267 px locally, 250 px on
+ * CI) requires 238, and counts below 20 allow no slack.
  * `firstVerdictVisible` is `false` today: no commerce verdict is on screen after Run. See `targets`.
  *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
@@ -49,8 +51,8 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
 export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLesson, Readonly<Record<BudgetState, LayoutBudget>>>>>> = {
   "1366x768": {
     "response-lost": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 254 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 254 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 238 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 238 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
       READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
