@@ -1,4 +1,4 @@
-import type { ApplicationError, CanonicalValue, RuntimeProjectionSet, SessionIdentity, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import type { ApplicationError, CanonicalValue, RuntimeProjectionSet, ScenarioDocument, SessionIdentity, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { applicationError, detached, isWorkerCommand, isWorkerEvent } from "./protocol.ts";
 
 export interface WorkerPort {
@@ -18,6 +18,8 @@ export interface HostSnapshot {
   readonly attempt: number;
   /** The lesson, seed, and normalized overlay the worker applied. Present only with a projection. */
   readonly session: SessionIdentity | null;
+  /** The normalized document the worker validated, for an imported session (ADR-006). Present only with a projection. */
+  readonly document: ScenarioDocument | null;
 }
 
 type Pending = { type: WorkerCommand["type"]; resolve: (event: WorkerEvent) => void; reject: (error: ApplicationError) => void };
@@ -33,7 +35,8 @@ export class SimulationHost {
   #sequence = 0;
   #attempt = 0;
   #session: SessionIdentity | null = null;
-  #snapshot: HostSnapshot = Object.freeze({ projection: null, error: null, loading: false, pendingCommands: Object.freeze([]), attempt: 0, session: null });
+  #document: ScenarioDocument | null = null;
+  #snapshot: HostSnapshot = Object.freeze({ projection: null, error: null, loading: false, pendingCommands: Object.freeze([]), attempt: 0, session: null, document: null });
 
   constructor(createWorker: () => WorkerPort) { this.#createWorker = createWorker; }
   getSnapshot = (): HostSnapshot => this.#snapshot;
@@ -47,8 +50,21 @@ export class SimulationHost {
    * The main thread never sends an applied document (ADR-004).
    */
   load(scenario: CanonicalValue, overlay?: CanonicalValue): Promise<WorkerEvent> {
+    return this.#load({ scenario, ...(overlay === undefined ? {} : { overlay }) });
+  }
+
+  /**
+   * Sends the text of an imported scenario document exactly as read, and optionally the draft
+   * overlay. The main thread never parses or validates the document (ADR-006); the worker does.
+   */
+  loadDocument(document: string, overlay?: CanonicalValue): Promise<WorkerEvent> {
+    return this.#load({ document, ...(overlay === undefined ? {} : { overlay }) });
+  }
+
+  #load(input: { scenario: CanonicalValue; overlay?: CanonicalValue } | { document: string; overlay?: CanonicalValue }): Promise<WorkerEvent> {
     this.#release(applicationError("SESSION_REPLACED", "A new scenario replaced the previous session."));
     this.#session = null;
+    this.#document = null;
     this.#update({ projection: null, error: null, loading: true });
     const generation = this.#generation;
     try {
@@ -69,7 +85,7 @@ export class SimulationHost {
         worker.removeEventListener("messageerror", failure);
       };
     } catch { return Promise.reject(this.#unavailable()); }
-    return this.#send({ version: 1, requestId: this.#id(), type: "load", scenario, ...(overlay === undefined ? {} : { overlay }) });
+    return this.#send({ version: 1, requestId: this.#id(), type: "load", ...input } as WorkerCommand);
   }
 
   run(maxEvents?: number): Promise<WorkerEvent> {
@@ -132,7 +148,7 @@ export class SimulationHost {
       if (pending.type === "reset") this.#attempt++;
       pending.resolve(event);
     }
-    if (event.type === "loaded") this.#session = event.session;
+    if (event.type === "loaded") { this.#session = event.session; this.#document = event.document ?? null; }
     if (event.type === "loaded" || event.type === "projection.updated") {
       this.#update({ projection: event.projection, error: null, loading: false });
     } else if (terminal) this.#update(this.#snapshot);
@@ -151,9 +167,9 @@ export class SimulationHost {
     for (const pending of this.#pending.values()) pending.reject(error);
     this.#pending.clear();
   }
-  #update(snapshot: Omit<HostSnapshot, "pendingCommands" | "attempt" | "session">): void {
+  #update(snapshot: Omit<HostSnapshot, "pendingCommands" | "attempt" | "session" | "document">): void {
     this.#snapshot = Object.freeze({ ...snapshot, pendingCommands: Object.freeze([...this.#pending.values()].map(item => item.type)), attempt: this.#attempt,
-      session: snapshot.projection ? this.#session : null });
+      session: snapshot.projection ? this.#session : null, document: snapshot.projection ? this.#document : null });
     for (const listener of this.#listeners) {
       try { listener(); } catch { this.#listeners.delete(listener); }
     }

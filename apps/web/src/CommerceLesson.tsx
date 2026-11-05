@@ -38,9 +38,11 @@ export function CommerceFacts({ projection, componentId }: { projection: Runtime
 const marks: Readonly<Record<string, string>> = {
   HOLDS: "✓", VIOLATED: "✗", PENDING: "…", INCOMPLETE: "–",
   reproduced: "✓", "not reproduced": "✗", pending: "…", incomplete: "–",
+  // Imported documents keep the stored verdict (ADR-006): they declare no invariant classification.
+  PASS: "✓", FAIL: "✗",
 };
 
-function CheckItem({ row, onShowEvidence }: { row: CheckRow<string>; onShowEvidence: (observationId: string) => void }) {
+export function CheckItem({ row, onShowEvidence }: { row: CheckRow<string>; onShowEvidence: (observationId: string) => void }) {
   const tone = row.verdict.toLowerCase().replace(" ", "-");
   return <li className={`lesson-check is-${tone}`}>
     <strong className="lesson-check-verdict"><span aria-hidden="true">{marks[row.verdict]} </span>{row.verdict}</strong>
@@ -50,20 +52,22 @@ function CheckItem({ row, onShowEvidence }: { row: CheckRow<string>; onShowEvide
   </li>;
 }
 
+/** `checks` is the packaged lesson's classification. An imported session lists its own checks separately, so it passes none. */
 export function CommerceState({ projection, checks, onShowEvidence }: {
   projection: RuntimeProjectionSet;
-  checks: readonly CommerceCheck[];
+  checks?: readonly CommerceCheck[];
   onShowEvidence: (observationId: string) => void;
 }) {
   const student = projection.components.filter(entry => entry.visibility === "student");
   const client = student.find(entry => object(entry.state).role === "commerce-client");
-  const view = lessonChecks(object(client?.state).assertions, checks, projection.history.observations);
+  const view = checks ? lessonChecks(object(client?.state).assertions, checks, projection.history.observations) : null;
   return <section className="commerce-state" aria-label="Commerce lesson state">
     <h3>Service knowledge and committed state</h3>
     <p>These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.</p>
     <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={`${entry.componentId} state`}>
       <h4>{entry.componentId}</h4><CommerceFacts projection={projection} componentId={entry.componentId} />
     </section>)}</div>
+    {view ? <>
     <h3>Lesson checks</h3>
     <section className="lesson-checks" aria-labelledby="business-invariants-heading">
       <h4 id="business-invariants-heading">Business invariants</h4>
@@ -75,5 +79,6 @@ export function CommerceState({ projection, checks, onShowEvidence }: {
       <p>Scenario expectations confirm that the run told this lesson's story. They say nothing about whether the system is safe.</p>
       <ul aria-label="Scenario expectations">{view.expectations.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
     </section> : null}
+    </> : null}
   </section>;
 }

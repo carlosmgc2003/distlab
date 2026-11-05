@@ -71,3 +71,28 @@ export function lessonChecks(assertions: CanonicalValue | undefined, checks: rea
         : expectations.every(row => row.verdict === "reproduced") ? "yes" : "not yet";
   return { invariants, expectations, reproduced };
 }
+
+export type ImportedVerdict = "PASS" | "FAIL" | "PENDING" | "INCOMPLETE";
+
+/**
+ * Checks of an imported scenario document (ADR-006). A version 1 document
+ * carries no invariant/expectation classification, so each check keeps the
+ * stored verdict that the catalog predicate gave it. The label is the
+ * document's plain-text presentation label, or the assertion ID without one.
+ */
+export function importedChecks(assertions: CanonicalValue | undefined, labels: Readonly<Record<string, string>> | undefined, observations: readonly Observation[]): readonly CheckRow<ImportedVerdict>[] {
+  const evidence = latestEvaluations(observations);
+  const rows: CheckRow<ImportedVerdict>[] = [];
+  for (const item of Array.isArray(assertions) ? assertions : []) {
+    if (!isRecord(item) || typeof item.id !== "string") continue;
+    const id = item.id;
+    const status = item.status === "PASS" || item.status === "FAIL" || item.status === "INCOMPLETE" ? item.status : "PENDING";
+    const settled = status === "PASS" || status === "FAIL";
+    rows.push({
+      id, label: labels && Object.hasOwn(labels, id) ? labels[id]! : id, verdict: status,
+      ...(settled && typeof item.time === "number" ? { time: item.time } : {}),
+      ...(settled && evidence.has(id) ? { evidenceId: evidence.get(id)! } : {}),
+    });
+  }
+  return rows;
+}

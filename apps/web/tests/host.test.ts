@@ -222,3 +222,42 @@ test("reload after worker failure fences queued callbacks and pending control re
   current.emit({ version: 1, requestId: resetId, type: "projection.updated", projection: projection("FAILED") });
   assert.equal(host.getSnapshot().projection?.simulation.status, "READY");
 });
+
+test("APP-AC-9 loadDocument sends the file text unparsed and exposes the validated document only with its session", async () => {
+  const worker = new FakeWorker();
+  const host = new SimulationHost(() => worker);
+  // Whitespace, key order, and a duplicate key all survive: only the worker parses the text.
+  const text = '{ "format": "distlab.scenario",\n  "format": "x" }';
+  const overlay = { version: 1, faults: [], scheduledFaults: [], parameters: [] };
+  const loaded = host.loadDocument(text, overlay);
+  const command = worker.last();
+  assert.ok(command.type === "load");
+  assert.equal(command.document, text);
+  assert.equal(Object.hasOwn(command, "scenario"), false);
+  assert.deepEqual(command.overlay, overlay);
+  assert.equal(host.getSnapshot().loading, true);
+  const document = {
+    format: "distlab.scenario", formatVersion: 1, catalog: { id: "mvp.checkout", version: "1.0.0" }, presentation: { title: "Imported" },
+    scenario: { version: 1, name: "imported@1", seed: "seed", architecture: {} },
+  };
+  const origin = { kind: "imported", digest: "a".repeat(64), catalog: { id: "mvp.checkout", version: "1.0.0" } } as const;
+  worker.emit({ version: 1, requestId: command.requestId, type: "loaded", projection: projection(), session: { ...session(), origin }, document } as never);
+  await loaded;
+  assert.deepEqual(host.getSnapshot().document, document);
+  assert.deepEqual(host.getSnapshot().session?.origin, origin);
+
+  // A rejected document leaves no session or document behind.
+  const rejected = host.loadDocument("{");
+  const failure = assert.rejects(rejected, { code: "INVALID_DOCUMENT" });
+  assert.equal(host.getSnapshot().document, null);
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "error", error: { code: "INVALID_DOCUMENT", message: "Invalid", context: { diagnostics: [{ path: "", code: "DOCUMENT_SYNTAX" }] } } });
+  await failure;
+  assert.equal(host.getSnapshot().projection, null);
+  assert.equal(host.getSnapshot().document, null);
+
+  // A packaged load reports no document.
+  const packaged = host.load({});
+  worker.emit({ version: 1, requestId: worker.last().requestId, type: "loaded", projection: projection(), session: session() });
+  await packaged;
+  assert.equal(host.getSnapshot().document, null);
+});

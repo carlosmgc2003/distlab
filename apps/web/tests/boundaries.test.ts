@@ -39,8 +39,10 @@ test("main-thread import graph uses application contracts and data, never runtim
     "ModelDescriptor", "ModelPeer", "ModelOption", "ModelStorage",
     // Architecture edit and allowance shapes (ADR-005). Types only: no validation or application code.
     "ArchitectureEdits", "SlotEdit", "BindingEdit", "ResourceEdit", "SubscriptionEdit", "LessonArchitectureAllowance",
-    // A packaged lesson's hosted catalog reference (ADR-006). Type only: no parser, validator, or registry.
-    "CatalogReference"]);
+    // Scenario document shapes (ADR-006). Types only: no parser, validator, or registry.
+    "CatalogReference", "ScenarioDocument", "ScenarioDocumentPresentation", "SessionOrigin"]);
+  // Contract constants the main thread shares with the worker (ADR-006 "Bounded size"). Data only.
+  const allowedValues = new Set(["ScenarioDocumentLimits"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;
@@ -48,8 +50,8 @@ test("main-thread import graph uses application contracts and data, never runtim
     assert.ok(!file.startsWith(resolve(app, "worker")), `Runtime code on main thread: ${file}`);
     for (const dependency of imports(file)) {
       if (dependency.path === "@distlab/contracts") {
-        assert.ok(dependency.typeOnly, `Contracts must be type-only on main thread: ${file}`);
-        assert.ok(dependency.names.every(name => allowed.has(name)), `Low-level contract in ${file}`);
+        assert.ok(dependency.typeOnly || dependency.names.every(name => allowedValues.has(name)), `Contracts must be type-only on main thread, apart from shared constants: ${file}`);
+        assert.ok(dependency.names.every(name => dependency.typeOnly ? allowed.has(name) : allowedValues.has(name)), `Low-level contract in ${file}`);
       } else if (dependency.path.startsWith(".")) {
         const target = resolve(dirname(file), dependency.path);
         assert.ok(target.startsWith(app) || dataModules.has(target), `Only the catalog's data-only source may cross a source boundary: ${target}`);
@@ -93,4 +95,24 @@ test("OVL-AC-5 and ARCH-AC-7: the main thread reads overlay policies from data-o
   assert.ok(adapter.some(item => item.path === "@distlab/scenario" && item.names.includes("composeOverlay")));
   // Architecture edits are validated against the allowance in that same policy; the worker passes its own catalog's descriptors.
   assert.match(readFileSync(resolve(app, "worker/adapter.ts"), "utf8"), /composeOverlay\(lesson\.scenario, lesson\.policy, command\.overlay, [^)]*\), catalog\)/);
+});
+
+test("DOC-AC-5 and APP-AC-9: the main thread sends scenario file text unparsed and imports no document parser, validator, or catalog registry", () => {
+  const mainThread = files(app).filter(file => !file.startsWith(resolve(app, "worker")));
+  const hosted = resolve(root, "packages/catalogs/src/hosted.ts");
+  for (const file of mainThread) {
+    const text = readFileSync(file, "utf8");
+    // Parsing untrusted text happens once, in the worker: JSON.parse would also hide duplicate keys.
+    for (const name of ["JSON.parse", "validateScenarioDocument", "parseDocumentText", "documentDigest", "resolveHostedCatalog", "hostedCatalogs", "SUPPORTED_FORMAT_VERSIONS"]) {
+      assert.ok(!text.includes(name), `${file} must not reference ${name}`);
+    }
+    for (const dependency of imports(file).filter(item => item.path.startsWith("."))) {
+      assert.notEqual(resolve(dirname(file), dependency.path), hosted, `${file} must not import the hosted catalog registry`);
+    }
+  }
+  // The host forwards the text it was given as the command's `document`, unchanged.
+  assert.match(readFileSync(resolve(app, "host.ts"), "utf8"), /loadDocument\(document: string, overlay\?: CanonicalValue\)[^}]*this\.#load\(\{ document,/);
+  // The worker validates the text against its own registry; nothing else resolves a catalog for an imported document.
+  const adapter = readFileSync(resolve(app, "worker/adapter.ts"), "utf8");
+  assert.match(adapter, /validateScenarioDocument\(command\.document, hostedCatalogs\)/);
 });
