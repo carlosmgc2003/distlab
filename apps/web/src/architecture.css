@@ -460,7 +460,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
 .brand span { color: var(--text-secondary); font-size: .8rem; }
-.scenario-picker { flex: 0 1 38rem; }
+/* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) the select,
+   Load, and Open scenario file… exceed 38rem and would wrap the row at the desktop baselines. */
+.scenario-picker { flex: 0 1 auto; }
 .status-line { align-items: center; gap: 8px 16px; font-size: .85rem; }
 .run-summary { align-items: center; }
 .run-status { color: var(--action-primary); }
