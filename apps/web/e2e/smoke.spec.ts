@@ -42,7 +42,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await observeWorker(page);
     await page.goto("/");
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("Choose a scenario to begin.");
-    await page.getByLabel("Scenario").selectOption(scenario);
+    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
     const started = page.waitForEvent("worker");
     await page.getByRole("button", { name: "Load scenario" }).click();
     expect((await started).url()).toMatch(/entry-.*\.js$/);
@@ -125,7 +125,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     // Changing the experiment replaces the worker. The shared architecture metadata remains.
     const other = scenario === "normal" ? "response-lost" : "normal";
-    await page.getByLabel("Scenario").selectOption(other);
+    await page.getByLabel("Scenario", { exact: true }).selectOption(other);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
     // Advanced diagnostics lives inside the collapsed lesson drawer, so open that first.
