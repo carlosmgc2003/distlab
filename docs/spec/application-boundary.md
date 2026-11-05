@@ -101,6 +101,15 @@ projections are chosen by catalog reference and derived from the normalized
 architecture. Imported sessions have no paired lesson, so Compare is
 unavailable. #113, #114, and #115 implement the decision.
 
+**Save as scenario file** (#116) is the authoring aid ADR-006 allows: for the
+chosen packaged lesson, the main thread builds a starter document from the
+data-only scenario modules. It wraps the packaged scenario under a new,
+non-reserved name (`<lesson>-copy@1`) with the lesson's catalog reference, title,
+explanation, assertion labels, and overlay policy renamed to that scenario, and
+downloads it as pretty-printed JSON through a Blob. It sends no command, uses no
+network or storage, and never exports the applied session overlay. It is not
+offered for an imported session.
+
 Engine counters use the read-only properties documented in
 [ADR-003](adr/003-boundary-counters.md), not observation counting or a hardcoded
 zero for random draws.
@@ -292,6 +301,7 @@ and it takes effect at an event boundary.
 | Step | Unavailable | Process one scheduled event | Unavailable | Process one scheduled event | Unavailable because the run has finished | Unavailable |
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
 | Open scenario file | Read a local file and load it | Replace the session | Unavailable | Replace the session | Replace the session | After `INVALID_DOCUMENT` the diagnostics stay listed, and choosing a file loads again |
+| Save as scenario file | Download the chosen packaged lesson as a starter document | Download it. The session is unchanged | Download it. The session is unchanged | Download it. The session is unchanged | Download it. The session is unchanged | Download it. Not offered while an imported session is loaded |
 | Break and design choices (draft overlay) | Not shown | Edit the draft. Apply sends `load` with the packaged document, or the imported document's text, and the draft, which replaces the session. An imported document without `overlayPolicy` shows that it accepts no student changes | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
 | Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |

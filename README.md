@@ -183,6 +183,9 @@ as `examples/scenarios/processor-response-lost.json`. The browser checks the
 file's size and sends its text unparsed; the worker validates it, and an invalid
 file lists each problem with its JSON path. An imported run's header says
 "Imported" and names the document's title, scenario, seed, catalog, digest, and run.
+**Save as scenario file** downloads the chosen packaged lesson as a starter
+document (for example `retry-idempotent-copy.json`) that an instructor can edit
+and open again; the browser builds it from data-only modules, with no network.
 `npm run build` produces the static site in `apps/web/dist`, including its worker
 bundle; no backend is required. Linux CI images may also need
 `npm exec -w @distlab/web -- playwright install --with-deps chromium`.

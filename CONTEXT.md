@@ -107,6 +107,9 @@ reader needs before changing code, and the vocabulary used when discussing them.
   validates it, and resolves the catalog from its own registry. Invariants are
   catalog predicates referenced by ID, never code. An imported session's
   overlay policy comes from its validated document, not from a catalog.
+- A **starter file** is a packaged lesson saved as a scenario document under a
+  `-copy` name. The main thread builds it from data-only modules; opening it is
+  an ordinary import.
 - Say *imported* for a session from a scenario document and *packaged* for a
   lesson from the catalogs. The **document digest** identifies the file, and
   `runId` identifies the run.

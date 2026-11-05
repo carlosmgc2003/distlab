@@ -63,6 +63,8 @@ test("main-thread import graph uses application contracts and data, never runtim
   assert.ok(visited.has(resolve(app, "host.ts")));
   assert.ok(visited.has(dataModule));
   assert.ok(visited.has(commerceDataModule));
+  // #116: the starter file builder is on the main thread, so the walk above holds it to contract types and data-only modules.
+  assert.ok(visited.has(resolve(app, "starter-file.ts")));
   // Descriptor modules obey the same data-only rules whether or not the app imports them yet.
   for (const module of descriptorModules) walk(module);
 });
