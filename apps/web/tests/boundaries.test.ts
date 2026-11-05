@@ -38,7 +38,9 @@ test("main-thread import graph uses application contracts and data, never runtim
     // Model descriptor data shapes (ADR-005). Types only: no composition code.
     "ModelDescriptor", "ModelPeer", "ModelOption", "ModelStorage",
     // Architecture edit and allowance shapes (ADR-005). Types only: no validation or application code.
-    "ArchitectureEdits", "SlotEdit", "BindingEdit", "ResourceEdit", "SubscriptionEdit", "LessonArchitectureAllowance"]);
+    "ArchitectureEdits", "SlotEdit", "BindingEdit", "ResourceEdit", "SubscriptionEdit", "LessonArchitectureAllowance",
+    // A packaged lesson's hosted catalog reference (ADR-006). Type only: no parser, validator, or registry.
+    "CatalogReference"]);
   const visited = new Set<string>();
   function walk(file: string): void {
     if (visited.has(file)) return;
