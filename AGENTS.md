@@ -41,6 +41,7 @@ npm run lesson -- retry-idempotent --replay # verify deterministic reset/replay
 npm run lesson -- saga-compensated --step  # interactive event stepping
 npm run --silent lesson -- outbox-idempotent --json # full state/history export
 npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
+npm run scenario -- check examples/scenarios/processor-response-lost.json # check an ADR-006 scenario document
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included

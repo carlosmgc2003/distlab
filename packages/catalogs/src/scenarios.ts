@@ -1,4 +1,7 @@
-import type { CanonicalValue, LessonOverlayPolicy } from "@distlab/contracts";
+import type { CanonicalValue, CatalogReference, LessonOverlayPolicy } from "@distlab/contracts";
+
+/** The hosted catalog both checkout lessons run against (ADR-006). Data only, so the main thread can name it. */
+export const checkoutCatalogReference: CatalogReference = Object.freeze({ id: "mvp.checkout", version: "1.0.0" });
 
 // Illustrative logical milliseconds: expose async boundaries while keeping
 // success quick; the lost-response case still hits the 1000 ms network timeout.

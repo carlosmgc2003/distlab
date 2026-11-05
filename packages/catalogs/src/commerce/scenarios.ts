@@ -1,4 +1,4 @@
-import type { CanonicalValue, FaultEffect, FaultPoint, LessonArchitectureAllowance, LessonOverlayPolicy, LessonParameter, ScheduledFault } from "@distlab/contracts";
+import type { CanonicalValue, CatalogReference, FaultEffect, FaultPoint, LessonArchitectureAllowance, LessonOverlayPolicy, LessonParameter, ScheduledFault } from "@distlab/contracts";
 
 const component = (id: string, model: string, kind = "service", configuration = {}) => ({ id, model: `commerce.${model}`, kind, version: "1.0.0", configuration });
 const link = (source: string, target: string, timeout = 20) => ({ source, target, policy: { requestLatency: 1, responseLatency: 1, jitter: 0, timeout, failureRate: 0 } });
@@ -10,6 +10,9 @@ const request = (id: string, at: number, target: string, endpoint: string, body 
 const assertion = (id: string, at: number, owner: string, table: string, count: number, key = "", expected = {}) => ({ id, predicate: "commerce.rows", mode: "at", at, parameters: { owner, table, count, key, expected } });
 const fault = (id: string, point: string, source: string, target: string, name: string, effect: object) => ({ id, point, source, target, name, from: 0, probability: 1, maxApplications: 1, effect });
 const configuration = { startTime: 0, historyLimit: 100000, visibility: { defaultMode: "visible", byType: {}, summaryFields: {} }, models: {} };
+
+/** The hosted catalog every commerce lesson runs against (ADR-006). Data only, so the main thread can name it. */
+export const commerceCatalogReference: CatalogReference = Object.freeze({ id: "commerce.lessons", version: "1.0.0" });
 
 export const commerceLessonNames = [
   "retry-unsafe", "retry-idempotent",

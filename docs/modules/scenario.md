@@ -24,7 +24,8 @@ time, event ordering, randomness, controlled tasks, and execution history.
 It imports only contracts and kernel implementations. The kernel does not
 interpret scenario documents or import scenario assessment. Catalog providers
 and application composition roots supply trusted definitions to the engine.
-The package does not parse YAML, edit UI state, grade students, restore snapshots,
+Its document layer parses instructor scenario documents (JSON only). The package
+does not parse YAML, edit UI state, grade students, restore snapshots,
 or mutate a running scenario from host controls.
 
 ## Source modules
@@ -43,6 +44,7 @@ point; `package.json` exposes no source subpaths.
 | Normalization | `normalizeScenario`, `Normalization` |
 | Catalog and assessment adapters | `ScenarioCatalog`, `ScenarioModel`, `ScenarioPredicate`, `ScenarioAssessment`, `AssessmentProjection` |
 | Diagnostics | `DiagnosticCodes`, `DiagnosticCode` |
+| Scenario documents ([ADR-006](../spec/adr/006-scenario-documents.md)) | `validateScenarioDocument`, `parseDocumentText`, `documentDigest`, `resolveHostedCatalog`, `SUPPORTED_FORMAT_VERSIONS`, `HostedCatalog`, `HostedCatalogRegistry`, `DocumentValidation`, `DocumentStage`, `DocumentParse` |
 
 Types in this table are exported as TypeScript types. `DiagnosticCodes` is a
 runtime constant. `startAssessment` and `AssessmentAttempt` are internal module
@@ -259,6 +261,42 @@ do not reset mutable state captured by a predicate. Stateless predicates fit
 the current seam directly; stateful obligations need explicit lifecycle support
 before they can satisfy reset equivalence.
 
+### `document.ts`: scenario documents
+
+[`document.ts`](../../packages/scenario/src/document.ts) is the pure ADR-006
+document layer. `validateScenarioDocument(text, registry)` takes the raw file
+text and a `HostedCatalogRegistry`: the hosted catalogs, each a
+`ScenarioCatalog` paired with its `ScenarioAssessment`, and the packaged
+scenario names an imported document may not reuse. A hosted catalog's
+reference is the catalog's own `id` and `version`. The concrete registry is
+`hostedCatalogs` in `@distlab/catalogs`.
+
+Validation runs in stages and stops at the first that fails. Each stage reports
+all of its diagnostics, sorted by JSON pointer, then code:
+
+| Stage | Checks | Codes |
+| --- | --- | --- |
+| `text` | UTF-8 byte limit before parsing, RFC 8259 syntax, duplicate keys, the `__proto__` key, nesting depth (the root is depth 1) | `DOCUMENT_SIZE`, `DOCUMENT_SYNTAX` (path `""`), `DUPLICATE_KEY`, `RESERVED_KEY`, `DOCUMENT_DEPTH` |
+| `envelope` | `format` and `formatVersion` first (either failing stops the stage), then required members, types, unknown keys at every level, presentation lengths in code points, the overlay policy's shape, and the catalog reference | `FORMAT`, `FORMAT_VERSION`, `REQUIRED`, `TYPE`, `UNSUPPORTED`, `DUPLICATE`, `VERSION`, `FAULT`, `DOCUMENT_LIMIT`, `UNKNOWN_CATALOG`, `CATALOG_VERSION` |
+| `scenario` | Count and `historyLimit` limits, reserved names and IDs, labels that name an existing assertion, then `normalizeScenario` against the resolved catalog with paths under `/scenario`. The engine runs only when the limits hold. | `DOCUMENT_LIMIT`, `RESERVED_NAME`, `RESERVED_ID`, `REFERENCE`, and the engine's codes |
+| `policy` | `overlayPolicy.lesson` equals `scenario.name`; OVL-AC-6 target and default integrity; with an architecture allowance, ARCH-AC-6 allowance integrity | `REFERENCE`, `POLICY_TARGET`, `POLICY_DEFAULT`, `POLICY_ALLOWANCE` |
+
+The parser is iterative, so a deeply nested text cannot exhaust the call stack.
+It normalizes `-0` to `0` and returns a frozen `CanonicalValue`.
+`documentDigest(value)` is the SHA-256 of the value's canonical encoding, so
+whitespace and key order do not change it. A valid result carries the
+normalized `ScenarioDocument` (the engine-normalized scenario and only the
+envelope members present), the scenario as a `CanonicalValue` ready for
+`create` and `composeOverlay`, the digest, and the resolved `HostedCatalog`.
+
+Policy targets resolve against the normalized scenario. A link target may name
+only a `NetworkPolicy` field and a destination target only a delivery field.
+An allowed slot model is checked the way the catalog design tests check it:
+substituted with `options: []`, completed with the resource and subscription
+edits its descriptor needs and the allowance offers, and composed through
+`composeOverlay`. Validation creates no model, evaluates no predicate, and
+draws no randomness.
+
 ### `harness.ts`: UI-free controls and replay comparison
 
 [`harness.ts`](../../packages/scenario/src/harness.ts) wraps a concrete session
@@ -303,6 +341,9 @@ composition, boundary assessment, and replay checks live in
 [`scenario-engine.test.ts`](../../packages/scenario/tests/scenario-engine.test.ts).
 [`composition.test.ts`](../../packages/scenario/tests/composition.test.ts)
 covers each composition rule and its path.
+[`document.test.ts`](../../packages/scenario/tests/document.test.ts) covers the
+document parser, envelope, limits, reserved names and IDs, staging, and
+diagnostic order against a fixture registry.
 [`dependency.test.ts`](../../packages/scenario/tests/dependency.test.ts) checks
 dependency direction. The shared test fixtures are in
 [`support.ts`](../../packages/scenario/tests/support.ts).

@@ -164,6 +164,7 @@ npm run lesson -- retry-idempotent --replay # verify deterministic reset/replay
 npm run lesson -- saga-compensated --step  # interactive event stepping
 npm run --silent lesson -- outbox-idempotent --json # full state/history export
 npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
+npm run scenario -- check examples/scenarios/processor-response-lost.json # check a scenario document
 npm exec -w @distlab/web -- playwright test checkout-lesson.spec.ts # focused lesson E2E
 ```
 

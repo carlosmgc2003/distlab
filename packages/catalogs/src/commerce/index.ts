@@ -10,7 +10,7 @@ import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.j
 import { cacheCartModel, cacheCatalogModel, cacheOrdersModel } from "./cache.js";
 import { inventoryModel } from "./inventory.js";
 import { placeholderExternalModel, placeholderServiceModel } from "./placeholder.js";
-export { commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
+export { commerceCatalogReference, commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
 export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
 
