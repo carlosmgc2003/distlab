@@ -3,6 +3,7 @@ import { CommerceFacts, CommerceState } from "./CommerceLesson.tsx";
 import { DocumentDiagnostics, ImportedChecks, ImportedHeader } from "./ImportedScenario.tsx";
 import { errorDiagnostics, oversized } from "./scenario-file.ts";
 import type { ScenarioFile } from "./scenario-file.ts";
+import { starterFile } from "./starter-file.ts";
 import { commerceCatalogReference } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
@@ -218,6 +219,21 @@ export function App({ host }: { readonly host: SimulationHost }) {
       ? `Compare kept ${faults} student fault${faults === 1 ? "" : "s"}${kept}${carried.dropped.length ? ` and dropped ${carried.dropped.join(", ")}` : ""}.` : "");
     replaceSession(id, carried.overlay);
   };
+  /**
+   * Downloads the chosen packaged lesson as a starter scenario file (ADR-006). The file is built
+   * from data-only modules and handed to the browser as a Blob: no network, no storage, no load.
+   */
+  const saveStarter = () => {
+    const choice = scenarios.find(item => item.id === selected);
+    if (!choice) return;
+    const file = starterFile(choice);
+    const url = URL.createObjectURL(new Blob([file.text], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   const onScenario = (id: string) => {
     if (busy) return;
     if (projection || snapshot.error) replaceSession(id);
@@ -263,6 +279,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <h2 id="lesson-heading" className="sr-only">{commerce ? "Commerce lesson" : "Checkout lesson"}</h2>
           <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
           <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
+          {/* An instructor's authoring aid, kept in the drawer so the chooser row keeps its height at the
+              desktop baselines. It is offered only for a packaged lesson, never for an imported document. */}
+          {imported ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
           {projection && report ? <details className="execution-overview">
             <summary>Run overview</summary>
             <div className="execution-overview-body">
