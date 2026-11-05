@@ -110,6 +110,15 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Say *imported* for a session from a scenario document and *packaged* for a
   lesson from the catalogs. The **document digest** identifies the file, and
   `runId` identifies the run.
+- Student projections are chosen by the session's catalog reference and derived
+  from the normalized architecture, so a checkout document with other component
+  IDs shows the same facts. The checkout catalog's predicates still read fixed
+  IDs, so its checks only judge the packaged IDs (#148).
+- An imported session's checks are the document's assertions. Format version 1
+  carries no business invariant/scenario expectation classification, so they are
+  not lesson checks: `importedChecks` shows each stored verdict (PASS, FAIL)
+  beside the author's plain-text label, under a note that the file's author wrote
+  them and DistLab catalog predicates judged them.
 
 ## Naming
 

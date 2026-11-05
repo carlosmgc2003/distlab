@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-11-01 |
-| Related issues | #3, #46, #47, #69, #93, #98, #99 |
+| Last updated | 2026-11-05 |
+| Related issues | #3, #46, #47, #69, #93, #98, #99, #115 |
 
 ## Responsibility
 
@@ -65,11 +65,17 @@ that produced the location, else of the first edit that changed a component the
 location names, else at `/architecture`. Reset replays the applied edits. The
 main thread never sends an applied document or a design preview.
 Catalog factories and ScenarioEngine stay in the worker. The main thread imports
-the data-only scenario modules, never runtime code. Commerce student projections
+the data-only scenario modules, never runtime code. Student projections are
+chosen by the session's catalog reference and derived from the normalized
+architecture, never from fixed component IDs. The checkout projection gives
+each client its observed request and outcome, each service its lifecycle and
+committed rows, each external service its declared authorizations, and each
+destination its delivery records. Commerce student projections
 include committed DB rows, live KV entries with their absolute expiry (never the
 store's generations), client-observed outcomes, declared
 external-visible facts, delivery records, and assessment verdicts. The commerce
-client projection carries those verdicts in its canonical `assertions` field;
+client projection carries those verdicts in its canonical `assertions` field, and
+so does the checkout client projection;
 no worker command or top-level protocol variant is added. Raw runtime tasks and
 provider counters remain host-only. Paired comparisons replace the worker session.
 Compare carries the student's fault entries and every parameter override whose
@@ -93,8 +99,7 @@ code. An overlay on an imported session is checked against the document's own
 validated policy. Without a policy, only the empty overlay is accepted. Student
 projections are chosen by catalog reference and derived from the normalized
 architecture. Imported sessions have no paired lesson, so Compare is
-unavailable. The decision is accepted, and #113, #114, and #115 implement it.
-Until then the worker accepts packaged lessons only.
+unavailable. #113, #114, and #115 implement the decision.
 
 Engine counters use the read-only properties documented in
 [ADR-003](adr/003-boundary-counters.md), not observation counting or a hardcoded
@@ -161,7 +166,7 @@ schedule events, mutate state, complete operations, or consume randomness.
 
 Selecting an interactive fault or design parameter in the UI edits a draft
 session overlay, which is UI state. Applying the draft sends `load` with the
-packaged document and the overlay, and that constructs a new session from the
+packaged document, or the imported document's text, and the overlay, and that constructs a new session from the
 start time. Reset replays the applied overlay. Neither path mutates a running
 simulation.
 
@@ -209,11 +214,12 @@ value. Packaged sessions report the origin `{ kind: "packaged" }`. `reset`
 reconstructs an imported session from the same normalized document. The
 contract types (`ScenarioDocument`, `CatalogReference`, `SessionOrigin`,
 `ScenarioDocumentLimits`, `ScenarioDocumentDiagnosticCodes`) live in
-`@distlab/contracts` (`scenario-document.ts`), and the worker reports
-`{ kind: "packaged" }` for every session. Parsing, validation, the hosted
-catalog registry, and the worker's `document` load path are not implemented
-yet, so the host still rejects a `load` that carries `document` as an invalid
-command.
+`@distlab/contracts` (`scenario-document.ts`). The parser and validation live
+in `@distlab/scenario` (`validateScenarioDocument`) and the hosted catalog
+registry in `@distlab/catalogs` (`hostedCatalogs`); only the worker composition
+root and headless tools call them. The main thread checks `File.size` against
+`ScenarioDocumentLimits.documentBytes` before it reads a file, and it explains
+each diagnostic code from its own table.
 
 The `overlay` field and `loaded.session` are accepted by ADR-004 and implemented
 by #94. The contract types (`SessionOverlay`, `SessionIdentity`,
@@ -273,7 +279,7 @@ offered only in a layout that shows one region at a time. Adding a control to
 express a new fact, or a new status to restate an existing one, is not a
 solution to a presentation problem.
 
-While a command is outstanding, scenario choice, Load, Run, Step, and Reset are
+While a command is outstanding, scenario choice, Load, Open scenario file, Run, Step, and Reset are
 unavailable. Pause stays available only when Run is the sole outstanding command,
 and it takes effect at an event boundary.
 
@@ -286,7 +292,7 @@ and it takes effect at an event boundary.
 | Step | Unavailable | Process one scheduled event | Unavailable | Process one scheduled event | Unavailable because the run has finished | Unavailable |
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
 | Open scenario file | Read a local file and load it | Replace the session | Unavailable | Replace the session | Replace the session | After `INVALID_DOCUMENT` the diagnostics stay listed, and choosing a file loads again |
-| Break and design choices (draft overlay) | Not shown | Edit the draft. Apply sends `load` with the packaged document and the draft, which replaces the session | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
+| Break and design choices (draft overlay) | Not shown | Edit the draft. Apply sends `load` with the packaged document, or the imported document's text, and the draft, which replaces the session. An imported document without `overlayPolicy` shows that it accepts no student changes | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
 | Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
 | Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
