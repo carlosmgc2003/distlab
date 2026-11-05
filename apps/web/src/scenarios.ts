@@ -1,9 +1,9 @@
 // This catalog module contains scenario data and lesson copy only, never model factories.
 import type { LessonOverlayPolicy, ScenarioDefinition } from "@distlab/contracts";
 import { detached } from "./protocol.ts";
-import { checkoutLesson, checkoutOverlayPolicy, normalCheckout, responseLostCheckout } from "../../../packages/catalogs/src/scenarios.ts";
+import { checkoutCatalogReference, checkoutLesson, checkoutOverlayPolicy, normalCheckout, responseLostCheckout } from "../../../packages/catalogs/src/scenarios.ts";
 
-import { commerceChecks, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import { commerceCatalogReference, commerceChecks, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 
 export { checkoutLesson };
 
@@ -30,12 +30,13 @@ const commerceCopy = {
 /**
  * Overlay policies are the same data-only values the worker enforces from its own
  * catalog (ADR-004). The panel reads them to offer only allowed faults; the
- * worker never accepts a policy from the main thread.
+ * worker never accepts a policy from the main thread. Each lesson names its hosted
+ * catalog, so a starter scenario file can be built from this data alone (ADR-006).
  */
 export const scenarios = [
-  { id: "normal", family: "checkout", title: checkoutLesson.normal.title, description: checkoutLesson.normal.explanation, compare: "response-lost", scenario: detached(normalCheckout), policy: checkoutOverlayPolicy("normal") as LessonOverlayPolicy },
-  { id: "response-lost", family: "checkout", title: checkoutLesson["response-lost"].title, description: checkoutLesson["response-lost"].explanation, compare: "normal", scenario: detached(responseLostCheckout), policy: checkoutOverlayPolicy("response-lost") as LessonOverlayPolicy },
-  ...commerceLessonNames.map(id => ({ id, family: "commerce" as const, title: commerceCopy[id][0], description: commerceCopy[id][1], compare: commerceCopy[id][2], scenario: detached(commerceScenario(id)), policy: commerceOverlayPolicy(id), checks: commerceChecks(id) })),
+  { id: "normal", family: "checkout", catalog: checkoutCatalogReference, title: checkoutLesson.normal.title, description: checkoutLesson.normal.explanation, compare: "response-lost", scenario: detached(normalCheckout), policy: checkoutOverlayPolicy("normal") as LessonOverlayPolicy },
+  { id: "response-lost", family: "checkout", catalog: checkoutCatalogReference, title: checkoutLesson["response-lost"].title, description: checkoutLesson["response-lost"].explanation, compare: "normal", scenario: detached(responseLostCheckout), policy: checkoutOverlayPolicy("response-lost") as LessonOverlayPolicy },
+  ...commerceLessonNames.map(id => ({ id, family: "commerce" as const, catalog: commerceCatalogReference, title: commerceCopy[id][0], description: commerceCopy[id][1], compare: commerceCopy[id][2], scenario: detached(commerceScenario(id)), policy: commerceOverlayPolicy(id), checks: commerceChecks(id) })),
 ] as const;
 
 export type PackagedScenario = (typeof scenarios)[number];
