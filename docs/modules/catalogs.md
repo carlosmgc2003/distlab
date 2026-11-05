@@ -36,8 +36,10 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/inventory.ts`](../../packages/catalogs/src/commerce/inventory.ts) | Inventory that reserves the last unit with check-then-act or with optimistic concurrency. |
 | [`src/commerce/placeholder.ts`](../../packages/catalogs/src/commerce/placeholder.ts) | Placeholder service and external models that fill an empty design slot and answer `NOT_IMPLEMENTED`. |
 | [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for seventeen commerce documents, their checks, and their overlay policies. |
+| [`src/hosted.ts`](../../packages/catalogs/src/hosted.ts) | `hostedCatalogs`: the ADR-006 hosted catalog registry and the reserved packaged scenario names. Worker and headless tools only. |
 | [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the twenty commerce models. |
 | [`examples/commerce.ts`](../../packages/catalogs/examples/commerce.ts) | Headless CLI lesson runner with timeline, stepping, JSON export, and replay. |
+| [`examples/scenario.ts`](../../packages/catalogs/examples/scenario.ts) | Headless `check` command for instructor scenario documents. |
 
 The two `scenarios.ts` modules import only contract types from
 `@distlab/contracts`. Their functions construct serializable inputs; they do not
@@ -67,6 +69,8 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `commerceCatalog` | `ScenarioCatalog` with ID `commerce.lessons`, version `1.0.0`. |
 | `commerceAssessment` | `ScenarioAssessment` with version `1.0.0`. |
 | `commerceScenario(name)` | Returns a `CanonicalValue` document for a `CommerceLessonName`. |
+| `checkoutCatalogReference`, `commerceCatalogReference` | Data-only `CatalogReference` of each packaged lesson's hosted catalog, exported from the two `scenarios.ts` modules. |
+| `hostedCatalogs` | `HostedCatalogRegistry` pairing `checkoutCatalog` with `checkoutAssessment` and `commerceCatalog` with `commerceAssessment`; its `reservedNames` are every packaged scenario name. |
 | `commerceLessonNames` | Ordered tuple of the seventeen supported commerce names. |
 | `CommerceLessonName` | Type-only union derived from that tuple. |
 
@@ -307,6 +311,7 @@ npm run lesson -- retry-idempotent --replay
 npm run lesson -- saga-compensated --step
 npm run --silent lesson -- outbox-idempotent --json
 npm run lesson -- outbox-notifications-gap --replay
+npm run scenario -- check examples/scenarios/processor-response-lost.json
 npm test -w @distlab/catalogs
 npm run test:boundaries
 ```
@@ -324,6 +329,23 @@ and `quit`. `--json` and `--step` cannot be combined. `--replay` works with eith
 mode: once a run is completed, it resets, runs again, and uses `compareExports`
 to verify equivalence. Invalid names/flags set exit code 1; failed simulation or
 FAIL results also set exit code 1, and replay mismatch throws.
+
+The root `scenario` script builds the packages and runs `examples/scenario.ts`.
+`check <file>` resolves the path from the directory where npm was invoked,
+checks the file size before reading it, and validates the text against
+`hostedCatalogs` with `validateScenarioDocument`. It prints each diagnostic as
+`<path> <code>` and exits with code 1, or runs the scenario once and prints the
+title, name, seed, catalog reference, digest, final status, `runId`, and each
+assertion result with its presentation label. A failing assertion is the
+document's finding and keeps exit code 0; a run that does not complete exits
+with 1. [`examples/scenarios/processor-response-lost.json`](../../examples/scenarios/processor-response-lost.json)
+is the vision §19 example from ADR-006 and a permanent fixture (DOC-AC-1).
+
+The [document tests](../../packages/catalogs/tests/document.test.ts) cover that
+fixture, every packaged lesson wrapped as a starter document (DOC-AC-2), digest
+and `runId` identity across fresh runs, Reset, and reformatting (DOC-AC-3),
+policy and allowance integrity at import (DOC-AC-6), versioning against the
+hosted registry (DOC-AC-7), and the `check` command.
 
 The [checkout tests](../../packages/catalogs/tests/checkout.test.ts) cover model
 versions, both documents, authorization outcomes, commit/drop/timeout ordering,

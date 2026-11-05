@@ -1,0 +1,57 @@
+{
+  "format": "distlab.scenario",
+  "formatVersion": 1,
+  "catalog": { "id": "mvp.checkout", "version": "1.0.0" },
+  "presentation": {
+    "title": "Processor response lost",
+    "summary": "The processor approves the payment, but its response never reaches Payments.",
+    "assertions": { "order-not-charged-twice": "The customer is charged at most once." }
+  },
+  "scenario": {
+    "version": 1,
+    "name": "processor-response-lost@1",
+    "seed": "processor-response-lost-1",
+    "architecture": {
+      "components": [
+        { "id": "customer-app", "kind": "client", "model": "distlab.customer-app", "version": "1.0.0", "configuration": {} },
+        { "id": "orders", "kind": "service", "model": "distlab.orders", "version": "1.0.0", "configuration": {} },
+        { "id": "payments", "kind": "service", "model": "distlab.payments", "version": "1.0.0", "configuration": {} },
+        { "id": "payment-processor", "kind": "external", "model": "distlab.payment-processor", "version": "1.0.0", "configuration": {} }
+      ],
+      "links": [
+        { "source": "customer-app", "target": "orders",
+          "policy": { "requestLatency": 20, "responseLatency": 20, "jitter": 0, "timeout": 1000, "failureRate": 0 } },
+        { "source": "payments", "target": "payment-processor",
+          "policy": { "requestLatency": 0, "responseLatency": 0, "jitter": 0, "timeout": 1000, "failureRate": 0 } }
+      ],
+      "databases": [
+        { "owner": "orders",
+          "tables": [{ "name": "orders", "unique": [["orderId"]], "checks": [] },
+                     { "name": "outbox", "unique": [["messageId"]], "checks": [] }],
+          "initial": { "orders": {}, "outbox": {} } },
+        { "owner": "payments",
+          "tables": [{ "name": "payments", "unique": [["paymentId"]], "checks": [] },
+                     { "name": "inbox", "unique": [["messageId"]], "checks": [] }],
+          "initial": { "payments": {}, "inbox": {} } }
+      ],
+      "stores": [],
+      "destinations": [{ "id": "OrderCreated", "kind": "topic", "deliveryDelay": 5, "ackTimeout": 1000,
+                         "retryDelay": 0, "maxAttempts": 3, "capacity": 10000 }],
+      "subscriptions": [{ "destination": "OrderCreated", "consumer": "payments" }]
+    },
+    "external": [
+      { "target": "payment-processor", "operation": "POST /authorize",
+        "behavior": { "latency": 30, "degradedExtraLatency": 0, "dropResponse": true, "parameters": {} } }
+    ],
+    "actions": [
+      { "id": "start-orders", "at": 0, "kind": "service", "target": "orders", "state": "RUNNING" },
+      { "id": "start-payments", "at": 0, "kind": "service", "target": "payments", "state": "RUNNING" },
+      { "id": "place-order", "at": 0, "kind": "client", "target": "customer-app", "action": "checkout",
+        "data": { "cartId": "cart-42", "customerId": "customer-42", "amount": 15000 } }
+    ],
+    "assertions": [
+      { "id": "order-not-charged-twice", "predicate": "mvp.processor-authorized-once",
+        "parameters": { "orderId": "order-1", "amount": 15000 }, "mode": "eventually", "deadline": 2000 }
+    ]
+  }
+}
