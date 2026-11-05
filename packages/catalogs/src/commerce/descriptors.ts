@@ -114,9 +114,19 @@ export const inventoryDescriptor: ModelDescriptor = {
   storage: tables("stock", "reservations"), options: [flag("optimistic")],
 };
 
+/**
+ * Placeholder models (ADR-005) fill an empty slot. Each exposes the endpoints or
+ * operations listed in its configuration field `interface` and answers every
+ * request with a `NOT_IMPLEMENTED` error. They consume and publish nothing,
+ * need no storage, and hold no state.
+ */
+export const placeholderServiceDescriptor: ModelDescriptor = { ...none, model: "commerce.placeholder-service", version: VERSION, kind: "service", placeholder: true };
+export const placeholderExternalDescriptor: ModelDescriptor = { ...none, model: "commerce.placeholder-external", version: VERSION, kind: "external", placeholder: true };
+
 export const commerceDescriptors: readonly ModelDescriptor[] = [
   clientDescriptor, retryDescriptor, carrierDescriptor, sagaDescriptor, sagaResourceDescriptor, notificationDescriptor,
   outboxDescriptor, orderReadDescriptor, orderWriteDescriptor, dependencyDescriptor, riskDescriptor,
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
   cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor, inventoryDescriptor,
+  placeholderServiceDescriptor, placeholderExternalDescriptor,
 ];

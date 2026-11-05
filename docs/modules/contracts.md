@@ -247,10 +247,11 @@ Service handlers and scenario architecture depend on these broker contracts.
 [Source](../../packages/contracts/src/model.ts) ·
 [Specification](../spec/adr/005-architecture-editor.md#contract-types).
 
-**Exported API:** `ModelDescriptor`, `ModelPeer`, `ModelOption`, and
-`ModelStorage`. A descriptor is the data-only interface of one catalog model
-version: its kind, actions, endpoints, consumers, operations, published
-destinations, peers, storage needs, and behavior options.
+**Exported API:** `ModelDescriptor`, `ModelPeer`, `ModelOption`,
+`ModelStorage`, and the placeholder error code `NOT_IMPLEMENTED`. A descriptor
+is the data-only interface of one catalog model version: its kind, actions,
+endpoints, consumers, operations, published destinations, peers, storage needs,
+and behavior options.
 
 **Invariants:** A peer's `name` is also the `ComponentInstance.configuration`
 field that holds the bound component ID; when the field is absent the peer is
@@ -258,7 +259,10 @@ bound to `default`. A peer lists the component kinds it may bind to and the
 endpoints (service) or operations (external) the model calls on it. An option's
 `key` is also its configuration field, and its domain reuses
 `LessonParameterDomain`. Peer names and option keys of one model are disjoint.
-Peers are not kernel ports. Descriptors contain no code.
+Peers are not kernel ports. Descriptors contain no code. A descriptor marked
+`placeholder` declares no endpoints or operations of its own: the component
+exposes the ones listed in its configuration field `interface`, and answers
+each with an error reply whose body is `{ code: NOT_IMPLEMENTED }`.
 
 **Dependency direction:** Kernel component IDs, database table definitions,
 component kinds, and overlay parameter domains. `ScenarioModel` in

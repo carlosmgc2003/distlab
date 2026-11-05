@@ -1,6 +1,6 @@
 # Commerce failure and resilience lessons
 
-These sixteen browser and headless scenarios build on the same commerce vocabulary: `order-1`,
+These seventeen browser and headless scenarios build on the same commerce vocabulary: `order-1`,
 a 5000-unit payment, service-owned databases, and explicit network/message
 boundaries. Each lesson uses only the topology needed for its teaching point.
 They are independent experiments, not successive mutations of one running system.
@@ -14,6 +14,7 @@ npm run lesson -- retry-unsafe
 npm run lesson -- retry-idempotent --replay
 npm run lesson -- saga-compensated --step
 npm run --silent lesson -- outbox-idempotent --json > outbox.json
+npm run lesson -- outbox-notifications-gap --replay
 npm test -w @distlab/catalogs
 ```
 
@@ -71,7 +72,8 @@ Setting every choice back to its default gives the packaged run exactly.
 | --- | --- |
 | `retry-*` | `idempotency` (payments `idempotent`), `timeout` 1–60 (client → payments link) |
 | `saga-*` | `compensation` (orders `compensate`) |
-| `dual-write`, `outbox-*` | `outbox` (payments `outbox`), `consumer-idempotency` (notifications `idempotent`) |
+| `dual-write`, `outbox-unsafe-consumer`, `outbox-idempotent` | `outbox` (payments `outbox`), `consumer-idempotency` (notifications `idempotent`) |
+| `outbox-notifications-gap` | `outbox` (payments `outbox`); the notifications slot is a design edit, not a choice |
 | `cascade-*` | `circuit-breaker` (payments `breaker`) |
 | `notifications-*` | `decoupled-confirmation` (orders `decoupled`), `max-attempts` 1–50 (`OrderPlaced` destination `maxAttempts`) |
 | `cache-*` | `cache-invalidation` (catalog `invalidate`) |
@@ -509,6 +511,50 @@ commit since the transaction began causes a conflict
 ([ADR-002](spec/adr/002-runtime-model-semantics.md)). Optimistic concurrency
 does not block the second client. It makes the loser find out at commit time,
 and the loser must re-read and decide again; here it retries once.
+
+## 9. Design the missing consumer ("fill the gap")
+
+**Pattern:** a constrained design exercise
+([ADR-005](spec/adr/005-architecture-editor.md)). The student composes catalog
+models; they never write handler code.
+
+**Problem:** the outbox reliably publishes `PaymentApproved`, but no service is
+there to turn it into a notification.
+
+**Topology:** the outbox story of section 3 with the idempotent variant's
+inputs: Client → Payments → Payments DB (payment + outbox), relay → MessageBus
+`PaymentApproved`. `notifications` is a **slot** filled by the placeholder model
+`commerce.placeholder-service`. It has no database and no subscription. A
+placeholder exposes only the endpoints listed in its configuration field
+`interface` (here none), answers each with an error reply whose body is
+`{ code: "NOT_IMPLEMENTED" }`, and consumes, publishes, and stores nothing.
+
+**Injected faults:** the same Payments crash at t=5 and duplicate delivery of
+`PaymentApproved` as section 3. The duplicate rule names the slot's ID, so it
+applies to whatever model fills it.
+
+**Architecture allowance:** fill the `notifications` slot with
+`commerce.notifications@1.0.0` (option `idempotent`), attach a database to
+`notifications`, and subscribe `notifications` to `PaymentApproved`. At most
+three design edits. No binding is offered, and no design choice targets the slot.
+
+**Expected checks:**
+
+| Design | Notification effects | One notification per payment | Event published |
+| --- | ---: | --- | --- |
+| Packaged (empty slot): `npm run lesson -- outbox-notifications-gap` | 0 | VIOLATED | HOLDS |
+| Slot filled, database attached, subscribed | 2 | VIOLATED | HOLDS |
+| The same with `idempotent` on (reference design) | 1 | HOLDS | HOLDS |
+
+Every scenario expectation of section 3 is reproduced by the packaged run, so
+the empty slot is a meaningful first run: the event is published and never
+delivered. A design that fills the slot without a database is rejected with
+`STORAGE` at `/architecture/slots/0/model`. A design without the subscription is
+rejected with `SUBSCRIPTION` at `/architecture`, because no edit names the
+missing subscription. Each design has its own `runId`, and Reset replays it.
+The browser's Design editor (#112) will offer these edits; until then the
+worker accepts them in a `load` overlay, and catalog tests run the fixture
+designs above.
 
 ## Extension points and boundaries
 

@@ -35,7 +35,7 @@ test("paired lessons use equivalent fault schedules, workloads, and seeds", () =
   }
 });
 
-const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"]] as const;
+const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent", "outbox-notifications-gap"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"]] as const;
 /** The business invariants each packaged lesson is meant to violate; every other check passes. */
 const violated: Record<typeof commerceLessonNames[number], readonly string[]> = {
   "retry-unsafe": ["one-payment-per-order"],
@@ -45,6 +45,7 @@ const violated: Record<typeof commerceLessonNames[number], readonly string[]> = 
   "dual-write": ["one-notification-per-payment", "payment-event-published"],
   "outbox-unsafe-consumer": ["one-notification-per-payment"],
   "outbox-idempotent": [],
+  "outbox-notifications-gap": ["one-notification-per-payment"],
   "cqrs-delayed": [],
   "cascade-unprotected": ["bounded-waiting"],
   "cascade-breaker": [],
@@ -57,7 +58,7 @@ const violated: Record<typeof commerceLessonNames[number], readonly string[]> = 
 };
 const assertionsOf = (name: typeof commerceLessonNames[number]) => object(commerceScenario(name)).assertions as Record<string, CanonicalValue>[];
 
-test("every check in the 16 commerce lessons is classified as a business invariant or a scenario expectation", () => {
+test("every check in the 17 commerce lessons is classified as a business invariant or a scenario expectation", () => {
   assert.equal(families.flat().length, commerceLessonNames.length);
   for (const name of commerceLessonNames) {
     const checks = commerceChecks(name);
@@ -263,7 +264,12 @@ for (const name of commerceLessonNames) {
       const outcome = logs(result, "client.result")[0]!;
       assert.equal(object(outcome.result!).paymentId, name === "retry-idempotent" ? "payment-1" : "payment-2");
     }
-    if (name.startsWith("outbox-")) {
+    if (name === "outbox-notifications-gap") {
+      // The empty slot is subscribed to nothing: the event is published and never delivered.
+      assert.equal(result.history.observations.filter(o => o.type === "message.published").length, 1);
+      assert.equal(result.history.observations.filter(o => o.type === "message.delivered").length, 0);
+      assert.equal(logs(result, "notification.created").length, 0);
+    } else if (name.startsWith("outbox-")) {
       const delivered = result.history.observations.filter(o => o.type === "message.delivered");
       assert.equal(delivered.length, 2);
       assert.equal(object(delivered[0]!.data!).messageId, object(delivered[1]!.data!).messageId);

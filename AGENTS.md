@@ -40,6 +40,7 @@ npm run lesson -- retry-unsafe    # run a commerce lesson with textual timeline
 npm run lesson -- retry-idempotent --replay # verify deterministic reset/replay
 npm run lesson -- saga-compensated --step  # interactive event stepping
 npm run --silent lesson -- outbox-idempotent --json # full state/history export
+npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included
@@ -58,7 +59,7 @@ modules may import application contracts, the host client, and the data-only
 modules; they must not import runtime model
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command.
-The host accepts only the two packaged checkout documents and sixteen packaged
+The host accepts only the two packaged checkout documents and seventeen packaged
 commerce lessons, each optionally with a session overlay that the lesson's
 data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`). The
 main thread never sends an applied document. Reset replays the applied overlay.

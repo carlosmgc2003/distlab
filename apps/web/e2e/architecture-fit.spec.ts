@@ -169,7 +169,7 @@ test("Reset and a new scenario return to the fitted default view", async ({ page
 test("the legend covers no node at the default fit of any packaged lesson", async ({ page }) => {
   test.setTimeout(240_000);
   const { scenarios } = await import("../src/scenarios.ts");
-  expect(scenarios).toHaveLength(18);
+  expect(scenarios).toHaveLength(19);
   for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]) {
     await page.setViewportSize(size);
     for (const scenario of scenarios) {
