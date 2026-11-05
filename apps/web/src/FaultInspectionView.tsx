@@ -120,20 +120,22 @@ export function ComponentRuntimeFacts({ report, componentId }: {
   readonly componentId: string;
 }): ReactNode {
   if (!report.studentFactsPresent) return <p>No student-visible state is projected for this component.</p>;
-  if (componentId === "orders") return <ServiceFacts title="Runtime facts" service={report.orders} stagedNote={report.stagedNote} />;
-  if (componentId === "payments") return <ServiceFacts title="Runtime facts" service={report.paymentsService} stagedNote={report.stagedNote} />;
-  if (componentId === "payment-processor") return <>
+  // Roles come from the architecture's models, so renamed components show the same facts.
+  const { roles } = report;
+  if (componentId === roles.orders) return <ServiceFacts title="Runtime facts" service={report.orders} stagedNote={report.stagedNote} />;
+  if (componentId === roles.payments) return <ServiceFacts title="Runtime facts" service={report.paymentsService} stagedNote={report.stagedNote} />;
+  if (componentId === roles.processor) return <>
     <h4>Runtime facts</h4>
     <p>Declared visible authorizations. Provider counters stay hidden.</p>
     {report.authorizations.length ? <ul className="fact-list">{report.authorizations.map(item => <li key={item.authorizationId}>
       {item.authorizationId} status {item.status}, amount {item.amount}, order {item.orderId}.
     </li>)}</ul> : <p>No visible authorization is declared.</p>}
   </>;
-  if (componentId === "OrderCreated") return <>
+  if (roles.destinations.includes(componentId)) return <>
     <h4>Runtime facts</h4>
-    <DeliveryList deliveries={report.deliveries} />
+    <DeliveryList deliveries={report.deliveries.filter(delivery => delivery.destination === componentId)} />
   </>;
-  if (componentId === "customer-app") return <>
+  if (componentId === roles.client) return <>
     <h4>Runtime facts</h4>
     <p>Client-observed checkout request and outcome.</p>
     <dl>

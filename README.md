@@ -177,6 +177,12 @@ DistLab is licensed under the [Apache License 2.0](LICENSE).
 Use Node.js 22.12 or newer and `npm install`. `npm run dev` starts Vite at
 `http://127.0.0.1:5173`; choose either checkout scenario and press **Load scenario**
 to receive READY, architecture, and execution projections from the worker.
+**Open scenario file…** (or dropping a `.json` file on the scenario chooser) loads
+an instructor's [scenario document](docs/spec/adr/006-scenario-documents.md), such
+as `examples/scenarios/processor-response-lost.json`. The browser checks the
+file's size and sends its text unparsed; the worker validates it, and an invalid
+file lists each problem with its JSON path. An imported run's header says
+"Imported" and names the document's title, scenario, seed, catalog, digest, and run.
 `npm run build` produces the static site in `apps/web/dist`, including its worker
 bundle; no backend is required. Linux CI images may also need
 `npm exec -w @distlab/web -- playwright install --with-deps chromium`.

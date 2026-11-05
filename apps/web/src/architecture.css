@@ -460,7 +460,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
 .brand span { color: var(--text-secondary); font-size: .8rem; }
-.scenario-picker { flex: 0 1 38rem; }
+/* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) the select,
+   Load, and Open scenario file… exceed 38rem and would wrap the row at the desktop baselines. */
+.scenario-picker { flex: 0 1 auto; }
 .status-line { align-items: center; gap: 8px 16px; font-size: .85rem; }
 .run-summary { align-items: center; }
 .run-status { color: var(--action-primary); }
@@ -663,3 +665,21 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .design-choices-header button { min-height: 36px; padding: 4px 10px; }
 .design-choices-body[hidden] { display: none; }
 .design-choices-body { display: grid; gap: 6px; }
+
+/* Imported scenario documents (ADR-006). "Imported" and each verdict are stated in text; colour only reinforces them. */
+.imported-header { display: grid; gap: 4px; flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
+.imported-header p { margin: 0; }
+.imported-identity { font-variant-numeric: tabular-nums; }
+.origin-label { display: inline-block; padding: 0 6px; border: 1px solid var(--action-primary); border-radius: 4px; color: var(--action-primary); font-weight: 700; font-size: .8rem; letter-spacing: .02em; }
+.imported-summary, .authorship-note, .imported-locked { color: var(--text-secondary); font-size: .85rem; }
+.panel-architecture:has(.imported-checks) { overflow: auto; }
+.panel-architecture:has(.imported-checks) > .architecture-layout { flex: 0 0 28rem; min-height: 28rem; }
+.imported-checks { flex: none; padding: 1rem; }
+.lesson-check.is-pass { border-left-color: var(--status-approved); }
+.lesson-check.is-pass .lesson-check-verdict { color: var(--status-approved); }
+.lesson-check.is-fail { border-color: var(--status-error); background: var(--status-error-bg); }
+.lesson-check.is-fail .lesson-check-verdict { color: var(--status-error); }
+.document-diagnostics { flex: none; max-width: 48rem; max-height: 40dvh; margin: 0 auto; padding: 12px 20px; overflow: auto; border: 1px solid var(--status-error); border-left-width: 4px; border-radius: 8px; background: var(--surface-panel); overflow-wrap: anywhere; }
+.document-diagnostics h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.document-diagnostics ul { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 1.25rem; }
+.document-diagnostics .file-name { font-weight: 650; }

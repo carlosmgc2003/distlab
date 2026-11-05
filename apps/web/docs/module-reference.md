@@ -26,7 +26,10 @@ catalog barrel `@distlab/catalogs` are prohibited. The worker URL in
 into the main-thread module graph. Shared protocol shapes come from
 `@distlab/contracts`; local UI state types do not extend the simulation protocol.
 The import checks in [boundaries.test.ts](../tests/boundaries.test.ts) traverse
-the main-thread graph and restrict contract imports to application types.
+the main-thread graph and restrict contract imports to application types; the
+one contract value allowed is the `ScenarioDocumentLimits` constant. The main
+thread never parses scenario file text or imports the document parser,
+validator, or hosted catalog registry (ADR-006, DOC-AC-5).
 
 Execution history is an immutable sequence of stored `Observation` values.
 Readers use stored sequence, identifiers, virtual time, correlation fields, and
@@ -92,7 +95,9 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   A projectionless `SIMULATION_FAILED` can still be reset.
 - **Session overlays:** `load(scenario, overlay?)` sends the exact packaged
   document and, when present, the student's draft overlay in one `load`
-  command. `session` in the snapshot is the `SessionIdentity` from the latest
+  command. `loadDocument(text, overlay?)` sends an imported scenario file's text
+  exactly as read, as `load.document`; `document` in the snapshot is the
+  normalized document from that `loaded` event, present only with a projection. `session` in the snapshot is the `SessionIdentity` from the latest
   `loaded` event (lesson, seed, normalized overlay); it is present only with a
   projection and survives Reset, which takes no overlay.
 - **Presentation/runtime separation:** frozen snapshots contain projection,
@@ -111,8 +116,10 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **State and protocol:** `isCanonical` rejects capabilities, accessors,
   unsupported object prototypes, cycles, non-finite numbers, negative zero,
   and malformed arrays. `detached` performs `structuredClone` and recursive
-  freezing. Validators check permitted envelope keys (an optional `overlay` on
-  `load` only, a required `session` on `loaded`), projection structure,
+  freezing. Validators check permitted envelope keys (exactly one of `scenario`
+  and a string `document`, and an optional `overlay`, on `load`; a required
+  `session` and an optional `document` on `loaded`, whose presentation text must
+  be strings), projection structure,
   lifecycle values, observation fields, and explicit counters. `requestIdOf`
   reads a data-property descriptor without invoking an accessor;
   `applicationError` creates a detached error.
@@ -157,6 +164,13 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   choosing a lesson starts from an empty draft. Compare carries the applied
   overlay with `carryOverlay` and lists any dropped parameter overrides. The
   run identity line shows seed, student fault count, and a short `runId`.
+  **Open scenario file…** and a drop on the scenario chooser read a local file
+  after `oversized` passes and call `host.loadDocument`; the file stays in UI
+  state, so Apply resends its text with the draft and a failed import lists its
+  diagnostics. An imported session takes its architecture, overlay policy, and
+  family (by catalog reference) from the validated document, shows
+  `ImportedHeader` and `ImportedChecks`, and offers no Compare. Choosing a
+  packaged scenario discards the imported file.
 - **Presentation/runtime separation:** owns `useFlightPlayback` outside the tab
   panels so playback survives tab switches. Explicit history selection releases
   the playback cursor; automatic live cues do not. Evidence links activate
@@ -507,6 +521,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Imports and boundaries:** application contract types and checkout lesson
   copy from local `scenarios.ts`; no runtime model dependency.
 - **State and protocol:** uses only `visibility: "student"` component states.
+  `roles` names the component playing each checkout role, found by its
+  versioned model in the architecture projection rather than by a fixed ID.
   Extracts committed service rows/revisions, lifecycle/process generation,
   payment outcomes, declared processor authorizations, client request/outcome,
   and bus delivery facts. Declared fault rules remain `recorded` unless a stored
@@ -528,7 +544,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **State and protocol:** `DistributedState` displays scenario/seed, fault
   selection, Payments' local state beside processor-visible facts, client
   outcome, committed service rows, bus attempts, and linked observations.
-  `ComponentRuntimeFacts` routes the selected component to its report fields.
+  `ComponentRuntimeFacts` routes the selected component to its report fields
+  through the report's `roles`, so renamed components show the same facts.
   Semantic CSS classes format existing strings without changing their meaning.
 - **Presentation/runtime separation:** supplied evidence callbacks navigate to
   stored observations only. Expected scenario outcomes and projected facts are
@@ -546,10 +563,42 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   declared external availability/visible state, and delivery records.
   `CommerceState` lists student components and reads assertions from the
   `commerce-client` projection, displaying stored status, ID, and optional time.
+  Without `checks` (an imported session) it omits the lesson checks, which
+  `ImportedChecks` shows instead.
 - **Presentation/runtime separation:** host state and tasks are never rendered.
   Passing an unsafe lesson verifies the expected failure assertion; it does not
   imply a safe business outcome. These facts are the current published projection,
   not state reconstructed for a selected historical observation.
+
+## `scenario-file.ts`
+
+[Source](../src/scenario-file.ts)
+
+- **Responsibility:** the main thread's side of importing a scenario file.
+- **Imports and boundaries:** the `ScenarioDocumentLimits` constant and
+  contract types only. No parser, validator, or catalog registry.
+- **State and protocol:** `oversized` rejects a file whose `File.size` exceeds
+  the document byte limit before it is read. `explainDiagnostic` is the
+  main-thread table of plain explanations keyed by document and scenario code;
+  `errorDiagnostics` reads `{ diagnostics }` from an error context.
+- **Presentation/runtime separation:** pure. It never reads, parses, or
+  interprets document text.
+
+## `ImportedScenario.tsx`
+
+[Source](../src/ImportedScenario.tsx)
+
+- **Responsibility:** render an imported session's run header and checks, and a
+  failed import's diagnostics (ADR-006).
+- **Imports and boundaries:** contract types, `CheckItem`, `importedChecks`, and
+  `scenario-file.ts`.
+- **State and protocol:** `ImportedHeader` shows an "Imported" text label, the
+  title, `scenario.name`, seed, catalog reference, short digest, short `runId`,
+  and the authorship note. `ImportedChecks` reads stored verdicts from the client
+  projection and labels from `presentation.assertions`. `DocumentDiagnostics`
+  lists each path, code, and explanation.
+- **Presentation/runtime separation:** every document string is a React text
+  node, never HTML or Markdown.
 
 ## `ui-hint.tsx`
 
@@ -583,7 +632,7 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 [Source](../src/worker/adapter.ts)
 
 - **Responsibility:** serve as the runtime composition root, construct packaged
-  scenario sessions, delegate controls to Simulation, and publish projections.
+  and imported scenario sessions, delegate controls to Simulation, and publish projections.
 - **Imports and boundaries:** shared application types; checkout/commerce
   catalogs, assessments, and packaged documents from `@distlab/catalogs`;
   `canonicalEncode` from `@distlab/kernel`; engine/normalization/session from
@@ -594,7 +643,12 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   accepts only canonical-equal copies of the two checkout documents or ten
   packaged commerce lessons, then takes that lesson's overlay policy from its
   own catalog and calls `composeOverlay` (ADR-004 stages 3 and 4) before
-  creating the session from the applied document. A rejected overlay returns
+  creating the session from the applied document. A `load.document` is
+  validated with `validateScenarioDocument` against `hostedCatalogs`; a
+  rejection returns `INVALID_DOCUMENT` with `{ diagnostics }`. An accepted
+  document's own policy governs its overlay, `loaded.document` carries the
+  normalized document, and `session.origin` its digest and catalog reference.
+  Student projections are chosen by the session's catalog reference. A rejected overlay returns
   `INVALID_OVERLAY` with `{ diagnostics }`; `loaded` carries the applied
   `SessionIdentity`. Load failure
   exposes no old session. Concurrent non-pause controls get `CONTROL_BUSY`;
@@ -618,10 +672,10 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Responsibility:** form authorized student read models from assessment data.
 - **Imports and boundaries:** shared architecture, canonical-value, and
   component-projection types only; used by the worker adapter.
-- **State and protocol:** `studentComponents` exposes checkout client
-  request/outcome, service lifecycle/process generation and committed
-  revision/tables, selected processor authorization fields, and bus delivery
-  facts. `commerceComponents` exposes service committed rows and declared KV
+- **State and protocol:** `checkoutComponents` derives checkout entries from
+  the normalized architecture: client request/outcome plus assertion results,
+  service lifecycle/process generation and committed revision/tables, selected
+  external authorization fields, and destination-scoped bus delivery facts. `commerceComponents` exposes service committed rows and declared KV
   entries/metrics, client-observed state plus assertion results, declared
   external availability/visible state, and destination-scoped delivery records.
   Helpers validate the expected record shapes and use explicit absent-state

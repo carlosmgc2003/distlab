@@ -45,7 +45,10 @@ export function isWorkerCommand(value: unknown): value is WorkerCommand {
   if (!isCanonical(value) || !record(value) || value.version !== 1 || !text(value.requestId)) return false;
   const base = ["version", "requestId", "type"];
   switch (value.type) {
-    case "load": return keys(value, [...base, "scenario"], ["overlay"]);
+    // ADR-006: exactly one of a packaged `scenario` and the raw text of an imported `document`.
+    case "load": return Object.hasOwn(value, "document")
+      ? keys(value, [...base, "document"], ["overlay"]) && typeof value.document === "string"
+      : keys(value, [...base, "scenario"], ["overlay"]);
     case "run": return keys(value, base, ["maxEvents"]) && (!Object.hasOwn(value, "maxEvents") || count(value.maxEvents));
     case "pause": case "step": case "reset": return keys(value, base);
     default: return false;
@@ -100,6 +103,23 @@ function isOrigin(value: unknown): boolean {
     && record(catalog) && keys(catalog, ["id", "version"]) && text(catalog.id) && text(catalog.version);
 }
 
+/**
+ * Shape only, for the fields the main thread renders: the worker already parsed and validated the
+ * document. Presentation text must be strings, because the UI renders it as text nodes.
+ */
+function isScenarioDocument(value: unknown): boolean {
+  if (!record(value) || !keys(value, ["format", "formatVersion", "catalog", "presentation", "scenario"], ["overlayPolicy"])) return false;
+  const { catalog, presentation, scenario } = value;
+  if (value.format !== "distlab.scenario" || value.formatVersion !== 1) return false;
+  if (!record(catalog) || !keys(catalog, ["id", "version"]) || !text(catalog.id) || !text(catalog.version)) return false;
+  if (!record(presentation) || !keys(presentation, ["title"], ["summary", "assertions"]) || typeof presentation.title !== "string") return false;
+  if (Object.hasOwn(presentation, "summary") && typeof presentation.summary !== "string") return false;
+  const labels = presentation.assertions;
+  if (Object.hasOwn(presentation, "assertions") && !(record(labels) && Object.values(labels).every(label => typeof label === "string"))) return false;
+  return record(scenario) && text(scenario.name) && text(scenario.seed) && record(scenario.architecture)
+    && (!Object.hasOwn(value, "overlayPolicy") || record(value.overlayPolicy));
+}
+
 export function isWorkerEvent(value: unknown): value is WorkerEvent {
   if (!isCanonical(value) || !record(value) || value.version !== 1) return false;
   if (value.type === "projection.updated") return keys(value, ["version", "type", "projection"], ["requestId"])
@@ -108,7 +128,8 @@ export function isWorkerEvent(value: unknown): value is WorkerEvent {
   const base = ["version", "requestId", "type"];
   switch (value.type) {
     case "accepted": return keys(value, base);
-    case "loaded": return keys(value, [...base, "projection", "session"]) && isProjection(value.projection) && isSession(value.session);
+    case "loaded": return keys(value, [...base, "projection", "session"], ["document"]) && isProjection(value.projection) && isSession(value.session)
+      && (!Object.hasOwn(value, "document") || isScenarioDocument(value.document));
     case "run.finished": return keys(value, [...base, "status"]) && oneOf(value.status, ["PAUSED", "COMPLETED", "FAILED"]);
     case "error": return keys(value, [...base, "error"]) && record(value.error) && keys(value.error, ["code", "message", "context"]) && text(value.error.code) && typeof value.error.message === "string";
     default: return false;

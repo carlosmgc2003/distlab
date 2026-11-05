@@ -59,18 +59,26 @@ modules may import application contracts, the host client, and the data-only
 `packages/catalogs/src/descriptors.ts`, and `packages/catalogs/src/commerce/descriptors.ts`
 modules; they must not import runtime model
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
-`@distlab/contracts`, and status is a projection field, not a new command.
-The host accepts only the two packaged checkout documents and seventeen packaged
+`@distlab/contracts`, and status is a projection field, not a new command. The
+only contract value the main thread imports is the `ScenarioDocumentLimits`
+constant.
+The host accepts the two packaged checkout documents and seventeen packaged
 commerce lessons, each optionally with a session overlay that the lesson's
-data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`). The
+data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`), and
+imported scenario documents against a hosted catalog, each optionally with an
+overlay that the document's own policy allows. The
 main thread never sends an applied document. Reset replays the applied overlay.
 Imported scenario documents follow `docs/spec/adr/006-scenario-documents.md`:
-the main thread sends the file text unparsed, and only the worker parses and
-validates it. Until that ADR is implemented the host accepts packaged lessons only. Simulation exposes explicit pending-event, processed-event,
+the main thread checks `File.size`, sends the file text unparsed, and never
+imports the document parser, validator, or hosted catalog registry; only the
+worker parses and validates it. Simulation exposes explicit pending-event, processed-event,
 and random-draw counters; never infer these from arbitrary/redacted history.
+Student projections are chosen by catalog reference and derived from the
+normalized architecture, never from fixed component IDs.
 Commerce student projections expose committed business rows, live KV entries with their expiry, client
 outcomes, declared external-visible state, delivery facts, dead letters, and
-assertion results; runtime tasks and provider counters remain host-only. Architecture playback in
+assertion results; the checkout client projection carries assertion results
+too. Runtime tasks and provider counters remain host-only. Architecture playback in
 `apps/web/src/flight.ts` and `apps/web/src/flight-playback.ts` is presentation
 over records the worker already published: a host timer may move the playback
 cursor and paint a movement token on a measured link path, and it must not

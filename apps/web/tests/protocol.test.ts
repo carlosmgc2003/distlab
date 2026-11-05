@@ -7,8 +7,12 @@ test("commands use exactly the specified discriminants, version and canonical pa
   for (const type of ["pause", "step", "reset"]) assert.ok(isWorkerCommand({ version: 1, requestId: "x", type }));
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {} }));
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, overlay: { version: 1 } }), "the overlay is an optional canonical field of load");
-  for (const extra of [{ policy: {} }, { document: {} }]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, ...extra }), false);
-  assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", document: "{}" }), false, "the host accepts packaged lessons only until the ADR-006 load path lands");
+  for (const extra of [{ policy: {} }, { document: {} }, { document: "{}" }]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", scenario: {}, ...extra }), false);
+  // ADR-006: load carries exactly one of a packaged scenario and the raw text of an imported document.
+  assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", document: "{}" }));
+  assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "load", document: "", overlay: { version: 1 } }), "empty text is a document syntax diagnostic, not a malformed command");
+  for (const document of [{}, 1, null, ["{}"]]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load", document }), false, "the document is the file text, never a parsed value");
+  assert.equal(isWorkerCommand({ version: 1, requestId: "x", type: "load" }), false, "a load names a scenario or a document");
   for (const type of ["run", "reset", "step", "pause"]) assert.equal(isWorkerCommand({ version: 1, requestId: "x", type, overlay: { version: 1 } }), false, `${type} takes no overlay`);
   assert.ok(isWorkerCommand({ version: 1, requestId: "x", type: "run", maxEvents: 0 }));
   for (const change of [{ version: 2 }, { requestId: "" }, { type: "status" }, { maxEvents: -1 }, { maxEvents: 1.5 }, { maxEvents: undefined }, { maxEvents: Infinity }, { sessionId: "invented" }]) {
@@ -37,7 +41,21 @@ test("events validate nested projections and reject extra capability fields", ()
   assert.ok(isWorkerEvent({ ...event, session: { ...session(), origin: imported } }), "an imported origin names its digest and catalog");
   const architecture = { slots: [{ component: "notify", model: "demo.mailer", version: "1", options: [] }], bindings: [], resources: [], subscriptions: [] };
   assert.ok(isWorkerEvent({ ...event, session: { ...session(), overlay: { ...session().overlay, architecture } } }), "an applied overlay may carry architecture edits");
+  const document = {
+    format: "distlab.scenario", formatVersion: 1, catalog: { id: "mvp.checkout", version: "1.0.0" },
+    presentation: { title: "Processor response lost", assertions: { "order-not-charged-twice": "The customer is charged at most once." } },
+    scenario: { version: 1, name: "processor-response-lost@1", seed: "processor-response-lost-1", architecture: {} },
+  };
+  assert.ok(isWorkerEvent({ ...event, session: { ...session(), origin: imported }, document }), "loaded may carry the normalized imported document");
+  assert.ok(isWorkerEvent({ ...event, document: { ...document, overlayPolicy: { version: 1 } } }));
   for (const broken of [
+    { ...event, document: { ...document, format: "other" } },
+    { ...event, document: { ...document, formatVersion: 2 } },
+    { ...event, document: { ...document, presentation: { title: 1 } } },
+    { ...event, document: { ...document, presentation: { ...document.presentation, summary: { html: "<b>x</b>" } } } },
+    { ...event, document: { ...document, presentation: { ...document.presentation, assertions: { "order-not-charged-twice": 1 } } } },
+    { ...event, document: { ...document, script: "alert(1)" } },
+    { ...event, document: "{}" },
     { ...event, session: { ...session(), overlay: { ...session().overlay, architecture: { slots: [] } } } },
     { ...event, session: { ...session(), overlay: { ...session().overlay, architecture: { ...architecture, links: [] } } } },
     { ...event, version: 2 },

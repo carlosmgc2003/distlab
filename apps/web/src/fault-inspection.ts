@@ -56,7 +56,22 @@ export interface EvidenceLink {
   readonly time: number;
 }
 
+/**
+ * Which component plays each checkout role. Read from the architecture projection's
+ * versioned models, never from fixed component IDs, so an imported checkout document
+ * with other IDs shows the same facts (ADR-006).
+ */
+export interface CheckoutRoles {
+  readonly client: string | null;
+  readonly orders: string | null;
+  readonly payments: string | null;
+  readonly processor: string | null;
+  /** Every MessageBus destination with student-visible delivery records. */
+  readonly destinations: readonly string[];
+}
+
 export interface FaultReport {
+  readonly roles: CheckoutRoles;
   readonly scenarioName: string;
   readonly seed: string;
   readonly lesson: string | null;
@@ -227,6 +242,17 @@ function knowledge(studentFactsPresent: boolean, payments: readonly PaymentFact[
   return `${local}. The Payment Processor visible ledger shows ${remote}. ${relation} ${TIMEOUT_BOUNDARY}`;
 }
 
+function checkoutRoles(projection: RuntimeProjectionSet): CheckoutRoles {
+  const byModel = (model: string) => projection.architecture.components.find(item => item.model === model)?.id ?? null;
+  return {
+    client: byModel("distlab.customer-app"),
+    orders: byModel("distlab.orders"),
+    payments: byModel("distlab.payments"),
+    processor: byModel("distlab.payment-processor"),
+    destinations: projection.components.filter(item => item.visibility === "student" && isRecord(item.state) && item.state.role === "bus-delivery").map(item => item.componentId),
+  };
+}
+
 /** Read-only lesson view. Host-visibility state is ignored. */
 export function inspectFaults(projection: RuntimeProjectionSet, scenario: ScenarioDefinition): FaultReport {
   const observations = projection.history.observations;
@@ -242,24 +268,27 @@ export function inspectFaults(projection: RuntimeProjectionSet, scenario: Scenar
     status: selected.has(fault.id) ? "selected" : "recorded",
   }));
   const faultStatus = faults.length === 0 ? "not recorded" : faults.every(fault => fault.status === "selected") ? "selected" : "recorded";
-  const orders = serviceSnapshot(studentState(projection, "orders"));
-  const paymentsService = serviceSnapshot(studentState(projection, "payments"));
+  const roles = checkoutRoles(projection);
+  const state = (id: string | null) => id === null ? null : studentState(projection, id);
+  const orders = serviceSnapshot(state(roles.orders));
+  const paymentsService = serviceSnapshot(state(roles.payments));
   const paymentRowsFound = paymentRows(paymentsService);
-  const authorizations = authorizationsOf(studentState(projection, "payment-processor"));
-  const client = studentState(projection, "customer-app");
+  const authorizations = authorizationsOf(state(roles.processor));
+  const client = state(roles.client);
   const evidence = [
     ...faults.map(fault => link("Show fault selection", faultSelection(observations, fault.id))),
     link("Show dropped processor response", lastObservation(observations, "network.response.dropped")),
-    link("Show processor authorization", lastObservation(observations, "external.effect.committed", "payment-processor")),
-    link("Show Payments timeout", lastObservation(observations, "network.request.timedout", "payments")),
+    roles.processor ? link("Show processor authorization", lastObservation(observations, "external.effect.committed", roles.processor)) : null,
+    roles.payments ? link("Show Payments timeout", lastObservation(observations, "network.request.timedout", roles.payments)) : null,
     link("Show bus acknowledgement", lastObservation(observations, "message.acknowledged")),
-    link("Show Orders lifecycle", lastObservation(observations, "service.lifecycle.changed", "orders")),
-    link("Show Payments lifecycle", lastObservation(observations, "service.lifecycle.changed", "payments")),
+    roles.orders ? link("Show Orders lifecycle", lastObservation(observations, "service.lifecycle.changed", roles.orders)) : null,
+    roles.payments ? link("Show Payments lifecycle", lastObservation(observations, "service.lifecycle.changed", roles.payments)) : null,
   ].filter((item): item is EvidenceLink => item !== null);
   const lesson = scenario.name === "checkout-normal@1" ? checkoutLesson.normal.explanation
     : scenario.name === "checkout-processor-response-lost@1" ? checkoutLesson["response-lost"].explanation
       : null;
   return {
+    roles,
     scenarioName: scenario.name,
     seed: scenario.seed,
     lesson,
@@ -272,7 +301,7 @@ export function inspectFaults(projection: RuntimeProjectionSet, scenario: Scenar
     paymentsService,
     paymentRows: paymentRowsFound,
     authorizations,
-    deliveries: deliveriesOf(studentState(projection, "OrderCreated")),
+    deliveries: roles.destinations.flatMap(id => deliveriesOf(studentState(projection, id))),
     clientRequest: client && client.role === "client-observed" ? formatValue(client.request ?? null) : "not projected",
     clientOutcome: client && client.role === "client-observed" ? formatValue(client.outcome ?? null) : "not projected",
     evidence,
