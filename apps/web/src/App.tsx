@@ -229,10 +229,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const breakPanel = policy && lesson ? <BreakPanel key={sessionName} policy={policy} architecture={lesson.architecture}
     applied={applied} draft={draft} onDraftChange={setDraft} parameters={choiceDraft} choicesPending={choicesPending} editable={editable}
     rejected={rejectedFaults} onApply={applyDraft} picking={picking} onPickingChange={setPicking} pick={pick} open={breakOpen} onOpenChange={setBreakOpen}
-    hidden={projection !== null && tab !== "architecture"} />
-    : imported && importedScenario ? <section className="break-panel" aria-label="Break the system" hidden={projection !== null && tab !== "architecture"}>
-      <p className="break-summary">This scenario accepts no student changes: its file declares no overlay policy.</p>
-    </section> : null;
+    hidden={projection !== null && tab !== "architecture"} /> : null;
   // Design choices exist only for lessons whose policy declares parameters.
   const choicesPanel = policy && policy.parameters.length ? <DesignChoicesPanel key={sessionName} policy={policy}
     applied={applied?.parameters ?? null} draft={choiceDraft} onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices}
@@ -313,6 +310,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
       {imported && importedScenario ? <aside className="learning-prompt" aria-label="Learning objective">
         {/* Imported sessions have no paired lesson, so Compare is unavailable. */}
         <ImportedHeader document={importedScenario} origin={snapshot.session?.origin} runId={projection.simulation.runId} />
+        {/* Without an overlay policy there is no Break panel; say so where the scenario is described (ADR-006). */}
+        {policy ? null : <span className="imported-locked">This scenario accepts no student changes: its file declares no overlay policy.</span>}
         {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length) ? <span className="run-identity" aria-label="Applied student changes">
           {snapshot.session.overlay.parameters.length ? `${describeChoices(snapshot.session.overlay.parameters)} · ` : ""}{appliedEntries.length} student fault{appliedEntries.length === 1 ? "" : "s"}
         </span> : null}

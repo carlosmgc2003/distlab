@@ -69,7 +69,7 @@ export function DocumentDiagnostics({ fileName, diagnostics, loaded }: {
   return <section className="document-diagnostics" aria-labelledby="document-diagnostics-heading">
     <h2 id="document-diagnostics-heading">The scenario file was not loaded</h2>
     <p><span className="file-name">{fileName}</span> has {diagnostics.length} problem{diagnostics.length === 1 ? "" : "s"}.
-      {loaded ? " The current session is unchanged." : " No session is loaded."} Fix the file, then open it again with Open scenario file….</p>
+      {loaded ? " The current session is unchanged." : " No session is loaded."} Fix the file, then open it again.</p>
     <ul aria-label="Scenario file problems">{diagnostics.map((item, index) => <li key={`${item.path}:${item.code}:${index}`}>
       <code>{diagnosticPath(item.path)}</code> <code>{item.code}</code> — {explainDiagnostic(item.code)}
     </li>)}</ul>

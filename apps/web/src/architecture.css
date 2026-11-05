@@ -669,7 +669,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .imported-header p { margin: 0; }
 .imported-identity { font-variant-numeric: tabular-nums; }
 .origin-label { display: inline-block; padding: 0 6px; border: 1px solid var(--action-primary); border-radius: 4px; color: var(--action-primary); font-weight: 700; font-size: .8rem; letter-spacing: .02em; }
-.imported-summary, .authorship-note { color: var(--text-secondary); font-size: .85rem; }
+.imported-summary, .authorship-note, .imported-locked { color: var(--text-secondary); font-size: .85rem; }
 .panel-architecture:has(.imported-checks) { overflow: auto; }
 .panel-architecture:has(.imported-checks) > .architecture-layout { flex: 0 0 28rem; min-height: 28rem; }
 .imported-checks { flex: none; padding: 1rem; }
