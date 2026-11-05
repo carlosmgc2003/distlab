@@ -1,32 +1,69 @@
-import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, LessonOverlayPolicy, RuntimeProjectionSet, ScenarioDiagnostic, SessionIdentity, WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { checkoutAssessment, checkoutCatalog, checkoutOverlayPolicy, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "@distlab/catalogs";
+import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, CatalogReference, LessonOverlayPolicy, RuntimeProjectionSet, ScenarioDiagnostic, ScenarioDocument, SessionIdentity, SessionOrigin, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { checkoutAssessment, checkoutCatalog, checkoutCatalogReference, checkoutOverlayPolicy, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceCatalogReference, commerceLessonNames, commerceOverlayPolicy, commerceScenario, hostedCatalogs } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
-import { DeterministicScenarioEngine, composeOverlay, normalizeScenario } from "@distlab/scenario";
-import type { DeterministicScenarioSession } from "@distlab/scenario";
+import { DeterministicScenarioEngine, composeOverlay, normalizeScenario, validateScenarioDocument } from "@distlab/scenario";
+import type { DeterministicScenarioSession, HostedCatalog } from "@distlab/scenario";
 import { applicationError, detached, isCanonical, isWorkerCommand, requestIdOf } from "../protocol.ts";
-import { commerceComponents, studentComponents } from "./student-projection.ts";
+import { checkoutComponents, commerceComponents } from "./student-projection.ts";
 
-interface PackagedLesson {
+/** One loadable input: a scenario, the policy that governs its overlays, and the hosted catalog it runs against. */
+interface Lesson {
   readonly scenario: CanonicalValue;
-  readonly policy: LessonOverlayPolicy;
-  readonly commerce: boolean;
+  /** Absent only for an imported document without `overlayPolicy`, which accepts the empty overlay alone. */
+  readonly policy: LessonOverlayPolicy | undefined;
+  readonly hosted: HostedCatalog;
+  readonly origin: SessionOrigin;
+  /** Present only for an imported session: the normalized document the worker validated. */
+  readonly document?: ScenarioDocument;
 }
 
-/** The only documents the host accepts, each with the overlay policy from the worker's own catalog. */
-const packagedLessons: readonly PackagedLesson[] = [
-  { scenario: normalCheckout, policy: checkoutOverlayPolicy("normal"), commerce: false },
-  { scenario: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), commerce: false },
-  ...commerceLessonNames.map(name => ({ scenario: commerceScenario(name), policy: commerceOverlayPolicy(name), commerce: true })),
+const checkoutHosted: HostedCatalog = { catalog: checkoutCatalog, assessment: checkoutAssessment };
+const commerceHosted: HostedCatalog = { catalog: commerceCatalog, assessment: commerceAssessment };
+const packagedOrigin: SessionOrigin = { kind: "packaged" };
+
+/** The packaged documents the host accepts, each with the overlay policy from the worker's own catalog. */
+const packagedLessons: readonly Lesson[] = [
+  { scenario: normalCheckout, policy: checkoutOverlayPolicy("normal"), hosted: checkoutHosted, origin: packagedOrigin },
+  { scenario: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), hosted: checkoutHosted, origin: packagedOrigin },
+  ...commerceLessonNames.map(name => ({ scenario: commerceScenario(name), policy: commerceOverlayPolicy(name), hosted: commerceHosted, origin: packagedOrigin })),
 ];
+
+const sameReference = (left: CatalogReference, right: CatalogReference) => left.id === right.id && left.version === right.version;
 
 class OverlayRejected {
   readonly diagnostics: readonly ScenarioDiagnostic[];
   constructor(diagnostics: readonly ScenarioDiagnostic[]) { this.diagnostics = diagnostics; }
 }
 
+class DocumentRejected {
+  readonly diagnostics: readonly ScenarioDiagnostic[];
+  constructor(diagnostics: readonly ScenarioDiagnostic[]) { this.diagnostics = diagnostics; }
+}
+
+/**
+ * Resolves a `load` to one lesson. A packaged scenario must equal a packaged
+ * document exactly. An imported document (ADR-006) is parsed, bounded, and
+ * validated here, against the worker's own hosted catalog registry, and its
+ * overlay policy comes from that validated document.
+ */
+function resolveLesson(command: Extract<WorkerCommand, { type: "load" }>): Lesson {
+  if (command.document !== undefined) {
+    const validated = validateScenarioDocument(command.document, hostedCatalogs);
+    if (!validated.ok) throw new DocumentRejected(validated.diagnostics);
+    const { document, digest, hosted } = validated;
+    return { scenario: validated.scenario, policy: document.overlayPolicy, hosted, document,
+      origin: { kind: "imported", digest, catalog: { id: document.catalog.id, version: document.catalog.version } } };
+  }
+  const encoded = canonicalEncode(command.scenario);
+  const lesson = packagedLessons.find(item => canonicalEncode(item.scenario) === encoded);
+  if (!lesson) throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios and imported scenario documents are supported." } };
+  return lesson;
+}
+
 /** The sole runtime composition root. The transport delegates every control to Simulation. */
 export class WorkerAdapter {
-  #commerce = false;
+  /** The hosted catalog the loaded session runs against. Student projections are chosen by this reference. */
+  #catalog: CatalogReference = checkoutCatalogReference;
   #definition: ArchitectureDefinition | undefined;
   readonly #send: (event: WorkerEvent) => void;
   #session: DeterministicScenarioSession | undefined;
@@ -65,27 +102,25 @@ export class WorkerAdapter {
       if (command.type === "load") {
         // Construction is atomic from the host's perspective: failures expose no old session.
         this.#session = undefined; this.#architecture = undefined;
-        // ADR-004 order: command shape (checked on receive), packaged document, overlay, applied document.
-        // Imported documents (ADR-006) fail the command-shape check on receive until the worker load path lands.
-        if (command.scenario === undefined) throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
-        const encoded = canonicalEncode(command.scenario);
-        const lesson = packagedLessons.find(item => canonicalEncode(item.scenario) === encoded);
-        if (!lesson) throw { code: "INVALID_SCENARIO", context: { reason: "Only packaged scenarios are supported." } };
-        this.#commerce = lesson.commerce;
-        const catalog = this.#commerce ? commerceCatalog : checkoutCatalog;
-        const assessment = this.#commerce ? commerceAssessment : checkoutAssessment;
+        // ADR-004 order: command shape (checked on receive), packaged document or imported document, overlay, applied document.
+        const lesson = resolveLesson(command);
+        const { catalog, assessment } = lesson.hosted;
+        this.#catalog = { id: catalog.id, version: catalog.version };
         const engine = new DeterministicScenarioEngine({ catalog, assessment });
-        // The policy, including any architecture allowance, comes from this catalog, never from the command.
+        // The policy, including any architecture allowance, comes from this catalog or the validated document, never from the command.
         const composed = composeOverlay(lesson.scenario, lesson.policy, command.overlay, document => engine.validate(document), catalog);
         if (!composed.ok && composed.code === "INVALID_OVERLAY") throw new OverlayRejected(composed.diagnostics);
+        // An imported document was already validated on its own, so a remaining diagnostic is the overlay's, never a catalog defect (ADR-006).
+        if (!composed.ok && lesson.document) throw new OverlayRejected([...new Set(composed.diagnostics.map(item => item.code))].sort().map(code => ({ path: "", code })));
         if (!composed.ok) throw { code: "INVALID_SCENARIO", context: composed.diagnostics };
         const session = engine.create(composed.document);
         const normalized = normalizeScenario(composed.document, catalog, assessment).scenario!;
         this.#definition = normalized.architecture;
         this.#architecture = architectureProjection(normalized.architecture);
         this.#session = session;
-        const identity: SessionIdentity = { lesson: normalized.name, seed: normalized.seed, overlay: composed.overlay, origin: { kind: "packaged" } };
-        this.#emit({ version: 1, requestId: command.requestId, type: "loaded", projection: this.#project(), session: identity });
+        const identity: SessionIdentity = { lesson: normalized.name, seed: normalized.seed, overlay: composed.overlay, origin: lesson.origin };
+        this.#emit({ version: 1, requestId: command.requestId, type: "loaded", projection: this.#project(), session: identity,
+          ...(lesson.document ? { document: lesson.document } : {}) });
         return;
       }
       if (!this.#session) { this.#noSession(command.requestId); return; }
@@ -104,6 +139,13 @@ export class WorkerAdapter {
         this.#publish(command.requestId);
       }
     } catch (error) {
+      if (error instanceof DocumentRejected) {
+        // Stages 2 to 5 of ADR-006 validation. No session stays exposed; the main thread keeps the file text.
+        this.#session = undefined; this.#architecture = undefined;
+        this.#emit({ version: 1, requestId: command.requestId, type: "error", error: applicationError("INVALID_DOCUMENT",
+          "The scenario document is not valid.", { diagnostics: detached(error.diagnostics) as unknown as CanonicalValue }) });
+        return;
+      }
       if (error instanceof OverlayRejected) {
         // A rejected load follows the atomic rule: no session stays exposed. The draft lives on the main thread.
         this.#session = undefined; this.#architecture = undefined;
@@ -164,6 +206,7 @@ export class WorkerAdapter {
     const history = session.simulation.history.export();
     const { pendingEvents, processedEvents, randomDrawCount } = session.simulation;
     const components = read.components as Readonly<Record<string, CanonicalValue>>;
+    const results = detached(session.results()) as unknown as CanonicalValue;
     return detached({
       architecture: this.#architecture!,
       simulation: {
@@ -174,7 +217,8 @@ export class WorkerAdapter {
       components: [
         // Host entries preserve the assessment read model and stay unrendered.
         ...Object.entries(components).map(([componentId, state]) => ({ componentId, state, visibility: "host" as const })),
-        ...(this.#commerce ? commerceComponents(read, this.#definition!, detached(session.results()) as unknown as CanonicalValue) : studentComponents(read)),
+        ...(sameReference(this.#catalog, commerceCatalogReference) ? commerceComponents(read, this.#definition!, results)
+          : checkoutComponents(read, this.#definition!, results)),
       ],
     });
   }

@@ -118,13 +118,20 @@ export function commerceComponents(read: AssessmentRead & { readonly stores: Can
   ];
 }
 
-/** Student-visible checkout facts copied from the assessment read model. */
-export function studentComponents(read: AssessmentRead): ComponentStateProjection[] {
+/**
+ * Student-visible checkout facts copied from the assessment read model. Derived
+ * from the normalized architecture, never from fixed component IDs (ADR-006), so
+ * an imported checkout document with other IDs projects the same facts. The
+ * client carries the stored assertion verdicts, as the commerce client does.
+ */
+export function checkoutComponents(read: AssessmentRead, architecture: ArchitectureDefinition, assertions: CanonicalValue): ComponentStateProjection[] {
   return [
-    { componentId: "customer-app", visibility: "student", state: client(read.components, "customer-app") },
-    { componentId: "orders", visibility: "student", state: service(read.components, read.databases, "orders") },
-    { componentId: "payments", visibility: "student", state: service(read.components, read.databases, "payments") },
-    { componentId: "payment-processor", visibility: "student", state: { role: "external-visible", authorizations: authorizations(read.components, "payment-processor") } },
-    { componentId: "OrderCreated", visibility: "student", state: { role: "bus-delivery", records: deliveries(read.messageBus) } },
+    ...architecture.components.map(({ id, kind }): ComponentStateProjection => ({ componentId: id, visibility: "student", state:
+      kind === "client" ? { ...client(read.components, id) as Record<string, CanonicalValue>, assertions }
+        : kind === "service" ? service(read.components, read.databases, id)
+          : { role: "external-visible", authorizations: authorizations(read.components, id) } })),
+    ...architecture.destinations.map(({ id }): ComponentStateProjection => ({ componentId: id, visibility: "student", state: {
+      role: "bus-delivery", records: deliveries(read.messageBus).filter(item => isRecord(item) && item.destination === id),
+    } })),
   ];
 }
