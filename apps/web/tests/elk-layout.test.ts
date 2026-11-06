@@ -85,6 +85,25 @@ function beforeMetrics(nodes: readonly AnyNode[], edges: readonly AnyEdge[]) {
   return metrics(all, drawn);
 }
 
+/** Route ends that do not touch the border of their own node (arrowheads must land on the node). */
+function detachedEnds(edges: readonly LayoutEdge[], all: readonly Box[]): string[] {
+  const byId = new Map(all.map(box => [box.id, box]));
+  const onBorder = (point: XYPosition, box: Box) => {
+    const inX = point.x >= box.x - 1.5 && point.x <= box.x + box.width + 1.5;
+    const inY = point.y >= box.y - 1.5 && point.y <= box.y + box.height + 1.5;
+    const nearX = Math.abs(point.x - box.x) <= 1.5 || Math.abs(point.x - box.x - box.width) <= 1.5;
+    const nearY = Math.abs(point.y - box.y) <= 1.5 || Math.abs(point.y - box.y - box.height) <= 1.5;
+    return (inX && nearY) || (inY && nearX);
+  };
+  return edges.flatMap(edge => {
+    const points = edge.data!.route!.points;
+    return [
+      ...onBorder(points[0]!, byId.get(edge.source)!) ? [] : [`${edge.id} start`],
+      ...onBorder(points.at(-1)!, byId.get(edge.target)!) ? [] : [`${edge.id} end`],
+    ];
+  });
+}
+
 async function loadPackaged(index: number) {
   const events: WorkerEvent[] = [];
   await new WorkerAdapter(event => events.push(event)).receive({ version: 1, requestId: "layout", type: "load", scenario: scenarios[index]!.scenario });
@@ -138,10 +157,13 @@ test("every packaged lesson lays out without overlaps or edges through foreign n
     const projection = await loadPackaged(index);
     const metadata = packagedMetadata(choice);
     const { nodes, edges } = graphOf(projection.architecture, metadata.architecture, metadata.name);
-    const laid = await elkLayout(nodes, edges, options);
-    const all = boxes(laid.nodes);
-    assert.deepEqual(overlappingPairs(all), [], metadata.name);
-    assert.deepEqual(nodeIntrusions(routes(laid.edges), all), [], metadata.name);
+    for (const asyncEdges of ["layout", "route-after"] as const) {
+      const laid = await elkLayout(nodes, edges, { ...options, asyncEdges });
+      const all = boxes(laid.nodes);
+      assert.deepEqual(overlappingPairs(all), [], `${metadata.name} ${asyncEdges}`);
+      assert.deepEqual(nodeIntrusions(routes(laid.edges), all), [], `${metadata.name} ${asyncEdges}`);
+      assert.deepEqual(detachedEnds(laid.edges, all), [], `${metadata.name} ${asyncEdges}`);
+    }
   }
 });
 
@@ -253,4 +275,57 @@ test("layout is deterministic and leaves its inputs untouched", async () => {
   const second = await elkLayout(nodes, edges, options);
   assert.deepEqual(first, second);
   assert.equal(JSON.stringify({ nodes, edges }), before);
+});
+
+/**
+ * Pairs of component nodes whose left-to-right order differs between two
+ * layouts: one strictly left of the other in `reference` but strictly right of
+ * it in `laid`, or two nodes of one reference column whose vertical order flips.
+ */
+function orderChanges(reference: readonly LayoutNode[], laid: readonly LayoutNode[]): string[] {
+  const at = new Map(laid.map(node => [node.id, node.position]));
+  const components = reference.filter(node => node.type === "component");
+  const changes: string[] = [];
+  for (const a of components) {
+    for (const b of components) {
+      if (a.id >= b.id) continue;
+      const [ra, rb, la, lb] = [a.position, b.position, at.get(a.id)!, at.get(b.id)!];
+      if ((ra.x < rb.x && la.x > lb.x) || (ra.x > rb.x && la.x < lb.x)) changes.push(`${a.id}|${b.id} swap columns`);
+      if (ra.x === rb.x && la.x === lb.x && Math.sign(ra.y - rb.y) !== Math.sign(la.y - lb.y)) changes.push(`${a.id}|${b.id} swap rows`);
+    }
+  }
+  return changes;
+}
+
+test("the MessageBus is already split: one node per topic or queue, each bus link ends on its own destination", () => {
+  const { nodes, edges } = platformGraph();
+  const destinations = nodes.filter(node => node.type === "component" && (node.data.symbol === "topic" || node.data.symbol === "queue")).map(node => node.id).sort();
+  assert.deepEqual(destinations, ["OrderPlaced", "PaymentCaptured", "StockReserved", "UserRegistered"]);
+  for (const edge of edges) {
+    if (edge.data?.link !== "async") continue;
+    assert.ok(destinations.includes(edge.source) !== destinations.includes(edge.target), `${edge.id} joins a service and one destination`);
+  }
+});
+
+test("route-after places nodes from request and data links only, then routes the bus links", async () => {
+  const { nodes, edges } = platformGraph();
+  const withoutBus = await elkLayout(nodes, edges.filter(edge => edge.data?.link !== "async"), options);
+  const routeAfter = await elkLayout(nodes, edges, { ...options, asyncEdges: "route-after" });
+  // The placement a layout without bus links chose survives: no node changes sides, and nodes that
+  // share a layer keep their vertical order. ELK may still split a column into neighboring layers
+  // to make room for the bus links it routes in the second pass.
+  assert.deepEqual(orderChanges(withoutBus.nodes, routeAfter.nodes), []);
+  const all = boxes(routeAfter.nodes);
+  assert.deepEqual(overlappingPairs(all), []);
+  assert.deepEqual(nodeIntrusions(routes(routeAfter.edges), all), []);
+  const inLayout = await elkLayout(nodes, edges, options);
+  const compare = (name: string, laid: typeof inLayout) => {
+    const result = metrics(boxes(laid.nodes), routes(laid.edges));
+    console.log(`  ${name}: overlaps=${result.overlaps} crossings=${result.crossings} edges-through-nodes=${result.intrusions} edges-drawn-over-each-other=${result.sharedRuns}`);
+    return result;
+  };
+  console.log("async edge strategies (platform fixture)");
+  compare("layout     ", inLayout);
+  const after = compare("route-after", routeAfter);
+  assert.equal(after.sharedRuns, 0);
 });

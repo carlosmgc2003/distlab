@@ -58,9 +58,11 @@ export interface Size {
 export interface ElkLayoutOptions {
   readonly engine: ElkEngine;
   /**
-   * "layout": event links take part in placement. "route-after": nodes are placed
-   * from request and data links only, and a second pass routes event links
-   * around the fixed placement, so a busy topic cannot pull services toward it.
+   * "layout" (default): event links take part in placement. "route-after":
+   * nodes are placed from request and data links only, and a second pass routes
+   * the event links without moving any node across another, so a busy topic
+   * cannot pull services toward it. The MessageBus is already one node per
+   * destination; on the platform fixture "layout" leaves fewer crossings.
    */
   readonly asyncEdges?: "layout" | "route-after";
   /** Measured size of an edge label's text box; labels without a size get no reserved space. */
@@ -100,11 +102,15 @@ export const BASE_OPTIONS: Readonly<LayoutOptions> = {
   "elk.layered.thoroughness": "100",
 };
 
-/** Second pass of "route-after": keep the first pass's layers, order, and placement. */
+/**
+ * Second pass of "route-after". Each first-pass column becomes a partition and
+ * interactive layering keeps nodes in the column their x puts them in, so no
+ * node changes sides; semi-interactive crossing minimization keeps each layer's
+ * order from `elk.position` while it untangles the event edges. ELK may still
+ * split a column into neighboring layers to make room for those edges.
+ */
 const ROUTE_AFTER_OPTIONS: Readonly<LayoutOptions> = {
-  "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
   "elk.layered.layering.strategy": "INTERACTIVE",
-  // Keep each layer's node order from the first pass, but still untangle the new long event edges.
   "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
   "elk.layered.crossingMinimization.semiInteractive": "true",
 };
@@ -200,10 +206,16 @@ interface Port {
   readonly side: PortSide;
 }
 
+/** Where an earlier pass put a node: its position and its column (layer) among its siblings. */
+interface Placement {
+  readonly position: XYPosition;
+  readonly column: number;
+}
+
 interface Pass {
   readonly included: (edge: LayoutEdge) => boolean;
-  /** Positions from an earlier pass; switches ELK to its interactive strategies. */
-  readonly previous?: ReadonlyMap<string, XYPosition> | undefined;
+  /** Placement from an earlier pass: fixes layers and in-layer order, so only routing changes. */
+  readonly previous?: ReadonlyMap<string, Placement> | undefined;
   readonly pins?: PortPins | undefined;
 }
 
@@ -233,15 +245,18 @@ function buildGraph<N extends LayoutNode>(nodes: readonly N[], edges: readonly L
     childrenOf.set(node.parentId, [...childrenOf.get(node.parentId) ?? [], node]);
   }
   const toElk = (node: N): ElkNode => {
-    const partition = parents.has(node.id)
+    const earlier = previous?.get(node.id);
+    const partition = earlier ? earlier.column : parents.has(node.id)
       ? Math.min(tierOf(node), ...(childrenOf.get(node.id) ?? []).map(tierOf))
       : tierOf(node);
-    const at = previous?.get(node.id);
-    const position = at ? { x: at.x, y: at.y } : {};
+    const position = earlier ? { x: earlier.position.x, y: earlier.position.y } : {};
+    const pinned: LayoutOptions = earlier ? {
+      "elk.position": `(${earlier.position.x}, ${earlier.position.y})`,
+    } : {};
     if (parents.has(node.id)) {
       return {
         id: node.id, ...position,
-        layoutOptions: { "elk.padding": GROUP_PADDING, "elk.partitioning.activate": "true", "elk.partitioning.partition": String(partition) },
+        layoutOptions: { ...pinned, "elk.padding": GROUP_PADDING, "elk.partitioning.activate": "true", "elk.partitioning.partition": String(partition) },
         children: (childrenOf.get(node.id) ?? []).map(toElk),
       };
     }
@@ -250,6 +265,7 @@ function buildGraph<N extends LayoutNode>(nodes: readonly N[], edges: readonly L
     const block = row ? cluster(size, row) : { width: size.width, height: size.height, owner: { x: 0, y: 0 } };
     const order = row ? pins?.get(node.id) : undefined;
     const layoutOptions: LayoutOptions = {
+      ...pinned,
       "elk.portConstraints": order ? "FIXED_POS" : "FIXED_SIDE",
       "elk.partitioning.partition": String(partition),
     };
@@ -275,6 +291,11 @@ function buildGraph<N extends LayoutNode>(nodes: readonly N[], edges: readonly L
   };
 }
 
+const portSides: readonly string[] = ["NORTH", "EAST", "SOUTH", "WEST"] satisfies PortSide[];
+function isPortSide(value: string | undefined): value is PortSide {
+  return value !== undefined && portSides.includes(value);
+}
+
 /** ELK's port order on each side of every cluster, read from a FIXED_SIDE pass. */
 function portOrder(root: ElkNode, clusters: ReadonlySet<string>): PortPins {
   const pins = new Map<string, Map<PortSide, string[]>>();
@@ -283,8 +304,8 @@ function portOrder(root: ElkNode, clusters: ReadonlySet<string>): PortPins {
       if (clusters.has(child.id)) {
         const sides = new Map<PortSide, { id: string; at: number }[]>();
         for (const port of child.ports ?? []) {
-          const side = port.layoutOptions?.["elk.port.side"] as PortSide | undefined;
-          if (!side) continue;
+          const side = port.layoutOptions?.["elk.port.side"];
+          if (!isPortSide(side)) continue;
           const at = side === "NORTH" || side === "SOUTH" ? port.x ?? 0 : port.y ?? 0;
           sides.set(side, [...sides.get(side) ?? [], { id: port.id, at }]);
         }
@@ -331,6 +352,21 @@ function placements(root: ElkNode) {
   return { relative, absolute, sizes, edges };
 }
 
+/** Each node's parent-relative position and its column: the rank of its x among its siblings. */
+function columnsOf(root: ElkNode): Map<string, Placement> {
+  const result = new Map<string, Placement>();
+  const visit = (node: ElkNode) => {
+    const children = node.children ?? [];
+    const xs = [...new Set(children.map(child => child.x ?? 0))].sort((a, b) => a - b);
+    for (const child of children) {
+      result.set(child.id, { position: { x: child.x ?? 0, y: child.y ?? 0 }, column: xs.indexOf(child.x ?? 0) });
+      visit(child);
+    }
+  };
+  visit(root);
+  return result;
+}
+
 /**
  * ELK reports a section's points relative to the edge's container (the lowest
  * common ancestor of its ends), not to the canvas. Node positions stay relative
@@ -343,19 +379,19 @@ export function absoluteSectionPoints(section: ElkEdgeSection, containerOrigin: 
 
 /**
  * A cluster wider than its owner puts east and west ports on the block's side,
- * a few pixels out from the owner. The last horizontal run is extended to the
- * owner's own side. ELK's port ids end in ":source" or ":target".
+ * a few pixels out from the owner. The first and last horizontal runs are
+ * extended to the owner's own side.
  */
-function reachOwner(points: XYPosition[], edge: ElkExtendedEdge, inset: ReadonlyMap<string, number>): XYPosition[] {
+function reachOwner(points: XYPosition[], edge: LayoutEdge | undefined, inset: ReadonlyMap<string, number>): XYPosition[] {
   const result = points.map(point => ({ ...point }));
   const ends: [string | undefined, XYPosition | undefined, XYPosition | undefined][] = [
-    [edge.sources[0], result[0], result[1]], [edge.targets[0], result.at(-1), result.at(-2)],
+    [edge?.source, result[0], result[1]], [edge?.target, result.at(-1), result.at(-2)],
   ];
-  for (const [port, end, next] of ends) {
-    const owner = port?.replace(/:(source|target)$/, "");
+  for (const [owner, end, next] of ends) {
     const dx = owner ? inset.get(owner) ?? 0 : 0;
     if (!end || !next || dx === 0 || Math.abs(end.y - next.y) > 1e-6) continue;
-    end.x += next.x > end.x ? dx : -dx;
+    // Step away from the neighboring point, toward the owner inside the block.
+    end.x += next.x < end.x ? dx : -dx;
   }
   return result;
 }
@@ -382,7 +418,7 @@ export async function elkLayout<N extends LayoutNode, E extends LayoutEdge>(
   const laid = routeAfter
     ? await layoutPass(nodes, edges, options, {
       included: everything,
-      previous: placements(await layoutPass(nodes, edges, options, { included: edge => edge.data?.link !== "async" })).relative,
+      previous: columnsOf(await layoutPass(nodes, edges, options, { included: edge => edge.data?.link !== "async" })),
     })
     : await layoutPass(nodes, edges, options, { included: everything });
   const { relative, absolute, sizes, edges: laidEdges } = placements(laid);
@@ -413,13 +449,14 @@ export async function elkLayout<N extends LayoutNode, E extends LayoutEdge>(
     return parents.has(node.id) ? { ...node, position, width: size.width, height: size.height } : { ...node, position };
   });
   const routes = new Map<string, EdgeRoute>();
+  const edgeById = new Map<string, LayoutEdge>(edges.map(edge => [edge.id, edge]));
   for (const edge of laidEdges) {
     const section = edge.sections?.[0];
     if (!section) continue;
     const origin = absolute.get(edge.container ?? "root") ?? { x: 0, y: 0 };
     const label = edge.labels?.[0];
     routes.set(edge.id, {
-      points: reachOwner(absoluteSectionPoints(section, origin), edge, inset),
+      points: reachOwner(absoluteSectionPoints(section, origin), edgeById.get(edge.id), inset),
       ...(label?.x !== undefined && label.y !== undefined
         ? { label: { x: origin.x + label.x + (label.width ?? 0) / 2, y: origin.y + label.y + (label.height ?? 0) / 2 } }
         : {}),
