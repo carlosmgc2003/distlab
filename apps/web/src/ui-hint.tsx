@@ -89,7 +89,10 @@ export function HelpHint({ label, children, bodyId, className }: HelpHintProps) 
     onPointerLeave={event => { if (event.pointerType === "mouse") setHovered(false); }}
     onFocus={() => setFocused(true)}
     onBlur={() => setFocused(false)}
-    onKeyDown={event => { if (event.key === "Escape" && open) { event.stopPropagation(); close(); } }}>
+    onKeyDown={event => {
+      // Escape closes the open explanation only: inside a modal dialog it must not also close the dialog.
+      if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(); }
+    }}>
     <button ref={triggerRef} type="button" className="help-hint-trigger" aria-expanded={open} aria-controls={id}
       onClick={() => setPinned(value => !value)}>
       <span className="help-hint-icon" aria-hidden="true">i</span>

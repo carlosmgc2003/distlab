@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { loadLesson } from "./support/lesson.ts";
+import { applyMoreFilters, fillFilterField, filterByType, openMoreFilters, viewButton } from "./support/history.ts";
 
 declare global {
   interface Window {
@@ -62,26 +63,20 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.getByRole("heading", { name: "Recorded history", exact: true })).toBeVisible();
   await expect(page.locator("#timeline-order")).toContainText("it does not execute an event");
   const ready = await latestProjection(page);
-  const filterDrawer = page.locator(".history-filter-drawer");
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
+  const activeFilters = page.getByRole("list", { name: "Active filters", exact: true });
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
-  await page.getByLabel("Type", { exact: true }).fill("simulation.created");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await filterByType(page, "simulation.created");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
   // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
-  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
+  await expect(activeFilters).toHaveCount(0);
   await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
 
   await stepUntil(page, "network.request.sent");
-  await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await filterByType(page, "network.request.sent");
   const requestRows = page.locator("#timeline-rows button");
   await expect(requestRows).toHaveCount(1);
   const requestText = await requestRows.first().innerText();
@@ -93,8 +88,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   await stepUntil(page, "message.delivered");
-  await page.getByLabel("Type", { exact: true }).fill("message.delivered");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await filterByType(page, "message.delivered");
   await expect(page.locator("#timeline-rows button").first()).toContainText("message.delivered");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
@@ -103,8 +97,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(0);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
-  await page.getByLabel("Type", { exact: true }).fill("database.write.staged");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await filterByType(page, "database.write.staged");
   await page.locator("#timeline-rows button").first().click();
   const detail = page.locator("#inspection-panel");
   await expect(detail).toContainText("Before");
@@ -116,14 +109,14 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await detail.getByText("Related evidence", { exact: true }).click();
   await expect(detail.getByRole("heading", { name: "Causation" })).toBeVisible();
   await page.getByRole("button", { name: "Show this trace" }).click();
-  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
-  await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
   await expect(page.locator(".timeline-count")).not.toContainText(/^0 of /);
+  const dialog = await openMoreFilters(page);
+  await dialog.getByLabel("Filter by", { exact: true }).selectOption("traceId");
+  await expect(dialog.getByLabel("Trace", { exact: true })).not.toHaveValue("");
 
-  await page.getByLabel("Trace", { exact: true }).fill("");
-  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
-  await page.getByLabel("Type", { exact: true }).fill("scenario.assertion.evaluated");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await fillFilterField(page, "traceId", "");
+  await fillFilterField(page, "type", "scenario.assertion.evaluated");
+  await applyMoreFilters(page);
   const visible = await page.locator("#timeline-rows button").allInnerTexts();
   const parsed = visible.map(text => {
     const time = /t=(\d+)/.exec(text);
@@ -146,7 +139,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(status).toHaveText("READY");
   // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
+  await expect(activeFilters).toHaveCount(0);
   await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
   await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
@@ -168,7 +161,7 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   await expect(status).toHaveText("COMPLETED");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const observations = (await latestProjection(page)).history.observations;
-  await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Learning", exact: true }).click();
   await expect(page.getByRole("button", { name: "Learning", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".learning-group").first()).toContainText("Initial engine queue setup");
@@ -203,11 +196,7 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
-  const reducedDrawer = page.locator(".history-filter-drawer");
-  if ((await reducedDrawer.getAttribute("open")) === null) await reducedDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
-  await page.getByLabel("Type", { exact: true }).fill("network.request.sent");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await filterByType(page, "network.request.sent");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders");

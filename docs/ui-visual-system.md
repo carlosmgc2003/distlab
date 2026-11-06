@@ -229,7 +229,7 @@ close it, and the trigger carries `aria-expanded` with `aria-controls` pointing
 at the body.
 
 The body is positioned against the viewport rather than the trigger's ancestor,
-so a scrolling panel such as the timeline tools region never clips it, and it
+so a scrolling panel or a modal dialog such as More filters never clips it, and it
 flips above the trigger when there is no room below. The explanation text stays
 in the DOM while collapsed, so it remains searchable and testable, and its
 `bodyId` can back an existing `aria-describedby`.
@@ -262,9 +262,10 @@ and a text label, and the legend names all of them:
 | Dropped message | `⊘` | dotted |
 | Timeout | `◷` | rounded |
 
-Timeline quick views use the same categories: each toggle is labeled and shows
-a count of the stored records it keeps, and the pressed state uses the shared
-`--selection-*` tokens rather than a new color.
+Timeline quick views use the same categories. They are the options of the one
+**Show** select in the Recorded history toolbar: each option names its category
+and the count of stored records it keeps, and an active quick view appears as a
+removable chip. No toggle button repeats them.
 
 A milestone also carries its stored label text, and a recorded virtual-time
 boundary is drawn as a dashed rule with a `t=` label. A rule marks a recorded

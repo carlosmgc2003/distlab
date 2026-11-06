@@ -464,13 +464,17 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/TimelineView.tsx)
 
-- **Responsibility:** render Story diagram/table, Learning groups, virtualized
-  Raw rows, filters, observation details, and stored correlation links.
+- **Responsibility:** render the one view switch (Story diagram, Story table,
+  Learning, Raw), the Show / Component / More filters… row and its modal
+  dialog, Learning groups, virtualized Raw rows, observation details, and
+  stored correlation links.
 - **Imports and boundaries:** React and `Observation`, plus `timeline-query.ts`,
   `timeline-quick-views.ts`, `records.ts`, `timeline.ts`, `story-timeline.ts`, and
   `HelpHint`. Receives observation snapshots, drawn-link identities, titles, and
   UI callbacks; has no host client.
-- **State and protocol:** owns filter draft and last valid query, quick view,
+- **State and protocol:** holds the Story presentation (diagram or table) and the
+  More filters dialog as presentation state; the dialog edits a copy of the draft
+  and applies it as one `set-draft`, or discards it. Review navigation owns filter draft and last valid query, quick view,
   display mode, expanded groups, selected observation ID, feedback, live cue,
   scroll window, and focus requests. Quick views apply before advanced filters.
   Invalid drafts keep the last valid query. Evidence reveal switches to Raw,

@@ -5,6 +5,7 @@ import { simulationTime } from "@distlab/contracts";
 import type { Observation, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { projection } from "../tests/support.ts";
 import { lessonTrigger, loadLesson } from "./support/lesson.ts";
+import { applyMoreFilters, fillFilterField, filterByType, openMoreFilters, viewButton } from "./support/history.ts";
 
 declare global {
   interface Window {
@@ -51,20 +52,15 @@ test("single dropped response disables both boundaries and evidence navigation k
   const commands = await commandTypes(page);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // This test walks canonical rows; the Story view is covered in story-timeline.spec.ts.
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
-  const filterDrawer = page.locator(".history-filter-drawer");
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
+  await viewButton(page, "Raw").click();
 
-  await page.getByLabel("Type", { exact: true }).fill("not.a.real.type");
+  await filterByType(page, "not.a.real.type");
   await expect(page.getByText("No observations match every active filter.")).toBeVisible();
   await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
 
   await page.getByRole("button", { name: "Clear all filters", exact: true }).click();
   await expect(page.getByRole("group", { name: "Active filters and reset" })).not.toBeVisible();
-  await page.getByLabel("Type", { exact: true }).fill("network.response.dropped");
-  await page.getByLabel("Type", { exact: true }).press("Escape");
+  await filterByType(page, "network.response.dropped");
   await expect(page.locator(".timeline-count")).toContainText(/^1 of /);
   await expect(page.locator("#timeline-boundary")).toContainText("Next and Previous select it.");
   await page.locator("#timeline-rows").focus();
@@ -93,10 +89,14 @@ test("single dropped response disables both boundaries and evidence navigation k
   if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
   await page.locator("#inspection-panel").getByText("Related evidence", { exact: true }).click();
   await page.getByRole("button", { name: "Show this trace" }).click();
-  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
-  await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
-  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
-  await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
+  // More filters opens on the applied draft: the trace is set and the type was cleared.
+  const dialog = await openMoreFilters(page);
+  await dialog.getByLabel("Filter by", { exact: true }).selectOption("traceId");
+  await expect(dialog.getByLabel("Trace", { exact: true })).not.toHaveValue("");
+  await dialog.getByLabel("Filter by", { exact: true }).selectOption("type");
+  await expect(dialog.getByLabel("Type", { exact: true })).toHaveValue("");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).toBeHidden();
   await expect(page.locator("#timeline-feedback")).toContainText("type filter was cleared");
   await expect(selected).toContainText("network.response.dropped");
   await expect(selected).toBeVisible();
@@ -107,10 +107,17 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.locator("#timeline-feedback")).toContainText(/Selected #/);
   await expect(selected).not.toContainText("network.response.dropped");
 
-  await page.getByLabel("Virtual time from", { exact: true }).fill("999999");
-  await page.getByLabel("Virtual time to", { exact: true }).fill("0");
-  await page.getByLabel("Type", { exact: true }).fill("network.response.dropped");
-  await expect(page.getByRole("alert")).toContainText("Virtual time from 999999 is after virtual time to 0");
+  await openMoreFilters(page);
+  await dialog.getByLabel("Virtual time from", { exact: true }).fill("999999");
+  await dialog.getByLabel("Virtual time to", { exact: true }).fill("0");
+  await fillFilterField(page, "type", "network.response.dropped");
+  await dialog.getByRole("button", { name: "Apply", exact: true }).click();
+  // An invalid draft stays in the dialog with its error and changes nothing; Escape discards it.
+  await expect(dialog.getByRole("alert")).toContainText("Virtual time from 999999 is after virtual time to 0");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  // A valid filter that hides the evidence target: following the link clears it.
+  await filterByType(page, "network.response.dropped");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
   // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
@@ -123,13 +130,13 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("external.effect.committed");
   await expect(page.locator("#timeline-feedback")).toContainText("Selected #");
-  await expect(page.locator("#timeline-feedback")).toContainText("filters were cleared");
+  await expect(page.locator("#timeline-feedback")).toContainText("The type filter was cleared so this observation is visible.");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
-  await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");
-  await page.getByLabel("Trace", { exact: true }).fill("");
-  await page.getByLabel("Filter by", { exact: true }).selectOption("type");
-  await page.getByLabel("Type", { exact: true }).fill("");
+  // Clear empties the dialog's fields; Apply shows every record again.
+  await openMoreFilters(page);
+  await dialog.getByRole("button", { name: "Clear", exact: true }).click();
+  await applyMoreFilters(page);
   await expect(page.locator(".timeline-count")).toContainText(/^[0-9]{2,} of /);
   await page.locator("#timeline-rows").focus();
   await page.keyboard.press("Home");

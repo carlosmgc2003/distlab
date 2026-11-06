@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { Observation, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { loadLesson } from "./support/lesson.ts";
+import { viewButton } from "./support/history.ts";
 
 declare global {
   interface Window {
@@ -75,9 +76,10 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   const before = await commandTypes(page);
 
   // The milestone table is one presentation of the Story view; the strip is the other.
-  await page.getByRole("button", { name: "Table", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: "Learning", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await viewButton(page, "Story table").click();
+  await expect(viewButton(page, "Story table")).toHaveAttribute("aria-pressed", "true");
+  await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "false");
+  await expect(viewButton(page, "Learning")).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".timeline-count")).toHaveText(
     new RegExp(`^\\d+ teaching milestones from ${observations.length} recorded observations\\.`),
   );
@@ -100,7 +102,7 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   }
 
   // The diagram presents the same milestones as a component-lane strip.
-  await page.getByRole("button", { name: "Diagram", exact: true }).click();
+  await viewButton(page, "Story diagram").click();
   // Accessible summary, shapes, and labeled boundaries.
   await expect(page.locator(".story-view")).toContainText("no elapsed duration between milestones is stored");
   await expect(page.locator("#story-summary")).toContainText("component lanes");
@@ -124,7 +126,7 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   expect(cueFromStrip).toContain("Request sent");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(page.locator(".story-milestone[data-selected='true']")).toHaveCount(1);
-  await page.getByRole("button", { name: "Table", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await tableRow.click();
   expect(await page.locator("#inspection-panel").textContent()).toBe(fromStrip);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
@@ -135,7 +137,7 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
 
   // Story selection stays inside the presentation layer. Playback is covered by the architecture spec.
   expect(await commandTypes(page)).toEqual(before);
-  await page.getByRole("button", { name: "Story", exact: true }).click();
+  await viewButton(page, "Story diagram").click();
 
   // Learning and Raw keep every record.
   await page.getByRole("button", { name: "Learning", exact: true }).click();
@@ -143,7 +145,7 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   await expect(page.locator(".learning-rows, .learning-group").first()).toBeVisible();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.locator(".timeline-count")).toContainText(`${observations.length} of ${observations.length}`);
-  await page.getByRole("button", { name: "Story", exact: true }).click();
+  await viewButton(page, "Story diagram").click();
   await expect(page.locator(".timeline-count")).toContainText("teaching milestones from");
 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -176,8 +178,7 @@ test("response-lost Story milestones stay linked to their records without new co
   expect(stripDetail).toContain(dropped.id);
   expect(stripCue).toContain("Response dropped");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Story", exact: true }).click();
-  await page.getByRole("button", { name: "Table", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await dropRow.click();
   expect(await page.locator("#inspection-panel").textContent()).toBe(stripDetail);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
