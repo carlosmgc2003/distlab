@@ -9,6 +9,8 @@ import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import { BreakPanel } from "./BreakPanel.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
+import { LessonPanel } from "./LessonPanel.tsx";
+import { currentStep } from "./lesson-steps.ts";
 import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
 import { DesignChoicesPanel } from "./DesignChoicesPanel.tsx";
@@ -45,6 +47,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [showHistoryControls, setShowHistoryControls] = useState(false);
   // The Lesson chooser is the one way to choose a packaged lesson (#139). Choosing one loads it.
   const [chooserOpen, setChooserOpen] = useState(false);
+  // The Lesson panel's collapsed rail is UI state: it survives tab switches and lesson loads (#140).
+  const [lessonCollapsed, setLessonCollapsed] = useState(false);
   const lessonTrigger = useRef<HTMLButtonElement>(null);
   const chooserOpener = useRef<HTMLElement | null>(null);
   // After a choice, focus returns to the trigger once the load settles and the trigger is enabled again.
@@ -277,6 +281,76 @@ export function App({ host }: { readonly host: SimulationHost }) {
     applied={applied?.parameters ?? null} draft={choiceDraft} onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices}
     onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft))} faultsPending={faultsPending} open={choicesOpen} onOpenChange={setChoicesOpen} /> : null;
 
+  // The Lesson panel (#140) holds what the learning prompt bar and the toolbar's lesson drawer held,
+  // moved without rewording. Only Advanced diagnostics stays a disclosure.
+  const status = projection?.simulation.status;
+  const checkoutGuide = !imported && loadedChoice?.family !== "commerce";
+  const runOverview = projection && report ? <div className="execution-overview">
+    <p><strong>{imported ? importedScenario?.presentation.title : loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {status === "COMPLETED" ? "Execution completed; business outcome is shown from recorded state." : status === "FAILED" ? "Execution failed." : status === "RUNNING" ? "Execution in progress." : "Execution partial or ready."}</p>
+    <p>{report.knowledge}</p>
+    <p>Recorded delivery attempts: {report.deliveries.length ? report.deliveries.map(item => `${item.destination}: attempt ${item.attempt} (${item.state})`).join("; ") : "Unavailable — no student-visible delivery records."}</p>
+    <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p>
+    <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
+    {imported ? null : <p>Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.</p>}
+  </div> : null;
+  const lessonGoal = imported && importedScenario
+    ? <ImportedHeader document={importedScenario} origin={snapshot.session?.origin} runId={projection?.simulation.runId} />
+    : <>
+      <p className="lesson-goal-title"><strong>{loadedChoice ? experimentLabel(loadedChoice) : null}</strong></p>
+      {loadedChoice?.family === "commerce" ? null
+        : <p className="lesson-goal-question">{loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</p>}
+      <p>{loadedChoice?.family === "commerce" ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</p>
+    </>;
+  const lessonRun = <>
+    <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
+    <p>Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
+    <p>Reset and run again to compare the same virtual-time history.</p>
+  </>;
+  // The outcome comes first, then the evidence links, then the lesson's questions.
+  const lessonInvestigate = <>
+    {runOverview}
+    {imported ? <p>Seed: {lesson?.seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, check its results below the architecture, then use Recorded history to follow what happened.</p>
+      : !checkoutGuide ? <p>Seed: {lesson?.seed}. Observe the service state and lesson checks in Architecture, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p> : <>
+      <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+      {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
+      <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
+      <p>For the response-lost experiment, find the processor authorization, the dropped response, and the Payments timeout. What does Payments know, and what does the processor know? Does the timeout prove that payment failed?</p>
+    </>}
+  </>;
+  const appliedChanges = snapshot.session ? `${snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters)}` : ""} · ${appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"}` : "";
+  const lessonExperiment = <>
+    {imported ? <>
+      {/* Without an overlay policy there is no Break panel; say so where the scenario is described (ADR-006). */}
+      {policy ? null : <p className="imported-locked">This scenario accepts no student changes: its file declares no overlay policy.</p>}
+      {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length) ? <p className="run-identity" aria-label="Applied student changes">
+        {snapshot.session.overlay.parameters.length ? `${describeChoices(snapshot.session.overlay.parameters)} · ` : ""}{appliedEntries.length} student fault{appliedEntries.length === 1 ? "" : "s"}
+      </p> : null}
+    </> : <>
+      {snapshot.session && projection ? <p className="run-identity" aria-label="Run identity">
+        Seed {snapshot.session.seed}{appliedChanges} · run {projection.simulation.runId.replace(/^run:/, "").slice(0, 8)}
+      </p> : null}
+      {loadedChoice?.family === "commerce" && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => compare(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
+      {carryNotice ? <p role="status">{carryNotice}</p> : null}
+    </>}
+    {choicesPanel}
+    {/* An instructor's authoring aid. It is offered only for a packaged lesson, never for an imported document. */}
+    {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
+    {/* Engine counters stay here; the committed run summary in the toolbar carries status and virtual time. */}
+    {projection && report ? <details className="raw-state advanced-diagnostics">
+      <summary>Advanced diagnostics</summary>
+      <div className="raw-state-body" tabIndex={0} aria-label="Distributed state details">
+        <dl className="diagnostics">
+          <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
+          <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
+        </dl>
+        <DistributedState report={report} onShowEvidence={showEvidence} />
+      </div>
+    </details> : null}
+  </>;
+  const lessonPanel = <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
+    step={currentStep(status, projection?.simulation.processedEvents)}
+    goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} />;
+
   return <main className={`app-shell${tab === "history" && projection && !showHistoryControls ? " history-focus" : ""}`}>
     {tab === "history" && projection && !showHistoryControls ? <h1 className="sr-only">DistLab · Recorded history</h1> : null}
     <header className="command-toolbar">
@@ -293,116 +367,54 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>Open scenario file…</button>
           <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Scenario file" hidden disabled={busy}
             onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
+          <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
         </div>
       </div>
       <SimulationControls host={host} snapshot={snapshot} notices={<>
         {mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
-        <details className="lesson-drawer">
-        <summary>Lesson guide & run insights</summary>
-        <div className="shell-notices">
-        <section className="lesson-guide" aria-labelledby="lesson-heading">
-          <h2 id="lesson-heading" className="sr-only">{commerce ? "Commerce lesson" : "Checkout lesson"}</h2>
-          <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
-          <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
-          {/* An instructor's authoring aid, kept in the drawer so the chooser row keeps its height at the
-              desktop baselines. It is offered only for a packaged lesson, never for an imported document. */}
-          {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
-          {projection && report ? <details className="execution-overview">
-            <summary>Run overview</summary>
-            <div className="execution-overview-body">
-            <p><strong>{imported ? importedScenario?.presentation.title : loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {projection.simulation.status === "COMPLETED" ? "Execution completed; business outcome is shown from recorded state." : projection.simulation.status === "FAILED" ? "Execution failed." : projection.simulation.status === "RUNNING" ? "Execution in progress." : "Execution partial or ready."}</p>
-            <p>{report.knowledge}</p>
-            <p>Recorded delivery attempts: {report.deliveries.length ? report.deliveries.map(item => `${item.destination}: attempt ${item.attempt} (${item.state})`).join("; ") : "Unavailable — no student-visible delivery records."}</p>
-            <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p>
-            <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
-            {imported ? null : <p>Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.</p>}
-            </div>
-          </details> : null}
-          <details>
-            <summary>Lesson guide</summary>
-            {imported ? <>{importedScenario?.presentation.summary ? <p>{importedScenario.presentation.summary}</p> : null}<p>Seed: {lesson?.seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, check its results below the architecture, then use Recorded history to follow what happened.</p></>
-              : commerce && loadedChoice?.family === "commerce" ? <><p>{loadedChoice.description}</p><p>Seed: {lesson?.seed}. Observe the service state and lesson checks in Architecture, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p></> : <>
-            <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
-            {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
-            <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
-            <p>For the response-lost experiment, find the processor authorization, the dropped response, and the Payments timeout. What does Payments know, and what does the processor know? Does the timeout prove that payment failed?</p>
-            </>}
-            <p>Reset and run again to compare the same virtual-time history.</p>
-            <p>Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
-          </details>
-        </section>
-        {/* Engine counters stay here; the committed run summary above carries status and virtual time. */}
-        {projection && report ? <details className="raw-state">
-          <summary>Advanced diagnostics</summary>
-          <div className="raw-state-body" tabIndex={0} aria-label="Distributed state details">
-            <dl className="diagnostics">
-              <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
-              <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
-            </dl>
-            <DistributedState report={report} onShowEvidence={showEvidence} />
-          </div>
-        </details> : null}
-        </div>
-        </details>
       </>}>
         {/* Recorded history navigation shares the command row, kept apart by its own rule and label. */}
         {tab === "architecture" && projection ? <FlightControls playback={playback} /> : null}
       </SimulationControls>
     </header>
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}
-    {projection ? <div className={`investigation-workspace${breakOpen && policy && tab === "architecture" ? " break-open" : ""}`}>
-      {imported && importedScenario ? <aside className="learning-prompt" aria-label="Learning objective">
-        {/* Imported sessions have no paired lesson, so Compare is unavailable. */}
-        <ImportedHeader document={importedScenario} origin={snapshot.session?.origin} runId={projection.simulation.runId} />
-        {/* Without an overlay policy there is no Break panel; say so where the scenario is described (ADR-006). */}
-        {policy ? null : <span className="imported-locked">This scenario accepts no student changes: its file declares no overlay policy.</span>}
-        {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length) ? <span className="run-identity" aria-label="Applied student changes">
-          {snapshot.session.overlay.parameters.length ? `${describeChoices(snapshot.session.overlay.parameters)} · ` : ""}{appliedEntries.length} student fault{appliedEntries.length === 1 ? "" : "s"}
-        </span> : null}
-        {choicesPanel}
-      </aside> : <aside className="learning-prompt" aria-label="Learning objective">
-        <strong>{loadedChoice?.family === "commerce" ? loadedChoice.title : loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</strong>
-        <span>{loadedChoice?.family === "commerce" ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</span>
-        {loadedChoice?.family === "commerce" && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => compare(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
-        {snapshot.session ? <span className="run-identity" aria-label="Run identity">
-          Seed {snapshot.session.seed}{snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters)}` : ""} · {appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"} · run {projection.simulation.runId.replace(/^run:/, "").slice(0, 8)}
-        </span> : null}
-        {carryNotice ? <span role="status">{carryNotice}</span> : null}
-        {choicesPanel}
-      </aside>}
-      <div className="workspace-navigation">
-      <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
-        {tabs.map(([id, label]) => <button key={id} type="button" role="tab"
-          id={id === "architecture" ? "tab-architecture" : "tab-history"}
-          aria-selected={tab === id} aria-controls={id === "architecture" ? "architecture-panel" : "history-panel"}
-          tabIndex={tab === id ? 0 : -1}
-          className={tab === id ? "is-active" : undefined}
-          onClick={() => showTab(id)}>{label}</button>)}
+    {projection ? <div className="investigation-workspace has-lesson-panel">
+      {lessonPanel}
+      <div className={`workspace-main${breakOpen && policy && tab === "architecture" ? " break-open" : ""}`}>
+        <div className="workspace-navigation">
+        <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
+          {tabs.map(([id, label]) => <button key={id} type="button" role="tab"
+            id={id === "architecture" ? "tab-architecture" : "tab-history"}
+            aria-selected={tab === id} aria-controls={id === "architecture" ? "architecture-panel" : "history-panel"}
+            tabIndex={tab === id ? 0 : -1}
+            className={tab === id ? "is-active" : undefined}
+            onClick={() => showTab(id)}>{label}</button>)}
+        </div>
+        {tab === "history" ? <button type="button" className="history-controls-toggle" aria-expanded={showHistoryControls}
+          onClick={() => setShowHistoryControls(current => !current)}>{showHistoryControls ? "Hide simulation controls" : "Show simulation controls"}</button> : null}
+        </div>
+        {/* Break the system belongs to the Architecture tab: faults target the graph's links and components. */}
+        {breakPanel}
+        <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
+          aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
+          <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
+            {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
+            {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
+            {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
+            {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
+          {imported && importedScenario ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
+          {imported ? commerce ? <CommerceState projection={projection} onShowEvidence={showEvidence} /> : null
+            : loadedChoice?.family === "commerce" ? <CommerceState projection={projection} checks={loadedChoice.checks} onShowEvidence={showEvidence} /> : null}
+        </section>
+        <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
+          aria-labelledby="tab-history" hidden={tab !== "history"}>
+          <TimelineView key={`${sessionName}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
+            {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
+        </div>
       </div>
-      {tab === "history" ? <button type="button" className="history-controls-toggle" aria-expanded={showHistoryControls}
-        onClick={() => setShowHistoryControls(current => !current)}>{showHistoryControls ? "Hide simulation controls" : "Show simulation controls"}</button> : null}
-      </div>
-      {/* Break the system belongs to the Architecture tab: faults target the graph's links and components. */}
-      {breakPanel}
-      <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
-        aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
-        <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
-          {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
-          {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
-          {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
-          {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
-        {imported && importedScenario ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
-        {imported ? commerce ? <CommerceState projection={projection} onShowEvidence={showEvidence} /> : null
-          : loadedChoice?.family === "commerce" ? <CommerceState projection={projection} checks={loadedChoice.checks} onShowEvidence={showEvidence} /> : null}
-      </section>
-      <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
-        aria-labelledby="tab-history" hidden={tab !== "history"}>
-        <TimelineView key={`${sessionName}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
-          {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
-      </div>
-    </div> : overlayError && (loadedChoice || imported) ? <div className="investigation-workspace">
-      {choicesPanel}
-      {breakPanel}
+    </div> : overlayError && (loadedChoice || imported) ? <div className="investigation-workspace has-lesson-panel">
+      {lessonPanel}
+      <div className="workspace-main">{breakPanel}</div>
     </div> : documentError ? <div className="investigation-workspace">
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />
     </div> : <div className="investigation-workspace">

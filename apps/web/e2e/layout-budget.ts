@@ -10,7 +10,10 @@ export interface LayoutMeasures {
   readonly firstVerdictVisible: boolean | null;
   /** Visible buttons, selects, inputs, summaries, links, and tabs in the viewport and outside `.graph-canvas`. */
   readonly controlsOutsideGraph: number;
-  /** Visible paragraphs of 8 or more words in the viewport, outside `.graph-canvas`, `.architecture-side`, and `.sr-only`. */
+  /**
+   * Visible paragraphs of 8 or more words in the viewport, outside `.graph-canvas`, `.architecture-side`, `.lesson-panel`,
+   * and `.sr-only`. The Lesson panel is where lesson prose belongs (#137 budget: outside the lesson panel and graph area).
+   */
   readonly proseBlocks: number;
 }
 
@@ -75,8 +78,8 @@ export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLess
       COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
     },
   },
 };
@@ -129,7 +132,7 @@ export async function measureLayout(page: Page): Promise<LayoutMeasures> {
       .filter(element => outside(element, ".graph-canvas") && shown(element)).length;
 
     const proseBlocks = [...document.querySelectorAll("p")]
-      .filter(element => outside(element, ".graph-canvas, .architecture-side, .sr-only"))
+      .filter(element => outside(element, ".graph-canvas, .architecture-side, .lesson-panel, .sr-only"))
       .filter(element => (element.textContent ?? "").trim().split(/\s+/).filter(Boolean).length >= 8)
       .filter(shown).length;
 

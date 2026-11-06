@@ -117,6 +117,10 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await expect(page.getByLabel("Trace", { exact: true })).not.toHaveValue("");
   await page.getByLabel("Filter by", { exact: true }).selectOption("type");
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
+  // The detail actions are done. Close the floating detail: beside the Lesson panel (#140) the history
+  // column is narrower, and the floating panel can cover the filter bar until #146 docks it.
+  await inspector.locator("> summary").click();
+  await expect(inspector).not.toHaveAttribute("open", "");
 
   await page.getByRole("button", { name: "Clear all filters" }).click();
   await page.getByLabel("Filter by", { exact: true }).selectOption("traceId");

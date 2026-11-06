@@ -3,12 +3,9 @@ import type { Page } from "@playwright/test";
 import { loadLesson } from "./support/lesson.ts";
 
 async function revealRawState(page: Page) {
-  // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
-  // Advanced diagnostics lives inside the collapsed lesson drawer, so open that first.
-  const drawer = page.locator("details.lesson-drawer");
-  if ((await drawer.getAttribute("open")) === null) await drawer.locator("> summary").click();
-  const raw = page.locator(".shell-notices > details.raw-state");
-  const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
+  // Advanced diagnostics is the Lesson panel's one disclosure; Distributed state nests its own raw-state disclosures.
+  const raw = page.locator(".lesson-panel details.advanced-diagnostics");
+  const rawToggle = raw.locator("> summary");
   await expect(raw).toBeVisible();
   if ((await raw.getAttribute("open")) === null) await rawToggle.click();
 }
@@ -43,14 +40,14 @@ test("response-lost selection shows remote authorization and local timeout as di
   await expect(panel).not.toContainText("payment failed");
   await expect(page.locator("body")).not.toContainText("effectCount");
 
-  await page.getByRole("button", { name: "Show Payments timeout", exact: true }).click();
+  await panel.getByRole("button", { name: "Show Payments timeout", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("network.request.timedout");
   // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
+  await panel.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
-  await page.getByRole("button", { name: "Show fault selection", exact: true }).click();
+  await panel.getByRole("button", { name: "Show fault selection", exact: true }).click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");
 
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();

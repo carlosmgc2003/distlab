@@ -129,10 +129,8 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       await expect(page.getByRole("group", { name: "Recorded history navigation" })).toHaveCount(0);
       await page.getByRole("tab", { name: "Architecture", exact: true }).click();
       await expect(page.locator(".graph-canvas")).toBeVisible();
-      // Explanatory prose stays collapsed; the summary and both control groups stay out of it.
-      for (const disclosure of await page.locator(".shell-notices details").all()) {
-        await expect(disclosure).not.toHaveAttribute("open", "");
-      }
+      // Engine counters stay collapsed in the Lesson panel; the summary and both control groups stay out of it.
+      await expect(page.locator(".lesson-panel details.advanced-diagnostics")).not.toHaveAttribute("open", "");
       await expect(page.getByRole("region", { name: "Distributed state" })).toHaveCount(0);
       await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
       await page.getByRole("button", { name: "Raw", exact: true }).click();
@@ -159,7 +157,7 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       await expect(page.getByText("Latest committed simulation state")).toHaveCount(0);
       await expect(page.getByText("Run complete")).toHaveCount(0);
       await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toHaveCount(0);
-      await expect(page.locator(".shell-notices > details.raw-state > summary")).toHaveText("Advanced diagnostics");
+      await expect(page.locator(".lesson-panel details.advanced-diagnostics > summary")).toHaveText("Advanced diagnostics");
       await pageFits(page);
       await page.getByRole("tab", { name: "Architecture", exact: true }).click();
       await boxInViewport(page, page.locator(".graph-canvas"), 80);
@@ -230,11 +228,9 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   const afterRunCommands = await commands();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  const lessonDrawer = page.locator("details.lesson-drawer");
-  if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
-  const raw = page.locator(".shell-notices > details.raw-state");
-  if ((await raw.getAttribute("open")) === null) await page.locator(".shell-notices > details.raw-state > summary").click();
-  await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
+  // The evidence links sit in the Lesson panel's ③ Investigate section, with nothing to open first.
+  await page.getByRole("complementary", { name: "Lesson", exact: true }).locator(".execution-overview")
+    .getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toBeFocused();
@@ -372,7 +368,7 @@ test("desktop 200% zoom keeps tabs and controls keyboard reachable without horiz
       seen.add(focused.name);
       await page.keyboard.press("Tab");
     }
-    for (const label of ["Lesson: ", "Run", "Pause", "Step", "Reset", "Architecture", "Lesson guide"]) {
+    for (const label of ["Lesson: ", "Run", "Pause", "Step", "Reset", "Architecture", "Hide lesson"]) {
       expect([...seen].some(item => item.includes(label)), `${label} at ${viewport.name}`).toBe(true);
     }
     // Roving tabindex: Tab reaches the active tab; arrows reach the other tab.

@@ -115,11 +115,9 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.evaluate(() => window.scrollTo(0, 0));
   // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  const lessonDrawer = page.locator("details.lesson-drawer");
-  if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
-  const raw = page.locator(".shell-notices > details.raw-state");
-  if ((await raw.getAttribute("open")) === null) await page.locator(".shell-notices > details.raw-state > summary").click();
-  await page.getByRole("button", { name: "Show processor authorization", exact: true }).click();
+  // The evidence links sit in the Lesson panel's ③ Investigate section, visible on both tabs.
+  await page.getByRole("complementary", { name: "Lesson", exact: true }).locator(".execution-overview")
+    .getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(selected).toContainText("external.effect.committed");
   await expect(selected).toBeVisible();
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeVisible();

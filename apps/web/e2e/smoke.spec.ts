@@ -127,12 +127,9 @@ for (const scenario of ["normal", "response-lost"]) {
     const other = scenario === "normal" ? "response-lost" : "normal";
     await loadLesson(page, other);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-    // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
-    // Advanced diagnostics lives inside the collapsed lesson drawer, so open that first.
-    const lessonDrawer = page.locator("details.lesson-drawer");
-    if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
-    const raw = page.locator(".shell-notices > details.raw-state");
-    const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
+    // Advanced diagnostics is the Lesson panel's one disclosure; Distributed state nests its own raw-state disclosures.
+    const raw = page.locator(".lesson-panel details.advanced-diagnostics");
+    const rawToggle = raw.locator("> summary");
     if ((await raw.getAttribute("open")) === null) await rawToggle.click();
     await expect(page.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1");
     await rawToggle.click();
