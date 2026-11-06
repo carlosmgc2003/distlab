@@ -1,13 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { commerceLessonNames } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import { loadLesson } from "./support/lesson.ts";
 
 for (const name of commerceLessonNames) {
   test(`${name}: select, step, run, inspect facts and checks, reset and replay`, async ({ page }, testInfo) => {
     await page.goto("/");
     const status = page.getByRole("status", { name: "Simulation status" });
-    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
-    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     await page.getByRole("button", { name: "Step", exact: true }).click();
     await expect(status).toHaveText("PAUSED");
@@ -54,8 +54,7 @@ test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each ver
   const status = page.getByRole("status", { name: "Simulation status" });
   const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
   const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
-  await page.getByLabel("Scenario", { exact: true }).selectOption("saga-uncompensated");
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, "saga-uncompensated");
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
@@ -80,8 +79,7 @@ test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each ver
 test("compare replaces the experiment; commerce state fits a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption("retry-unsafe");
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, "retry-unsafe");
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
@@ -102,8 +100,7 @@ test("the notifications pair shows the dead-letter queue only when the retry bud
   const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
   const orderPlaced = state.getByRole("region", { name: "OrderPlaced state", exact: true });
   for (const [name, letters] of [["notifications-dlq", 1], ["notifications-unbounded", 0]] as const) {
-    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
-    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
@@ -131,8 +128,7 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   const orders = state.getByRole("region", { name: "orders state", exact: true });
   const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
-    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
-    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     // Step until both carts are live: each entry shows its absolute expiry.
     const step = page.getByRole("button", { name: "Step", exact: true });
@@ -178,8 +174,7 @@ test("the inventory pair shows stock with its version and each client's outcome,
   const partner = state.getByRole("region", { name: "partner-api state", exact: true });
   const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, stock, version, outcome, verdict] of [["inventory-oversell", -1, 3, "RESERVED", "VIOLATED"], ["inventory-optimistic", 0, 2, "OUT_OF_STOCK", "HOLDS"]] as const) {
-    await page.getByLabel("Scenario", { exact: true }).selectOption(name);
-    await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+    await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");

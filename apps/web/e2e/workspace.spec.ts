@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { lessonTrigger, loadLesson } from "./support/lesson.ts";
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-70");
 
@@ -66,8 +67,7 @@ async function boxInViewport(page: Page, locator: ReturnType<Page["locator"]>, m
 
 async function loadScenario(page: Page, scenario: string) {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
 }
 
@@ -90,7 +90,7 @@ test("desktop baselines expose exactly two investigation tabs with one committed
         expect(box!.height).toBeLessThanOrEqual(56);
       }
       for (const target of [
-        page.getByLabel("Scenario", { exact: true }),
+        lessonTrigger(page),
         page.getByRole("button", { name: "Run", exact: true }),
         page.getByRole("button", { name: "Pause", exact: true }),
         page.getByRole("button", { name: "Step", exact: true }),
@@ -252,7 +252,7 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   await page.getByLabel("Type", { exact: true }).press("Escape");
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.locator("#timeline-rows button").first().click();
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
+  await loadLesson(page, "response-lost");
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expect(page.getByLabel("Type", { exact: true })).toHaveValue("");
   await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
@@ -352,7 +352,10 @@ test("desktop 200% zoom keeps tabs and controls keyboard reachable without horiz
       expect(box!.y).toBeGreaterThanOrEqual(-1);
       expect(box!.y + box!.height).toBeLessThanOrEqual(size.height + 1);
     }
-    await page.getByLabel("Scenario", { exact: true }).focus();
+    // Focus already returned to the trigger after the lesson was chosen, so focus() alone would not
+    // scroll it back into view after the loop above; start the traversal with it on screen.
+    await lessonTrigger(page).scrollIntoViewIfNeeded();
+    await lessonTrigger(page).focus();
     const seen = new Set<string>();
     for (let step = 0; step < 24; step += 1) {
       const focused = await page.evaluate(() => {
@@ -369,7 +372,7 @@ test("desktop 200% zoom keeps tabs and controls keyboard reachable without horiz
       seen.add(focused.name);
       await page.keyboard.press("Tab");
     }
-    for (const label of ["Load scenario", "Run", "Pause", "Step", "Reset", "Architecture", "Lesson guide"]) {
+    for (const label of ["Lesson: ", "Run", "Pause", "Step", "Reset", "Architecture", "Lesson guide"]) {
       expect([...seen].some(item => item.includes(label)), `${label} at ${viewport.name}`).toBe(true);
     }
     // Roving tabindex: Tab reaches the active tab; arrows reach the other tab.

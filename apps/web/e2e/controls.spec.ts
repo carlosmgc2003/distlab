@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -40,8 +41,7 @@ for (const scenario of ["normal", "response-lost"]) {
     const status = page.getByRole("status", { name: "Simulation status" });
     const button = (name: string) => page.getByRole("button", { name, exact: true });
     for (const name of ["Run", "Pause", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
-    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-    await button("Load scenario").click();
+    await loadLesson(page, scenario);
     await expect(status).toHaveText("READY");
     const initial = await latestProjection(page);
     await button("Run").click();
@@ -88,7 +88,7 @@ for (const scenario of ["normal", "response-lost"]) {
 test("Load → Run/Pause → Step → Reset uses correlated boundary commands", async ({ page }, testInfo) => {
   await observeWorker(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   const initial = await latestProjection(page);

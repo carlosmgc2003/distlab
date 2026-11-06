@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -42,9 +43,8 @@ for (const scenario of ["normal", "response-lost"]) {
     await observeWorker(page);
     await page.goto("/");
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("Choose a scenario to begin.");
-    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
     const started = page.waitForEvent("worker");
-    await page.getByRole("button", { name: "Load scenario" }).click();
+    await loadLesson(page, scenario);
     expect((await started).url()).toMatch(/entry-.*\.js$/);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     const architecture = page.getByRole("tabpanel", { name: "Architecture", exact: true });
@@ -125,7 +125,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     // Changing the experiment replaces the worker. The shared architecture metadata remains.
     const other = scenario === "normal" ? "response-lost" : "normal";
-    await page.getByLabel("Scenario", { exact: true }).selectOption(other);
+    await loadLesson(page, other);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
     // Advanced diagnostics lives inside the collapsed lesson drawer, so open that first.
@@ -181,8 +181,7 @@ test("commerce owned resources are visible and keyboard-inspectable with static 
     ["cascade-breaker", ["resource:kv:api", "resource:kv:orders", "resource:kv:payments"]],
   ] as const) {
     await page.goto("/");
-    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-    await page.getByRole("button", { name: "Load scenario" }).click();
+    await loadLesson(page, scenario);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
 
     const architecture = page.getByRole("tabpanel", { name: "Architecture", exact: true });
@@ -247,7 +246,7 @@ for (const mode of ["empty", "invalid", "error", "private"] as const) {
   test(`architecture component handles ${mode} inputs`, async ({ page }) => {
     await stubWorker(page, mode);
     await page.goto("/");
-    await page.getByRole("button", { name: "Load scenario" }).click();
+    await loadLesson(page, "normal");
     if (mode === "empty") await expect(page.getByText("No architecture components to display.")).toBeVisible();
     if (mode === "invalid") await expect(page.getByRole("alert")).toContainText("connections to missing components");
     if (mode === "error") {

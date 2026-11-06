@@ -50,9 +50,27 @@ button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visib
 .toolbar-row, .scenario-picker, .control-buttons, .status-line, .shell-notices, .lesson-guide { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 h1 { margin: 0; font-size: 1.15rem; line-height: 1.2; letter-spacing: -.04em; }
 h2 { font-size: 1.05rem; margin: 0 0 4px; }
-#scenario { max-width: 100%; min-width: 0; flex: 1 1 12rem; min-height: 44px; }
+/* The lesson trigger names the loaded lesson in one line; a long title is cut, and its full text stays
+   in the accessible name and the tooltip. */
+.lesson-trigger { display: inline-flex; align-items: center; gap: 6px; max-width: 24rem; min-width: 0; min-height: 44px; font-weight: 650; }
+.lesson-trigger-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.lesson-trigger-caret { flex: none; font-weight: 400; }
 .scenario-picker { flex: 1 1 16rem; }
-.scenario-picker label { font-weight: 650; }
+/* The Lesson chooser: a modal dialog of failing/fixed lesson pairs, one card per pair (#139). */
+.lesson-chooser { width: min(64rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px 24px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-panel); color: var(--text-primary); box-shadow: 0 16px 40px rgba(23, 32, 51, .25); }
+.lesson-chooser::backdrop { background: rgba(23, 32, 51, .45); }
+.lesson-chooser h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.lesson-chooser-discard { margin: 0 0 12px; padding: 6px 10px; border: 1px solid var(--status-warning); border-radius: 6px; background: var(--status-warning-bg); color: var(--status-warning); font-size: .85rem; }
+.lesson-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.lesson-card { padding: 8px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-subtle); }
+.lesson-card-lessons { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.lesson-choice { display: grid; gap: 2px; width: 100%; text-align: left; }
+.lesson-choice-title { font-weight: 650; }
+.lesson-choice-description { color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
+.lesson-choice:disabled .lesson-choice-description { color: var(--text-disabled); }
+.lesson-choice[aria-current="true"] { background: var(--selection-bg); border: 2px solid var(--selection-border); }
+.lesson-choice-current { justify-self: start; padding: 0 6px; border: 1px solid var(--selection-border); border-radius: 999px; font-size: .7rem; font-weight: 650; }
+.lesson-chooser-footer { display: flex; justify-content: flex-end; margin-top: 12px; }
 .control-buttons button { min-width: 80px; }
 /* Only the simulation group carries the primary action, so the two groups on one
    command row never read as one set of same-shaped commands. */
@@ -460,8 +478,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
 .brand span { color: var(--text-secondary); font-size: .8rem; }
-/* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) the select,
-   Load, and Open scenario file… exceed 38rem and would wrap the row at the desktop baselines. */
+/* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) a fixed cap
+   would wrap the lesson trigger and Open scenario file… at the desktop baselines. */
 .scenario-picker { flex: 0 1 auto; }
 .status-line { align-items: center; gap: 8px 16px; font-size: .85rem; }
 .run-summary { align-items: center; }

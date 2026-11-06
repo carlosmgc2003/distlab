@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand } from "@distlab/contracts";
 import { commerceScenario } from "@distlab/catalogs";
 import { projection } from "../tests/support.ts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -32,8 +33,7 @@ const runId = (page: Page) => page.getByLabel("Run identity").innerText().then(t
 
 async function load(page: Page, scenario: string) {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-  await button(page, "Load scenario").click();
+  await loadLesson(page, scenario);
   await expect(status(page)).toHaveText("READY");
 }
 async function openChoices(page: Page) {
@@ -112,7 +112,7 @@ test("an out-of-range timeout is caught inline, and the panel has no axe violati
   expect(results.violations).toEqual([]);
 
   // A lesson without design choices shows no panel.
-  await page.getByLabel("Scenario", { exact: true }).selectOption("cqrs-delayed");
+  await loadLesson(page, "cqrs-delayed");
   await expect(status(page)).toHaveText("READY");
   await expect(panel(page)).toHaveCount(0);
 });
@@ -146,8 +146,7 @@ test("design choices are unavailable while the simulation runs", async ({ page }
     } as unknown as typeof Worker;
   });
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption("retry-unsafe");
-  await button(page, "Load scenario").click();
+  await loadLesson(page, "retry-unsafe");
   const emit = (state: RuntimeProjectionSet["simulation"]["status"], type: "loaded" | "projection.updated") => page.evaluate(({ serialized, type }) => {
     const projection = JSON.parse(serialized) as RuntimeProjectionSet;
     const requestId = window.choiceFixture.commands.at(-1)!.requestId;

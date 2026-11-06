@@ -1,11 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { loadLesson } from "./support/lesson.ts";
 
 test("architecture and each inspector pass accessibility checks at the desktop baseline and 200% zoom", async ({ page }) => {
   test.setTimeout(60_000);
   await page.goto("/");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   const nodes = page.locator(".react-flow__node");
   await expect(nodes).toHaveCount(7);
   for (const size of [{ width: 1366, height: 768 }, { width: 683, height: 384 }]) {

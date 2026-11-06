@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { loadLesson } from "./support/lesson.ts";
 
 async function revealRawState(page: Page) {
   // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
@@ -18,8 +19,7 @@ test("response-lost selection shows remote authorization and local timeout as di
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
   const panel = page.getByRole("region", { name: "Distributed state" });
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await revealRawState(page);
   await expect(panel).toContainText("checkout-processor-response-lost@1");
@@ -74,7 +74,7 @@ test("response-lost selection shows remote authorization and local timeout as di
   await expect(knowledge).toContainText("NETWORK_TIMEOUT");
   await expect(knowledge).toContainText("authorization-1 APPROVED");
 
-  await page.getByLabel("Scenario", { exact: true }).selectOption("normal");
+  await loadLesson(page, "normal");
   await expect(status).toHaveText("READY");
   await revealRawState(page);
   await expect(panel).toContainText("checkout-normal@1");

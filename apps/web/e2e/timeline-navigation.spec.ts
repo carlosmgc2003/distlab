@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import { simulationTime } from "@distlab/contracts";
 import type { Observation, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { projection } from "../tests/support.ts";
+import { lessonTrigger, loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -43,8 +44,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
@@ -164,8 +164,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   const button = (name: string) => page.getByRole("button", { name, exact: true });
   const status = page.getByRole("status", { name: "Simulation status" });
   for (const name of ["Run", "Pause", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
-  await expect(button("Load scenario")).toBeEnabled();
-  await expect(page.getByLabel("Scenario", { exact: true })).toBeEnabled();
+  await expect(lessonTrigger(page)).toBeEnabled();
   await expect(page.locator("#timeline-rows")).toHaveCount(0);
 
   const emit = async (statusName: RuntimeProjectionSet["simulation"]["status"], observations: readonly Observation[], type: "loaded" | "projection.updated", correlated: boolean) => {
@@ -181,7 +180,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   };
   const history = [recorded("first", 1, "simulation.created"), recorded("middle", 2, "clock.advanced"), recorded("last", 3, "simulation.completed")];
 
-  await button("Load scenario").click();
+  await loadLesson(page, "normal");
   await emit("READY", [], "loaded", true);
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
@@ -213,8 +212,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
 
   await emit("RUNNING", history, "projection.updated", false);
   await expect(status).toHaveText("RUNNING");
-  await expect(page.getByLabel("Scenario", { exact: true })).toBeDisabled();
-  await expect(button("Load scenario")).toBeDisabled();
+  await expect(lessonTrigger(page)).toBeDisabled();
   await expect(button("Pause")).toBeEnabled();
   for (const name of ["Run", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
 
@@ -246,8 +244,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   });
   await expect(status).toContainText("FAILED");
   await expect(page.locator("#timeline-rows")).toHaveCount(0);
-  await expect(page.getByLabel("Scenario", { exact: true })).toBeEnabled();
-  await expect(button("Load scenario")).toBeEnabled();
+  await expect(lessonTrigger(page)).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
   for (const name of ["Run", "Pause", "Step"]) await expect(button(name)).toBeDisabled();
   await expect(page.getByRole("region", { name: "Architecture", exact: true })).toHaveCount(0);

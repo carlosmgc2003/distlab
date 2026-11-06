@@ -7,6 +7,7 @@ import type { WorkerCommand } from "@distlab/contracts";
 import { ScenarioDocumentLimits } from "@distlab/contracts";
 import { checkoutOverlayPolicy, hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";
+import { loadLesson } from "./support/lesson.ts";
 
 // ADR-006 browser import (#115): open a scenario file, run it, and read its checks.
 
@@ -80,7 +81,7 @@ test("APP-AC-8 opening the vision §19 file shows an imported header, runs, and 
   expect((await commands(page)).filter(command => command.type === "load")).toHaveLength(1);
 
   // Choosing a packaged scenario discards the imported document.
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, "normal");
   await expect(status(page)).toHaveText("READY");
   await expect(header).toHaveCount(0);
   await expect(page.getByRole("complementary", { name: "Learning objective" })).toContainText("How does a checkout travel through a distributed system?");
@@ -106,7 +107,7 @@ test("an invalid file lists each diagnostic with its path and explanation, loads
 test("an oversized file is not read or sent, and the loaded session stays", async ({ page }) => {
   await captureCommands(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, "normal");
   await expect(status(page)).toHaveText("READY");
   const before = (await commands(page)).length;
   await openFile(page, "huge.json", " ".repeat(ScenarioDocumentLimits.documentBytes + 1));

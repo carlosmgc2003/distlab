@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { loadLesson } from "./support/lesson.ts";
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-63");
 
@@ -79,8 +80,7 @@ async function expectFittedDefault(page: Page, context: string, transform: strin
 
 async function loadScenario(page: Page, scenario: string) {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
 }
@@ -160,7 +160,7 @@ test("Reset and a new scenario return to the fitted default view", async ({ page
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expectFittedDefault(page, "1534x897 after Reset", defaultView.transform);
 
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
+  await loadLesson(page, "response-lost");
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expectFittedDefault(page, "1534x897 after loading the other scenario", defaultView.transform);
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-after-reset.png") });
@@ -174,8 +174,7 @@ test("the legend covers no node at the default fit of any packaged lesson", asyn
     await page.setViewportSize(size);
     for (const scenario of scenarios) {
       await page.goto("/");
-      await page.getByLabel("Scenario", { exact: true }).selectOption(scenario.id);
-      await page.getByRole("button", { name: "Load scenario" }).click();
+      await loadLesson(page, scenario.id);
       await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
       const legend = page.getByRole("region", { name: "Architecture legend" });
       await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();

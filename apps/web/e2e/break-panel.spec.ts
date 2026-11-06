@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { normalCheckout } from "@distlab/catalogs";
 import { projection } from "../tests/support.ts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -39,8 +40,7 @@ const panel = (page: Page) => page.getByRole("region", { name: "Break the system
 
 async function load(page: Page, scenario: string) {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-  await button(page, "Load scenario").click();
+  await loadLesson(page, scenario);
   await expect(status(page)).toHaveText("READY");
 }
 
@@ -170,12 +170,12 @@ test("the graph picks a fault target, and a lesson offers only the fault kinds i
   const offered = async () => region.getByLabel("Fault", { exact: true }).locator("option").allTextContents();
   expect(await offered()).toContain("Duplicate message delivery");
   expect(await offered()).not.toContain("Change external service availability");
-  await page.getByLabel("Scenario", { exact: true }).selectOption("retry-unsafe");
+  await loadLesson(page, "retry-unsafe");
   await expect(status(page)).toHaveText("READY");
   // Choosing another lesson starts from an empty draft; the editor stays open.
   await expect(button(page, "Hide fault editor")).toBeVisible();
   expect(await offered()).not.toContain("Duplicate message delivery");
-  await page.getByLabel("Scenario", { exact: true }).selectOption("saga-compensated");
+  await loadLesson(page, "saga-compensated");
   await expect(status(page)).toHaveText("READY");
   expect(await offered()).toContain("Change external service availability");
   expect(await offered()).not.toContain("Crash service");
@@ -194,7 +194,7 @@ test("fault controls are unavailable while the simulation runs", async ({ page }
     } as unknown as typeof Worker;
   });
   await page.goto("/");
-  await button(page, "Load scenario").click();
+  await loadLesson(page, "normal");
   const emit = (state: RuntimeProjectionSet["simulation"]["status"], type: "loaded" | "projection.updated") => page.evaluate(({ serialized, type }) => {
     const projection = JSON.parse(serialized) as RuntimeProjectionSet;
     const requestId = window.breakFixture.commands.at(-1)!.requestId;

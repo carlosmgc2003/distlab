@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import type { WorkerCommand } from "@distlab/contracts";
 import { hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";
+import { loadLesson } from "./support/lesson.ts";
 
 // #116: save a packaged lesson as a starter scenario file, open it, and run it (ADR-006).
 
@@ -26,9 +27,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
     };
   });
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption("retry-idempotent");
-  // The packaged run first, for the verdict the starter must reproduce.
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, "retry-idempotent");
   await expect(status(page)).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
@@ -67,7 +66,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   // Choosing a packaged lesson again offers the starter again.
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, "retry-idempotent");
   await expect(status(page)).toHaveText("READY");
   await expect(save).toBeVisible();
 });

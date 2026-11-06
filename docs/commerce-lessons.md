@@ -37,8 +37,8 @@ the lesson's setup and may differ within a pair. The runner prints both groups
 and exits non-zero only when the run fails or an expectation is not reproduced.
 Assertion evidence includes the relevant database rows.
 
-In the browser, run `npm run dev`, choose a lesson in **Scenario**, and select
-**Load scenario**. Use **Step**, **Run**, and **Reset** as with checkout. The
+In the browser, run `npm run dev`, press **Choose a lesson**, and choose a lesson
+in the Lesson chooser. Use **Step**, **Run**, and **Reset** as with checkout. The
 Architecture tab shows committed service state, client outcomes, live KV entries
 with their expiry time,
 and lesson checks below the graph; selecting a component also shows its facts.

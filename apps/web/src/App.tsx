@@ -8,6 +8,7 @@ import { commerceCatalogReference } from "../../../packages/catalogs/src/commerc
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import { BreakPanel } from "./BreakPanel.tsx";
+import { LessonChooser } from "./LessonChooser.tsx";
 import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
 import { DesignChoicesPanel } from "./DesignChoicesPanel.tsx";
@@ -37,12 +38,17 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
   const { projection, loading, pendingCommands } = snapshot;
   const busy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
-  const [selected, setSelected] = useState<string>(scenarios[0].id);
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
   const [showHistoryControls, setShowHistoryControls] = useState(false);
+  // The Lesson chooser is the one way to choose a packaged lesson (#139). Choosing one loads it.
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const lessonTrigger = useRef<HTMLButtonElement>(null);
+  const chooserOpener = useRef<HTMLElement | null>(null);
+  // After a choice, focus returns to the trigger once the load settles and the trigger is enabled again.
+  const focusTriggerWhenIdle = useRef(false);
   const tabRequest = useRef<{ tab: WorkspaceTab; focusPanel: boolean } | null>(null);
   // The draft overlay is UI state (ADR-004). Only Apply, Load, and Compare send it, inside an ordinary load.
   const [draft, setDraft] = useState<readonly DraftEntry[]>([]);
@@ -112,13 +118,18 @@ export function App({ host }: { readonly host: SimulationHost }) {
     : snapshot.error?.code === "SIMULATION_FAILED" ? "The run failed. Inspect the error, then Reset to try again."
     : overlayError ? "The changes were not applied. Fix the marked faults or design choices, then apply them again."
     : documentError ? "The scenario file was not loaded. Fix the problems listed below, then open the file again."
-    : snapshot.error ? "The lesson could not be opened. Choose a scenario and load it again."
+    : snapshot.error ? "The lesson could not be opened. Choose a lesson to try again."
     : !projection ? "No lesson is loaded."
     : imported ? `Lesson ready: Imported · ${importedScenario?.presentation.title ?? importedFile.name}.`
     : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice) : "checkout"}.`;
   const sessionKey = `${sessionName}:${snapshot.attempt}:${projection?.simulation.runId ?? ""}`;
 
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
+  useEffect(() => {
+    if (chooserOpen || busy || !focusTriggerWhenIdle.current) return;
+    focusTriggerWhenIdle.current = false;
+    lessonTrigger.current?.focus();
+  }, [chooserOpen, busy]);
   useEffect(() => { setEvidenceFocus(null); }, [sessionKey]);
   useEffect(() => {
     const requested = tabRequest.current;
@@ -175,7 +186,6 @@ export function App({ host }: { readonly host: SimulationHost }) {
     if (busy) return;
     const choice = scenarios.find(item => item.id === id);
     if (!choice) return;
-    setSelected(choice.id);
     setLoadedChoice(choice);
     // Choosing another scenario discards the imported document (ADR-006).
     setImportedFile(null);
@@ -220,13 +230,12 @@ export function App({ host }: { readonly host: SimulationHost }) {
     replaceSession(id, carried.overlay);
   };
   /**
-   * Downloads the chosen packaged lesson as a starter scenario file (ADR-006). The file is built
+   * Downloads the loaded packaged lesson as a starter scenario file (ADR-006). The file is built
    * from data-only modules and handed to the browser as a Blob: no network, no storage, no load.
    */
   const saveStarter = () => {
-    const choice = scenarios.find(item => item.id === selected);
-    if (!choice) return;
-    const file = starterFile(choice);
+    if (!loadedChoice) return;
+    const file = starterFile(loadedChoice);
     const url = URL.createObjectURL(new Blob([file.text], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
@@ -234,11 +243,28 @@ export function App({ host }: { readonly host: SimulationHost }) {
     link.click();
     URL.revokeObjectURL(url);
   };
-  const onScenario = (id: string) => {
+  const openChooser = (opener: HTMLElement) => {
     if (busy) return;
-    if (projection || snapshot.error) replaceSession(id);
-    else setSelected(id);
+    chooserOpener.current = opener;
+    setChooserOpen(true);
   };
+  /** Escape and Cancel change nothing; focus returns to the control that opened the chooser. */
+  const closeChooser = () => {
+    setChooserOpen(false);
+    const opener = chooserOpener.current;
+    chooserOpener.current = null;
+    (opener?.isConnected ? opener : lessonTrigger.current)?.focus();
+  };
+  /** Choosing a lesson is the whole load: the exact packaged document, without an overlay. */
+  const chooseLesson = (id: string) => {
+    if (busy) return;
+    chooserOpener.current = null;
+    focusTriggerWhenIdle.current = true;
+    setChooserOpen(false);
+    replaceSession(id);
+  };
+  const triggerLabel = imported ? `Lesson: ${importedScenario?.presentation.title ?? importedFile.name}`
+    : loadedChoice ? `Lesson: ${experimentLabel(loadedChoice)}` : "Choose a lesson";
 
   const editable = !busy && (projection !== null || overlayError !== null);
   // An imported document accepts student changes only when it declares an overlay policy (ADR-006).
@@ -260,11 +286,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <div className="scenario-picker"
           onDragOver={event => { if (!busy && event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
           onDrop={event => { event.preventDefault(); void openFile(event.dataTransfer.files[0]); }}>
-          <label htmlFor="scenario">Scenario</label>
-          <select id="scenario" value={selected} disabled={busy} aria-describedby="scenario-help" onChange={event => onScenario(event.target.value)}>
-            {scenarios.map(choice => <option key={choice.id} value={choice.id}>{experimentLabel(choice)}</option>)}
-          </select>
-          <button disabled={busy} onClick={() => replaceSession(selected)}>Load scenario</button>
+          <button ref={lessonTrigger} type="button" className="lesson-trigger" disabled={busy} aria-haspopup="dialog" aria-expanded={chooserOpen}
+            aria-describedby="scenario-help" title={triggerLabel} onClick={event => openChooser(event.currentTarget)}>
+            <span className="lesson-trigger-label">{triggerLabel}</span><span className="lesson-trigger-caret" aria-hidden="true">▾</span>
+          </button>
           <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>Open scenario file…</button>
           <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Scenario file" hidden disabled={busy}
             onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
@@ -277,11 +302,11 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <div className="shell-notices">
         <section className="lesson-guide" aria-labelledby="lesson-heading">
           <h2 id="lesson-heading" className="sr-only">{commerce ? "Commerce lesson" : "Checkout lesson"}</h2>
-          <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+          <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
           <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
           {/* An instructor's authoring aid, kept in the drawer so the chooser row keeps its height at the
               desktop baselines. It is offered only for a packaged lesson, never for an imported document. */}
-          {imported ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
+          {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
           {projection && report ? <details className="execution-overview">
             <summary>Run overview</summary>
             <div className="execution-overview-body">
@@ -385,8 +410,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <p className="eyebrow">A small system. A big question.</p>
         <h2>What happens between checkout and payment?</h2>
         <p>Follow requests between services, discover what each component knows, and compare a successful checkout with a lost response.</p>
-        <ol><li>Choose and load a scenario above, or open an instructor’s scenario file.</li><li>Explore the system and run the simulation.</li><li>Read the story, then investigate only what interests you.</li></ol>
+        <ol><li><button type="button" className="empty-choose-lesson" disabled={busy} aria-haspopup="dialog" onClick={event => openChooser(event.currentTarget)}>Choose a lesson</button>, or open an instructor’s scenario file.</li><li>Explore the system and run the simulation.</li><li>Read the story, then investigate only what interests you.</li></ol>
       </section>
     </div>}
+    <LessonChooser open={chooserOpen} lessons={scenarios} current={imported ? null : loadedChoice?.id ?? null} busy={busy}
+      discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onClose={closeChooser} />
   </main>;
 }

@@ -2,13 +2,13 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { budgets, measureLayout, viewports } from "./layout-budget.ts";
 import type { BudgetLesson, BudgetState, BudgetViewport, LayoutBudget, LayoutMeasures } from "./layout-budget.ts";
+import { loadLesson } from "./support/lesson.ts";
 
 const lessons: readonly BudgetLesson[] = ["response-lost", "saga-uncompensated", "retry-unsafe"];
 
-async function loadLesson(page: Page, lesson: BudgetLesson) {
+async function openLesson(page: Page, lesson: BudgetLesson) {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(lesson);
-  await page.getByRole("button", { name: "Load scenario", exact: true }).click();
+  await loadLesson(page, lesson);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expect(page.getByRole("tab", { name: "Architecture", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".react-flow__node").first()).toBeVisible();
@@ -48,7 +48,7 @@ for (const viewport of Object.keys(viewports) as BudgetViewport[]) {
     test(`layout budget: ${lesson} at ${viewport}, READY and COMPLETED`, async ({ page }, testInfo) => {
       test.setTimeout(90_000);
       await page.setViewportSize(viewports[viewport]);
-      await loadLesson(page, lesson);
+      await openLesson(page, lesson);
       const readings: Partial<Record<BudgetState, LayoutMeasures>> = {};
 
       readings.READY = await settledMeasures(page, `${lesson} READY ${viewport}`);
