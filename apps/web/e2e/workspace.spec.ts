@@ -352,6 +352,9 @@ test("desktop 200% zoom keeps tabs and controls keyboard reachable without horiz
       expect(box!.y).toBeGreaterThanOrEqual(-1);
       expect(box!.y + box!.height).toBeLessThanOrEqual(size.height + 1);
     }
+    // Focus already returned to the trigger after the lesson was chosen, so focus() alone would not
+    // scroll it back into view after the loop above; start the traversal with it on screen.
+    await lessonTrigger(page).scrollIntoViewIfNeeded();
     await lessonTrigger(page).focus();
     const seen = new Set<string>();
     for (let step = 0; step < 24; step += 1) {

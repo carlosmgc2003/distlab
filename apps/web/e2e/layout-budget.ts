@@ -45,36 +45,38 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
  * CI) requires 238, and counts below 20 allow no slack.
  * `firstVerdictVisible` is `false` today: no commerce verdict is on screen after Run. See `targets`.
  *
+ * #139 replaced the Scenario select and Load scenario with one lesson trigger: one control fewer.
+ *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
  * stating the reason in its description.
  */
 export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLesson, Readonly<Record<BudgetState, LayoutBudget>>>>>> = {
   "1366x768": {
     "response-lost": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 238 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 238 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 238 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 238 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 195 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
     },
   },
   "1534x897": {
     "response-lost": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 377 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 377 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 377 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 377 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
+      READY: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 212 }, canvasVisible: { min: 318 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: false },
     },
   },
 };
