@@ -56,7 +56,11 @@ test("main-thread import graph uses application contracts and data, never runtim
         const target = resolve(dirname(file), dependency.path);
         assert.ok(target.startsWith(app) || dataModules.has(target), `Only the catalog's data-only source may cross a source boundary: ${target}`);
         if (!target.endsWith(".css")) walk(target);
-      } else assert.ok(["react", "react-dom/client", "@xyflow/react", "@xyflow/react/dist/style.css"].includes(dependency.path), `Runtime dependency ${dependency.path} in ${file}`);
+      } else assert.ok([
+        "react", "react-dom/client", "@xyflow/react", "@xyflow/react/dist/style.css",
+        // Presentation layout: the small ELK API, and the URL of the engine script it runs in its own worker.
+        "elkjs/lib/elk-api.js", "elkjs/lib/elk-worker.min.js?url",
+      ].includes(dependency.path), `Runtime dependency ${dependency.path} in ${file}`);
     }
   }
   walk(resolve(app, "main.tsx"));
