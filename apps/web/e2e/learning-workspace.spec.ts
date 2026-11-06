@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { loadLesson } from "./support/lesson.ts";
 
 for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 768, 390]) {
   test(`learning workspace discloses tools without losing context for ${scenario} at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 768 });
     await page.goto("/");
-    await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-    await page.getByRole("button", { name: "Load scenario" }).click();
+    await loadLesson(page, scenario);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     await expect(page.getByLabel("Learning objective")).toBeVisible();
     await expect(page.getByText("Advanced diagnostics", { exact: true })).not.toBeVisible();

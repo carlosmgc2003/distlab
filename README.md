@@ -175,9 +175,9 @@ DistLab is licensed under the [Apache License 2.0](LICENSE).
 ## Browser worker host
 
 Use Node.js 22.12 or newer and `npm install`. `npm run dev` starts Vite at
-`http://127.0.0.1:5173`; choose either checkout scenario and press **Load scenario**
+`http://127.0.0.1:5173`; press **Choose a lesson** and choose either checkout lesson
 to receive READY, architecture, and execution projections from the worker.
-**Open scenario file…** (or dropping a `.json` file on the scenario chooser) loads
+**Open scenario file…** (or dropping a `.json` file beside the lesson trigger) loads
 an instructor's [scenario document](docs/spec/adr/006-scenario-documents.md), such
 as `examples/scenarios/processor-response-lost.json`. The browser checks the
 file's size and sends its text unparsed; the worker validates it, and an invalid
@@ -214,7 +214,8 @@ Projections are copied and recursively frozen on both sides of structured clone.
 Component state labeled `host` stays on the projection for assessment comparison and is not rendered. The shell renders a separate `student` projection: committed Orders and Payments rows, service lifecycle, bus delivery state, the client-observed checkout outcome, and Payment Processor authorization facts. Provider counters and runtime handles are omitted from that projection.
 
 The host accepts the two packaged checkout documents and seventeen packaged commerce
-lessons. Choose them in the Scenario picker; commerce lessons show service-owned
+lessons. Choose them in the Lesson chooser, a dialog that shows each failing lesson
+beside its fix and loads a lesson in one click; commerce lessons show service-owned
 state and assertion verdicts below the graph, business events in Story, and a
 Compare button for paired experiments. Compare loads a fresh session rather than
 editing an active run. Runtime models remain worker-only.
@@ -235,7 +236,7 @@ that completed scenario as the payment outcome `NETWORK_TIMEOUT`. The worker
 samples boundaries with message tasks between kernel yields, and virtual time
 advances only inside the simulation.
 
-Scenario selection, Run, Pause, Step, Reset, simulation status, and virtual time
+The lesson trigger, Run, Pause, Step, Reset, simulation status, and virtual time
 stay in a compact toolbar. At a laptop width the architecture and a timeline
 share the remaining viewport, and the selected observation opens in the adjacent
 inspector. The lesson guide and the distributed-state dump stay collapsed until
@@ -378,8 +379,8 @@ rule; the provider records one approved authorization while Payments records
 headless proof, including fresh, stepped, and reset replay comparisons.
 
 With Node.js 22.12 or newer, run `npm install`, `npm run browser:install`, and
-`npm run dev`, then open `http://127.0.0.1:5173` in Chromium. Select **Checkout
-with lost processor response** and **Load scenario**. The lesson guides a first
+`npm run dev`, then open `http://127.0.0.1:5173` in Chromium. Press **Choose a
+lesson** and choose **Lost processor response**. The lesson guides a first
 run through the four category cues, request and message links, Run/Pause/Step,
 movement, timeline, component state, and fault evidence. Inspect the processor's
 approved authorization alongside Payments' `NETWORK_TIMEOUT` and `UNKNOWN` row.

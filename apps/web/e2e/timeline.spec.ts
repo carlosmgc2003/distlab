@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -50,7 +51,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   test.setTimeout(60_000);
   await observeWorker(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
@@ -160,7 +161,7 @@ test("Learning summarizes repeated engine bookkeeping and opens each exact raw r
   await observeWorker(page);
   await page.setViewportSize({ width: 1534, height: 897 });
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
@@ -196,7 +197,7 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await page.emulateMedia({ reducedMotion: "reduce" });
   await observeWorker(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
@@ -228,7 +229,7 @@ test("redacted and omitted payloads stay unmarked and incomplete history is labe
     } as unknown as typeof Worker;
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   await page.evaluate(() => {
     const requestId = window.timelineFixture.commands.at(-1)!.requestId;
     window.timelineFixture.emit({

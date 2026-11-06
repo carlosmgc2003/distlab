@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { projection } from "../tests/support.ts";
+import { lessonChoice, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -28,7 +29,7 @@ async function mount(page: Page) {
     } as unknown as typeof Worker;
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
 }
 
 async function emitProjection(page: Page, status: RuntimeProjectionSet["simulation"]["status"], type: "loaded" | "projection.updated" = "projection.updated", correlated = true) {
@@ -50,7 +51,7 @@ async function enabled(page: Page, names: string[]) {
 test("controls derive availability from every authoritative lifecycle and retain accessible names", async ({ page }) => {
   await mount(page);
   await enabled(page, []);
-  await expect(page.getByRole("button", { name: "Load scenario" })).toBeDisabled();
+  await expect(lessonTrigger(page)).toBeDisabled();
   await expect(page.getByRole("status", { name: "Simulation status" })).toContainText("Loading");
   await emitProjection(page, "READY", "loaded");
   for (const [status, available] of [
@@ -87,24 +88,35 @@ test("outstanding Run/Pause stays busy until both terminal replies and uses no o
   expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run", "pause"]);
 });
 
-test("fault selection cannot replace a pending or running session", async ({ page }) => {
+test("lesson selection cannot replace a pending or running session", async ({ page }) => {
   await mount(page);
   await emitProjection(page, "READY", "loaded");
   await page.getByRole("button", { name: "Run", exact: true }).click();
-  const selector = page.getByLabel("Scenario", { exact: true });
-  await expect(selector).toBeDisabled();
-  const forceChange = () => page.evaluate(() => {
-    const select = document.querySelector<HTMLSelectElement>("#scenario")!;
-    select.value = "response-lost";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await forceChange();
-  await expect(selector).toHaveValue("normal");
+  const trigger = lessonTrigger(page);
+  await expect(trigger).toBeDisabled();
+  // A forced activation of the disabled trigger opens no chooser.
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>(".lesson-trigger")!.click());
+  await expect(lessonChooser(page)).toHaveCount(0);
   await emitProjection(page, "RUNNING");
-  await expect(selector).toBeDisabled();
-  await forceChange();
-  await expect(selector).toHaveValue("normal");
+  await expect(trigger).toBeDisabled();
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>(".lesson-trigger")!.click());
+  await expect(lessonChooser(page)).toHaveCount(0);
+  await expect(trigger).toHaveText(/^Lesson: Normal checkout/);
   expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run"]);
+});
+
+test("a lesson choice cannot replace a session that starts running while the chooser is open", async ({ page }) => {
+  await mount(page);
+  await emitProjection(page, "READY", "loaded");
+  await lessonTrigger(page).click();
+  const choice = lessonChoice(page, "response-lost");
+  await expect(choice).toBeEnabled();
+  // The worker reports a run while the dialog is open: every lesson becomes unavailable.
+  await emitProjection(page, "RUNNING", "projection.updated", false);
+  await expect(choice).toBeDisabled();
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>("[data-lesson-id='response-lost']")!.click());
+  await expect(lessonChooser(page)).toBeVisible();
+  expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load"]);
 });
 
 test("Step and Reset serialize commands; structured failure remains inspectable and reset recovers", async ({ page }) => {
@@ -180,7 +192,7 @@ test("busy errors preserve lifecycle and transport failures require a fresh load
   await enabled(page, []);
   await expect(page.getByRole("alert")).toContainText("WORKER_UNAVAILABLE");
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("Simulation unavailable.");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "normal");
   await emitProjection(page, "READY", "loaded");
   await enabled(page, ["Run", "Step", "Reset"]);
   await expect(page.getByRole("alert")).toHaveCount(0);

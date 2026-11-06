@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -36,8 +37,7 @@ async function observeWorker(page: Page) {
 
 async function loadScenario(page: Page, scenario: "normal" | "response-lost" = "response-lost") {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
 }
 

@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window { filterEvidence: { commands: WorkerCommand[] }; }
@@ -37,8 +38,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // These assertions read canonical rows; the teaching Story view has its own spec.
@@ -152,7 +152,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await expect(typeInput).toHaveValue("network");
   expect(await page.evaluate(() => window.filterEvidence.commands.map(command => command.type))).toEqual([...commandsAtReady, "run"]);
 
-  await page.getByLabel("Scenario", { exact: true }).selectOption("normal");
+  await loadLesson(page, "normal");
   await expect(status).toHaveText("READY");
   // The scenario change remounts the history panel, so both disclosures start closed again.
   if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();

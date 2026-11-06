@@ -4,6 +4,7 @@ import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/
 import { checkoutAssessment, checkoutCatalog, responseLostCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 import AxeBuilder from "@axe-core/playwright";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -39,10 +40,8 @@ async function latestProjection(page: Page): Promise<RuntimeProjectionSet> {
 test("default architecture fit contains every checkout node after desktop and narrow workspace sizing", async ({ page }) => {
   await page.goto("/");
   const button = (name: string) => page.getByRole("button", { name, exact: true });
-  const scenario = page.getByLabel("Scenario", { exact: true });
   for (const value of ["normal", "response-lost"]) {
-    await scenario.selectOption(value);
-    await button("Load scenario").click();
+    await loadLesson(page, value);
     await expect(page.locator(".react-flow__node")).toHaveCount(7);
     for (const viewport of [{ width: 1534, height: 897 }, { width: 900, height: 800 }]) {
       await page.setViewportSize(viewport);
@@ -78,8 +77,7 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await page.locator(".lesson-guide summary").click();
   await expect(lesson).toContainText("Does the timeout prove that payment failed?");
   await page.locator(".lesson-guide summary").click();
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
-  await button("Load scenario").click();
+  await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await expect(lesson).toContainText("Lesson ready");
   await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();

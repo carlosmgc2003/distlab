@@ -101,6 +101,17 @@ Rules that keep the regions distinct:
 - Selecting evidence, changing history views, switching tabs, or opening and
   closing the lesson panel, the Service state dialog, or the Experiment drawer
   sends no worker commands and does not change simulation state or virtual time.
+- The Lesson chooser lists the packaged lessons as cards, one card per group of
+  lessons linked by Compare, so a failing lesson sits beside its fix, in catalog
+  order. Each lesson is one button, and the loaded lesson carries
+  `aria-current="true"`. Choosing a lesson closes the dialog and loads it in one
+  action, without an overlay; there is no separate Load button. When the draft
+  overlay has unapplied changes, the dialog says once that choosing a lesson
+  discards them, with no extra confirmation step. Escape and
+  `Cancel` close it without changes, and focus returns to the control that
+  opened it. The trigger reads **Choose a lesson** before any load and
+  `Lesson: ‹title›` after one, and is unavailable while a command is outstanding
+  or the simulation runs.
 - The Experiment drawer edits the draft overlay as UI state
   (`docs/spec/adr/004-session-overlays.md`). `Apply and restart` is the one path
   that sends the student's edits, inside an ordinary `load`; `Discard changes`

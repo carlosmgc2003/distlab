@@ -130,8 +130,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/scenarios.ts)
 
-- **Responsibility:** assemble the browser's packaged scenario picker and
-  lesson descriptions.
+- **Responsibility:** assemble the browser's packaged lessons for the Lesson
+  chooser, with their descriptions.
 - **Imports and boundaries:** `ScenarioDefinition` as a contract type,
   `detached` from `protocol.ts`, and the two permitted data-only catalog sources.
   Re-exports checkout lesson copy.
@@ -139,7 +139,7 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   commerce lessons, with IDs, families, titles, descriptions, comparisons,
   detached documents, and each lesson's data-only overlay policy (the same value
   the worker enforces from its own catalog). `packagedMetadata` casts these complete packaged values
-  for static display; `experimentLabel` supplies picker wording.
+  for static display; `experimentLabel` supplies the chooser and trigger wording.
 - **Presentation/runtime separation:** comparison choices and expected lesson
   behavior are teaching copy. Runtime validation belongs to the worker; the
   main thread neither normalizes untrusted scenarios nor chooses model factories.
@@ -148,7 +148,7 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/App.tsx)
 
-- **Responsibility:** compose scenario selection, execution controls,
+- **Responsibility:** compose the lesson trigger and Lesson chooser, execution controls,
   Architecture, Recorded history, lesson guidance, and evidence navigation.
 - **Imports and boundaries:** React, the host type, scenario metadata, graph
   mapping, playback, timeline terminal formatting, checkout fault inspection,

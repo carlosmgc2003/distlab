@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window { hintEvidence: { commands: WorkerCommand[] }; }
@@ -29,8 +30,7 @@ function commands(page: Page) {
 
 async function completed(page: Page) {
   const status = page.getByRole("status", { name: "Simulation status" });
-  await page.getByLabel("Scenario", { exact: true }).selectOption("response-lost");
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");

@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { Observation, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
+import { loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -57,8 +58,7 @@ function rowSelector(observation: Observation): string {
 
 async function runScenario(page: Page, scenario: string) {
   await page.goto("/");
-  await page.getByLabel("Scenario", { exact: true }).selectOption(scenario);
-  await page.getByRole("button", { name: "Load scenario" }).click();
+  await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   // Run while the simulation controls are visible (the architecture tab), then review history.
   await page.getByRole("button", { name: "Run", exact: true }).click();
