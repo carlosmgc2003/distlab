@@ -55,7 +55,7 @@ test("APP-AC-8 opening the vision §19 file shows an imported header, runs, and 
   const header = page.getByLabel("Imported scenario", { exact: true });
   await expect(header).toContainText(`Imported · Processor response lost · processor-response-lost@1 · seed processor-response-lost-1 · mvp.checkout@1.0.0 · digest ${validated.digest.slice(0, 8)} · run `);
   await expect(page.getByText("The checks in this scenario were written by the file’s author and judged by DistLab catalog predicates.")).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Learning objective" }).getByText("The processor approves the payment, but its response never reaches Payments.")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Lesson", exact: true }).getByText("The processor approves the payment, but its response never reaches Payments.")).toBeVisible();
   // No paired lesson, and the file declares no overlay policy.
   await expect(page.getByRole("button", { name: /^Compare/ })).toHaveCount(0);
   await expect(page.getByText("This scenario accepts no student changes: its file declares no overlay policy.")).toBeVisible();
@@ -84,7 +84,7 @@ test("APP-AC-8 opening the vision §19 file shows an imported header, runs, and 
   await loadLesson(page, "normal");
   await expect(status(page)).toHaveText("READY");
   await expect(header).toHaveCount(0);
-  await expect(page.getByRole("complementary", { name: "Learning objective" })).toContainText("How does a checkout travel through a distributed system?");
+  await expect(page.getByRole("complementary", { name: "Lesson", exact: true })).toContainText("How does a checkout travel through a distributed system?");
 });
 
 test("an invalid file lists each diagnostic with its path and explanation, loads no session, and a corrected file loads", async ({ page }) => {
@@ -116,7 +116,7 @@ test("an oversized file is not read or sent, and the loaded session stays", asyn
   await expect(page.getByRole("region", { name: "The scenario file was not loaded" })).toContainText("The current session is unchanged.");
   expect(await commands(page)).toHaveLength(before);
   await expect(status(page)).toHaveText("READY");
-  await expect(page.getByRole("complementary", { name: "Learning objective" })).toContainText("How does a checkout travel through a distributed system?");
+  await expect(page.getByRole("complementary", { name: "Lesson", exact: true })).toContainText("How does a checkout travel through a distributed system?");
 });
 
 test("presentation text renders as plain text, and a dropped file with an overlay policy offers the Break panel", async ({ page }) => {
@@ -136,7 +136,7 @@ test("presentation text renders as plain text, and a dropped file with an overla
   await page.dispatchEvent(".scenario-picker", "drop", { dataTransfer });
   await expect(status(page)).toHaveText("READY");
 
-  const prompt = page.getByRole("complementary", { name: "Learning objective" });
+  const prompt = page.getByRole("complementary", { name: "Lesson", exact: true });
   await expect(page.getByLabel("Imported scenario", { exact: true })).toContainText("Imported · <b>Bold?</b> · processor-response-lost@1");
   await expect(prompt).toContainText("<img src=x onerror=\"document.title='owned'\"> [link](https://example.com)");
   await expect(prompt.locator("b, img, a")).toHaveCount(0);

@@ -149,7 +149,7 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 [Source](../src/App.tsx)
 
 - **Responsibility:** compose the lesson trigger and Lesson chooser, execution controls,
-  Architecture, Recorded history, lesson guidance, and evidence navigation.
+  the Lesson panel's content, Architecture, Recorded history, and evidence navigation.
 - **Imports and boundaries:** React, the host type, scenario metadata, graph
   mapping, playback, timeline terminal formatting, checkout fault inspection,
   and local React presentation components. No runtime package imports.
@@ -171,9 +171,10 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   family (by catalog reference) from the validated document, shows
   `ImportedHeader` and `ImportedChecks`, and offers no Compare. Choosing a
   packaged scenario discards the imported file. **Save as scenario file**, in
-  the lesson drawer and offered only when no imported session is loaded,
-  downloads `starterFile` for the chosen packaged lesson through a Blob URL; it
-  sends no command.
+  the Lesson panel's ④ Experiment and offered only for a loaded packaged lesson,
+  downloads `starterFile` for that lesson through a Blob URL; it sends no
+  command. The Lesson panel's collapsed state is shell state, so it survives tab
+  switches and lesson loads.
 - **Presentation/runtime separation:** owns `useFlightPlayback` outside the tab
   panels so playback survives tab switches. Explicit history selection releases
   the playback cursor; automatic live cues do not. Evidence links activate
@@ -234,6 +235,32 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   `INVALID_OVERLAY` paths under `/parameters`.
 - **Presentation/runtime separation:** never resolves a target, never applies an
   overlay, and never sends a command.
+
+## `LessonPanel.tsx`
+
+[Source](../src/LessonPanel.tsx)
+
+- **Responsibility:** render the Lesson panel (#140): an `aside` named “Lesson”
+  with four numbered sections, ① Goal, ② Run, ③ Investigate, and ④ Experiment,
+  and one Hide lesson / Show lesson toggle that folds it to a rail.
+- **Imports and boundaries:** React types and `lesson-steps.ts`. The shell
+  passes each section's content; the panel owns only structure.
+- **State and protocol:** stateless. The collapsed state and the current step
+  come from `App.tsx`; the panel sends no worker command.
+- **Presentation/runtime separation:** the current step is `aria-current="step"`
+  plus a visible badge. It is emphasis only and never hides or disables a section.
+
+## `lesson-steps.ts`
+
+[Source](../src/lesson-steps.ts)
+
+- **Responsibility:** `currentStep(status, processedEvents)` decides which
+  Lesson panel section carries the current-step marker: Run while READY or
+  PAUSED with no event processed, Investigate after COMPLETED or FAILED, and
+  none otherwise.
+- **Imports and boundaries:** the `RuntimeProjectionSet` contract type only.
+- **State and protocol:** pure; reads projection fields the shell already holds.
+- **Presentation/runtime separation:** it never infers progress from history.
 
 ## `DesignChoicesPanel.tsx`
 

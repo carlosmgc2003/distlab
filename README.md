@@ -239,8 +239,10 @@ advances only inside the simulation.
 The lesson trigger, Run, Pause, Step, Reset, simulation status, and virtual time
 stay in a compact toolbar. At a laptop width the architecture and a timeline
 share the remaining viewport, and the selected observation opens in the adjacent
-inspector. The lesson guide and the distributed-state dump stay collapsed until
-their summaries are opened. Below 960px, including a phone width and the layout
+inspector. The Lesson panel beside the tabs reads as four numbered sections:
+Goal, Run, Investigate (the outcome, evidence links, and questions), and
+Experiment. Only its Advanced diagnostics, the distributed-state dump, stays
+collapsed until opened, and **Hide lesson** folds the panel to a rail. Below 960px, including a phone width and the layout
 viewport Chrome uses at 200% zoom, Architecture, Timeline, and Inspection switch
 among those same panels. Timeline selection and filters survive that switch.
 Reset and loading another scenario clear run-specific timeline state. These

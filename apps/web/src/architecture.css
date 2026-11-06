@@ -104,10 +104,6 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .status-line [role="alert"], .terminal-history, .lesson-guide:has(details[open]), .raw-state[open] { flex: 1 1 100%; min-width: 0; }
 .lesson-guide { margin: 0; padding: 0; border: 0; background: transparent; }
 .lesson-guide p { margin: 0; }
-.execution-overview { flex: 0 1 auto; min-width: 0; padding: 0 8px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-panel); }
-.execution-overview > summary { min-height: 40px; padding: 8px 2px; cursor: pointer; font-weight: 650; }
-.execution-overview-body { max-height: min(35dvh, 20rem); overflow: auto; padding: 0 2px 8px; }
-.execution-overview-body p { margin: 4px 0; max-width: 100ch; }
 .evidence-links { display: flex; flex-wrap: wrap; gap: 6px; }
 .evidence-links button { min-height: 40px; padding: 5px 9px; }
 /* The committed run is summarised once: status, virtual time, and the two boundary counts. */
@@ -130,6 +126,33 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .workspace-empty { margin: 0; }
 
 .investigation-workspace { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+/* The Lesson panel (#140) is the workspace's first column on both tabs; the tabs fill the rest. */
+.investigation-workspace.has-lesson-panel { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; }
+.workspace-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.lesson-panel { width: 20rem; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-left: 3px solid var(--action-primary); border-radius: 0 10px 10px 0; background: var(--surface-panel); }
+.lesson-panel.is-collapsed { width: auto; }
+.lesson-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border-subtle); }
+.lesson-panel.is-collapsed .lesson-panel-header { flex-direction: column; padding: 6px; border-bottom: 0; }
+.lesson-panel-title { margin: 0; font-size: 1rem; }
+.lesson-panel-toggle { min-height: 36px; padding: 4px 10px; font-size: .8rem; }
+.lesson-panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 14px 12px; }
+.lesson-panel-body[hidden] { display: none; }
+.lesson-step { padding: 10px 0; border-bottom: 1px solid var(--border-subtle); font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere; }
+.lesson-step:last-child { border-bottom: 0; }
+.lesson-step h3 { margin: 0 0 4px; font-size: .9rem; color: var(--text-secondary); }
+.lesson-step p { margin: 4px 0; }
+/* The current step is emphasis only: a marked heading and edge, never a hidden or disabled section. */
+.lesson-step[aria-current="step"] { margin: 0 -8px; padding: 10px 8px; border-left: 3px solid var(--selection-border); background: var(--selection-bg); }
+.lesson-step[aria-current="step"] h3 { color: var(--text-primary); }
+.lesson-step-now { margin-left: 6px; padding: 0 6px; border: 1px solid var(--selection-border); border-radius: 999px; font-size: .7rem; font-weight: 650; }
+.lesson-step .execution-overview { display: grid; gap: 4px; }
+.lesson-step .execution-overview p { margin: 0; }
+.lesson-step .evidence-links { margin: 4px 0; }
+.lesson-step .design-choices { margin-top: 8px; }
+.lesson-step .design-choices-grid { grid-template-columns: minmax(0, 1fr); }
+.lesson-step .save-starter { margin-top: 8px; }
+.lesson-step .advanced-diagnostics { margin-top: 8px; }
+.lesson-step .advanced-diagnostics .raw-state-body { max-height: none; }
 .panel-architecture, .panel-history { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: hidden; }
 .panel-architecture[hidden], .panel-history[hidden] { display: none; }
 .panel-architecture { display: flex; flex-direction: column; overflow: auto; }
@@ -473,7 +496,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
    summary keeps its own full-width line. */
 .command-toolbar .command-row { grid-column: 1 / -1; }
 .command-toolbar > .status-line { display: contents; }
-.command-toolbar .lesson-drawer, .command-toolbar .terminal-history, .command-toolbar [role="alert"], .command-toolbar .run-summary { grid-column: 1 / -1; }
+.command-toolbar .terminal-history, .command-toolbar [role="alert"], .command-toolbar .run-summary { grid-column: 1 / -1; }
 .command-toolbar .run-summary { justify-content: flex-end; }
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
@@ -484,12 +507,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .status-line { align-items: center; gap: 8px 16px; font-size: .85rem; }
 .run-summary { align-items: center; }
 .run-status { color: var(--action-primary); }
-.lesson-drawer { width: 100%; border-top: 1px solid var(--border-subtle); }
-.lesson-drawer > summary, .history-filter-drawer > summary, .detail-disclosure > summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-size: .85rem; font-weight: 650; }
-.lesson-drawer > .shell-notices { display: block; max-height: 30dvh; overflow: auto; padding: 8px 12px; background: var(--surface-subtle); border-radius: 8px; }
-.lesson-drawer .lesson-guide { display: block; }
-.lesson-drawer .lesson-guide details[open] { max-height: none; overflow: visible; }
-.learning-prompt { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px 16px; border-left: 3px solid var(--action-primary); background: var(--surface-panel); border-radius: 0 10px 10px 0; }
+.history-filter-drawer > summary, .detail-disclosure > summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-size: .85rem; font-weight: 650; }
 .panel-architecture:has(.commerce-state) { overflow: auto; }
 .panel-architecture:has(.commerce-state) > .architecture-layout { flex: 0 0 28rem; min-height: 28rem; }
 .commerce-state { flex: none; padding: 1rem; }
@@ -511,9 +529,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .lesson-checks.is-secondary .lesson-check { border-left-color: var(--border-subtle); background: none; }
 .lesson-checks.is-secondary .lesson-check.is-not-reproduced { border-left-color: var(--status-warning); background: var(--status-warning-bg); }
 .commerce-facts ul { padding-left: 1.25rem; }
-.learning-prompt button { white-space: normal; }
-.learning-prompt strong { font-size: .95rem; }
-.learning-prompt span { color: var(--text-secondary); font-size: .85rem; }
 .workspace-tabs { border-bottom: 1px solid var(--border-subtle); gap: 4px; }
 .workspace-tabs [role="tab"] { border: 0; border-radius: 8px 8px 0 0; background: transparent; }
 .workspace-tabs [role="tab"][aria-selected="true"] { background: var(--surface-panel); }
@@ -556,12 +571,17 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .command-toolbar .run-summary { justify-content: flex-start; }
   .scenario-picker { flex: 1 1 100%; }
   .workspace-empty { padding: 24px; }
+  /* At browser zoom the Lesson panel stacks above the tabs and keeps its own scroll. */
+  .investigation-workspace.has-lesson-panel { display: flex; flex-direction: column; }
+  .lesson-panel { width: auto; }
+  .lesson-panel-body { max-height: 24rem; }
+  .lesson-panel.is-collapsed .lesson-panel-header { flex-direction: row; }
 }
 /* History is a first-class canvas, not a list squeezed beside an empty inspector. */
 .workspace-navigation { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .workspace-navigation .workspace-tabs { flex: 1; }
 .history-controls-toggle { font-size: .8rem; }
-.history-focus .command-toolbar, .history-focus .learning-prompt { display: none; }
+.history-focus .command-toolbar { display: none; }
 .history-layout { display: flex; position: relative; }
 .history-layout > .timeline-panel { flex: 1; }
 .story-filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: none; }
@@ -608,18 +628,17 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
    edits a running simulation; Apply is an ordinary load. */
 .break-panel[hidden] { display: none; }
 .break-panel { flex: none; overflow: auto; padding: 8px 16px; border: 1px solid var(--border-subtle); border-left: 3px solid var(--status-error); border-radius: 0 10px 10px 0; background: var(--surface-panel); }
-.investigation-workspace > .break-panel:only-child { max-height: none; flex: 1 1 auto; }
+.workspace-main > .break-panel:only-child { max-height: none; flex: 1 1 auto; }
 /* The open editor takes a column beside the graph, so the architecture keeps its height. */
-.investigation-workspace.break-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem); grid-template-rows: auto auto minmax(0, 1fr);
-  grid-template-areas: "prompt break" "nav break" "panel break"; column-gap: 12px; }
-.investigation-workspace.break-open > .learning-prompt { grid-area: prompt; }
-.investigation-workspace.break-open > .break-panel { grid-area: break; min-height: 0; }
-.investigation-workspace.break-open > .workspace-navigation { grid-area: nav; }
-.investigation-workspace.break-open > .panel-architecture, .investigation-workspace.break-open > .panel-history { grid-area: panel; }
+.workspace-main.break-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem); grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "nav break" "panel break"; column-gap: 12px; }
+.workspace-main.break-open > .break-panel { grid-area: break; min-height: 0; }
+.workspace-main.break-open > .workspace-navigation { grid-area: nav; }
+.workspace-main.break-open > .panel-architecture, .workspace-main.break-open > .panel-history { grid-area: panel; }
 .break-panel.is-open .break-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); }
 @media (max-width: 1100px) {
-  .investigation-workspace.break-open { display: flex; flex-direction: column; }
-  .investigation-workspace.break-open > .break-panel { max-height: 50%; }
+  .workspace-main.break-open { display: flex; flex-direction: column; }
+  .workspace-main.break-open > .break-panel { max-height: 50%; }
 }
 .break-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .break-header h2 { margin: 0; font-size: 1rem; }
@@ -668,14 +687,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .design-choices { flex-basis: 100%; display: grid; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
 .design-choices-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
 .design-choices-header h2 { margin: 0; font-size: 1rem; }
-.learning-prompt .design-choices span.design-choices-summary { color: var(--text-secondary); font-size: .85rem; }
 .design-choices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 8px 16px; }
 .design-choice { display: grid; gap: 2px; align-content: start; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: 8px; }
 .design-choice.is-changed { border-color: var(--action-primary); border-width: 2px; }
 .design-choice-toggle { display: flex; gap: 8px; align-items: center; min-height: 32px; font-weight: 600; }
 .design-choice-toggle input { width: 18px; height: 18px; }
 .design-choice input[type="number"] { width: 7rem; min-height: 32px; }
-.investigation-workspace > .design-choices { flex: none; padding: 8px 16px; background: var(--surface-panel); border-radius: 10px; }
 /* The learning prompt styles every span; field messages keep their own size and colour. */
 .design-choices .field-help { font-size: .75rem; color: var(--text-secondary); }
 .design-choices .field-error { font-size: .8rem; color: var(--status-error); font-weight: 600; }

@@ -69,17 +69,13 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await page.goto("/");
   const button = (name: string) => page.getByRole("button", { name, exact: true });
   const status = page.getByRole("status", { name: "Simulation status" });
-  const lesson = page.getByRole("region", { name: "Checkout lesson" });
-  // The lesson guide lives inside the collapsed lesson drawer; open it before reading the lesson.
-  const lessonDrawer = page.locator("details.lesson-drawer");
-  if ((await lessonDrawer.getAttribute("open")) === null) await lessonDrawer.locator("> summary").click();
-  await expect(lesson).toContainText("No lesson is loaded");
-  await page.locator(".lesson-guide summary").click();
-  await expect(lesson).toContainText("Does the timeout prove that payment failed?");
-  await page.locator(".lesson-guide summary").click();
+  // The Lesson panel (#140) appears with the loaded lesson; its guide needs no disclosure.
+  const lesson = page.getByRole("complementary", { name: "Lesson", exact: true });
+  await expect(lesson).toHaveCount(0);
   await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await expect(lesson).toContainText("Lesson ready");
+  await expect(lesson.getByRole("region", { name: "③ Investigate" })).toContainText("Does the timeout prove that payment failed?");
   await expect(page.getByRole("application", { name: "Architecture graph" })).toBeVisible();
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
   await expect(page.locator(".react-flow__edge")).toHaveCount(6);
@@ -124,23 +120,24 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   });
   expect(verdicts).toEqual(fixture.results);
 
-  // The header disclosure is scoped: Distributed state nests its own raw-state disclosures.
-  const raw = page.locator(".shell-notices > details.raw-state");
-  const rawToggle = page.locator(".shell-notices > details.raw-state > summary");
-  if ((await raw.getAttribute("open")) === null) await rawToggle.click();
+  // Advanced diagnostics is scoped: Distributed state nests its own raw-state disclosures.
+  const raw = lesson.locator("details.advanced-diagnostics");
+  if ((await raw.getAttribute("open")) === null) await raw.locator("> summary").click();
+  // Distributed state repeats the evidence links; use the ones in ③ Investigate.
+  const evidence = (name: string) => lesson.locator(".execution-overview").getByRole("button", { name, exact: true });
   const panel = page.getByRole("region", { name: "Distributed state" });
   await expect(panel).toContainText("Status: selected");
   await expect(panel).toContainText("NETWORK_TIMEOUT");
   await expect(panel).toContainText("authorization-1 APPROVED");
   await expect(panel).toContainText("not proof of denial or rollback");
-  await button("Show fault selection").click();
+  await evidence("Show fault selection").click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");
   // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  await button("Show processor authorization").click();
+  await evidence("Show processor authorization").click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
-  await button("Show Payments timeout").click();
+  await evidence("Show Payments timeout").click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("network.request.timedout");
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.getByRole("status", { name: "Request and message movement" })).not.toContainText("No request or message movement");

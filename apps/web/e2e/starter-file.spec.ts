@@ -34,8 +34,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
   await expect(page.getByRole("list", { name: "Business invariants", exact: true }).getByRole("listitem").filter({ hasText: label })).toContainText("HOLDS");
   const sent = (await page.evaluate(() => window.starterEvidence.commands)).length;
 
-  // The action lives in the lesson drawer, beside the lesson state.
-  await page.getByText("Lesson guide & run insights", { exact: true }).click();
+  // The action lives in the Lesson panel's ④ Experiment section, with nothing to open first.
   const save = page.getByRole("button", { name: "Save as scenario file", exact: true });
   const [download] = await Promise.all([page.waitForEvent("download"), save.click()]);
   expect(download.suggestedFilename()).toBe("retry-idempotent-copy.json");
