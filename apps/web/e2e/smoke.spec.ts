@@ -63,7 +63,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(legend).toContainText("Ownership");
     await expect(legend.getByRole("img", { name: "Cylinder" })).toBeVisible();
     await expect(legend.getByRole("img", { name: "Layered box with key" })).toBeVisible();
-    await expect(legend.getByRole("img", { name: "Short thin solid line without arrowhead" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Short thin amber line without arrowhead" })).toBeVisible();
     await expect(legend).toContainText("Client");
     await expect(legend).toContainText("Internal service");
     await expect(legend).toContainText("External service");
@@ -192,7 +192,7 @@ test("commerce owned resources are visible and keyboard-inspectable with static 
     await expect(legend).toContainText("Ownership");
     await expect(legend.getByRole("img", { name: "Cylinder" })).toBeVisible();
     await expect(legend.getByRole("img", { name: "Layered box with key" })).toBeVisible();
-    await expect(legend.getByRole("img", { name: "Short thin solid line without arrowhead" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Short thin amber line without arrowhead" })).toBeVisible();
     for (const id of resourceIds) {
       const resource = page.locator(`.react-flow__node[data-id="${id}"]`);
       await expect(resource).toBeVisible();

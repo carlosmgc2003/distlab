@@ -16,6 +16,7 @@ import type { GraphEmphasis } from "./timeline.ts";
 import { elkLayout } from "./layout/elk-layout.ts";
 import type { EdgeRoute, ElkLayoutOptions, Size } from "./layout/elk-layout.ts";
 import { browserElk, edgeLabelMeasurer } from "./layout/elk-engine.ts";
+import { roundedPath, routeMidpoint } from "./layout/elk-path.ts";
 import "@xyflow/react/dist/style.css";
 import "./architecture.css";
 
@@ -137,7 +138,7 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
         <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
         <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
         <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
-        <li><EdgeSample relationship="ownership" label="Short thin solid line without arrowhead" /><span>Ownership</span></li>
+        <li><EdgeSample relationship="ownership" label="Short thin amber line without arrowhead" /><span>Ownership (data)</span></li>
       </ul>
     </section>
     <section aria-labelledby="legend-movements-heading">
@@ -247,15 +248,32 @@ function activityBadgeId(componentId: string): string {
   return `activity-${componentId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
-/** The token follows the measured link path, so the link is drawn here instead of by a built-in edge. */
-const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
+/**
+ * Draws the route ELK computed: start point, bend points, end point, with
+ * slightly rounded corners, and the label where ELK reserved its space. The
+ * route is already in canvas coordinates (elk-layout converts container-relative
+ * points). Before a layout lands, or if it fails, the edge falls back to a
+ * smooth-step path between its handles. The flight token follows the same path.
+ */
+const ElkEdge = memo(function ElkEdge(props: EdgeProps<ArchitectureEdge | OwnershipEdge>) {
   const { id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
     markerEnd, markerStart, style, label, labelStyle, labelShowBg, labelBgStyle, labelBgPadding, labelBgBorderRadius, pathOptions, data } = props;
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
-    borderRadius: pathOptions?.borderRadius, offset: pathOptions?.offset, stepPosition: pathOptions?.stepPosition,
-  });
-  const flight = data?.flight;
+  const route = data?.route;
+  const [path, labelX, labelY] = useMemo((): [string, number, number] => {
+    if (route && route.points.length > 1) {
+      const at = route.label ?? routeMidpoint(route.points);
+      return [roundedPath(route.points), at.x, at.y];
+    }
+    const [fallback, x, y] = getSmoothStepPath({
+      sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+      borderRadius: pathOptions?.borderRadius, offset: pathOptions?.offset, stepPosition: pathOptions?.stepPosition,
+    });
+    return [fallback, x, y];
+  }, [route, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, pathOptions]);
+  // Ownership (data) links never carry a recorded movement.
+  const movement = data && data.link !== "data" ? data : undefined;
+  const flight = movement?.flight;
+  const pace = movement?.pace;
   // The token is drawn in graph coordinates, so it is scaled back against the
   // canvas zoom to stay the same readable size at any zoom level.
   const zoom = useStore(state => state.transform[2]);
@@ -268,11 +286,11 @@ const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
       {...(labelBgBorderRadius !== undefined ? { labelBgBorderRadius } : {})}
       {...(style !== undefined ? { style } : {})}
       {...(markerEnd !== undefined ? { markerEnd } : {})} {...(markerStart !== undefined ? { markerStart } : {})} />
-    {flight ? <FlightToken flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(data?.pace ?? "slow") * 0.62)} /> : null}
+    {flight ? <FlightToken flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
   </>;
 });
 const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
-const edgeTypes = { link: LinkEdge };
+const edgeTypes = { elk: ElkEdge };
 const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
   "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",

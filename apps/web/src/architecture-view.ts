@@ -44,8 +44,8 @@ export type ArchitectureNode = Node<{
 }, "component">;
 export type ArchitectureEdge = Edge<{
   relationship: "request" | "subscription" | "publication";
-  /** Layout link kind: requests are sync, bus relationships async. */
-  link: LinkKind;
+  /** Layout link kind: requests are sync, bus relationships async. Data links are ownership edges only. */
+  link: Exclude<LinkKind, "data">;
   /** ELK route in canvas coordinates, once the graph is laid out. */
   route?: EdgeRoute;
   /** The recorded movement currently painted on this link, if any. */
@@ -179,7 +179,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const label = subscription ? `Subscribe · ${link.source}` : publication ? `Publish · ${link.target}` : `Request${link.label ? ` · ${link.label}` : ""}`;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
-      type: "link", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
+      type: "elk", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
       sourceHandle: handleFor[relationship].source, targetHandle: handleFor[relationship].target,
       markerEnd: relationshipMarkers[relationship],
       style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
@@ -217,7 +217,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
   const resourceEdges: OwnershipEdge[] = resourceNodes.map(node => ({
     id: `ownership:${node.data.owner}:${node.id}`,
     source: node.data.owner, target: node.id, sourceHandle: handleFor.ownership.source, targetHandle: handleFor.ownership.target,
-    type: "link", data: { owner: node.data.owner, resource: node.data.kind, link: "data" },
+    type: "elk", data: { owner: node.data.owner, resource: node.data.kind, link: "data" },
     style: { stroke: DATA_STROKE, strokeWidth: 1.5 },
     selectable: false, focusable: false, deletable: false,
   }));
@@ -227,7 +227,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     && nodes.some(node => node.id === topic.id && node.data.component.kind === "infrastructure")) {
     edges.push({
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
-      sourceHandle: handleFor.publication.source, targetHandle: handleFor.publication.target, type: "link",
+      sourceHandle: handleFor.publication.source, targetHandle: handleFor.publication.target, type: "elk",
       label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication", link: "async" },
       markerEnd: relationshipMarkers.publication,
       style: { stroke: "#334155", strokeWidth: 2, strokeDasharray: "2 5" },
