@@ -1553,7 +1553,8 @@ DistLab should remain intentionally smaller than the distributed systems it teac
 
 The browser hosts the two checkout documents and seventeen commerce lessons through
 worker-only catalog composition. Main-thread imports are limited to contracts
-and data-only scenario documents. Committed business facts, live KV entries and
+and data-only scenario documents, plus the React, React Flow, and ELK
+presentation libraries; ELK layout runs in its own presentation worker. Committed business facts, live KV entries and
 their expiry, client
 outcomes, bus delivery facts and dead letters, and assessment verdicts are
 explicitly projected for student inspection; runtime task handles and provider

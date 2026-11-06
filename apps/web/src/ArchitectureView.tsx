@@ -286,7 +286,8 @@ const ElkEdge = memo(function ElkEdge(props: EdgeProps<ArchitectureEdge | Owners
       {...(labelBgBorderRadius !== undefined ? { labelBgBorderRadius } : {})}
       {...(style !== undefined ? { style } : {})}
       {...(markerEnd !== undefined ? { markerEnd } : {})} {...(markerStart !== undefined ? { markerStart } : {})} />
-    {flight ? <FlightToken flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
+    {/* Keyed by observation: each recorded movement mounts its own token, so its CSS animation always starts from the leg's start. */}
+    {flight ? <FlightToken key={flight.observationId} flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
   </>;
 });
 const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
@@ -390,7 +391,7 @@ function ElkLayoutRunner({ layoutKey, nodes, edges, container, onLayout }: {
 }
 
 /** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
-function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure }: {
+function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure, onFitted }: {
   readonly container: RefObject<HTMLDivElement | null>;
   readonly sessionKey: string;
   /** Changes when a new ELK layout is applied, so the fitted view follows the laid-out graph. */
@@ -398,6 +399,8 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure }
   /** Opening or closing the legend changes the space it reserves. */
   readonly legendOpen: boolean;
   readonly onMeasure: (width: number) => void;
+  /** Reports the layout the view was just fitted to. */
+  readonly onFitted: (layoutKey: string) => void;
 }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
@@ -428,9 +431,12 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure }
   useEffect(() => {
     const element = container.current;
     // Measure after the legend has painted at its new size.
-    const frame = requestAnimationFrame(() => { void fitView(element ? fitOptionsFor(element) : fitViewOptions); });
-    return () => cancelAnimationFrame(frame);
-  }, [container, fitView, sessionKey, layoutKey, legendOpen]);
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      void fitView(element ? fitOptionsFor(element) : fitViewOptions).then(() => { if (!cancelled) onFitted(layoutKey); });
+    });
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [container, fitView, sessionKey, layoutKey, legendOpen, onFitted]);
   return null;
 }
 
@@ -511,6 +517,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   const layoutKeyRef = useRef(layoutKey);
   layoutKeyRef.current = layoutKey;
   const laidOut = layout?.key === layoutKey ? layout : null;
+  // The graph stays hidden (and the canvas busy) until the laid-out graph is fitted to the canvas.
+  const [fittedKey, setFittedKey] = useState<string | null>(null);
+  const ready = laidOut !== null && fittedKey === layoutKey;
   // Sizes React Flow measured for this structure. A new structure starts unmeasured, so layout waits for fresh sizes.
   const [measuredSizes, setMeasuredSizes] = useState<{ readonly key: string; readonly sizes: ReadonlyMap<string, Size> }>({ key: layoutKey, sizes: new Map() });
   const sizes = measuredSizes.key === layoutKey ? measuredSizes.sizes : undefined;
@@ -620,7 +629,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       : <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>}
     {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
     <div className={`architecture-layout${selectedId || flight ? " has-selection" : ""}${onPick ? " is-picking" : ""}`}>
-      <div className={`graph-canvas${laidOut ? "" : " is-laying-out"}`} ref={canvas} aria-busy={laidOut ? undefined : true} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
+      <div className={`graph-canvas${ready ? "" : " is-laying-out"}`} ref={canvas} aria-busy={ready ? undefined : true} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
         if (event.key === "Escape") {
@@ -637,7 +646,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           minZoom={minZoom} maxZoom={1.8}
           ariaLabelConfig={ariaLabelConfig}>
           <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
-          <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen} onMeasure={setCanvasWidth} />
+          <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
+            onMeasure={setCanvasWidth} onFitted={setFittedKey} />
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />

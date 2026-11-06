@@ -90,8 +90,9 @@ export const BASE_OPTIONS: Readonly<LayoutOptions> = {
   "elk.partitioning.activate": "true",
   "elk.separateConnectedComponents": "false",
   "elk.randomSeed": "1",
-  "elk.spacing.nodeNode": "70",
-  "elk.layered.spacing.nodeNodeBetweenLayers": "120",
+  "elk.spacing.nodeNode": "60",
+  // Edge labels get layers of their own, which already widen the gap between two node layers.
+  "elk.layered.spacing.nodeNodeBetweenLayers": "70",
   "elk.spacing.edgeNode": "30",
   "elk.layered.spacing.edgeNodeBetweenLayers": "30",
   "elk.spacing.edgeEdge": "18",
@@ -396,9 +397,14 @@ function reachOwner(points: XYPosition[], edge: LayoutEdge | undefined, inset: R
   return result;
 }
 
+/**
+ * A data link drops straight from the owner's bottom side, right above its
+ * satellite, so two satellites of one owner never share a run.
+ */
 function satelliteRoute(owner: XYPosition, ownerSize: Size, satellite: XYPosition, satelliteSize: Size): XYPosition[] {
-  const start = { x: owner.x + ownerSize.width / 2, y: owner.y + ownerSize.height };
   const end = { x: satellite.x + satelliteSize.width / 2, y: satellite.y };
+  const inset = Math.min(8, ownerSize.width / 2);
+  const start = { x: Math.min(Math.max(end.x, owner.x + inset), owner.x + ownerSize.width - inset), y: owner.y + ownerSize.height };
   if (Math.abs(start.x - end.x) < 0.5) return [start, { x: start.x, y: end.y }];
   const middle = (start.y + end.y) / 2;
   return [start, { x: start.x, y: middle }, { x: end.x, y: middle }, end];

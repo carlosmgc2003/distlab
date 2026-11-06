@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import { loadLesson } from "./support/lesson.ts";
 
 test("architecture and each inspector pass accessibility checks at the desktop baseline and 200% zoom", async ({ page }) => {

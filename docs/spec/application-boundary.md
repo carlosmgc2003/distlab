@@ -34,6 +34,10 @@ worker commands.
 React plus React Flow is the MVP presentation stack. React Flow positions and
 selection state are host/UI state and must not enter `RunInputs`, scheduling,
 randomness, assertions, or canonical history.
+The graph is laid out by ELK (`elkjs`): the main thread imports only the ELK
+API and the URL of its engine script, which runs in a presentation worker of
+its own, never in the simulation worker. Layout positions and edge routes are
+UI state like any other React Flow position.
 The main thread may derive presentation-only resource nodes from packaged
 `ArchitectureDefinition` metadata; those nodes remain outside
 `ArchitectureProjection`, worker messages, and canonical history.

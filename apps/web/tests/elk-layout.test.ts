@@ -11,7 +11,7 @@ import type { ElkLayoutOptions, LayoutEdge, LayoutNode } from "../src/layout/elk
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { GATEWAY_ID, platformMetadata, platformProjection } from "./fixtures/platform-architecture.ts";
-import { metrics, nodeIntrusions, overlappingPairs, smoothStepRoute } from "./layout-geometry.ts";
+import { metrics, nodeIntrusions, overlappingPairs, sharedRuns, smoothStepRoute } from "./layout-geometry.ts";
 import type { Box, Route } from "./layout-geometry.ts";
 
 const engine = new ELK();
@@ -163,6 +163,7 @@ test("every packaged lesson lays out without overlaps or edges through foreign n
       assert.deepEqual(overlappingPairs(all), [], `${metadata.name} ${asyncEdges}`);
       assert.deepEqual(nodeIntrusions(routes(laid.edges), all), [], `${metadata.name} ${asyncEdges}`);
       assert.deepEqual(detachedEnds(laid.edges, all), [], `${metadata.name} ${asyncEdges}`);
+      assert.equal(sharedRuns(routes(laid.edges)), 0, `${metadata.name} ${asyncEdges}: no two edges drawn over each other`);
     }
   }
 });

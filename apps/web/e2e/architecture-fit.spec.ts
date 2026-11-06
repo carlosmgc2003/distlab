@@ -1,9 +1,9 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
-import { loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-63");
 
@@ -83,6 +83,7 @@ async function loadScenario(page: Page, scenario: string) {
   await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
+  await graphLaidOut(page);
 }
 
 test("the default view shows the whole checkout graph at the supported desktop baselines", async ({ page }) => {
@@ -128,6 +129,8 @@ test("the inspector, tab switches, and window resizes refit the graph", async ({
 
   // Keyboard users reach the same fit: the pan buttons move the view, the fit button restores it.
   await page.getByRole("button", { name: "Pan right", exact: true }).click();
+  // The ELK layout is wide and short, so one zoom step can still fit; two always push it past the canvas.
+  await page.getByRole("button", { name: "Zoom In", exact: true }).click();
   await page.getByRole("button", { name: "Zoom In", exact: true }).click();
   const panned = await graphFit(page);
   expect(panned.clipped.length, "a panned and zoomed view may leave the canvas").toBeGreaterThan(0);
