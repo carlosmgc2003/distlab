@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { loadLesson } from "./support/lesson.ts";
+import { viewButton } from "./support/history.ts";
 
 declare global {
   interface Window {
@@ -300,7 +301,7 @@ test("selecting a record in Recorded history takes the graph highlight back", as
 
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // Selecting a movement milestone in the Story table is a reader choice, not a live cue.
-  await page.getByRole("button", { name: "Table", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await page.locator(".story-table button").first().click();
   await expect(page.locator(".story-table button[aria-pressed='true']")).toHaveCount(1);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();

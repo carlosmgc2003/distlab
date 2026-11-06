@@ -330,15 +330,15 @@ selected observation. Exact, Prefix, and Contains are explicit: Exact follows
 the history query, and Prefix and Contains are case-sensitive read-only
 projections. Choosing a suggestion uses Exact. Quick views narrow the same
 recorded history before those fields are applied: Key events, Faults &
-timeouts, Requests & responses, Messages, State changes, and Assertions, plus
-the recorded components and the selected trace as chips. A quick view states
+timeouts, Requests & responses, Messages, State changes, and Assertions, chosen
+in the **Show** select, and **Component** picks one recorded component. A quick view states
 how many observations it shows out of the recorded total, and its label says it
 narrows the display rather than the run. Active chips show the applied quick
 view and filters and can be removed one at a time or cleared together. The
-canonical fields stay under an **Advanced filters** disclosure, so they keep
-their exact, prefix, and contains semantics and suggestions without competing
-with the quick views. Malformed or
-reversed virtual times stay on screen with an explanation, and an empty result
+other canonical fields are in the **More filters…** dialog, so they keep their
+exact, prefix, and contains semantics and suggestions without competing with
+the quick views; Apply applies them, and Escape or Cancel discards the edits.
+Malformed or reversed virtual times stay in the dialog with an explanation, and an empty result
 names the active quick view and filters, the recorded values, and how to clear
 them. These controls do not
 change canonical history or `ExecutionHistoryReader` semantics. Previous and

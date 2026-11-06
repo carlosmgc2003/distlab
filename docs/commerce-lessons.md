@@ -47,8 +47,8 @@ as well as colour. The scenario expectations follow under **Lesson setup
 reproduced**. Each settled check has **Show evidence**, which opens Recorded
 history at its `scenario.assertion.evaluated` record.
 **Recorded history → Story** includes business logs such as compensation and
-breaker transitions, as well as network, DB, and fault milestones. Diagram and
-Table presentations select the same underlying observations.
+breaker transitions, as well as network, DB, and fault milestones. The Story
+diagram and Story table views select the same underlying observations.
 
 **Compare** loads the paired experiment with equivalent inputs and a fresh worker
 session (it does not retain a side-by-side result or change rules during a run).

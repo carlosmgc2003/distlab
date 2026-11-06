@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { commerceLessonNames } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import { loadLesson } from "./support/lesson.ts";
+import { filterByType, viewButton } from "./support/history.ts";
 
 for (const name of commerceLessonNames) {
   test(`${name}: select, step, run, inspect facts and checks, reset and replay`, async ({ page }, testInfo) => {
@@ -35,7 +36,7 @@ for (const name of commerceLessonNames) {
     await checks.scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath(`${name}-state.png`) });
     await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
     // Story keeps only the documented milestones, so a commerce run teaches on its network,
     // message, transaction, and fault records. runtime.log is not a milestone; its records
     // stay in Learning and Raw.
@@ -44,7 +45,7 @@ for (const name of commerceLessonNames) {
     await expect(legend.locator("li")).not.toHaveCount(0);
     await expect(legend).toContainText(/Request|Response|Transaction commit|Fault|Timeout/);
     await expect(page.getByRole("region", { name: "Story diagram", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Table", exact: true }).click();
+    await viewButton(page, "Story table").click();
     await expect(page.locator(".story-table")).toBeVisible();
   });
 }
@@ -155,10 +156,7 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   // Raw renders a window of rows, so narrow it to the expiry records with the Type filter.
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  const filterDrawer = page.locator(".history-filter-drawer");
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
-  await page.getByLabel("Type", { exact: true }).fill("kv.expired");
+  await filterByType(page, "kv.expired");
   const rows = page.locator("#timeline-rows");
   await expect(page.locator(".timeline-count")).toHaveText(/^3 of \d+ observations/);
   await expect(rows).toContainText("cart");
@@ -190,10 +188,7 @@ test("the inventory pair shows stock with its version and each client's outcome,
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  const filterDrawer = page.locator(".history-filter-drawer");
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
-  await page.getByLabel("Type", { exact: true }).fill("database.transaction.rejected");
+  await filterByType(page, "database.transaction.rejected");
   await expect(page.locator(".timeline-count")).toHaveText(/^1 of \d+ observations/);
   await page.locator("#timeline-rows").getByRole("button", { name: /database.transaction.rejected inventory/ }).click();
   await expect(page.locator("#inspection-panel")).toContainText("TRANSACTION_CONFLICT");
