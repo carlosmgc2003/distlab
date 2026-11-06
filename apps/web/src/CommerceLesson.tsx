@@ -1,7 +1,7 @@
 import type { CanonicalValue, RuntimeProjectionSet } from "@distlab/contracts";
 import type { CommerceCheck } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import { lessonChecks } from "./lesson-checks.ts";
-import type { CheckRow } from "./lesson-checks.ts";
+import type { CheckRow, LessonCheckView } from "./lesson-checks.ts";
 
 function object(value: CanonicalValue | undefined): Readonly<Record<string, CanonicalValue>> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Readonly<Record<string, CanonicalValue>> : {};
@@ -52,23 +52,21 @@ export function CheckItem({ row, onShowEvidence }: { row: CheckRow<string>; onSh
   </li>;
 }
 
-/** `checks` is the packaged lesson's classification. An imported session lists its own checks separately, so it passes none. */
-export function CommerceState({ projection, checks, onShowEvidence }: {
-  projection: RuntimeProjectionSet;
-  checks?: readonly CommerceCheck[];
-  onShowEvidence: (observationId: string) => void;
-}) {
-  const student = projection.components.filter(entry => entry.visibility === "student");
-  const client = student.find(entry => object(entry.state).role === "commerce-client");
-  const view = checks ? lessonChecks(object(client?.state).assertions, checks, projection.history.observations) : null;
-  return <section className="commerce-state" aria-label="Commerce lesson state">
-    <h3>Service knowledge and committed state</h3>
-    <p>These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.</p>
-    <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={`${entry.componentId} state`}>
-      <h4>{entry.componentId}</h4><CommerceFacts projection={projection} componentId={entry.componentId} />
-    </section>)}</div>
-    {view ? <>
-    <h3>Lesson checks</h3>
+/**
+ * The packaged lesson's checks, mapped from the `commerce-client` projection's stored verdicts. The
+ * client is found by its role, never by a component ID.
+ */
+export function commerceLessonChecks(projection: RuntimeProjectionSet, checks: readonly CommerceCheck[]): LessonCheckView {
+  const client = projection.components.find(entry => entry.visibility === "student" && object(entry.state).role === "commerce-client");
+  return lessonChecks(object(client?.state).assertions, checks, projection.history.observations);
+}
+
+/**
+ * The two lists of lesson checks (#96), shown in the Lesson panel's ③ Investigate (#141). An
+ * imported session lists its own checks with `ImportedChecks` instead.
+ */
+export function LessonChecks({ view, onShowEvidence }: { view: LessonCheckView; onShowEvidence: (observationId: string) => void }) {
+  return <div className="lesson-checks-view" role="region" aria-label="Lesson checks">
     <section className="lesson-checks" aria-labelledby="business-invariants-heading">
       <h4 id="business-invariants-heading">Business invariants</h4>
       <p>Properties the system must keep whatever its design. VIOLATED is what this run did to the business.</p>
@@ -79,6 +77,17 @@ export function CommerceState({ projection, checks, onShowEvidence }: {
       <p>Scenario expectations confirm that the run told this lesson's story. They say nothing about whether the system is safe.</p>
       <ul aria-label="Scenario expectations">{view.expectations.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
     </section> : null}
-    </> : null}
+  </div>;
+}
+
+/** Every student-visible component's facts, below the graph until the Service state dialog (#136). */
+export function ServiceStateGrid({ projection }: { projection: RuntimeProjectionSet }) {
+  const student = projection.components.filter(entry => entry.visibility === "student");
+  return <section className="commerce-state" aria-labelledby="service-state-heading">
+    <h3 id="service-state-heading">Service knowledge and committed state</h3>
+    <p>These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.</p>
+    <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={`${entry.componentId} state`}>
+      <h4>{entry.componentId}</h4><CommerceFacts projection={projection} componentId={entry.componentId} />
+    </section>)}</div>
   </section>;
 }

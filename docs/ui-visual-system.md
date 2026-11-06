@@ -83,6 +83,16 @@ Rules that keep the regions distinct:
   boundary once: replaying does not change the simulation or its virtual time.
 - The top bar and the lesson panel are identical on both tabs. No tab hides the
   simulation controls or the lesson guidance.
+- ③ Investigate states the outcome in one line before anything else: for a
+  commerce lesson, “‹n› of ‹m› business invariants violated”, “All ‹m›
+  business invariants hold”, “Checks are pending: run the lesson”, or “Checks
+  are incomplete”; for checkout, the Run overview's outcome sentence. The
+  verdicts (commerce) or evidence links (checkout) follow, then the questions.
+- When a run ends (COMPLETED or FAILED), the lesson panel scrolls ③ Investigate
+  into view (`block: "nearest"`, no smooth scrolling under
+  `prefers-reduced-motion: reduce`) and a polite live region announces the
+  outcome once per run, not on every projection update. Focus does not move,
+  and a collapsed panel stays collapsed.
 - The loaded investigation workspace exposes exactly two top-level tabs:
   **Architecture** (the Replay toolbar, the architecture graph, and the
   Component inspector) and **Recorded history** (history navigation and
