@@ -14,14 +14,47 @@ Components should use these tokens rather than adding isolated color values.
 
 ## Workspace hierarchy
 
-The shell has three levels, and each level owns its own information. A reader
-should never have to reconcile two statements about the same fact.
+The workspace is a guided lesson: a student always knows what lesson they are
+in, what to do next, and where the result is. The shell has four regions, and
+each region owns its own information. A reader should never have to reconcile
+two statements about the same fact.
 
-| Level | Region | Carries |
+This layout was approved in #137. The child issues of #136 deliver it one region
+at a time, so until they land the shipped shell can still differ from it.
+
+### Regions
+
+| Region | Holds | Rules |
 | --- | --- | --- |
-| Summary | `Committed simulation state` in the command toolbar | Run status, virtual time, processed events, pending events |
-| Investigation | `Architecture` tab, `Recorded history` tab | System structure with component inspector, or recorded evidence with observation detail |
-| Detail | The observation detail inside `Recorded history` | Summary, effect evidence, related evidence, and technical record for the selected observation |
+| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, `Pause`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no replay controls, no tagline. |
+| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run and Step do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
+| Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds a one-row **Replay** toolbar above the architecture graph, and nothing below the graph. |
+| Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds Design choices and Faults with one footer: `Apply and restart`, `Discard changes`, `Close`. | No other overlay is added. |
+
+### Vocabulary
+
+| Term | Use | Replaces |
+| --- | --- | --- |
+| Lesson | A packaged lesson, in all visible UI text | "Scenario" and "experiment" in visible labels |
+| Replay | The Architecture tab's graph playback controls: `Play replay`, `Pause replay`, `Restart replay`, `Previous movement`, `Next movement`, **Speed** | The "Recorded history" group label, `Play timeline`, `Previous observation`, `Next observation` |
+| Recorded history | Only the tab and its panel heading | — |
+| Observation #n | One recorded record | "Step #n"; **Step** is a simulation command |
+| Change the experiment / Apply and restart | The one path that sends the student's edited session overlay | "Apply faults and reload", "Apply choices and reload" |
+
+### Layout budgets
+
+| Measure | 1366×768 | 1534×897 |
+| --- | --- | --- |
+| Top bar height | ≤ 64 px | ≤ 64 px |
+| Graph canvas height inside the viewport, lesson loaded, no overlay open | ≥ 440 px | ≥ 560 px |
+| First business invariant verdict after a commerce run completes | Inside the viewport without user scrolling | Same |
+| Disclosures to open before the lesson guide or evidence links are visible | 0 | 0 |
+| Visible paragraphs of 8 or more words outside the lesson panel and graph area | ≤ 2 | ≤ 2 |
+
+The layout budget browser test (`apps/web/e2e/layout-budget.ts`) enforces the
+budgets. It holds the bounds measured before #136, and each issue of #136
+tightens them toward this table. Once the single-row top bar and the Replay
+toolbar land (#144), the canvas budget is final.
 
 DistLab is a desktop learning application. The supported desktop viewport
 baseline is 1366×768 and 1534×897, covered by browser tests. Mobile screen
@@ -32,29 +65,29 @@ requirements. The desktop tabbed layout remains usable at 200% browser zoom
 (683×384 CSS pixels for the 1366 baseline) with vertical scrolling and no
 horizontal overflow; zoom support is not mobile support.
 
-Rules that keep the levels distinct:
+### Rules
 
-- The committed run is stated once. Status, virtual time, and the two event
-  counts share one region and one line; no second line restates completion,
-  and no region repeats the run's virtual time. Engine counters such as random
-  draws and the observation count stay under the **Advanced diagnostics**
-  disclosure.
-- Simulation commands and recorded-history navigation are two separate control
-  groups that share the command row, kept apart by a vertical rule and their own
-  visible labels. `Run`, `Pause`, `Step`, and `Reset` carry **Simulation
-  execution**; `Play timeline`, `Pause timeline`, `Previous observation`, and
-  `Next observation` carry **Recorded history navigation**. Each group is a
-  `group` with its label as the accessible name, so the distinction survives
-  without the styling, and only the simulation group's first command is painted
-  as the primary action.
-- Only the first group changes the run. The history group states its boundary
-  in one sentence: reviewing history does not change the simulation or its
-  virtual time.
+Rules that keep the regions distinct:
+
+- The committed run is stated once, in the top bar's run summary. Status,
+  virtual time, and the two event counts share one region and one line; no
+  second line restates completion, and no region repeats the run's virtual time.
+  Engine counters such as random draws and the observation count stay under the
+  **Advanced diagnostics** disclosure in ④ Experiment.
+- Simulation commands and replay are two separate control groups in two
+  regions. `Run`, `Pause`, `Step`, and `Reset` carry **Simulation execution** in
+  the top bar; the replay controls carry **Replay** in the Architecture tab. Each
+  group is a `group` with its label as the accessible name, so the distinction
+  survives without the styling, and only `Run` is painted as the primary action.
+- Only Simulation execution changes the run. The Replay group states its
+  boundary once: replaying does not change the simulation or its virtual time.
+- The top bar and the lesson panel are identical on both tabs. No tab hides the
+  simulation controls or the lesson guidance.
 - The loaded investigation workspace exposes exactly two top-level tabs:
-  **Architecture** (architecture graph and Component inspector) and
-  **Recorded history** (history navigation/filtering and Observation detail
-  together). The former narrow/mobile Architecture, Timeline, and Inspection
-  view switcher is removed.
+  **Architecture** (the Replay toolbar, the architecture graph, and the
+  Component inspector) and **Recorded history** (history navigation and
+  filtering, and the docked Observation detail). Service state is a dialog, not
+  a third tab.
 - The tab set uses standard tab semantics (`tablist`, `tab`, `tabpanel`),
   has a clear active state (`aria-selected`), is keyboard operable (including
   Left/Right/Home/End within the tablist), and moves focus predictably:
@@ -63,33 +96,47 @@ Rules that keep the levels distinct:
   selected row.
 - Switching tabs preserves component selection, observation selection, history
   mode, filters, and other investigation state; both tab panels stay mounted
-  and the inactive panel is hidden. Only a scenario load or reset clears the
+  and the inactive panel is hidden. Only a lesson load or reset clears the
   state that load/reset already resets.
-- Simulation controls and committed simulation state stay outside the tabs.
-  Selecting evidence, changing history views, or switching tabs sends no
-  worker commands and does not change simulation state or virtual time.
-- Observation detail is summary-first inside the Recorded history tab, in
-  this order: **Event summary** (plain-language stored event label,
-  sequence, virtual time, source, target, payload visibility), **Effect and
-  evidence** (before/after changes when stored, otherwise an explicit
-  statement that none were stored), **Related evidence** (causing
-  observation, effects, current trace, event/entity filters), **Technical
-  record** (canonical IDs, trace/span/event IDs, visibility statement, stored
-  JSON). Headings for requests, commits, faults, dropped responses, timeouts,
-  and external effects are pure presentation mappings over stored fields;
-  redacted payloads are never reconstructed or summarized as if visible.
+- Selecting evidence, changing history views, switching tabs, or opening and
+  closing the lesson panel, the Service state dialog, or the Experiment drawer
+  sends no worker commands and does not change simulation state or virtual time.
+- The Experiment drawer edits the draft overlay as UI state
+  (`docs/spec/adr/004-session-overlays.md`). `Apply and restart` is the one path
+  that sends the student's edits, inside an ordinary `load`; `Discard changes`
+  returns the draft to the applied overlay. Compare carries the applied overlay
+  to the paired lesson as ADR-004 states, and choosing another lesson in the
+  Lesson chooser starts from an empty draft.
+
+### Recorded history
+
+- One view switch: **Story diagram**, **Story table**, **Learning**, **Raw**.
+- One control per filter dimension: **Show** (quick views with counts),
+  **Component**, and **More filters…**, a modal dialog for advanced filters.
+- Active filters appear as chips only while a filter is active.
+- Observation detail is docked as the right column of the tab, never floating.
+- The selection is stated once, in the observation detail header.
+
+Observation detail is summary-first, in this order: **Event summary**
+(plain-language stored event label, sequence, virtual time, source, target,
+payload visibility), **Effect and evidence** (before/after changes when stored,
+otherwise an explicit statement that none were stored), **Related evidence**
+(causing observation, effects, current trace, event/entity filters),
+**Technical record** (canonical IDs, trace/span/event IDs, visibility statement,
+stored JSON). Headings for requests, commits, faults, dropped responses,
+timeouts, and external effects are pure presentation mappings over stored
+fields; redacted payloads are never reconstructed or summarized as if visible.
 
 ## Architecture playback and message flight
 
 The Architecture tab can replay the movements a run has already recorded, so a
 reader watches requests, responses, and messages travel between components at a
-pace they choose. The transport is the **Recorded history** group on the command
-row: `Play timeline`, `Pause timeline`, `Restart timeline`, `Previous
-observation`, `Next observation`, and a **Speed** select. It shares the command
-row with **Simulation execution** to keep the graph area tall, and is separated
-from it by a vertical rule and its own label rather than by a second block of
-chrome. It appears only while the Architecture tab is showing, because the graph
-it animates is the graph it belongs to.
+pace they choose. The transport is the **Replay** toolbar, one row at the top of
+the Architecture tab panel, above the graph: `Play replay`, `Pause replay`,
+`Restart replay`, `Previous movement`, `Next movement`, and a **Speed** select.
+It lives inside the Architecture tab, never in the top bar, because the graph it
+animates is the graph it belongs to; the top bar keeps only **Simulation
+execution**.
 
 - A *movement* is one stored observation that travels a link. A record that
   travels no link is not a movement and stays in Recorded history. Movements keep
@@ -105,7 +152,7 @@ it animates is the graph it belongs to.
   the run, and the `Playback speed` hint says so.
 - While the run is still recording, the cursor waits at the recorded end for the
   next movement instead of stopping. When the run has finished, the transport
-  ends with the last movement still painted and offers `Restart timeline`.
+  ends with the last movement still painted and offers `Restart replay`.
 
 The narration beside the graph is a presentation mapping over stored fields:
 
