@@ -7,14 +7,15 @@ import { starterFile } from "./starter-file.ts";
 import { commerceCatalogReference } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
-import { BreakPanel } from "./BreakPanel.tsx";
+import { ExperimentDrawer } from "./ExperimentDrawer.tsx";
+import { FaultsSection } from "./FaultsSection.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
 import { LessonPanel } from "./LessonPanel.tsx";
 import { currentStep } from "./lesson-steps.ts";
 import { endsRun, outcomeSummary, runOutcome } from "./lesson-outcome.ts";
 import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
-import { DesignChoicesPanel } from "./DesignChoicesPanel.tsx";
+import { DesignChoicesSection } from "./DesignChoicesSection.tsx";
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
 import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
@@ -62,9 +63,12 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [picking, setPicking] = useState(false);
   const [pick, setPick] = useState<{ pick: GraphPick; token: number } | null>(null);
   const [carryNotice, setCarryNotice] = useState("");
-  const [breakOpen, setBreakOpen] = useState(false);
-  // Collapsed by default, so the architecture keeps its height.
-  const [choicesOpen, setChoicesOpen] = useState(false);
+  // The Experiment drawer (#143) is UI state: it stays open across Apply and lesson loads, and Close keeps the draft.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerTrigger = useRef<HTMLButtonElement>(null);
+  // A design-choice field holding text that is not a value withholds Apply; Discard clears that text.
+  const [choicesInvalid, setChoicesInvalid] = useState(false);
+  const [choicesReset, setChoicesReset] = useState(0);
   // An imported scenario file stays in UI state until the student chooses another scenario (ADR-006).
   // Its text is sent unparsed; only the worker parses and validates it.
   const [importedFile, setImportedFile] = useState<ScenarioFile | null>(null);
@@ -272,15 +276,33 @@ export function App({ host }: { readonly host: SimulationHost }) {
     : loadedChoice ? `Lesson: ${experimentLabel(loadedChoice)}` : "Choose a lesson";
 
   const editable = !busy && (projection !== null || overlayError !== null);
+  const experimentPending = choicesPending || faultsPending;
+  // A rejected overlay opens the drawer, where each section shows the diagnostics that point into it.
+  useEffect(() => { if (rejected) setDrawerOpen(true); }, [rejected]);
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setPicking(false);
+    drawerTrigger.current?.focus();
+  };
+  const discardDraft = () => {
+    setDraft(applied ? draftFromOverlay(applied) : []);
+    setChoiceDraft(applied?.parameters ?? []);
+    setChoicesReset(token => token + 1);
+  };
+  // Picking happens on the graph, so starting it shows the Architecture tab.
+  const changePicking = useCallback((next: boolean) => {
+    setPicking(next);
+    if (next) setTab("architecture");
+  }, []);
   // An imported document accepts student changes only when it declares an overlay policy (ADR-006).
-  const breakPanel = policy && lesson ? <BreakPanel key={sessionName} policy={policy} architecture={lesson.architecture}
-    applied={applied} draft={draft} onDraftChange={setDraft} parameters={choiceDraft} choicesPending={choicesPending} editable={editable}
-    rejected={rejectedFaults} onApply={applyDraft} picking={picking} onPickingChange={setPicking} pick={pick} open={breakOpen} onOpenChange={setBreakOpen}
-    hidden={projection !== null && tab !== "architecture"} /> : null;
-  // Design choices exist only for lessons whose policy declares parameters.
-  const choicesPanel = policy && policy.parameters.length ? <DesignChoicesPanel key={sessionName} policy={policy}
-    applied={applied?.parameters ?? null} draft={choiceDraft} onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices}
-    onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft))} faultsPending={faultsPending} open={choicesOpen} onOpenChange={setChoicesOpen} /> : null;
+  const experimentDrawer = policy && lesson ? <ExperimentDrawer key={sessionName} open={drawerOpen} onClose={closeDrawer}
+    pending={experimentPending} invalid={choicesInvalid} editable={editable}
+    onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft))} onDiscard={discardDraft}
+    // Design choices exist only for lessons whose policy declares parameters.
+    designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} applied={applied?.parameters ?? null} draft={choiceDraft}
+      onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices} onInvalidChange={setChoicesInvalid} resetToken={choicesReset} /> : null}
+    faults={<FaultsSection policy={policy} architecture={lesson.architecture} applied={applied} draft={draft} onDraftChange={setDraft}
+      pending={faultsPending} editable={editable} rejected={rejectedFaults} picking={picking} onPickingChange={changePicking} pick={pick} />} /> : null;
 
   // The Lesson panel (#140) holds what the learning prompt bar and the toolbar's lesson drawer held,
   // moved without rewording. Only Advanced diagnostics stays a disclosure.
@@ -330,7 +352,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const appliedChanges = snapshot.session ? `${snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters)}` : ""} · ${appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"}` : "";
   const lessonExperiment = <>
     {imported ? <>
-      {/* Without an overlay policy there is no Break panel; say so where the scenario is described (ADR-006). */}
+      {/* Without an overlay policy there is no Experiment drawer; say so where the scenario is described (ADR-006). */}
       {policy ? null : <p className="imported-locked">This scenario accepts no student changes: its file declares no overlay policy.</p>}
       {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length) ? <p className="run-identity" aria-label="Applied student changes">
         {snapshot.session.overlay.parameters.length ? `${describeChoices(snapshot.session.overlay.parameters)} · ` : ""}{appliedEntries.length} student fault{appliedEntries.length === 1 ? "" : "s"}
@@ -342,7 +364,11 @@ export function App({ host }: { readonly host: SimulationHost }) {
       {loadedChoice?.family === "commerce" && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => compare(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
       {carryNotice ? <p role="status">{carryNotice}</p> : null}
     </>}
-    {choicesPanel}
+    {/* The one way to change a session: the Experiment drawer (#143). */}
+    {experimentDrawer ? <button ref={drawerTrigger} type="button" className="experiment-trigger" aria-expanded={drawerOpen} aria-controls="experiment-drawer"
+      onClick={() => drawerOpen ? closeDrawer() : setDrawerOpen(true)}>
+      Change the experiment…{experimentPending || choicesInvalid ? <span className="experiment-badge"> unapplied changes</span> : null}
+    </button> : null}
     {/* An instructor's authoring aid. It is offered only for a packaged lesson, never for an imported document. */}
     {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
     {/* Engine counters stay here; the committed run summary in the toolbar carries status and virtual time. */}
@@ -404,7 +430,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}
     {projection ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
-      <div className={`workspace-main${breakOpen && policy && tab === "architecture" ? " break-open" : ""}`}>
+      <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>
         <div className="workspace-navigation">
         <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
           {tabs.map(([id, label]) => <button key={id} type="button" role="tab"
@@ -417,8 +443,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
         {tab === "history" ? <button type="button" className="history-controls-toggle" aria-expanded={showHistoryControls}
           onClick={() => setShowHistoryControls(current => !current)}>{showHistoryControls ? "Hide simulation controls" : "Show simulation controls"}</button> : null}
         </div>
-        {/* Break the system belongs to the Architecture tab: faults target the graph's links and components. */}
-        {breakPanel}
+        {/* Docked beside both tab panels and non-modal, so Pick on graph keeps working. */}
+        {experimentDrawer}
         <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
           <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
@@ -438,7 +464,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </div>
     </div> : overlayError && (loadedChoice || imported) ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
-      <div className="workspace-main">{breakPanel}</div>
+      <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>{experimentDrawer}</div>
     </div> : documentError ? <div className="investigation-workspace">
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />
     </div> : <div className="investigation-workspace">

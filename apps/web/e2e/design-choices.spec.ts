@@ -5,6 +5,7 @@ import type { RuntimeProjectionSet, WorkerCommand } from "@distlab/contracts";
 import { commerceScenario } from "@distlab/catalogs";
 import { projection } from "../tests/support.ts";
 import { loadLesson } from "./support/lesson.ts";
+import { applyAndRestart, choicesSection, experimentDrawer, experimentTrigger, openExperiment } from "./support/experiment.ts";
 
 declare global {
   interface Window {
@@ -27,7 +28,7 @@ async function captureCommands(page: Page) {
 }
 const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
 const status = (page: Page) => page.getByRole("status", { name: "Simulation status" });
-const panel = (page: Page) => page.getByRole("region", { name: "Design choices" });
+const panel = choicesSection;
 const checks = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "Lesson checks", exact: true }).getByRole("list", { name: "Business invariants", exact: true });
 const runId = (page: Page) => page.getByLabel("Run identity").innerText().then(text => /run (\w+)$/.exec(text)?.[1]);
 
@@ -37,7 +38,7 @@ async function load(page: Page, scenario: string) {
   await expect(status(page)).toHaveText("READY");
 }
 async function openChoices(page: Page) {
-  await panel(page).getByRole("button", { name: "Change design choices" }).click();
+  await openExperiment(page);
 }
 async function runToEnd(page: Page) {
   await button(page, "Run").click();
@@ -52,18 +53,20 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
   await runToEnd(page);
   await expect(checks(page)).toContainText("VIOLATED — A retried payment request charges the order once");
 
-  await expect(panel(page).getByLabel("Idempotency key")).toBeHidden();
+  // The choices live only in the drawer, which starts closed.
+  await expect(page.getByLabel("Idempotency key")).toBeHidden();
   await openChoices(page);
   const idempotency = panel(page).getByLabel("Idempotency key");
   await expect(idempotency).not.toBeChecked();
   await expect(panel(page)).toContainText("Lesson default: off.");
   await idempotency.check();
-  await expect(panel(page)).toContainText("These choices are not applied yet.");
-  await button(page, "Apply choices and reload").click();
+  await expect(experimentDrawer(page)).toContainText("These changes are not applied yet.");
+  await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   await expect(page.getByLabel("Run identity")).toContainText("Seed commerce-classroom-1 · idempotency=on · packaged faults only · run ");
-  await expect(panel(page)).toContainText("Idempotency key: on");
-  await expect(panel(page)).not.toContainText("not applied yet");
+  await expect(idempotency).toBeChecked();
+  await expect(experimentDrawer(page)).not.toContainText("not applied yet");
+  await expect(applyAndRestart(page)).toBeDisabled();
 
   // One ordinary load: the exact packaged document plus the parameter override.
   const last = await page.evaluate(() => window.choiceCommands.filter(command => command.type === "load").at(-1));
@@ -86,7 +89,7 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
 
   // Back to the default: the overlay is empty again and the run is the packaged run.
   await idempotency.uncheck();
-  await button(page, "Restore lesson design and reload").click();
+  await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   expect(await runId(page)).toBe(packagedRun);
   await expect(page.getByLabel("Run identity")).not.toContainText("idempotency=");
@@ -101,19 +104,21 @@ test("an out-of-range timeout is caught inline, and the panel has no axe violati
   await timeout.fill("0");
   await expect(timeout).toHaveAttribute("aria-invalid", "true");
   await expect(panel(page)).toContainText("Enter a whole number from 1 to 60.");
-  await expect(button(page, "Apply choices and reload")).toBeDisabled();
+  await expect(applyAndRestart(page)).toBeDisabled();
+  await expect(experimentTrigger(page)).toHaveAccessibleName("Change the experiment… unapplied changes");
   await timeout.fill("40");
   await expect(timeout).not.toHaveAttribute("aria-invalid", "true");
-  await button(page, "Apply choices and reload").click();
+  await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   await expect(page.getByLabel("Run identity")).toContainText("timeout=40");
 
-  const results = await new AxeBuilder({ page }).include(".design-choices").analyze();
+  const results = await new AxeBuilder({ page }).include(".experiment-drawer").analyze();
   expect(results.violations).toEqual([]);
 
-  // A lesson without design choices shows no panel.
+  // A lesson without design choices shows only the Faults section.
   await loadLesson(page, "cqrs-delayed");
   await expect(status(page)).toHaveText("READY");
+  await expect(experimentDrawer(page)).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
 });
 
@@ -123,12 +128,12 @@ test("Compare drops the choice the pair compares and keeps the shared one", asyn
   await openChoices(page);
   await panel(page).getByLabel("Idempotency key").check();
   await panel(page).getByLabel("Client timeout").fill("40");
-  await button(page, "Apply choices and reload").click();
+  await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   await button(page, "Compare: Retry with idempotency").click();
   await expect(status(page)).toHaveText("READY");
   await expect(page.getByText("Compare kept 0 student faults, kept timeout=40 and dropped idempotency.")).toBeVisible();
-  // The panel stays open, and the paired lesson's own default for idempotency is on.
+  // The drawer stays open, and the paired lesson's own default for idempotency is on.
   await expect(panel(page).getByLabel("Idempotency key")).toBeChecked();
   await expect(panel(page).getByLabel("Client timeout")).toHaveValue("40");
 });
@@ -157,14 +162,14 @@ test("design choices are unavailable while the simulation runs", async ({ page }
   const region = panel(page);
   await openChoices(page);
   await region.getByLabel("Idempotency key").check();
-  await expect(button(page, "Apply choices and reload")).toBeEnabled();
+  await expect(applyAndRestart(page)).toBeEnabled();
   await emit("RUNNING", "projection.updated");
   await expect(region).toContainText("Design choices are unavailable while the simulation runs");
   await expect(region.getByLabel("Idempotency key")).toBeDisabled();
   await expect(region.getByLabel("Client timeout")).toBeDisabled();
-  await expect(button(page, "Apply choices and reload")).toBeDisabled();
-  await expect(button(page, "Discard choice changes")).toBeDisabled();
+  await expect(applyAndRestart(page)).toBeDisabled();
+  await expect(experimentDrawer(page).getByRole("button", { name: "Discard changes", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => window.choiceFixture.commands.map(command => command.type))).toEqual(["load"]);
   await emit("PAUSED", "projection.updated");
-  await expect(button(page, "Apply choices and reload")).toBeEnabled();
+  await expect(applyAndRestart(page)).toBeEnabled();
 });

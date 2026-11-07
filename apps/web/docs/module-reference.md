@@ -192,7 +192,7 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/break-faults.ts)
 
-- **Responsibility:** the Break panel's pure model (ADR-004): fault kinds a
+- **Responsibility:** the Faults section's pure model (ADR-004): fault kinds a
   lesson policy allows, targets from the packaged architecture, mapping form
   text one-to-one to `FaultRule` or a scheduled `fault` action, chip text,
   draft/overlay conversion, placement of worker diagnostics on entries and
@@ -208,29 +208,47 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Presentation/runtime separation:** never validates or applies an overlay,
   and never sends a command.
 
-## `BreakPanel.tsx`
+## `ExperimentDrawer.tsx`
 
-[Source](../src/BreakPanel.tsx)
+[Source](../src/ExperimentDrawer.tsx)
 
-- **Responsibility:** render “Break the system”: student faults as chips
+- **Responsibility:** render the Experiment drawer (#143): a non-modal region
+  “Change the experiment” with the Design choices and Faults sections and one
+  footer: the pending sentence, **Apply and restart**, **Discard changes**, and
+  **Close**.
+- **Imports and boundaries:** React only. The shell passes both sections.
+- **State and protocol:** holds no draft. It stays mounted while closed, so an
+  unfinished fault form survives Close. Opening moves focus to its heading;
+  Close and Escape call back to the shell, which returns focus to the trigger.
+  Apply is available only while the draft differs from the applied overlay, no
+  design-choice field holds an invalid value, no command is outstanding, and the
+  simulation is not running.
+- **Presentation/runtime separation:** Apply hands the shell one callback, which
+  sends the whole draft overlay in an ordinary `load`. Nothing here edits a
+  running simulation.
+
+## `FaultsSection.tsx`
+
+[Source](../src/FaultsSection.tsx)
+
+- **Responsibility:** the drawer's Faults section: student faults as chips
   (applied, not applied yet, or with inline diagnostics), the add/edit form,
-  graph picking, and Apply.
+  and graph picking.
 - **Imports and boundaries:** React, contract types, `break-faults.ts`, and the
   `GraphPick` type from `ArchitectureView.tsx`.
 - **State and protocol:** owns the form, field errors, and the entry being
-  edited. The draft, open state, and picking state belong to `App.tsx`. Editing
-  is available when no command is outstanding and the simulation is not
-  running; otherwise the applied faults stay listed read-only. A draft that
-  differs from the applied overlay says that applying it replaces the session.
-- **Presentation/runtime separation:** Apply hands the draft overlay, including
-  the Design choices draft, to the shell, which sends an ordinary `load`.
-  Nothing here edits a running simulation.
+  edited. The draft, its pending state, and picking state belong to `App.tsx`;
+  starting a pick shows the Architecture tab. Editing is available when no
+  command is outstanding and the simulation is not running; otherwise the
+  faults stay listed read-only.
+- **Presentation/runtime separation:** it edits the draft only; the drawer's
+  Apply sends it. Nothing here edits a running simulation.
 
 ## `design-choices.ts`
 
 [Source](../src/design-choices.ts)
 
-- **Responsibility:** the Design choices panel's pure model (ADR-004 parameters,
+- **Responsibility:** the Design choices section's pure model (ADR-004 parameters,
   #95): presentation copy keyed by parameter key, draft values with defaults
   filled in, overrides in the worker's normalized form (sorted by key, defaults
   removed), integer field checks, the run-header text (`idempotency=on ·
@@ -287,22 +305,22 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Presentation/runtime separation:** it reads verdicts the worker already
   published, so a summary never says more than the checks below it.
 
-## `DesignChoicesPanel.tsx`
+## `DesignChoicesSection.tsx`
 
-[Source](../src/DesignChoicesPanel.tsx)
+[Source](../src/DesignChoicesSection.tsx)
 
-- **Responsibility:** render “Design choices”: one control per declared
-  parameter (checkbox, number, or list) with a one-line hint and the lesson
-  default, the applied summary, inline errors, and Apply.
+- **Responsibility:** the drawer's Design choices section: one control per
+  declared parameter (checkbox, number, or list) with a one-line hint and the
+  lesson default, and inline errors.
 - **Imports and boundaries:** React, contract types, and `design-choices.ts`.
-- **State and protocol:** owns the text of integer fields and their errors. The
-  draft and open state belong to `App.tsx`. Editing is available when no command
-  is outstanding and the simulation is not running. Apply sends the whole draft
-  overlay, so unapplied faults in Break the system go with it, and the panel
-  says so. A lesson without parameters shows no panel.
-- **Presentation/runtime separation:** Apply hands the draft to the shell, which
-  sends an ordinary `load`. Lesson checks are not edited, so the panel notes
-  that a check can FAIL under applied choices.
+- **State and protocol:** owns the text of integer fields and their errors, and
+  reports whether any is invalid so the drawer withholds Apply; a reset token
+  from Discard clears them. The draft belongs to `App.tsx`. Editing is available
+  when no command is outstanding and the simulation is not running. A lesson
+  without parameters shows no section.
+- **Presentation/runtime separation:** it edits the draft only; the drawer's
+  Apply sends it. Lesson checks are not edited, so the section notes that a
+  check can FAIL under applied choices.
 
 ## `SimulationControls.tsx`
 
