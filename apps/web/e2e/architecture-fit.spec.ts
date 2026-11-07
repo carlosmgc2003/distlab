@@ -127,9 +127,14 @@ test("the inspector, tab switches, and window resizes refit the graph", async ({
   }
 
   // Keyboard users reach the same fit: the pan buttons move the view, the fit button restores it.
+  // How many zoom steps push a node out depends on how much room the canvas leaves around the fit, so zoom
+  // until one does (at most four steps).
   await page.getByRole("button", { name: "Pan right", exact: true }).click();
-  await page.getByRole("button", { name: "Zoom In", exact: true }).click();
-  const panned = await graphFit(page);
+  let panned = await graphFit(page);
+  for (let step = 0; step < 4 && panned.clipped.length === 0; step++) {
+    await page.getByRole("button", { name: "Zoom In", exact: true }).click();
+    panned = await graphFit(page);
+  }
   expect(panned.clipped.length, "a panned and zoomed view may leave the canvas").toBeGreaterThan(0);
   await page.getByRole("button", { name: "Fit View", exact: true }).click();
   const fitted = await expectGraphFits(page, "1534x897 after the Fit View control");
