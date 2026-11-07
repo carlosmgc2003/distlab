@@ -65,9 +65,10 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Say *parameter*, not *configuration*. `configuration` means
   `RunInputs.configuration`, which an overlay cannot change.
 - **Design choices** are the student-facing name for a lesson's parameters
-  (#95). The Design choices panel edits parameter overrides; the Break panel
-  edits fault entries. Both edit one draft overlay, and either Apply sends all
-  of it in one `load`. A parameter's default is the packaged value, and a
+  (#95). In the Experiment drawer (#143), the Design choices section edits
+  parameter overrides and the Faults section edits fault entries. Both edit one
+  draft overlay, and the drawer's one **Apply and restart** sends all of it in
+  one `load`. A parameter's default is the packaged value, and a
   paired lesson's distinguishing switch is a declared parameter.
 
 ## Lesson checks

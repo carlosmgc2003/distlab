@@ -5,6 +5,7 @@ import type { WorkerCommand } from "@distlab/contracts";
 import { commerceScenario } from "@distlab/catalogs";
 import { scenarios } from "../src/scenarios.ts";
 import { lessonChoice, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
+import { choicesSection, experimentDrawer, openExperiment } from "./support/experiment.ts";
 
 // #139: one Lesson chooser replaces the Scenario select and Load scenario.
 
@@ -122,10 +123,9 @@ test("unapplied changes are named once, and choosing a lesson discards them and 
   await page.goto("/");
   await loadLesson(page, "retry-unsafe");
   await expect(status(page)).toHaveText("READY");
-  const designChoices = page.getByRole("region", { name: "Design choices" });
-  await designChoices.getByRole("button", { name: "Change design choices" }).click();
-  await designChoices.getByLabel("Idempotency key").check();
-  await expect(designChoices).toContainText("These choices are not applied yet.");
+  await openExperiment(page);
+  await choicesSection(page).getByLabel("Idempotency key").check();
+  await expect(experimentDrawer(page)).toContainText("These changes are not applied yet.");
 
   await lessonTrigger(page).click();
   const chooser = lessonChooser(page);

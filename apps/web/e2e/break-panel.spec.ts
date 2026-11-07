@@ -5,6 +5,7 @@ import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/
 import { normalCheckout } from "@distlab/catalogs";
 import { projection } from "../tests/support.ts";
 import { loadLesson } from "./support/lesson.ts";
+import { applyAndRestart, experimentDrawer, experimentTrigger, faultsSection, openExperiment } from "./support/experiment.ts";
 
 declare global {
   interface Window {
@@ -36,7 +37,7 @@ const latestProjection = (page: Page): Promise<RuntimeProjectionSet> => page.eva
 });
 const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
 const status = (page: Page) => page.getByRole("status", { name: "Simulation status" });
-const panel = (page: Page) => page.getByRole("region", { name: "Break the system" });
+const panel = faultsSection;
 
 async function load(page: Page, scenario: string) {
   await page.goto("/");
@@ -57,15 +58,17 @@ test("a student drop-response fault on Normal checkout reproduces the lost-respo
   await captureWorker(page);
   await page.setViewportSize({ width: 1534, height: 897 });
   await load(page, "normal");
-  await button(page, "Add or change faults").click();
+  await openExperiment(page);
   await addDropResponse(page);
   const chips = panel(page).getByRole("list", { name: "Student faults" });
   await expect(chips).toContainText("student-fault-1 Drop response · payment-processor → payments · occurrence 1 · not applied yet");
-  await expect(panel(page)).toContainText("The draft is not applied yet.");
-  await button(page, "Apply faults and reload").click();
+  await expect(experimentDrawer(page)).toContainText("These changes are not applied yet.");
+  await expect(experimentTrigger(page)).toHaveAccessibleName("Change the experiment… unapplied changes");
+  await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   await expect(chips).toContainText("· applied");
   await expect(page.getByLabel("Run identity")).toContainText("Seed mvp-normal-001 · 1 student fault · run ");
+  await expect(experimentTrigger(page)).toHaveAccessibleName("Change the experiment…");
 
   // The panel sent one ordinary load: the exact packaged document plus the overlay.
   const loads = await page.evaluate(() => window.breakEvidence.commands.filter(command => command.type === "load"));
@@ -100,7 +103,7 @@ test("a student drop-response fault on Normal checkout reproduces the lost-respo
 test("an invalid fault is reported inline from contract validation and can be fixed", async ({ page }) => {
   await captureWorker(page);
   await load(page, "normal");
-  await button(page, "Add or change faults").click();
+  await openExperiment(page);
   const region = panel(page);
   await region.getByLabel("Fault", { exact: true }).selectOption("network.request/delay");
   await region.getByLabel("Target", { exact: true }).selectOption({ label: "customer-app → orders" });
@@ -113,15 +116,22 @@ test("an invalid fault is reported inline from contract validation and can be fi
   await region.getByLabel("From virtual time").fill("10");
   await region.getByLabel("Until virtual time (optional, exclusive)").fill("5");
   await region.getByRole("button", { name: "Add fault", exact: true }).click();
-  await button(page, "Apply faults and reload").click();
+  // Close keeps the draft and returns focus to the trigger.
+  await experimentDrawer(page).getByRole("button", { name: "Close", exact: true }).click();
+  await expect(experimentDrawer(page)).toBeHidden();
+  await expect(experimentTrigger(page)).toBeFocused();
+  await experimentTrigger(page).click();
+  await expect(region.getByRole("list", { name: "Student faults" })).toContainText("student-fault-1");
+  await applyAndRestart(page).click();
   // The worker rejects the empty time window; the draft stays editable with the diagnostic on its field.
   await expect(page.getByRole("alert")).toContainText("INVALID_OVERLAY");
+  await expect(experimentDrawer(page)).toBeVisible();
   await expect(region.locator(".fault-chip-errors")).toContainText("Until virtual time (optional, exclusive): This value breaks a fault rule");
   await region.getByRole("button", { name: "Edit student-fault-1" }).click();
   await expect(region.getByLabel("Until virtual time (optional, exclusive)")).toHaveValue("5");
   await region.getByLabel("Until virtual time (optional, exclusive)").fill("50");
   await region.getByRole("button", { name: "Update fault", exact: true }).click();
-  await button(page, "Apply faults and reload").click();
+  await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   await expect(region.locator(".fault-chip-errors")).toHaveCount(0);
   await expect(region.getByRole("list", { name: "Student faults" })).toContainText("Delay request by 40 · customer-app → orders · t=10–50");
@@ -130,10 +140,12 @@ test("an invalid fault is reported inline from contract validation and can be fi
 test("keyboard users can add, inspect, and remove a fault, and the open panel has no axe violations", async ({ page }) => {
   await captureWorker(page);
   await load(page, "normal");
-  const toggle = button(page, "Add or change faults");
+  const toggle = experimentTrigger(page);
   await toggle.focus();
   await page.keyboard.press("Enter");
-  await expect(button(page, "Hide fault editor")).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  // Opening moves focus to the drawer's heading.
+  await expect(experimentDrawer(page).getByRole("heading", { name: "Change the experiment", exact: true })).toBeFocused();
   const region = panel(page);
   const kind = region.getByLabel("Fault", { exact: true });
   await kind.focus();
@@ -145,7 +157,7 @@ test("keyboard users can add, inspect, and remove a fault, and the open panel ha
   const chips = region.getByRole("list", { name: "Student faults" });
   await expect(chips).toContainText("Crash service · payments · at t=15");
   await expect(page.getByRole("status").filter({ hasText: "Added to the draft" })).toHaveCount(1);
-  expect((await new AxeBuilder({ page }).include(".break-panel").analyze()).violations).toEqual([]);
+  expect((await new AxeBuilder({ page }).include(".experiment-drawer").analyze()).violations).toEqual([]);
   await region.getByRole("button", { name: "Edit student-fault-1" }).focus();
   await page.keyboard.press("Enter");
   await expect(region.getByLabel("At virtual time")).toHaveValue("15");
@@ -154,14 +166,23 @@ test("keyboard users can add, inspect, and remove a fault, and the open panel ha
   await page.keyboard.press("Enter");
   await expect(chips).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  // Escape inside the drawer closes it and returns focus to its trigger.
+  await kind.focus();
+  await page.keyboard.press("Escape");
+  await expect(experimentDrawer(page)).toBeHidden();
+  await expect(toggle).toBeFocused();
 });
 
 test("the graph picks a fault target, and a lesson offers only the fault kinds it allows", async ({ page }) => {
   await load(page, "normal");
-  await button(page, "Add or change faults").click();
+  await openExperiment(page);
   const region = panel(page);
   await region.getByLabel("Fault", { exact: true }).selectOption("scheduled/crash");
+  // The drawer is docked beside the tab panels: picking from Recorded history shows the graph.
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  await expect(experimentDrawer(page)).toBeVisible();
   await region.getByRole("button", { name: "Pick on graph" }).click();
+  await expect(page.getByRole("tab", { name: "Architecture", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(region.getByRole("button", { name: "Stop picking" })).toHaveAttribute("aria-pressed", "true");
   await page.locator(".react-flow__node").filter({ hasText: "Payments" }).first().click();
   await expect(region.getByLabel("Target", { exact: true })).toHaveValue("component:payments");
@@ -172,8 +193,8 @@ test("the graph picks a fault target, and a lesson offers only the fault kinds i
   expect(await offered()).not.toContain("Change external service availability");
   await loadLesson(page, "retry-unsafe");
   await expect(status(page)).toHaveText("READY");
-  // Choosing another lesson starts from an empty draft; the editor stays open.
-  await expect(button(page, "Hide fault editor")).toBeVisible();
+  // Choosing another lesson starts from an empty draft; the drawer stays open.
+  await expect(experimentDrawer(page)).toBeVisible();
   expect(await offered()).not.toContain("Duplicate message delivery");
   await loadLesson(page, "saga-compensated");
   await expect(status(page)).toHaveText("READY");
@@ -202,20 +223,24 @@ test("fault controls are unavailable while the simulation runs", async ({ page }
     window.breakFixture.emit(type === "loaded" ? { version: 1, type, requestId, projection, session } : { version: 1, type, projection });
   }, { serialized: JSON.stringify(projection(state)), type });
   await emit("READY", "loaded");
-  await button(page, "Add or change faults").click();
+  await openExperiment(page);
   const region = panel(page);
   await region.getByLabel("Fault", { exact: true }).selectOption("scheduled/crash");
   await region.getByLabel("Target", { exact: true }).selectOption("component:orders");
   await region.getByRole("button", { name: "Add fault", exact: true }).click();
-  await expect(button(page, "Apply faults and reload")).toBeEnabled();
+  await expect(applyAndRestart(page)).toBeEnabled();
   await emit("RUNNING", "projection.updated");
   await expect(region).toContainText("Fault controls are unavailable while the simulation runs");
-  for (const name of ["Apply faults and reload", "Add fault", "Edit student-fault-1", "Remove student-fault-1"]) {
+  for (const name of ["Add fault", "Edit student-fault-1", "Remove student-fault-1"]) {
     await expect(region.getByRole("button", { name })).toBeDisabled();
   }
+  await expect(applyAndRestart(page)).toBeDisabled();
+  await expect(experimentDrawer(page).getByRole("button", { name: "Discard changes", exact: true })).toBeDisabled();
   await expect(region.getByLabel("Fault", { exact: true })).toBeDisabled();
+  // The draft stays listed and readable.
+  await expect(region.getByRole("list", { name: "Student faults" })).toContainText("student-fault-1");
   const sent = await page.evaluate(() => window.breakFixture.commands.map(command => command.type));
   expect(sent).toEqual(["load"]);
   await emit("PAUSED", "projection.updated");
-  await expect(button(page, "Apply faults and reload")).toBeEnabled();
+  await expect(applyAndRestart(page)).toBeEnabled();
 });

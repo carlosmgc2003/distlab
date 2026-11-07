@@ -64,10 +64,12 @@ the old checkout-only history inference; see [ADR-003](spec/adr/003-boundary-cou
 ### Design choices
 
 **Design choices** change the settings a lesson declares as parameters before
-Run ([ADR-004](spec/adr/004-session-overlays.md), #95). Each control shows a
-one-line hint and the lesson default. **Apply choices and reload** loads the
-same packaged lesson with the choices as parameter overrides and starts again
-from t=0 with the same seed. Reset replays them, and the run header lists every
+Run ([ADR-004](spec/adr/004-session-overlays.md), #95). They are a section of
+the **Experiment drawer**, which opens from the Lesson panel's ④ Experiment →
+**Change the experiment…** (#143). Each control shows a one-line hint and the
+lesson default. **Apply and restart**, in the drawer's footer, loads the same
+packaged lesson with the choices and the student faults as one session overlay
+and starts again from t=0 with the same seed. Reset replays them, and the run header lists every
 choice that differs from its default, for example `idempotency=on · timeout=40`.
 Setting every choice back to its default gives the packaged run exactly.
 
@@ -92,13 +94,15 @@ can read "not reproduced" under a choice; that shows the changed story, not a
 simulator error (#96).
 Compare drops the switch the pair compares and keeps the shared ones.
 
-### Break the system
+### Faults
 
-**Break the system** adds student faults to a loaded lesson. Choose a fault, a
-target (from the list, or with **Pick on graph**), and its fields, which map one
-to one to a `FaultRule` or a scheduled fault. **Apply faults and reload** loads
-the same packaged lesson with the faults as a session overlay and starts again
-from t=0. Reset replays the applied faults. Student fault IDs start with
+The drawer's **Faults** section adds student faults to a loaded lesson. Choose a
+fault, a target (from the list, or with **Pick on graph**, which works while the
+drawer is open because it is docked beside the graph rather than modal), and its
+fields, which map one to one to a `FaultRule` or a scheduled fault. **Apply and
+restart** loads the same packaged lesson with the faults (and any design
+choices) as one session overlay and starts again from t=0. **Discard changes**
+returns the draft to the applied overlay, and **Close** keeps it. Reset replays the applied faults. Student fault IDs start with
 `student-`, so Recorded history shows them in `fault.rule.matched`,
 `fault.effect.selected`, `fault.applied`, and `scenario.action.dispatched`.
 A probability other than 1 uses the session seed. Each lesson offers only the
@@ -449,8 +453,8 @@ it came from the cache or the database. The headless timeline prints
 **Concept:** a TTL bounds how long a cache can be stale; it does not make it
 correct. Invalidation on write removes the stale entry at the price change. A
 TTL is enough for a cart, because its expiry is the business rule. The cart
-check and the commit are separate steps: delay Orders' price request with
-**Break the system**, and a checkout that saw a live cart can commit after the
+check and the commit are separate steps: delay Orders' price request in the
+Experiment drawer's **Faults**, and a checkout that saw a live cart can commit after the
 cart expired, which violates the cart invariant.
 
 ## 8. Concurrent stock reservation and optimistic concurrency

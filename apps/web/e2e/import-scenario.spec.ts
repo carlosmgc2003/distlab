@@ -8,6 +8,7 @@ import { ScenarioDocumentLimits } from "@distlab/contracts";
 import { checkoutOverlayPolicy, hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";
 import { loadLesson } from "./support/lesson.ts";
+import { experimentTrigger } from "./support/experiment.ts";
 
 // ADR-006 browser import (#115): open a scenario file, run it, and read its checks.
 
@@ -59,7 +60,7 @@ test("APP-AC-8 opening the vision §19 file shows an imported header, runs, and 
   // No paired lesson, and the file declares no overlay policy.
   await expect(page.getByRole("button", { name: /^Compare/ })).toHaveCount(0);
   await expect(page.getByText("This scenario accepts no student changes: its file declares no overlay policy.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add or change faults" })).toHaveCount(0);
+  await expect(experimentTrigger(page)).toHaveCount(0);
 
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
@@ -119,7 +120,7 @@ test("an oversized file is not read or sent, and the loaded session stays", asyn
   await expect(page.getByRole("complementary", { name: "Lesson", exact: true })).toContainText("How does a checkout travel through a distributed system?");
 });
 
-test("presentation text renders as plain text, and a dropped file with an overlay policy offers the Break panel", async ({ page }) => {
+test("presentation text renders as plain text, and a dropped file with an overlay policy offers the Experiment drawer", async ({ page }) => {
   await page.goto("/");
   const name = (fixture().scenario as Doc).name as string;
   const text = JSON.stringify({
@@ -143,6 +144,6 @@ test("presentation text renders as plain text, and a dropped file with an overla
   expect(await page.title()).not.toBe("owned");
 
   // The document's policy, not a packaged one, decides what the student may break.
-  await expect(page.getByRole("button", { name: "Add or change faults" })).toBeVisible();
+  await expect(experimentTrigger(page)).toBeVisible();
   await expect(page.getByText("This scenario accepts no student changes", { exact: false })).toHaveCount(0);
 });

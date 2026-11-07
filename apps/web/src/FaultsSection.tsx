@@ -1,38 +1,28 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import type { ArchitectureDefinition, LessonOverlayPolicy, ParameterOverride, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
+import type { ArchitectureDefinition, LessonOverlayPolicy, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import {
-  buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, formFromEntry, isEmptyOverlay, nextStudentId,
-  draftFromOverlay, overlayFromDraft, pickTarget, placeDiagnostics, sameOverlay, targetOptions,
+  buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, formFromEntry, nextStudentId, pickTarget, placeDiagnostics, targetOptions,
 } from "./break-faults.ts";
 import type { DraftEntry, FaultForm, FormField } from "./break-faults.ts";
 
-export interface BreakPanelProps {
+export interface FaultsSectionProps {
   readonly policy: LessonOverlayPolicy;
   readonly architecture: ArchitectureDefinition;
   /** The normalized overlay the worker applied, or null when no session is loaded. */
   readonly applied: SessionOverlay | null;
   readonly draft: readonly DraftEntry[];
   readonly onDraftChange: (draft: readonly DraftEntry[]) => void;
-  /** The design choices draft. Apply sends it with the faults, so one load carries the whole draft overlay. */
-  readonly parameters?: readonly ParameterOverride[];
-  /** True when the design choices also have unapplied changes, which Apply sends too. */
-  readonly choicesPending?: boolean;
+  /** True when the faults draft differs from the applied faults. */
+  readonly pending: boolean;
   /** False while a command is outstanding or the simulation runs: the applied faults stay visible read-only. */
   readonly editable: boolean;
   /** Diagnostics from the last rejected load, and the overlay they point into. */
   readonly rejected: { readonly overlay: SessionOverlay; readonly diagnostics: readonly ScenarioDiagnostic[] } | null;
-  /** Sends `load` with the packaged document and this overlay, which replaces the session. */
-  readonly onApply: (overlay: SessionOverlay) => void;
   readonly picking: boolean;
   readonly onPickingChange: (picking: boolean) => void;
   /** The latest graph pick; the token changes on every pick. */
   readonly pick: { readonly pick: GraphPick; readonly token: number } | null;
-  /** Owned by the shell, so the editor stays open while Apply replaces the session. */
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-  /** Hidden (not unmounted) outside the Architecture tab, so an unfinished form survives a tab switch. */
-  readonly hidden?: boolean;
 }
 
 const fieldLabels: Readonly<Record<FormField, string>> = {
@@ -42,11 +32,12 @@ const fieldLabels: Readonly<Record<FormField, string>> = {
 };
 
 /**
- * Break panel (ADR-004, issue #94). The student composes a draft overlay of
- * fault rules and scheduled faults that the lesson allows. Applying sends one
- * ordinary `load`; nothing here edits a running simulation.
+ * Student faults (ADR-004, issue #94), a section of the Experiment drawer (#143).
+ * The student composes a draft overlay of fault rules and scheduled faults that
+ * the lesson allows. The drawer's one Apply sends one ordinary `load`; nothing
+ * here edits a running simulation.
  */
-export function BreakPanel({ policy, architecture, applied, draft, onDraftChange, parameters = [], choicesPending = false, editable, rejected, onApply, picking, onPickingChange, pick, open, onOpenChange, hidden = false }: BreakPanelProps) {
+export function FaultsSection({ policy, architecture, applied, draft, onDraftChange, pending, editable, rejected, picking, onPickingChange, pick }: FaultsSectionProps) {
   const ids = useId();
   const [form, setForm] = useState<FaultForm>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
@@ -55,15 +46,10 @@ export function BreakPanel({ policy, architecture, applied, draft, onDraftChange
   const options = useMemo(() => faultKindOptions(policy), [policy]);
   const option = options.find(item => item.id === form.kind);
   const targets = useMemo(() => targetOptions(option, architecture), [option, architecture]);
-  const draftOverlay = useMemo(() => overlayFromDraft(draft, parameters), [draft, parameters]);
-  // Pending compares faults only; the design choices panel reports its own changes.
-  const faultsOnly = useMemo(() => overlayFromDraft(draft, applied?.parameters ?? []), [draft, applied]);
-  const pending = applied ? !sameOverlay(faultsOnly, applied) : !isEmptyOverlay(faultsOnly);
   const placed = useMemo(() => rejected ? placeDiagnostics(rejected.diagnostics, rejected.overlay) : { entries: [], general: [] }, [rejected]);
   const appliedIds = new Set(applied ? [...applied.faults.map(rule => rule.id), ...applied.scheduledFaults.map(action => action.id)] : []);
   const remaining = policy.faults.maxEntries - draft.length;
 
-  useEffect(() => { if (rejected) onOpenChange(true); }, [rejected, onOpenChange]);
   useEffect(() => { if (!editable && picking) onPickingChange(false); }, [editable, picking, onPickingChange]);
   useEffect(() => {
     if (!pick || !picking) return;
@@ -95,7 +81,6 @@ export function BreakPanel({ policy, architecture, applied, draft, onDraftChange
     setForm(current => ({ ...emptyForm, kind: current.kind }));
   };
   const edit = (entry: DraftEntry) => {
-    onOpenChange(true);
     setEditing(entryId(entry));
     setErrors({});
     setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture)));
@@ -124,18 +109,9 @@ export function BreakPanel({ policy, architecture, applied, draft, onDraftChange
   });
   const number = (name: FormField, help?: string) => field(name, <input {...inputProps(name)} inputMode={name === "probability" ? "decimal" : "numeric"} autoComplete="off" />, help);
   const usesSeed = option?.kind === "rule" && form.probability.trim() !== "" && Number(form.probability) !== 1;
-  const summary = applied
-    ? applied.faults.length + applied.scheduledFaults.length === 0 ? "No student faults applied." : `${applied.faults.length + applied.scheduledFaults.length} student fault${applied.faults.length + applied.scheduledFaults.length === 1 ? "" : "s"} applied.`
-    : "The draft is not applied.";
 
-  return <section className={`break-panel${open ? " is-open" : ""}`} aria-labelledby={`${ids}-heading`} hidden={hidden}>
-    <div className="break-header">
-      <h2 id={`${ids}-heading`}>Break the system</h2>
-      <span className="break-summary">{summary}</span>
-      <button type="button" aria-expanded={open} aria-controls={`${ids}-body`} onClick={() => onOpenChange(!open)}>
-        {open ? "Hide fault editor" : "Add or change faults"}
-      </button>
-    </div>
+  return <section className="faults-section" aria-labelledby={`${ids}-heading`}>
+    <h3 id={`${ids}-heading`}>Faults</h3>
     {draft.length ? <ul className="fault-chips" aria-label="Student faults">
       {draft.map(entry => {
         const id = entryId(entry);
@@ -154,21 +130,12 @@ export function BreakPanel({ policy, architecture, applied, draft, onDraftChange
         </li>;
       })}
     </ul> : null}
-    {pending ? <div className="break-pending" role="note">
-      <p>The draft is not applied yet. Applying it replaces the session and starts again from the lesson’s start time. Reset keeps replaying the applied faults.{choicesPending ? " Unapplied design choices are applied too." : ""}</p>
-      <div className="break-actions">
-        <button type="button" className="primary" disabled={!editable} onClick={() => onApply(draftOverlay)}>
-          {draft.length ? "Apply faults and reload" : "Remove all faults and reload"}
-        </button>
-        {applied ? <button type="button" disabled={!editable} onClick={() => { onDraftChange(draftFromOverlay(applied)); setNotice("Draft changes discarded."); }}>Discard draft changes</button> : null}
-      </div>
-    </div> : null}
     {placed.general.length ? <ul className="field-error" aria-label="Fault problems">{placed.general.map(item => <li key={item}>{item}</li>)}</ul> : null}
     <p className="sr-only" role="status" aria-live="polite">{notice}</p>
-    <div id={`${ids}-body`} hidden={!open} className="break-body">
+    <div className="break-body">
       {!editable ? <p className="break-locked">Fault controls are unavailable while the simulation runs or a command is in progress. The applied faults stay listed.</p> : null}
       {options.length === 0 ? <p>This lesson does not allow student faults.</p> : <form className="break-form" onSubmit={submit} aria-labelledby={`${ids}-form-heading`} noValidate>
-        <h3 id={`${ids}-form-heading`}>{editing ? `Edit ${editing}` : "Add a fault"}</h3>
+        <h4 id={`${ids}-form-heading`}>{editing ? `Edit ${editing}` : "Add a fault"}</h4>
         <p className="field-help">Only the faults this lesson allows are listed. {remaining > 0 ? `You can add ${remaining} more.` : "The draft is at this lesson’s fault limit."} A fault applies when you apply the draft, never during a run.</p>
         <div className="break-grid">
           {field("kind", <select {...inputProps("kind")}>
