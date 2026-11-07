@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import type { LessonStep } from "./lesson-steps.ts";
 
@@ -14,8 +15,11 @@ const sections = [
  * stays readable and every control stays available whichever step is current. Collapsing the panel
  * leaves a rail with one visible "Show lesson" control; the shell keeps that UI state across tab
  * switches and lesson loads.
+ *
+ * Each new `revealInvestigate` token (#141: a run ended) scrolls ③ Investigate into view inside the
+ * panel. It never moves focus and never expands a collapsed panel.
  */
-export function LessonPanel({ collapsed, onCollapsedChange, step, goal, run, investigate, experiment }: {
+export function LessonPanel({ collapsed, onCollapsedChange, step, goal, run, investigate, experiment, revealInvestigate = 0 }: {
   readonly collapsed: boolean;
   readonly onCollapsedChange: (collapsed: boolean) => void;
   readonly step: LessonStep | null;
@@ -23,8 +27,21 @@ export function LessonPanel({ collapsed, onCollapsedChange, step, goal, run, inv
   readonly run: ReactNode;
   readonly investigate: ReactNode;
   readonly experiment: ReactNode;
+  /** A counter the shell increments once per ended run. */
+  readonly revealInvestigate?: number;
 }) {
   const content = { goal, run, investigate, experiment };
+  const investigateSection = useRef<HTMLElement>(null);
+  // Only a token newer than the one the panel mounted with reveals: collapsing and expanding the panel,
+  // or mounting it again, does not scroll it again.
+  const revealed = useRef(revealInvestigate);
+  useEffect(() => {
+    if (revealInvestigate === revealed.current) return;
+    revealed.current = revealInvestigate;
+    if (collapsed) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    investigateSection.current?.scrollIntoView({ block: "nearest", behavior: reduced ? "auto" : "smooth" });
+  }, [revealInvestigate, collapsed]);
   return <aside className={`lesson-panel${collapsed ? " is-collapsed" : ""}`} aria-label="Lesson">
     <div className="lesson-panel-header">
       {collapsed ? null : <h2 className="lesson-panel-title">Lesson</h2>}
@@ -32,7 +49,7 @@ export function LessonPanel({ collapsed, onCollapsedChange, step, goal, run, inv
         onClick={() => onCollapsedChange(!collapsed)}>{collapsed ? "Show lesson" : "Hide lesson"}</button>
     </div>
     <div id="lesson-panel-body" className="lesson-panel-body" hidden={collapsed}>
-      {sections.map(([id, heading]) => <section key={id} className={`lesson-step lesson-step-${id}`} aria-labelledby={`lesson-step-${id}`}
+      {sections.map(([id, heading]) => <section key={id} ref={id === "investigate" ? investigateSection : undefined} className={`lesson-step lesson-step-${id}`} aria-labelledby={`lesson-step-${id}`}
         aria-current={id === step ? "step" : undefined}>
         <h3><span id={`lesson-step-${id}`}>{heading}</span>
           {/* aria-current carries the marker to assistive technology; this badge is its visible text. */}
