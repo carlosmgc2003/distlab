@@ -13,7 +13,7 @@ import type {
 } from "@distlab/contracts";
 
 /**
- * Break panel model (ADR-004). Pure: it maps panel input to contract shapes and
+ * Faults section model (ADR-004; the Experiment drawer, #143). Pure: it maps section input to contract shapes and
  * reads lesson policies as data. It never validates the applied document, never
  * applies an overlay, and never sends a command. The worker validates the draft
  * against its own copy of the policy when the student applies it.

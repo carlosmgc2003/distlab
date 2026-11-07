@@ -128,6 +128,15 @@ Rules that keep the regions distinct:
   returns the draft to the applied overlay. Compare carries the applied overlay
   to the paired lesson as ADR-004 states, and choosing another lesson in the
   Lesson chooser starts from an empty draft.
+- The drawer opens from ④ Experiment's **Change the experiment…**, which carries
+  an "unapplied changes" badge while the draft differs from the applied overlay.
+  Opening it moves focus to its heading; **Close** and Escape keep the draft and
+  return focus to that trigger. It is docked beside both tabs and narrows them,
+  and starting **Pick on graph** shows the Architecture tab. A rejected overlay
+  opens it with each diagnostic in its own section. While a command is
+  outstanding or the simulation runs, it stays readable and its inputs,
+  `Apply and restart`, and `Discard changes` are unavailable; `Close` stays
+  available.
 
 ### Recorded history
 

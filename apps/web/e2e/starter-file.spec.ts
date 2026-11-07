@@ -5,6 +5,7 @@ import type { WorkerCommand } from "@distlab/contracts";
 import { hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";
 import { loadLesson } from "./support/lesson.ts";
+import { experimentTrigger } from "./support/experiment.ts";
 
 // #116: save a packaged lesson as a starter scenario file, open it, and run it (ADR-006).
 
@@ -53,7 +54,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
   const header = page.getByLabel("Imported scenario", { exact: true });
   await expect(header).toContainText("Imported · Retry with idempotency · retry-idempotent-copy@1 · seed commerce-classroom-1 · commerce.lessons@1.0.0");
   // The starter keeps the lesson's overlay policy, so the student choices stay available.
-  await expect(page.getByRole("button", { name: "Add or change faults" })).toBeVisible();
+  await expect(experimentTrigger(page)).toBeVisible();
   // A starter is offered only for a packaged lesson.
   await expect(save).toHaveCount(0);
 

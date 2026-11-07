@@ -148,8 +148,6 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .lesson-step .execution-overview { display: grid; gap: 4px; }
 .lesson-step .execution-overview p { margin: 0; }
 .lesson-step .evidence-links { margin: 4px 0; }
-.lesson-step .design-choices { margin-top: 8px; }
-.lesson-step .design-choices-grid { grid-template-columns: minmax(0, 1fr); }
 .lesson-step .save-starter { margin-top: 8px; }
 .lesson-step .advanced-diagnostics { margin-top: 8px; }
 .lesson-step .advanced-diagnostics .raw-state-body { max-height: none; }
@@ -499,7 +497,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .run-status { color: var(--action-primary); }
 .detail-disclosure > summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-size: .85rem; font-weight: 650; }
 .panel-architecture:has(.commerce-state) { overflow: auto; }
-.panel-architecture:has(.commerce-state) > .architecture-layout { flex: 0 0 28rem; min-height: 28rem; }
+/* The graph fills the visible panel (at least 28rem); service state follows below it until the Service state dialog (#136). */
+.panel-architecture:has(.commerce-state) > .architecture-layout { flex: 0 0 auto; height: max(28rem, 100%); min-height: 28rem; }
 .commerce-state { flex: none; padding: 1rem; }
 .commerce-state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
 .commerce-state-grid > section { padding: 1rem; border: 1px solid var(--border-subtle, #dbe2ea); border-radius: 8px; }
@@ -616,26 +615,33 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .history-layout { min-height: 36rem; }
 }
 
-/* Break the system (ADR-004): a draft overlay of student faults. The panel never
-   edits a running simulation; Apply is an ordinary load. */
-.break-panel[hidden] { display: none; }
-.break-panel { flex: none; overflow: auto; padding: 8px 16px; border: 1px solid var(--border-subtle); border-left: 3px solid var(--status-error); border-radius: 0 10px 10px 0; background: var(--surface-panel); }
-.workspace-main > .break-panel:only-child { max-height: none; flex: 1 1 auto; }
-/* The open editor takes a column beside the graph, so the architecture keeps its height. */
-.workspace-main.break-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem); grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas: "nav break" "panel break"; column-gap: 12px; }
-.workspace-main.break-open > .break-panel { grid-area: break; min-height: 0; }
-.workspace-main.break-open > .workspace-navigation { grid-area: nav; }
-.workspace-main.break-open > .panel-architecture, .workspace-main.break-open > .panel-history { grid-area: panel; }
-.break-panel.is-open .break-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); }
+/* The Experiment drawer (#143, ADR-004): Design choices and Faults edit a draft overlay with one
+   footer. It never edits a running simulation; Apply and restart is an ordinary load. Closed, it
+   stays mounted and hidden, so an unfinished fault form survives Close. */
+.experiment-drawer[hidden] { display: none; }
+.experiment-drawer { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--border-subtle); border-left: 3px solid var(--action-primary); border-radius: 0 10px 10px 0; background: var(--surface-panel); }
+.experiment-drawer > h2 { margin: 0; padding: 8px 16px; font-size: 1rem; border-bottom: 1px solid var(--border-subtle); }
+.experiment-drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px 16px 12px; display: grid; gap: 12px; align-content: start; }
+.experiment-drawer-body h3 { margin: 8px 0 4px; font-size: .95rem; }
+.experiment-drawer-footer { flex: none; padding: 8px 16px; border-top: 1px solid var(--border-subtle); background: var(--surface-panel); }
+.experiment-drawer-footer .break-actions { margin-top: 0; }
+.experiment-drawer-footer .break-pending { margin: 0 0 8px; font-size: .85rem; }
+.experiment-trigger { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.experiment-badge { padding: 0 6px; border-radius: 999px; background: var(--status-warning-bg); color: var(--status-warning); font-size: .75rem; font-weight: 700; }
+.workspace-main > .experiment-drawer:only-child { flex: 1 1 auto; }
+/* The open drawer takes a column beside the tab panels, so the architecture keeps its height. */
+.workspace-main.experiment-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem); grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "nav drawer" "panel drawer"; column-gap: 12px; }
+.workspace-main.experiment-open > .experiment-drawer { grid-area: drawer; }
+.workspace-main.experiment-open > .experiment-drawer:only-child { grid-area: auto; grid-column: 1 / -1; grid-row: 1 / -1; }
+.workspace-main.experiment-open > .workspace-navigation { grid-area: nav; }
+.workspace-main.experiment-open > .panel-architecture, .workspace-main.experiment-open > .panel-history { grid-area: panel; }
+.experiment-drawer .break-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 10rem), 1fr)); }
+.experiment-drawer .design-choices-grid { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1100px) {
-  .workspace-main.break-open { display: flex; flex-direction: column; }
-  .workspace-main.break-open > .break-panel { max-height: 50%; }
+  .workspace-main.experiment-open { display: flex; flex-direction: column; }
+  .workspace-main.experiment-open > .experiment-drawer { max-height: 50%; }
 }
-.break-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
-.break-header h2 { margin: 0; font-size: 1rem; }
-.break-summary { color: var(--text-secondary); font-size: .85rem; flex: 1 1 auto; }
-.break-header button { min-height: 36px; padding: 4px 10px; }
 .fault-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; }
 .fault-chip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 4px 4px 10px; border: 1.5px dashed var(--status-error); border-radius: 12px; background: var(--status-error-bg); font-size: .85rem; max-width: 100%; }
 .fault-chip.is-applied { border-style: solid; }
@@ -651,7 +657,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .break-actions button.primary { background: var(--action-primary); border-color: var(--action-primary); color: #fff; }
 .break-actions button.primary:hover { background: var(--action-primary-hover); }
 .break-actions button.primary:disabled { background: var(--surface-subtle); color: var(--text-disabled); border-color: var(--border-subtle); }
-.break-body h3 { margin: 10px 0 2px; font-size: .95rem; }
+.break-body h4 { margin: 10px 0 2px; font-size: .9rem; }
 .break-locked { color: var(--status-warning); font-size: .85rem; }
 .break-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 8px 12px; margin-top: 6px; }
 .break-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -674,11 +680,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .resource-body .fault-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); margin: 0; }
 .react-flow__edge.has-fault .react-flow__edge-text { fill: var(--status-error); font-weight: 700; }
 
-/* Design choices (ADR-004 parameters, #95): lesson-declared settings in the learning prompt.
+/* Design choices (ADR-004 parameters, #95): lesson-declared settings in the Experiment drawer.
    Apply is an ordinary load; nothing here edits a running simulation. */
-.design-choices { flex-basis: 100%; display: grid; gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }
-.design-choices-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.design-choices-header h2 { margin: 0; font-size: 1rem; }
+.design-choices { display: grid; gap: 6px; }
 .design-choices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 8px 16px; }
 .design-choice { display: grid; gap: 2px; align-content: start; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: 8px; }
 .design-choice.is-changed { border-color: var(--action-primary); border-width: 2px; }
@@ -688,9 +692,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 /* The learning prompt styles every span; field messages keep their own size and colour. */
 .design-choices .field-help { font-size: .75rem; color: var(--text-secondary); }
 .design-choices .field-error { font-size: .8rem; color: var(--status-error); font-weight: 600; }
-.design-choices-summary { flex: 1 1 auto; }
-.design-choices-header button { min-height: 36px; padding: 4px 10px; }
-.design-choices-body[hidden] { display: none; }
 .design-choices-body { display: grid; gap: 6px; }
 
 /* Imported scenario documents (ADR-006). "Imported" and each verdict are stated in text; colour only reinforces them. */

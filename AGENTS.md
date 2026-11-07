@@ -87,13 +87,15 @@ reads stored observation fields only, and a redacted or omitted payload is never
 reconstructed. A token travels from the record's origin to its destination even
 when that runs against the drawn link. Component activity in
 `apps/web/src/activity.ts` is pure: it reads records at or before the cursor and
-nothing after it. The Break panel (`apps/web/src/BreakPanel.tsx`, `apps/web/src/break-faults.ts`)
-edits a draft overlay as UI state; only Apply, Load, and Compare send it, inside
-an ordinary `load`. It never validates or applies an overlay itself, and it is
-unavailable while a command is outstanding or the simulation runs. The Design
-choices panel (`apps/web/src/DesignChoicesPanel.tsx`, `apps/web/src/design-choices.ts`)
-follows the same rules for parameter overrides; it offers only the parameters a
-lesson's policy declares and never edits the seed or the lesson checks.
+nothing after it. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
+edits a draft overlay as UI state in two sections: Faults
+(`apps/web/src/FaultsSection.tsx`, `apps/web/src/break-faults.ts`) and Design
+choices (`apps/web/src/DesignChoicesSection.tsx`, `apps/web/src/design-choices.ts`).
+Only Apply and restart, Load, and Compare send it, inside an ordinary `load`. It
+never validates or applies an overlay itself, and its inputs and Apply are
+unavailable while a command is outstanding or the simulation runs. Design
+choices offer only the parameters a lesson's policy declares and never edit the
+seed or the lesson checks.
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns

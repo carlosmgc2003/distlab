@@ -1,8 +1,8 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { LessonOverlayPolicy, ParameterOverride } from "@distlab/contracts";
-import { choiceCopy, choiceValues, formatChoice, readInteger, sameChoices, setChoice } from "./design-choices.ts";
+import { choiceCopy, choiceValues, formatChoice, readInteger, setChoice } from "./design-choices.ts";
 
-export interface DesignChoicesPanelProps {
+export interface DesignChoicesSectionProps {
   readonly policy: LessonOverlayPolicy;
   /** Normalized overrides the worker applied, or null when no session is loaded. */
   readonly applied: readonly ParameterOverride[] | null;
@@ -12,31 +12,27 @@ export interface DesignChoicesPanelProps {
   readonly editable: boolean;
   /** Worker diagnostics from the last rejected load, by parameter key. */
   readonly rejected: ReadonlyMap<string, string>;
-  /** Sends `load` with the packaged document and the whole draft overlay, which replaces the session. */
-  readonly onApply: () => void;
-  /** True when Break the system also has unapplied changes, which Apply sends too. */
-  readonly faultsPending: boolean;
-  /** Owned by the shell, so the panel stays open while Apply replaces the session. */
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
+  /** Reports whether a field holds text that is not a value, so the drawer can withhold Apply. */
+  readonly onInvalidChange: (invalid: boolean) => void;
+  /** Changes when the drawer discards the draft, so half-typed field text is cleared too. */
+  readonly resetToken: number;
 }
 
 /**
- * Design choices (ADR-004 parameters, issue #95). The student changes the
- * settings the lesson declares; applying sends one ordinary `load`. Nothing here
- * edits a running simulation, and the seed, workload, and checks stay the lesson's.
+ * Design choices (ADR-004 parameters, issue #95), a section of the Experiment
+ * drawer (#143). The student changes the settings the lesson declares; the
+ * drawer's one Apply sends them with the faults in one ordinary `load`. Nothing
+ * here edits a running simulation, and the seed, workload, and checks stay the lesson's.
  */
-export function DesignChoicesPanel({ policy, applied, draft, onDraftChange, editable, rejected, onApply, faultsPending, open, onOpenChange }: DesignChoicesPanelProps) {
+export function DesignChoicesSection({ policy, applied, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken }: DesignChoicesSectionProps) {
   const ids = useId();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
-  // A rejected load opens the panel on the choice it names.
-  useEffect(() => { if (rejected.size) onOpenChange(true); }, [rejected, onOpenChange]);
   const values = useMemo(() => choiceValues(policy, draft), [policy, draft]);
-  const pending = !sameChoices(draft, applied ?? []);
   const invalid = Object.keys(errors).length > 0;
-  // Restoring is the one apply that sends no choices while some are applied.
-  const restoring = draft.length === 0 && !invalid && (applied?.length ?? 0) > 0;
+  useEffect(() => { onInvalidChange(invalid); }, [invalid, onInvalidChange]);
+  // Discarding the draft also clears text that never became a value.
+  useEffect(() => { setTexts({}); setErrors({}); }, [resetToken]);
 
   const set = (key: string, value: boolean | number | string) => onDraftChange(setChoice(policy, draft, key, value));
   const setText = (key: string, text: string) => {
@@ -46,19 +42,10 @@ export function DesignChoicesPanel({ policy, applied, draft, onDraftChange, edit
     setErrors(current => { const { [key]: _, ...rest } = current; return result.error ? { ...rest, [key]: result.error } : rest; });
     if (result.value !== undefined) set(key, result.value);
   };
-  const reset = (overrides: readonly ParameterOverride[]) => { setTexts({}); setErrors({}); onDraftChange(overrides); };
 
   return <section className="design-choices" aria-labelledby={`${ids}-heading`}>
-    <div className="design-choices-header">
-      <h2 id={`${ids}-heading`}>Design choices</h2>
-      <span className="design-choices-summary">{applied?.length
-        ? applied.map(item => `${choiceCopy(item.key).label}: ${formatChoice(item.value)}`).join(" · ")
-        : "The lesson’s own design is applied."}</span>
-      <button type="button" aria-expanded={open} aria-controls={`${ids}-body`} onClick={() => onOpenChange(!open)}>
-        {open ? "Hide design choices" : "Change design choices"}
-      </button>
-    </div>
-    <div id={`${ids}-body`} hidden={!open} className="design-choices-body">
+    <h3 id={`${ids}-heading`}>Design choices</h3>
+    <div className="design-choices-body">
       {!editable ? <p className="field-help">Design choices are unavailable while the simulation runs or a command is in progress.</p> : null}
       <div className="design-choices-grid">
         {policy.parameters.map(parameter => {
@@ -92,15 +79,6 @@ export function DesignChoicesPanel({ policy, applied, draft, onDraftChange, edit
         })}
       </div>
     </div>
-    {pending || invalid ? <div className="break-pending" role="note">
-      <p>These choices are not applied yet. Applying them replaces the session and starts again from the lesson’s start time, with the same seed. Reset keeps replaying the applied choices.{faultsPending ? " Unapplied changes in Break the system are applied too." : ""}</p>
-      <div className="break-actions">
-        <button type="button" className="primary" disabled={!editable || invalid} onClick={onApply}>
-          {restoring ? "Restore lesson design and reload" : "Apply choices and reload"}
-        </button>
-        <button type="button" disabled={!editable} onClick={() => reset(applied ?? [])}>Discard choice changes</button>
-      </div>
-    </div> : null}
     {applied?.length ? <p className="field-help">Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read "not reproduced" under your choices. That shows how your change altered the story, not a simulator error.</p> : null}
   </section>;
 }
