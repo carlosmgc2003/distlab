@@ -28,7 +28,7 @@ async function captureCommands(page: Page) {
 const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
 const status = (page: Page) => page.getByRole("status", { name: "Simulation status" });
 const panel = (page: Page) => page.getByRole("region", { name: "Design choices" });
-const checks = (page: Page) => page.getByRole("region", { name: "Commerce lesson state", exact: true }).getByRole("list", { name: "Business invariants", exact: true });
+const checks = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "Lesson checks", exact: true }).getByRole("list", { name: "Business invariants", exact: true });
 const runId = (page: Page) => page.getByLabel("Run identity").innerText().then(text => /run (\w+)$/.exec(text)?.[1]);
 
 async function load(page: Page, scenario: string) {

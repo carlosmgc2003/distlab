@@ -39,16 +39,19 @@ Assertion evidence includes the relevant database rows.
 
 In the browser, run `npm run dev`, press **Choose a lesson**, and choose a lesson
 in the Lesson chooser. Use **Step**, **Run**, and **Reset** as with checkout. The
-Architecture tab shows committed service state, client outcomes, live KV entries
-with their expiry time,
-and lesson checks below the graph; selecting a component also shows its facts.
+Architecture tab shows committed service state, client outcomes, and live KV
+entries with their expiry time below the graph; selecting a component also
+shows its facts. The lesson checks are in the Lesson panel's ③ Investigate,
+under a one-line outcome such as “3 of 3 business invariants violated”. When a
+run ends, the panel scrolls that section into view and announces the outcome
+once to assistive technology, without moving focus.
 Business invariants come first, marked HOLDS or VIOLATED in words and a symbol
 as well as colour. The scenario expectations follow under **Lesson setup
 reproduced**. Each settled check has **Show evidence**, which opens Recorded
 history at its `scenario.assertion.evaluated` record.
 **Recorded history → Story** includes business logs such as compensation and
-breaker transitions, as well as network, DB, and fault milestones. Diagram and
-Table presentations select the same underlying observations.
+breaker transitions, as well as network, DB, and fault milestones. The Story
+diagram and Story table views select the same underlying observations.
 
 **Compare** loads the paired experiment with equivalent inputs and a fresh worker
 session (it does not retain a side-by-side result or change rules during a run).

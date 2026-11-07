@@ -174,7 +174,14 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   the Lesson panel's ④ Experiment and offered only for a loaded packaged lesson,
   downloads `starterFile` for that lesson through a Blob URL; it sends no
   command. The Lesson panel's collapsed state is shell state, so it survives tab
-  switches and lesson loads.
+  switches and lesson loads. ③ Investigate opens with the outcome summary
+  (`outcomeSummary` for a packaged commerce lesson, `runOutcome` for checkout),
+  then `LessonChecks` or the checkout evidence links, then the questions; the
+  commerce `ServiceStateGrid` stays below the graph. When the status first
+  becomes COMPLETED or FAILED, the shell sets the summary in a polite
+  “Lesson outcome” live region outside the panel and increments the panel's
+  reveal token; leaving that state clears the region silently, so each ended
+  run is announced once. Focus never moves.
 - **Presentation/runtime separation:** owns `useFlightPlayback` outside the tab
   panels so playback survives tab switches. Explicit history selection releases
   the playback cursor; automatic live cues do not. Evidence links activate
@@ -243,10 +250,13 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Responsibility:** render the Lesson panel (#140): an `aside` named “Lesson”
   with four numbered sections, ① Goal, ② Run, ③ Investigate, and ④ Experiment,
   and one Hide lesson / Show lesson toggle that folds it to a rail.
-- **Imports and boundaries:** React types and `lesson-steps.ts`. The shell
+- **Imports and boundaries:** React and `lesson-steps.ts`. The shell
   passes each section's content; the panel owns only structure.
-- **State and protocol:** stateless. The collapsed state and the current step
-  come from `App.tsx`; the panel sends no worker command.
+- **State and protocol:** holds no UI state. The collapsed state, the current
+  step, and the reveal token come from `App.tsx`; the panel sends no worker
+  command. A reveal token newer than the last one it saw scrolls ③ Investigate
+  into view inside the panel (`block: "nearest"`, smooth unless the reader
+  prefers reduced motion). It never moves focus or expands a collapsed panel.
 - **Presentation/runtime separation:** the current step is `aria-current="step"`
   plus a visible badge. It is emphasis only and never hides or disables a section.
 
@@ -261,6 +271,21 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Imports and boundaries:** the `RuntimeProjectionSet` contract type only.
 - **State and protocol:** pure; reads projection fields the shell already holds.
 - **Presentation/runtime separation:** it never infers progress from history.
+
+## `lesson-outcome.ts`
+
+[Source](../src/lesson-outcome.ts)
+
+- **Responsibility:** the one-line outcome at the top of ③ Investigate (#141).
+  `outcomeSummary` reads a lesson-check view's invariants: “‹n› of ‹m› business
+  invariants violated”, “All ‹m› business invariants hold”, “Checks are
+  pending: run the lesson”, or “Checks are incomplete”, in that precedence.
+  `runOutcome` is the checkout Run overview's outcome sentence. `endsRun` says
+  whether a status ends a run.
+- **Imports and boundaries:** contract and `lesson-checks.ts` types only.
+- **State and protocol:** pure; it never re-evaluates a check.
+- **Presentation/runtime separation:** it reads verdicts the worker already
+  published, so a summary never says more than the checks below it.
 
 ## `DesignChoicesPanel.tsx`
 
@@ -464,13 +489,17 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/TimelineView.tsx)
 
-- **Responsibility:** render Story diagram/table, Learning groups, virtualized
-  Raw rows, filters, observation details, and stored correlation links.
+- **Responsibility:** render the one view switch (Story diagram, Story table,
+  Learning, Raw), the Show / Component / More filters… row and its modal
+  dialog, Learning groups, virtualized Raw rows, observation details, and
+  stored correlation links.
 - **Imports and boundaries:** React and `Observation`, plus `timeline-query.ts`,
   `timeline-quick-views.ts`, `records.ts`, `timeline.ts`, `story-timeline.ts`, and
   `HelpHint`. Receives observation snapshots, drawn-link identities, titles, and
   UI callbacks; has no host client.
-- **State and protocol:** owns filter draft and last valid query, quick view,
+- **State and protocol:** holds the Story presentation (diagram or table) and the
+  More filters dialog as presentation state; the dialog edits a copy of the draft
+  and applies it as one `set-draft`, or discards it. Review navigation owns filter draft and last valid query, quick view,
   display mode, expanded groups, selected observation ID, feedback, live cue,
   scroll window, and focus requests. Quick views apply before advanced filters.
   Invalid drafts keep the last valid query. Evidence reveal switches to Raw,
@@ -585,16 +614,19 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/CommerceLesson.tsx)
 
-- **Responsibility:** render commerce component facts and lesson assertion results.
+- **Responsibility:** render commerce component facts and lesson check results.
 - **Imports and boundaries:** only shared canonical-value and runtime-projection
   types; no runtime model, host, or catalog dependency.
 - **State and protocol:** `CommerceFacts` selects the named student-visible state
   and formats lifecycle, committed tables, KV entries, client-observed fields,
   declared external availability/visible state, and delivery records.
-  `CommerceState` lists student components and reads assertions from the
-  `commerce-client` projection, displaying stored status, ID, and optional time.
-  Without `checks` (an imported session) it omits the lesson checks, which
-  `ImportedChecks` shows instead.
+  `ServiceStateGrid` lists the student components' facts below the graph.
+  `commerceLessonChecks` reads assertions from the `commerce-client`
+  projection, found by role, and maps them with `lessonChecks`; `LessonChecks`
+  renders the business invariants and scenario expectations, with stored
+  verdict, label, optional time, and **Show evidence**, in the Lesson panel's
+  ③ Investigate. An imported session has no classification, so it shows
+  `ImportedChecks` instead.
 - **Presentation/runtime separation:** host state and tasks are never rendered.
   Passing an unsafe lesson verifies the expected failure assertion; it does not
   imply a safe business outcome. These facts are the current published projection,

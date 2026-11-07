@@ -1,20 +1,54 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./support/test.ts";
 import { commerceLessonNames } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import type { Page } from "@playwright/test";
+import { measureLayout, viewports } from "./layout-budget.ts";
 import { loadLesson } from "./support/lesson.ts";
+import { filterByType, viewButton } from "./support/history.ts";
+
+/** The lesson checks live in the Lesson panel's ③ Investigate (#141); service facts stay below the graph. */
+const lessonChecks = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "Lesson checks", exact: true });
+const serviceState = (page: Page) => page.getByRole("region", { name: "Service knowledge and committed state", exact: true });
+const summary = (page: Page) => page.locator(".lesson-step-investigate .lesson-outcome");
+
+/** Records every non-empty text the polite "Lesson outcome" live region takes, in order. */
+async function recordAnnouncements(page: Page) {
+  await page.getByRole("status", { name: "Lesson outcome", exact: true }).evaluate(region => {
+    const seen: string[] = [];
+    (window as unknown as { announcements: string[] }).announcements = seen;
+    let last = region.textContent ?? "";
+    new MutationObserver(() => {
+      const text = region.textContent ?? "";
+      if (text !== last && text) seen.push(text);
+      last = text;
+    }).observe(region, { childList: true, characterData: true, subtree: true });
+  });
+}
+const announcements = (page: Page) => page.evaluate(() => (window as unknown as { announcements: string[] }).announcements);
 
 for (const name of commerceLessonNames) {
   test(`${name}: select, step, run, inspect facts and checks, reset and replay`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewports["1366x768"]);
     await page.goto("/");
     const status = page.getByRole("status", { name: "Simulation status" });
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
+    await recordAnnouncements(page);
     await page.getByRole("button", { name: "Step", exact: true }).click();
     await expect(status).toHaveText("PAUSED");
-    await page.getByRole("button", { name: "Run", exact: true }).click();
+    // Run from the keyboard: the reveal must leave focus on the element that had it.
+    const run = page.getByRole("button", { name: "Run", exact: true });
+    await run.focus();
+    await page.keyboard.press("Enter");
     await expect(status).toHaveText("COMPLETED");
-    const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+    await expect(run).toBeFocused();
+    const state = lessonChecks(page);
     const checks = state.getByRole("list", { name: "Business invariants", exact: true });
+    // The first verdict is revealed in the Lesson panel without any scrolling by the test.
+    await expect.poll(async () => (await measureLayout(page)).firstVerdictVisible, { message: `${name}: first verdict on screen at 1366x768` }).toBe(true);
+    await expect(summary(page)).toHaveText(/^(\d+ of \d+ business invariants violated|All \d+ business invariants hold)$/);
+    const outcome = await summary(page).innerText();
+    expect(await announcements(page)).toEqual([outcome]);
     await expect(checks).toContainText(/HOLDS|VIOLATED/);
     // A verdict is never a bare PASS or FAIL, and an unsafe lesson's violation is never green.
     await expect(state).not.toContainText(/\b(PASS|FAIL)\b/);
@@ -25,17 +59,22 @@ for (const name of commerceLessonNames) {
     }
     const setup = state.getByRole("list", { name: "Scenario expectations", exact: true });
     if (await setup.count()) await expect(state.getByRole("heading", { name: "Lesson setup reproduced: yes" })).toBeVisible();
-    const recorded = await state.innerText();
+    const recorded = [await state.innerText(), await serviceState(page).innerText()];
     await page.getByRole("button", { name: "Reset", exact: true }).click();
     await expect(status).toHaveText("READY");
     await expect(checks).toContainText("PENDING");
+    await expect(checks).not.toContainText(/HOLDS|VIOLATED/);
+    await expect(summary(page)).toHaveText("Checks are pending: run the lesson");
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
-    expect(await state.innerText()).toBe(recorded);
+    expect([await state.innerText(), await serviceState(page).innerText()]).toEqual(recorded);
+    // One announcement per completed run, each the run's summary.
+    await expect(summary(page)).toHaveText(outcome);
+    expect(await announcements(page)).toEqual([outcome, outcome]);
     await checks.scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath(`${name}-state.png`) });
     await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
     // Story keeps only the documented milestones, so a commerce run teaches on its network,
     // message, transaction, and fault records. runtime.log is not a milestone; its records
     // stay in Learning and Raw.
@@ -44,7 +83,7 @@ for (const name of commerceLessonNames) {
     await expect(legend.locator("li")).not.toHaveCount(0);
     await expect(legend).toContainText(/Request|Response|Transaction commit|Fault|Timeout/);
     await expect(page.getByRole("region", { name: "Story diagram", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Table", exact: true }).click();
+    await viewButton(page, "Story table").click();
     await expect(page.locator(".story-table")).toBeVisible();
   });
 }
@@ -52,7 +91,7 @@ for (const name of commerceLessonNames) {
 test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each verdict links to its evidence", async ({ page }) => {
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const state = lessonChecks(page);
   const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
   await loadLesson(page, "saga-uncompensated");
   await expect(status).toHaveText("READY");
@@ -60,6 +99,7 @@ test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each ver
   await expect(status).toHaveText("COMPLETED");
   const labels = ["A failed order is cancelled", "A failed order does not keep inventory reserved", "A failed order keeps no approved payment"];
   for (const label of labels) await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText("VIOLATED");
+  await expect(summary(page)).toHaveText("3 of 3 business invariants violated");
   await expect(state.getByRole("heading", { name: "Lesson setup reproduced: yes" })).toBeVisible();
 
   // The evidence link opens Recorded history at that check's evaluation record.
@@ -74,6 +114,7 @@ test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each ver
   await expect(status).toHaveText("COMPLETED");
   for (const label of labels) await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText("HOLDS");
   await expect(invariants).not.toContainText("VIOLATED");
+  await expect(summary(page)).toHaveText("All 3 business invariants hold");
 });
 
 test("compare replaces the experiment; commerce state fits a narrow viewport", async ({ page }) => {
@@ -97,7 +138,7 @@ test("compare replaces the experiment; commerce state fits a narrow viewport", a
 test("the notifications pair shows the dead-letter queue only when the retry budget is bounded", async ({ page }) => {
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const state = serviceState(page);
   const orderPlaced = state.getByRole("region", { name: "OrderPlaced state", exact: true });
   for (const [name, letters] of [["notifications-dlq", 1], ["notifications-unbounded", 0]] as const) {
     await loadLesson(page, name);
@@ -122,11 +163,11 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   test.setTimeout(90_000);
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const state = serviceState(page);
   const cart = state.getByRole("region", { name: "cart state", exact: true });
   const catalog = state.getByRole("region", { name: "catalog state", exact: true });
   const orders = state.getByRole("region", { name: "orders state", exact: true });
-  const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
+  const invariants = lessonChecks(page).getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
@@ -155,10 +196,7 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   // Raw renders a window of rows, so narrow it to the expiry records with the Type filter.
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  const filterDrawer = page.locator(".history-filter-drawer");
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
-  await page.getByLabel("Type", { exact: true }).fill("kv.expired");
+  await filterByType(page, "kv.expired");
   const rows = page.locator("#timeline-rows");
   await expect(page.locator(".timeline-count")).toHaveText(/^3 of \d+ observations/);
   await expect(rows).toContainText("cart");
@@ -169,10 +207,10 @@ test("the inventory pair shows stock with its version and each client's outcome,
   test.setTimeout(90_000);
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = page.getByRole("region", { name: "Commerce lesson state", exact: true });
+  const state = serviceState(page);
   const inventory = state.getByRole("region", { name: "inventory state", exact: true });
   const partner = state.getByRole("region", { name: "partner-api state", exact: true });
-  const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
+  const invariants = lessonChecks(page).getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, stock, version, outcome, verdict] of [["inventory-oversell", -1, 3, "RESERVED", "VIOLATED"], ["inventory-optimistic", 0, 2, "OUT_OF_STOCK", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
@@ -190,10 +228,7 @@ test("the inventory pair shows stock with its version and each client's outcome,
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await page.getByRole("button", { name: "Show simulation controls" }).click();
-  const filterDrawer = page.locator(".history-filter-drawer");
-  if ((await filterDrawer.getAttribute("open")) === null) await filterDrawer.locator("> summary").click();
-  await page.locator(".timeline-filter-disclosure summary").click();
-  await page.getByLabel("Type", { exact: true }).fill("database.transaction.rejected");
+  await filterByType(page, "database.transaction.rejected");
   await expect(page.locator(".timeline-count")).toHaveText(/^1 of \d+ observations/);
   await page.locator("#timeline-rows").getByRole("button", { name: /database.transaction.rejected inventory/ }).click();
   await expect(page.locator("#inspection-panel")).toContainText("TRANSACTION_CONFLICT");

@@ -88,10 +88,13 @@ categories as the Story milestones:
 - **Assertions** — `scenario.assertion.evaluated` records and their stored
   verdicts.
 
-The recorded components and the selected trace are offered as the same kind of
-chip. A component chip and a trace chip are canonical exact filters, so they
-compose with the quick view and with the advanced fields instead of replacing
-them.
+Each filter dimension has one control (#145). **Show** chooses the quick view
+and lists each one with its count. **Component** chooses one recorded component
+as a canonical exact filter, so it composes with the quick view and with the
+other fields instead of replacing them. Everything else, the virtual-time range
+and the Type, Trace, Event, Entity kind, and Entity id fields, is in the **More
+filters…** dialog. A trace is also reachable from the selected observation with
+**Show this trace**.
 
 A quick view is applied before the advanced fields, so the two compose by
 intersection: the timeline shows records kept by the quick view that also match
@@ -99,10 +102,14 @@ every active canonical filter. The result count, the selected position, and the
 empty-state explanation stay next to the rows they describe, and each quick
 view states how many observations it shows out of the recorded total.
 
-The canonical fields, their match modes, and their suggestions stay under the
-**Advanced filters** disclosure with unchanged semantics. Active quick views
-and active fields appear as removable chips, and **Clear all filters** removes
-both. An empty result names the active quick view and the active fields and
+The canonical fields, their match modes, and their suggestions keep their
+semantics inside **More filters…**, a modal dialog. It edits a copy of the
+active filters: **Apply** applies the copy as one change, **Clear** empties the
+dialog's fields, and Escape or **Cancel** discards every edit made since it
+opened. A draft that does not parse, such as a reversed virtual-time range,
+stays in the dialog with its error and changes nothing. Active quick views and
+active fields appear as removable chips only while one is active, chips only
+remove, and **Clear all filters** removes both. An empty result names the active quick view and the active fields and
 offers the same reset. Revealing an observation from evidence, causation, or a
 trace clears the quick view when that view would hide it, exactly as it clears
 the fields that would hide it.
@@ -118,20 +125,22 @@ the fields that would hide it.
 
 ### Accessibility
 
-Quick views are toggle buttons with `aria-pressed` in a labelled group. Each
-button's accessible name repeats its record count over the recorded total and
-the records it keeps; the count badge beside the label is decorative. The
-summary line is plain text, so the shown-of-recorded counts are available
-without relying on the badge. The advanced fields keep their own combobox and
-select semantics. The row-order and matching-rules explanations are hint pills
-rather than permanent paragraphs.
+**Show** and **Component** are native selects with visible labels; each Show
+option names its quick view and the count of records it keeps, and a
+screen-reader description says that quick views narrow the display rather than
+the run. The summary line is plain text, so the shown-of-recorded counts are
+available without opening the select. **More filters…** opens a modal dialog
+(`aria-modal="true"`, named "More filters"); focus moves to its first field and
+returns to the trigger when it closes. The fields keep their own combobox and
+select semantics, and Escape first closes an open suggestion list or hint
+before it closes the dialog. The row-order and matching-rules explanations are
+hint pills rather than permanent paragraphs.
 
-Panel space is bounded rather than allowed to overflow. The quick views and the
-advanced form share one scrolling region that yields first when the active
-filter chips grow, the chip row scrolls on its own once several filters are
-active, and the rows keep a minimum height. Playback, the active filter chips,
-the result count, and the rows stay outside that region, so the panel never
-clips a control or the event list.
+Panel space is bounded rather than allowed to overflow. The toolbar is two
+short rows, the view switch and the filter row, with no disclosure. The chip row
+appears only while a filter is active and scrolls on its own once several are
+active, and the rows keep a minimum height. The floating observation detail is
+positioned within the rows area, so it never covers the toolbar.
 
 ## Learning view
 

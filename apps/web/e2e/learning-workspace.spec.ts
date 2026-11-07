@@ -2,6 +2,7 @@ import { expect, test } from "./support/test.ts";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { loadLesson } from "./support/lesson.ts";
+import { viewButton } from "./support/history.ts";
 
 for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 768, 390]) {
   test(`learning workspace discloses tools without losing context for ${scenario} at ${width}px`, async ({ page }) => {
@@ -17,8 +18,9 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     await page.getByRole("tab", { name: "Recorded history" }).click();
     await expect(page.locator(".timeline-transport-row")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Play timeline", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("group", { name: "Quick views", exact: true })).not.toBeVisible();
-    await expect(page.getByRole("button", { name: "Story", exact: true })).toHaveAttribute("aria-pressed", "true");
+    // No disclosure in the history toolbar: one view switch and one filter row (#145).
+    await expect(page.locator(".timeline-panel details")).toHaveCount(0);
+    await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".story-table")).toHaveCount(0);
     await expect(page.locator(".story-inspector")).toHaveCount(0);
     if (width === 1366) {
@@ -33,18 +35,11 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     await page.getByText("Technical record", { exact: true }).click();
     await expect(page.getByRole("button", { name: "Copy observation id", exact: true })).toBeVisible();
     await page.locator(".story-inspector > summary").click();
-    await page.locator(".history-filter-drawer > summary").click();
-    await page.locator(".timeline-filter-disclosure > summary").click();
-    await page.getByLabel("Filter by", { exact: true }).selectOption("component");
-    await page.getByRole("combobox", { name: "Component", exact: true }).fill("payments");
-    await page.getByLabel("Filter by", { exact: true }).selectOption("type");
-    await expect(page.getByRole("combobox", { name: "Component", exact: true })).toHaveCount(0);
+    await page.getByLabel("Component", { exact: true }).selectOption("payments");
     await expect(page.getByRole("list", { name: "Active filters" })).toContainText("payments");
-    await page.getByLabel("Filter by", { exact: true }).selectOption("component");
-    await expect(page.getByRole("combobox", { name: "Component", exact: true })).toHaveValue("payments");
+    await expect(page.getByLabel("Component", { exact: true })).toHaveValue("payments");
     await page.getByRole("button", { name: "Clear all filters" }).click();
-    await page.getByRole("button", { name: /^Requests & responses/ }).click();
-    await page.locator(".history-filter-drawer > summary").click();
+    await page.getByLabel("Show", { exact: true }).selectOption("requests-and-responses");
     await expect(page.getByRole("group", { name: "Active filters and reset" })).toBeVisible();
     await page.getByRole("button", { name: "Clear all filters" }).click();
     await expect(page.getByRole("group", { name: "Active filters and reset" })).not.toBeVisible();
@@ -57,10 +52,10 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
       expect(rows!.width).toBeGreaterThan(column!.width - 40);
       const filters = await page.locator(".story-filter-bar").boundingBox();
       expect(filters!.y + filters!.height).toBeLessThan(rows!.y);
-      await page.getByRole("button", { name: "Table", exact: true }).click();
+      await viewButton(page, "Story table").click();
       await expect(page.locator(".story-table")).toBeVisible();
       await expect(page.locator(".story-strip")).toHaveCount(0);
-      await page.getByRole("button", { name: "Diagram", exact: true }).click();
+      await viewButton(page, "Story diagram").click();
       await expect(page.locator(".story-milestone[aria-pressed=true]")).toHaveCount(1);
       const accessibility = await new AxeBuilder({ page }).analyze();
       expect(accessibility.violations).toEqual([]);

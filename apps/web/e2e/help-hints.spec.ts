@@ -3,6 +3,7 @@ import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand } from "@distlab/contracts";
 import { loadLesson } from "./support/lesson.ts";
+import { openMoreFilters } from "./support/history.ts";
 
 declare global {
   interface Window { hintEvidence: { commands: WorkerCommand[] }; }
@@ -84,10 +85,9 @@ test("the filter, row order, and strip explanations keep their text and stay out
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   const afterRun = await commands(page);
 
-  const drawer = page.locator(".history-filter-drawer");
-  if ((await drawer.getAttribute("open")) === null) await drawer.locator("> summary").click();
-  const before = await page.locator(".timeline-tools").evaluate(node => node.clientHeight);
-  await page.locator(".timeline-filter-disclosure summary").click();
+  // The matching explanation lives in More filters, behind its hint.
+  const dialog = await openMoreFilters(page);
+  const before = await dialog.locator("form").evaluate(node => node.clientHeight);
   const filterHelp = page.getByRole("button", { name: "How matching works" });
   await expect(filterHelp).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("#timeline-filter-help")).toBeHidden();
@@ -101,7 +101,14 @@ test("the filter, row order, and strip explanations keep their text and stay out
   expect(popover).not.toBeNull();
   expect(popover!.x).toBeGreaterThanOrEqual(0);
   expect(popover!.x + popover!.width).toBeLessThanOrEqual(1280);
+  // The pinned explanation is not part of the dialog's layout.
+  expect(await dialog.locator("form").evaluate(node => node.clientHeight)).toBe(before);
+  // Escape closes the explanation first and keeps the dialog open; Cancel closes the dialog.
   await page.keyboard.press("Escape");
+  await expect(page.locator("#timeline-filter-help")).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).toBeHidden();
 
   await expect(page.locator("#timeline-order")).toBeHidden();
   await expect(page.locator("#timeline-order")).toContainText("it does not execute an event");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { CommerceFacts, CommerceState } from "./CommerceLesson.tsx";
+import { CommerceFacts, LessonChecks, ServiceStateGrid, commerceLessonChecks } from "./CommerceLesson.tsx";
 import { DocumentDiagnostics, ImportedChecks, ImportedHeader } from "./ImportedScenario.tsx";
 import { errorDiagnostics, oversized } from "./scenario-file.ts";
 import type { ScenarioFile } from "./scenario-file.ts";
@@ -11,6 +11,7 @@ import { BreakPanel } from "./BreakPanel.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
 import { LessonPanel } from "./LessonPanel.tsx";
 import { currentStep } from "./lesson-steps.ts";
+import { endsRun, outcomeSummary, runOutcome } from "./lesson-outcome.ts";
 import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
 import { DesignChoicesPanel } from "./DesignChoicesPanel.tsx";
@@ -285,12 +286,17 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // moved without rewording. Only Advanced diagnostics stays a disclosure.
   const status = projection?.simulation.status;
   const checkoutGuide = !imported && loadedChoice?.family !== "commerce";
+  // The packaged commerce lesson's checks; an imported session lists its own with ImportedChecks.
+  const checkView = useMemo(() => projection && !imported && loadedChoice?.family === "commerce"
+    ? commerceLessonChecks(projection, loadedChoice.checks) : null, [projection, imported, loadedChoice]);
+  // The one-line outcome (#141): the invariants' summary for commerce, the Run overview's sentence for checkout.
+  const summary = checkView ? outcomeSummary(checkView) : projection && report ? runOutcome(status) : null;
   const runOverview = projection && report ? <div className="execution-overview">
-    <p><strong>{imported ? importedScenario?.presentation.title : loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {status === "COMPLETED" ? "Execution completed; business outcome is shown from recorded state." : status === "FAILED" ? "Execution failed." : status === "RUNNING" ? "Execution in progress." : "Execution partial or ready."}</p>
+    <p><strong>{imported ? importedScenario?.presentation.title : loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {summary}</p>
+    <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
     <p>{report.knowledge}</p>
     <p>Recorded delivery attempts: {report.deliveries.length ? report.deliveries.map(item => `${item.destination}: attempt ${item.attempt} (${item.state})`).join("; ") : "Unavailable — no student-visible delivery records."}</p>
     <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p>
-    <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
     {imported ? null : <p>Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.</p>}
   </div> : null;
   const lessonGoal = imported && importedScenario
@@ -306,11 +312,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
     <p>Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.</p>
     <p>Reset and run again to compare the same virtual-time history.</p>
   </>;
-  // The outcome comes first, then the evidence links, then the lesson's questions.
+  // The outcome comes first, then the verdicts or the evidence links, then the lesson's questions.
   const lessonInvestigate = <>
+    {checkView ? <>
+      <p className="lesson-outcome"><strong>{summary}</strong></p>
+      <LessonChecks view={checkView} onShowEvidence={showEvidence} />
+    </> : null}
     {runOverview}
     {imported ? <p>Seed: {lesson?.seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, check its results below the architecture, then use Recorded history to follow what happened.</p>
-      : !checkoutGuide ? <p>Seed: {lesson?.seed}. Observe the service state and lesson checks in Architecture, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p> : <>
+      : !checkoutGuide ? <p>Seed: {lesson?.seed}. Observe the service state in Architecture, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p> : <>
       <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
       <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
@@ -347,9 +357,23 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </div>
     </details> : null}
   </>;
+  // When a run ends, ③ Investigate is revealed and its summary announced once (#141). Focus does not
+  // move. Leaving the ended state (Reset, a new load) clears the region silently, so the next run's
+  // identical summary is announced again.
+  const [announcement, setAnnouncement] = useState("");
+  const [revealToken, setRevealToken] = useState(0);
+  const previousStatus = useRef(status);
+  useEffect(() => {
+    const before = previousStatus.current;
+    previousStatus.current = status;
+    if (endsRun(status) && !endsRun(before)) {
+      setAnnouncement(summary ?? "");
+      setRevealToken(token => token + 1);
+    } else if (!endsRun(status)) setAnnouncement("");
+  }, [status, summary]);
   const lessonPanel = <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
     step={currentStep(status, projection?.simulation.processedEvents)}
-    goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} />;
+    goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} revealInvestigate={revealToken} />;
 
   return <main className={`app-shell${tab === "history" && projection && !showHistoryControls ? " history-focus" : ""}`}>
     {tab === "history" && projection && !showHistoryControls ? <h1 className="sr-only">DistLab · Recorded history</h1> : null}
@@ -403,8 +427,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
             {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
             {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
           {imported && importedScenario ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
-          {imported ? commerce ? <CommerceState projection={projection} onShowEvidence={showEvidence} /> : null
-            : loadedChoice?.family === "commerce" ? <CommerceState projection={projection} checks={loadedChoice.checks} onShowEvidence={showEvidence} /> : null}
+          {/* Service state stays below the graph until the Service state dialog (#136). */}
+          {commerce ? <ServiceStateGrid projection={projection} /> : null}
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
@@ -425,6 +449,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <ol><li><button type="button" className="empty-choose-lesson" disabled={busy} aria-haspopup="dialog" onClick={event => openChooser(event.currentTarget)}>Choose a lesson</button>, or open an instructor’s scenario file.</li><li>Explore the system and run the simulation.</li><li>Read the story, then investigate only what interests you.</li></ol>
       </section>
     </div>}
+    <p className="sr-only" role="status" aria-live="polite" aria-label="Lesson outcome">{announcement}</p>
     <LessonChooser open={chooserOpen} lessons={scenarios} current={imported ? null : loadedChoice?.id ?? null} busy={busy}
       discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onClose={closeChooser} />
   </main>;
