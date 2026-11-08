@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./support/test.ts";
-import { loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 
 test("architecture and each inspector pass accessibility checks at the desktop baseline and 200% zoom", async ({ page }) => {
   test.setTimeout(60_000);
@@ -9,6 +9,8 @@ test("architecture and each inspector pass accessibility checks at the desktop b
   await loadLesson(page, "normal");
   const nodes = page.locator(".react-flow__node");
   await expect(nodes).toHaveCount(7);
+  // Nodes stay hidden, and so unfocusable, until ELK has laid out and fitted the graph.
+  await graphLaidOut(page);
   for (const size of [{ width: 1366, height: 768 }, { width: 683, height: 384 }]) {
     const width = size.width;
     await page.setViewportSize(size);

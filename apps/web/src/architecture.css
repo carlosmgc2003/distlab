@@ -204,10 +204,11 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .architecture-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; align-items: stretch; }
 .architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(200px, 300px); }
 .graph-canvas { height: 100%; min-height: 240px; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }
-/* Nodes render (and are measured) before ELK places them; keep them out of sight until the layout lands. */
+/* Nodes render (and are measured) before ELK places them; keep them out of sight until the layout lands.
+   React Flow writes an inline `visibility: visible` on every measured node, so only !important wins here. */
 .graph-canvas.is-laying-out .react-flow__node,
 .graph-canvas.is-laying-out .react-flow__edge,
-.graph-canvas.is-laying-out .react-flow__edgelabel-renderer { visibility: hidden; }
+.graph-canvas.is-laying-out .react-flow__edgelabel-renderer { visibility: hidden !important; }
 .graph-canvas .react-flow { width: 100%; height: 100%; }
 .component-node { width: 215px; min-height: 90px; color: #172033; }
 .node-body { position: relative; width: 100%; min-height: 90px; }

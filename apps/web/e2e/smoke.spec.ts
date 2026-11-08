@@ -1,7 +1,7 @@
 import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -53,6 +53,8 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(inspector).toHaveCount(0);
     await expect(architecture.locator(".react-flow__node")).toHaveCount(7);
     await expect(architecture.locator(".react-flow__edge")).toHaveCount(6);
+    // Positions and the viewport are read below; they are final only once ELK has laid out and fitted the graph.
+    await graphLaidOut(page);
     const legend = architecture.getByRole("region", { name: "Architecture legend" });
     await expect(legend).toHaveCount(1);
     await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
