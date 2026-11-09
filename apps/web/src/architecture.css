@@ -482,7 +482,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
    desktop baselines; a narrower window wraps the bar instead of overlapping its parts. */
 .command-toolbar.top-bar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 14px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-panel); }
 .top-bar .brand { flex: none; margin-right: 0; }
-.top-bar .scenario-picker { flex: 1 1 22rem; flex-wrap: nowrap; min-width: 0; }
+.top-bar .scenario-picker { flex: 1 1 18rem; flex-wrap: nowrap; min-width: 0; }
 .top-bar .scenario-picker > button:not(.lesson-trigger) { flex: none; white-space: nowrap; }
 .top-bar .lesson-trigger { flex: 0 1 auto; min-width: 8rem; max-width: 22rem; }
 .execution-group { flex: none; display: flex; align-items: center; gap: 8px; }
@@ -492,6 +492,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 /* Each metric stacks its label over its value, so the summary keeps its words in one compact row. */
 .top-bar .run-summary { flex: 0 0 auto; margin-left: auto; flex-wrap: nowrap; justify-content: flex-end; align-items: center; gap: 4px 14px; font-size: .85rem; white-space: nowrap; }
 .top-bar .run-metrics { flex-wrap: nowrap; gap: 4px 14px; }
+/* A long status ("Choose a scenario to begin.") wraps to two short lines inside the row. */
+.top-bar .run-status { max-width: 11rem; margin: 0; white-space: normal; line-height: 1.15; }
 .top-bar .run-metrics > div { flex-direction: column; align-items: flex-start; gap: 0; }
 .top-bar .run-metrics dt { font-size: .7rem; line-height: 1.1; color: var(--text-secondary); font-weight: 600; }
 .top-bar .run-metrics dd { margin: 0; line-height: 1.2; font-weight: 650; }
@@ -580,6 +582,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(15rem, 1fr) minmax(0, 1fr); }
   .top-bar .run-summary { flex: 1 1 100%; margin-left: 0; justify-content: flex-start; flex-wrap: wrap; white-space: normal; }
   .top-bar .run-metrics { flex-wrap: wrap; }
+  .execution-group { flex: 1 1 100%; flex-wrap: wrap; }
+  .execution-group .control-buttons { flex-wrap: wrap; }
   .scenario-picker { flex: 1 1 100%; }
   .workspace-empty { padding: 24px; }
   /* At browser zoom the Lesson panel stacks above the tabs and keeps its own scroll. */
