@@ -315,3 +315,101 @@ test("a pair's distinguishing design choice gives the paired lesson's business i
     assert.notDeepEqual(invariants(from, await run(source, { version: 1 })), invariants(to, paired), `${from} and ${to} differ`);
   }
 });
+
+/** Every combination of each declared parameter's domain edges, as overlay parameter lists. */
+function extremes(lesson: Lesson): { key: string; value: CanonicalValue }[][] {
+  let combinations: { key: string; value: CanonicalValue }[][] = [[]];
+  for (const parameter of lesson.policy.parameters) {
+    const domain = parameter.domain;
+    const values: CanonicalValue[] = domain.type === "boolean" ? [true, false] : domain.type === "integer" ? [domain.minimum, domain.maximum] : [...domain.choices];
+    combinations = combinations.flatMap(chosen => values.map(value => [...chosen, { key: parameter.key, value }]));
+  }
+  return combinations;
+}
+
+/**
+ * Each business invariant's stored verdict beside the same predicate evaluated on the run's final
+ * state (#163). A verdict of PASS with `holdsAtEnd: false` is a false HOLDS.
+ */
+async function invariantsAtEnd(name: typeof commerceLessonNames[number], overlay: unknown) {
+  const lesson = lessons.find(item => item.id === name)!;
+  const document = compose(lesson, overlay).document;
+  const session = lesson.engine.create(document);
+  const harness = openHarness(session);
+  await harness.run();
+  const result = harness.inspect();
+  const projection = session.projection();
+  const ids = new Set(commerceChecks(name).filter(check => check.kind === "invariant").map(check => check.id));
+  const rows = (document as unknown as ScenarioDefinition).assertions.filter(assertion => ids.has(assertion.id)).map(assertion => ({
+    id: assertion.id,
+    status: result.results.find(item => item.id === assertion.id)!.status,
+    holdsAtEnd: commerceAssessment.find(assertion.predicate)!.evaluate({ parameters: assertion.parameters, projection }).pass,
+  }));
+  return { result, rows };
+}
+const payments = (result: HarnessExport) =>
+  Object.keys(((result.state as { databases: Record<string, { tables: Record<string, Record<string, unknown>> }> }).databases.payments!.tables.payments!));
+const delayedRetry = { version: 1, faults: [{ id: "student-slow-retry", point: "network.request", source: "client", target: "payments", from: 0, probability: 1, maxApplications: 1, occurrence: 2, effect: { kind: "delay", duration: 30 } }] };
+
+test("#163 retry-unsafe reports the double charge for every allowed client timeout", async () => {
+  for (let timeout = 1; timeout <= 60; timeout++) {
+    const { result, rows } = await invariantsAtEnd("retry-unsafe", { version: 1, parameters: [{ key: "timeout", value: timeout }] });
+    assert.equal(result.status, "COMPLETED", `timeout=${timeout}`);
+    assert.deepEqual(rows, [{ id: "one-payment-per-order", status: payments(result).length > 1 ? "FAIL" : "PASS", holdsAtEnd: payments(result).length <= 1 }], `timeout=${timeout}`);
+  }
+  // The reported case: with timeout=40 the second charge lands at t=42, after the time the lesson used to check.
+  const { result, rows } = await invariantsAtEnd("retry-unsafe", { version: 1, parameters: [{ key: "timeout", value: 40 }] });
+  assert.deepEqual(payments(result), ["payment-1", "payment-2"]);
+  assert.equal(rows[0]!.status, "FAIL");
+  const verdict = result.results.find(item => item.id === "one-payment-per-order")!;
+  assert.equal(verdict.time, 42);
+  assert.deepEqual(Object.keys(verdict.evidence as Record<string, unknown>), ["payment-1", "payment-2"]);
+});
+
+test("#163 retry-unsafe reports the double charge when a student fault delays the retry", async () => {
+  const { result, rows } = await invariantsAtEnd("retry-unsafe", delayedRetry);
+  assert.deepEqual(payments(result), ["payment-1", "payment-2"]);
+  assert.deepEqual(rows, [{ id: "one-payment-per-order", status: "FAIL", holdsAtEnd: false }]);
+  assert.ok(result.results[0]!.time > 30, "the violation is later than the time the lesson used to check");
+  // The same fault on the idempotent lesson leaves one payment, and the invariant holds to the end of the run.
+  const safe = await invariantsAtEnd("retry-idempotent", delayedRetry);
+  assert.deepEqual(payments(safe.result), ["payment-1"]);
+  assert.deepEqual(safe.rows, [{ id: "one-payment-per-order", status: "PASS", holdsAtEnd: true }]);
+});
+
+test("#163 no business invariant reads HOLDS while the final state violates it, at every design-choice extreme of every lesson", async () => {
+  for (const name of commerceLessonNames) for (const parameters of extremes(lessons.find(item => item.id === name)!)) {
+    const { result, rows } = await invariantsAtEnd(name, { version: 1, parameters });
+    assert.equal(result.status, "COMPLETED", `${name} ${JSON.stringify(parameters)}`);
+    assert.ok(rows.length > 0, name);
+    for (const row of rows) assert.ok(!(row.status === "PASS" && !row.holdsAtEnd), `${name} ${JSON.stringify(parameters)}: ${row.id} reads HOLDS, and the final state violates it`);
+  }
+});
+
+test("#163 no business invariant reads HOLDS while the final state violates it, when a request on any link is delayed", async () => {
+  for (const name of commerceLessonNames) {
+    const lesson = lessons.find(item => item.id === name)!;
+    for (const link of definition(lesson).architecture.links) for (const occurrence of [1, 2]) {
+      const fault = { id: "student-slow", point: "network.request", source: link.source, target: link.target, from: 0, probability: 1, maxApplications: 1, occurrence, effect: { kind: "delay", duration: 30 } };
+      const { result, rows } = await invariantsAtEnd(name, { version: 1, faults: [fault] });
+      assert.equal(result.status, "COMPLETED", `${name} ${link.source} → ${link.target} #${occurrence}`);
+      for (const row of rows) assert.ok(!(row.status === "PASS" && !row.holdsAtEnd), `${name} ${link.source} → ${link.target} #${occurrence}: ${row.id} reads HOLDS, and the final state violates it`);
+    }
+  }
+});
+
+test("#163 fresh, reset, and stepped runs agree on the verdicts of a changed experiment", async () => {
+  const lesson = lessons.find(item => item.id === "retry-unsafe")!;
+  for (const overlay of [{ version: 1, parameters: [{ key: "timeout", value: 40 }] }, delayedRetry]) {
+    const fresh = await run(lesson, overlay);
+    assert.deepEqual(fresh.results.map(item => [item.id, item.status]), [["one-payment-per-order", "FAIL"]]);
+    const session = openHarness(lesson.engine.create(compose(lesson, overlay).document));
+    await session.run();
+    await session.reset();
+    await session.run();
+    for (const other of [session.inspect(), await run(lesson, overlay, { step: true }), await run(lesson, overlay, { maxEvents: 3 })]) {
+      assert.equal(other.digest, fresh.digest);
+      assert.deepEqual(other.results, fresh.results);
+    }
+  }
+});

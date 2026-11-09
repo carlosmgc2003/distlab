@@ -8,6 +8,11 @@ const database = (owner: string, names: string[], initial = {}) => ({
 });
 const request = (id: string, at: number, target: string, endpoint: string, body = {}, retry = false) => ({ id, at, kind: "client", target: "client", action: "request", data: { target, endpoint, body, retry, label: id } });
 const assertion = (id: string, at: number, owner: string, table: string, count: number, key = "", expected = {}) => ({ id, predicate: "commerce.rows", mode: "at", at, parameters: { owner, table, count, key, expected } });
+/**
+ * A safety invariant (#163): it must hold at every event boundary of the run, so
+ * no design choice or student fault can move a violation past a check time.
+ */
+const always = (id: string, predicate: string, parameters: object) => ({ id, predicate, mode: "always", parameters });
 const fault = (id: string, point: string, source: string, target: string, name: string, effect: object) => ({ id, point, source, target, name, from: 0, probability: 1, maxApplications: 1, effect });
 const configuration = { startTime: 0, historyLimit: 100000, visibility: { defaultMode: "visible", byType: {}, summaryFields: {} }, models: {} };
 
@@ -41,7 +46,7 @@ export function commerceScenario(name: CommerceLessonName): CanonicalValue {
     architecture: { components, links: [link("client", "payments")], databases: [database("payments", ["payments", "results"])], stores: [], destinations: [], subscriptions: [] },
     external: [], faults: [fault("lost-payment-response", "network.response", "payments", "client", "POST /pay", { kind: "drop" })],
     actions: [{ id: "start-payments", at: 0, kind: "service", target: "payments", state: "RUNNING" }, request("pay", 0, "payments", "POST /pay", { idempotencyKey: "order-1" }, true)],
-    assertions: [assertion("one-payment-per-order", 30, "payments", "payments", 1)],
+    assertions: [always("one-payment-per-order", "commerce.rows", { owner: "payments", table: "payments", maximum: 1 })],
   } as CanonicalValue;
 }
 
@@ -144,7 +149,7 @@ function circuitScenario(name: CommerceLessonName): CanonicalValue {
       ...[0, 1, 2, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 65, 65, 90].map((at, i) => request(`check-${i}`, at, "api", "POST /check")),
     ], assertions: [
       { id: "dependency-recovered", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "payments", expected: { state: "CLOSED", active: 0, calls: breaker ? 5 : 16, failed: breaker ? 3 : 13, succeeded: breaker ? 2 : 3, rejected: breaker ? 11 : 0 } } },
-      { id: "bounded-waiting", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "payments", expected: { peakActive: 3 } } },
+      always("bounded-waiting", "commerce.metrics", { owner: "payments", maximum: { peakActive: 3 } }),
       { id: "upstream-drained", predicate: "commerce.metrics", mode: "at", at: 120, parameters: { owner: "api", expected: { active: 0, calls: 16, succeeded: breaker ? 2 : 3 } } },
     ],
   } as CanonicalValue;
@@ -178,7 +183,7 @@ function notificationScenario(name: CommerceLessonName): CanonicalValue {
       assertion("nothing-sent-during-outage", 60, "notifications", "notifications", 0),
       assertion("order-confirmed-despite-notification-failure", 50, "orders", "orders", 1, "order-1", { status: "CONFIRMED" }),
       { id: "failed-notification-dead-lettered", predicate: "commerce.dead-letters", mode: "at", at: 60, parameters: { destination: "OrderPlaced", attempts: 3 } },
-      { id: "bounded-notification-retries", predicate: "commerce.attempts", mode: "at", at: 120, parameters: { destination: "OrderPlaced", maximum: 3 } },
+      always("bounded-notification-retries", "commerce.attempts", { destination: "OrderPlaced", maximum: 3 }),
     ],
   } as CanonicalValue;
 }
@@ -213,8 +218,8 @@ function cacheScenario(name: CommerceLessonName): CanonicalValue {
     ], assertions: [
       assertion("price-raised", 15, "catalog", "prices", 1, "sku-1", { price: 1200, version: 2 }),
       assertion("expired-cart-rejected", 60, "orders", "orders", 2, "order-2", { status: "REJECTED", reason: "CART_EXPIRED" }),
-      { id: "order-priced-at-checkout", predicate: "commerce.pricing", mode: "at", at: 60, parameters: { owner: "orders", table: "orders", catalog: "catalog", history: "price-history" } },
-      { id: "no-expired-cart-checkout", predicate: "commerce.live-carts", mode: "at", at: 60, parameters: { owner: "orders", table: "orders" } },
+      always("order-priced-at-checkout", "commerce.pricing", { owner: "orders", table: "orders", catalog: "catalog", history: "price-history" }),
+      always("no-expired-cart-checkout", "commerce.live-carts", { owner: "orders", table: "orders" }),
     ],
   } as CanonicalValue;
 }
@@ -240,8 +245,8 @@ function inventoryScenario(name: CommerceLessonName): CanonicalValue {
     actions: [{ id: "start-inventory", at: 0, kind: "service", target: "inventory", state: "RUNNING" }, reserve("customer-app"), reserve("partner-api")],
     assertions: [
       assertion("last-unit-contended", 3, "inventory", "stock", 1, "sku-1", { stock: 1, version: 1 }),
-      { id: "stock-never-negative", predicate: "commerce.stock", mode: "at", at: 30, parameters: { owner: "inventory", table: "stock" } },
-      { id: "one-reservation-per-unit", predicate: "commerce.reservations", mode: "at", at: 30, parameters: { owner: "inventory", stock: "stock", reservations: "reservations" } },
+      always("stock-never-negative", "commerce.stock", { owner: "inventory", table: "stock" }),
+      always("one-reservation-per-unit", "commerce.reservations", { owner: "inventory", stock: "stock", reservations: "reservations" }),
     ],
   } as CanonicalValue;
 }
@@ -252,6 +257,12 @@ function inventoryScenario(name: CommerceLessonName): CanonicalValue {
  * so every lesson of a family carries the identical assertion and its verdict
  * reads HOLDS (PASS) or VIOLATED (FAIL). A scenario expectation confirms that
  * the lesson reproduced its setup; it may differ between the lessons of a pair.
+ *
+ * An invariant that forbids a state (a second charge, negative stock) is a
+ * safety property and uses `always`, so a design choice or a student fault
+ * cannot move its violation past a check time (#163). An invariant that
+ * requires a state to be reached (a failed order is cancelled) keeps `at` with
+ * its deadline. Scenario expectations keep `at`: they describe the packaged story.
  */
 export interface CommerceCheck {
   readonly id: string;
@@ -318,7 +329,7 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
         expectation("dependency-recovered", name === "cascade-breaker"
           ? "Payments' dependency recovered: 5 risk calls, 3 failures, 2 successes, 11 rejections (t=120)"
           : "Payments' dependency recovered: 16 risk calls, 13 failures, 3 successes (t=120)"),
-        invariant("bounded-waiting", "Payment requests waiting on the slow risk provider peak at 3"),
+        invariant("bounded-waiting", "No more than 3 payment requests wait on the slow risk provider at once"),
         expectation("upstream-drained", "All 16 checks reached the API and drained (t=120)"),
       ];
   }
