@@ -241,6 +241,23 @@ test("assertion boundaries, pause, predicate failure, and history failure", asyn
   assert.equal(limited.results().find(result => result.id === "always")?.status, "INCOMPLETE");
 });
 
+test("an assessment projection reads each field once, holds what a host projection holds, and stays frozen", async () => {
+  const fields = ["time", "status", "history", "components", "databases", "stores", "messageBus"];
+  let last: Record<string, unknown> = {};
+  const looked = predicate("demo.looked", ({ projection }) => {
+    const view = projection as unknown as Record<string, unknown>;
+    // Enumerable and stable: a second read returns the copy the first read made.
+    const stable = fields.every(field => view[field] === view[field]) && JSON.stringify(Object.keys(view).sort()) === JSON.stringify([...fields].sort());
+    last = { components: projection.components, databases: projection.databases, stores: projection.stores, messageBus: projection.messageBus, time: projection.time };
+    return { pass: stable && Object.isFrozen(projection), evidence: null };
+  });
+  const session = engineFor([], [looked]).create({ version: 1, name: "lazy", seed: "lazy", architecture: { components: [] }, assertions: [{ id: "looked", predicate: "demo.looked", parameters: null, mode: "always" }] });
+  await session.simulation.run();
+  assert.equal(session.results()[0]?.status, "PASS");
+  const host = session.projection();
+  assert.deepEqual(last, { components: host.components, databases: host.databases, stores: host.stores, messageBus: host.messageBus, time: host.time });
+});
+
 test("scheduled fault actions dispatch through the provider controller", async () => {
   const external = model({ model: "demo.external", kind: "external", operations: ["ping"], instantiate: instance => ({
     id: instance.id, version: instance.version, initialState: null, operations: {
