@@ -25,11 +25,38 @@ export interface FaultsSectionProps {
   readonly pick: { readonly pick: GraphPick; readonly token: number } | null;
 }
 
+/** The Faults section's reasoning (#147). It is in the Experiment drawer's hint, never in the section's layout. */
+const FAULTS_ALLOWED_HELP = "Only the faults this lesson allows are listed.";
+const FAULTS_APPLY_HELP = "A fault applies when you apply the draft, never during a run.";
+const FAULTS_LOCKED_HELP = "Fault controls are unavailable while the simulation runs or a command is in progress. The applied faults stay listed.";
+const REQUEST_HELP = "A request travels along the link, from the caller to the called component.";
+const RESPONSE_HELP = "A response travels back along the link, from the called component to the caller.";
+const OCCURRENCE_HELP = "1 means only the first matching request, message, or commit.";
+
 const fieldLabels: Readonly<Record<FormField, string>> = {
   kind: "Fault", target: "Target", endpoint: "Endpoint (optional)", from: "From virtual time", until: "Until virtual time (optional, exclusive)",
   occurrence: "Only occurrence number (optional)", maxApplications: "Maximum applications", probability: "Probability",
   duration: "Delay duration", additionalCopies: "Additional copies", spacing: "Spacing between copies", at: "At virtual time", state: "Availability state",
 };
+
+/**
+ * The Faults section's part of the Experiment drawer's one hint (#147). Field help other than
+ * probability is here, not under its field; each such field keeps it as a screen-reader description.
+ */
+export function FaultsHelp({ policy }: { readonly policy: LessonOverlayPolicy }) {
+  const options = faultKindOptions(policy);
+  if (options.length === 0) return null;
+  const links = options.some(option => option.target === "link");
+  const rules = options.some(option => option.kind === "rule");
+  return <>
+    <p>{FAULTS_ALLOWED_HELP} {FAULTS_APPLY_HELP}</p>
+    <p>{FAULTS_LOCKED_HELP}</p>
+    {links || rules ? <dl className="help-hint-fields">
+      {links ? <><dt>{fieldLabels.target}</dt><dd>{REQUEST_HELP} {RESPONSE_HELP}</dd></> : null}
+      {rules ? <><dt>{fieldLabels.occurrence}</dt><dd>{OCCURRENCE_HELP}</dd></> : null}
+    </dl> : null}
+  </>;
+}
 
 /**
  * Student faults (ADR-004, issue #94), a section of the Experiment drawer (#143).
@@ -92,12 +119,14 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
     if (editing === entryId(entry)) { setEditing(null); setForm(emptyForm); }
     setNotice(`Removed ${describeEntry(entry)} from the draft. Apply the draft to run without it.`);
   };
-  const field = (name: FormField, input: React.ReactNode, help?: string) => {
+  // Help shown under its field changes what the student types (probability). Other field help is read
+  // as the field's description only, and shown in the drawer's hint (#147).
+  const field = (name: FormField, input: React.ReactNode, help?: string, shown = false) => {
     const error = errors[name];
     return <div className="break-field">
       <label htmlFor={`${ids}-${name}`}>{fieldLabels[name]}</label>
       {input}
-      {help ? <span id={`${ids}-${name}-help`} className="field-help">{help}</span> : null}
+      {help ? <span id={`${ids}-${name}-help`} className={shown ? "field-help" : "sr-only"}>{help}</span> : null}
       {error ? <span id={`${ids}-${name}-error`} className="field-error">{error}</span> : null}
     </div>;
   };
@@ -107,7 +136,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
     "aria-describedby": [errors[name] ? `${ids}-${name}-error` : "", `${ids}-${name}-help`].filter(Boolean).join(" ") || undefined,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => update(name, event.target.value),
   });
-  const number = (name: FormField, help?: string) => field(name, <input {...inputProps(name)} inputMode={name === "probability" ? "decimal" : "numeric"} autoComplete="off" />, help);
+  const number = (name: FormField, help?: string) => field(name, <input {...inputProps(name)} inputMode={name === "probability" ? "decimal" : "numeric"} autoComplete="off" />, help, name === "probability");
   const usesSeed = option?.kind === "rule" && form.probability.trim() !== "" && Number(form.probability) !== 1;
 
   return <section className="faults-section" aria-labelledby={`${ids}-heading`}>
@@ -133,10 +162,9 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
     {placed.general.length ? <ul className="field-error" aria-label="Fault problems">{placed.general.map(item => <li key={item}>{item}</li>)}</ul> : null}
     <p className="sr-only" role="status" aria-live="polite">{notice}</p>
     <div className="break-body">
-      {!editable ? <p className="break-locked">Fault controls are unavailable while the simulation runs or a command is in progress. The applied faults stay listed.</p> : null}
       {options.length === 0 ? <p>This lesson does not allow student faults.</p> : <form className="break-form" onSubmit={submit} aria-labelledby={`${ids}-form-heading`} noValidate>
         <h4 id={`${ids}-form-heading`}>{editing ? `Edit ${editing}` : "Add a fault"}</h4>
-        <p className="field-help">Only the faults this lesson allows are listed. {remaining > 0 ? `You can add ${remaining} more.` : "The draft is at this lesson’s fault limit."} A fault applies when you apply the draft, never during a run.</p>
+        <p className="field-help">{remaining > 0 ? `You can add ${remaining} more.` : "The draft is at this lesson’s fault limit."}</p>
         <div className="break-grid">
           {field("kind", <select {...inputProps("kind")}>
             <option value="">Choose a fault…</option>
@@ -150,12 +178,12 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
             <button type="button" aria-pressed={picking} disabled={!editable} onClick={() => { onPickingChange(!picking); setNotice(picking ? "Graph picking stopped." : `Select ${targetHint(option.target)} in the Architecture graph.`); }}>
               {picking ? "Stop picking" : "Pick on graph"}
             </button>
-          </span>, option.target === "link" ? (option.point === "network.response" ? "A response travels back along the link, from the called component to the caller." : "A request travels along the link, from the caller to the called component.") : undefined) : null}
+          </span>, option.target === "link" ? (option.point === "network.response" ? RESPONSE_HELP : REQUEST_HELP) : undefined) : null}
           {option?.kind === "rule" && option.target === "link" ? field("endpoint", <input {...inputProps("endpoint")} autoComplete="off" placeholder="Any endpoint, for example POST /authorize" />) : null}
           {option?.kind === "rule" ? <>
             {number("from")}
             {number("until")}
-            {number("occurrence", "1 means only the first matching request, message, or commit.")}
+            {number("occurrence", OCCURRENCE_HELP)}
             {number("maxApplications")}
             {number("probability", usesSeed ? "Uses the session seed: the same seed gives the same choice, and it can shift later random outcomes." : "1 always applies. Any other value uses the session seed.")}
             {option.effect === "delay" ? number("duration") : null}

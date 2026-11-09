@@ -84,36 +84,44 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
  * 64 px (62 px measured) and the canvas at least 440 px at 1366×768 (490/473 px measured) and 560 px at 1534×897
  * (619 px measured), for every lesson and state. Control and prose counts are unchanged.
  *
+ * #147 moved the guarantee prose of ③ Investigate, the Experiment drawer, the Service state dialog, and More filters
+ * behind one hint per region. The control counts rose and are loosened on purpose: ③ Investigate's new **About these
+ * results** trigger is on screen in every measured state (+1), and the shorter section brings one more of its actions
+ * into view in three states: **Show service state** for retry-unsafe at READY (16 → 18 at 1366×768, 17 → 19 at
+ * 1534×897) and a fourth **Show evidence** for saga-uncompensated at COMPLETED at 1534×897 (19 → 21). The prose
+ * counts stay at 1 and 2: what they count is the Architecture tab's playback readout and movement cue, graph-area
+ * text that #136 and #147 leave alone. The drawer and the dialogs are closed while these are measured.
+ *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
  * stating the reason in its description.
  */
 export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLesson, Readonly<Record<BudgetState, LayoutBudget>>>>>> = {
   "1366x768": {
     "response-lost": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 23 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
   },
   "1534x897": {
     "response-lost": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 23 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 21 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
   },
 };

@@ -2,10 +2,11 @@ import { useEffect, useId, useMemo, useState } from "react";
 import type { LessonOverlayPolicy, ParameterOverride } from "@distlab/contracts";
 import { choiceCopy, choiceValues, formatChoice, readInteger, setChoice } from "./design-choices.ts";
 
+/** Why the setup checks can read "not reproduced" under a student's choices. It is in the Experiment drawer's hint (#147). */
+export const DESIGN_CHOICES_HELP = "Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read \"not reproduced\" under your choices. That shows how your change altered the story, not a simulator error.";
+
 export interface DesignChoicesSectionProps {
   readonly policy: LessonOverlayPolicy;
-  /** Normalized overrides the worker applied, or null when no session is loaded. */
-  readonly applied: readonly ParameterOverride[] | null;
   readonly draft: readonly ParameterOverride[];
   readonly onDraftChange: (draft: readonly ParameterOverride[]) => void;
   /** False while a command is outstanding or the simulation runs. */
@@ -23,8 +24,9 @@ export interface DesignChoicesSectionProps {
  * drawer (#143). The student changes the settings the lesson declares; the
  * drawer's one Apply sends them with the faults in one ordinary `load`. Nothing
  * here edits a running simulation, and the seed, workload, and checks stay the lesson's.
+ * While it is not editable, the drawer's footer says so; the reasoning is in the drawer's hint (#147).
  */
-export function DesignChoicesSection({ policy, applied, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken }: DesignChoicesSectionProps) {
+export function DesignChoicesSection({ policy, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken }: DesignChoicesSectionProps) {
   const ids = useId();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
@@ -46,7 +48,6 @@ export function DesignChoicesSection({ policy, applied, draft, onDraftChange, ed
   return <section className="design-choices" aria-labelledby={`${ids}-heading`}>
     <h3 id={`${ids}-heading`}>Design choices</h3>
     <div className="design-choices-body">
-      {!editable ? <p className="field-help">Design choices are unavailable while the simulation runs or a command is in progress.</p> : null}
       <div className="design-choices-grid">
         {policy.parameters.map(parameter => {
           const key = parameter.key;
@@ -79,6 +80,5 @@ export function DesignChoicesSection({ policy, applied, draft, onDraftChange, ed
         })}
       </div>
     </div>
-    {applied?.length ? <p className="field-help">Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read "not reproduced" under your choices. That shows how your change altered the story, not a simulator error.</p> : null}
   </section>;
 }
