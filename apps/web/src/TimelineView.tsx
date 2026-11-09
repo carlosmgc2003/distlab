@@ -461,7 +461,11 @@ function MoreFilters({ open, draft, field, error, suggestions, onApply, onClose 
     onClose={() => { if (expected.current) onClose(); }}>
     <div className="more-filters-header">
       <h2 id="more-filters-title">More filters</h2>
-      <HelpHint label="How matching works" bodyId="timeline-filter-help">{TIMELINE_FILTER_HELP}</HelpHint>
+      {/* The dialog's one hint (#147): how matching works, and how filters combine. */}
+      <HelpHint label="How matching works" bodyId="timeline-filter-help">
+        <p>{TIMELINE_FILTER_HELP}</p>
+        <p>Filters combine. Choose another field to narrow further; remove any condition using its chip below.</p>
+      </HelpHint>
     </div>
     <form className="timeline-filters" aria-label="Timeline filters" aria-describedby="timeline-filter-help" onSubmit={event => { event.preventDefault(); apply(); }}>
       <label>Virtual time from<input id="timeline-from" inputMode="numeric" autoComplete="off" {...invalid} value={local.fromTime} onChange={event => edit({ ...local, fromTime: event.target.value })} /></label>
@@ -474,7 +478,6 @@ function MoreFilters({ open, draft, field, error, suggestions, onApply, onClose 
         onValue={value => edit({ ...local, [item.field]: value })}
         onMode={mode => edit({ ...local, [item.mode]: mode })}
         onChoose={value => edit(withExactValue(local, item.field, value))} />)}
-      <p className="filter-composer-note">Filters combine. Choose another field to narrow further; remove any condition using its chip below.</p>
       {shownError ? <p id="timeline-filter-error" role="alert">{shownError}</p> : null}
       <div className="more-filters-footer">
         <button type="submit" className="is-primary">Apply</button>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { CommerceFacts, LessonChecks, ServiceStateGrid, commerceLessonChecks } from "./CommerceLesson.tsx";
+import { HelpHint } from "./ui-hint.tsx";
+import { CommerceFacts, EXPECTATIONS_HELP, INVARIANTS_HELP, LessonChecks, ServiceStateGrid, commerceLessonChecks } from "./CommerceLesson.tsx";
 import { DocumentDiagnostics, ImportedChecks, ImportedHeader } from "./ImportedScenario.tsx";
 import { errorDiagnostics, oversized } from "./scenario-file.ts";
 import type { ScenarioFile } from "./scenario-file.ts";
@@ -9,14 +10,14 @@ import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import { ExperimentDrawer } from "./ExperimentDrawer.tsx";
 import { ServiceStateDialog } from "./ServiceStateDialog.tsx";
-import { FaultsSection } from "./FaultsSection.tsx";
+import { FaultsHelp, FaultsSection } from "./FaultsSection.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
 import { LessonPanel } from "./LessonPanel.tsx";
 import { currentStep } from "./lesson-steps.ts";
 import { endsRun, outcomeSummary, runOutcome } from "./lesson-outcome.ts";
 import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
-import { DesignChoicesSection } from "./DesignChoicesSection.tsx";
+import { DESIGN_CHOICES_HELP, DesignChoicesSection } from "./DesignChoicesSection.tsx";
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
 import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
@@ -302,10 +303,12 @@ export function App({ host }: { readonly host: SimulationHost }) {
     pending={experimentPending} invalid={choicesInvalid} editable={editable}
     onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft))} onDiscard={discardDraft}
     // Design choices exist only for lessons whose policy declares parameters.
-    designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} applied={applied?.parameters ?? null} draft={choiceDraft}
+    designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} draft={choiceDraft}
       onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices} onInvalidChange={setChoicesInvalid} resetToken={choicesReset} /> : null}
     faults={<FaultsSection policy={policy} architecture={lesson.architecture} applied={applied} draft={draft} onDraftChange={setDraft}
-      pending={faultsPending} editable={editable} rejected={rejectedFaults} picking={picking} onPickingChange={changePicking} pick={pick} />} /> : null;
+      pending={faultsPending} editable={editable} rejected={rejectedFaults} picking={picking} onPickingChange={changePicking} pick={pick} />}
+    // The drawer's one hint holds both sections' reasoning (#147).
+    help={<>{policy.parameters.length ? <p>{DESIGN_CHOICES_HELP}</p> : null}<FaultsHelp policy={policy} /></>} /> : null;
 
   // The Lesson panel (#140) holds what the learning prompt bar and the toolbar's lesson drawer held,
   // moved without rewording. Only Advanced diagnostics stays a disclosure.
@@ -316,12 +319,18 @@ export function App({ host }: { readonly host: SimulationHost }) {
     ? commerceLessonChecks(projection, loadedChoice.checks) : null, [projection, imported, loadedChoice]);
   // The one-line outcome (#141): the invariants' summary for commerce, the Run overview's sentence for checkout.
   const summary = checkView ? outcomeSummary(checkView) : projection && report ? runOutcome(status) : null;
+  // ③ Investigate's one hint (#147): what the checks mean, or why the Run overview states no duration.
+  const investigateHelp = checkView || (projection && report) ? <HelpHint label="About these results" bodyId="investigate-help">
+    {checkView ? <p>{INVARIANTS_HELP}</p> : null}
+    {checkView?.reproduced ? <p>{EXPECTATIONS_HELP}</p> : null}
+    {projection && report ? <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p> : null}
+  </HelpHint> : null;
   const runOverview = projection && report ? <div className="execution-overview">
     <p><strong>{imported ? importedScenario?.presentation.title : loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {summary}</p>
+    {investigateHelp}
     <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
     <p>{report.knowledge}</p>
     <p>Recorded delivery attempts: {report.deliveries.length ? report.deliveries.map(item => `${item.destination}: attempt ${item.attempt} (${item.state})`).join("; ") : "Unavailable — no student-visible delivery records."}</p>
-    <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p>
     {imported ? null : <p>Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.</p>}
   </div> : null;
   const lessonGoal = imported && importedScenario
@@ -349,6 +358,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const lessonInvestigate = <>
     {checkView ? <>
       <p className="lesson-outcome"><strong>{summary}</strong></p>
+      {investigateHelp}
       <LessonChecks view={checkView} onShowEvidence={showEvidence} />
     </> : null}
     {runOverview}

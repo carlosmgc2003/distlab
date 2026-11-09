@@ -76,7 +76,9 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
   await runToEnd(page);
   // The packaged invariant is one payment per order: idempotency makes it hold.
   await expect(checks(page)).toContainText("HOLDS — A retried payment request charges the order once");
-  await expect(panel(page)).toContainText("Business invariants report what your choices achieve.");
+  // The reasoning is in the Experiment drawer's one hint (#147), not in the section.
+  await expect(experimentDrawer(page).locator("#experiment-help")).toContainText("Business invariants report what your choices achieve.");
+  await expect(panel(page)).not.toContainText("Business invariants report what your choices achieve.");
   await page.screenshot({ path: testInfo.outputPath("design-choices-applied.png") });
 
   // Reset replays the applied choice.
@@ -164,7 +166,8 @@ test("design choices are unavailable while the simulation runs", async ({ page }
   await region.getByLabel("Idempotency key").check();
   await expect(applyAndRestart(page)).toBeEnabled();
   await emit("RUNNING", "projection.updated");
-  await expect(region).toContainText("Design choices are unavailable while the simulation runs");
+  // One line in the drawer's footer states it (#147).
+  await expect(experimentDrawer(page).locator(".experiment-drawer-footer")).toContainText("Changes are unavailable while the simulation runs or a command is in progress.");
   await expect(region.getByLabel("Idempotency key")).toBeDisabled();
   await expect(region.getByLabel("Client timeout")).toBeDisabled();
   await expect(applyAndRestart(page)).toBeDisabled();

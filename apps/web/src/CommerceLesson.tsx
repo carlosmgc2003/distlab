@@ -2,6 +2,11 @@ import type { CanonicalValue, RuntimeProjectionSet } from "@distlab/contracts";
 import type { CommerceCheck } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import { lessonChecks } from "./lesson-checks.ts";
 import type { CheckRow, LessonCheckView } from "./lesson-checks.ts";
+import { HelpHint } from "./ui-hint.tsx";
+
+/** What the two lists of lesson checks mean (#96). ③ Investigate shows them behind its one hint (#147). */
+export const INVARIANTS_HELP = "Properties the system must keep whatever its design. VIOLATED is what this run did to the business.";
+export const EXPECTATIONS_HELP = "Scenario expectations confirm that the run told this lesson's story. They say nothing about whether the system is safe.";
 
 function object(value: CanonicalValue | undefined): Readonly<Record<string, CanonicalValue>> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Readonly<Record<string, CanonicalValue>> : {};
@@ -63,29 +68,28 @@ export function commerceLessonChecks(projection: RuntimeProjectionSet, checks: r
 
 /**
  * The two lists of lesson checks (#96), shown in the Lesson panel's ③ Investigate (#141). An
- * imported session lists its own checks with `ImportedChecks` instead.
+ * imported session lists its own checks with `ImportedChecks` instead. What the lists mean is in
+ * ③ Investigate's one hint (`INVARIANTS_HELP`, `EXPECTATIONS_HELP`), not in the lists.
  */
 export function LessonChecks({ view, onShowEvidence }: { view: LessonCheckView; onShowEvidence: (observationId: string) => void }) {
   return <div className="lesson-checks-view" role="region" aria-label="Lesson checks">
     <section className="lesson-checks" aria-labelledby="business-invariants-heading">
       <h4 id="business-invariants-heading">Business invariants</h4>
-      <p>Properties the system must keep whatever its design. VIOLATED is what this run did to the business.</p>
       <ul aria-label="Business invariants">{view.invariants.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
     </section>
     {view.reproduced ? <section className="lesson-checks is-secondary" aria-labelledby="scenario-expectations-heading">
       <h4 id="scenario-expectations-heading">Lesson setup reproduced: {view.reproduced}</h4>
-      <p>Scenario expectations confirm that the run told this lesson's story. They say nothing about whether the system is safe.</p>
       <ul aria-label="Scenario expectations">{view.expectations.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
     </section> : null}
   </div>;
 }
 
-/** Every student-visible component's facts, below the graph until the Service state dialog (#136). */
+/** Every student-visible component's facts, shown in the Service state dialog (#142). Its one hint holds the reasoning (#147). */
 export function ServiceStateGrid({ projection }: { projection: RuntimeProjectionSet }) {
   const student = projection.components.filter(entry => entry.visibility === "student");
   return <section className="commerce-state" aria-labelledby="service-state-heading">
     <h3 id="service-state-heading">Service knowledge and committed state</h3>
-    <p>These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.</p>
+    <HelpHint label="About service state" bodyId="service-state-help">These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.</HelpHint>
     <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={`${entry.componentId} state`}>
       <h4>{entry.componentId}</h4><CommerceFacts projection={projection} componentId={entry.componentId} />
     </section>)}</div>

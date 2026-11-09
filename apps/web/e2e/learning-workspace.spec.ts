@@ -95,7 +95,8 @@ test("after response-lost completes, the guide and every evidence link are reada
 
   // The question and the evidence links are readable after scrolling only the Lesson panel.
   await expect(investigate).toContainText("Does the timeout prove that payment failed?");
-  await expect(overview.getByRole("button")).toHaveCount(7);
+  // The overview also holds ③ Investigate's one hint (#147); the links are the evidence buttons.
+  await expect(overview.locator(".evidence-links").getByRole("button")).toHaveCount(7);
   const link = overview.getByRole("button", { name: "Show dropped processor response", exact: true });
   expect(await link.evaluate(element => element.closest("details") === null)).toBe(true);
   await link.scrollIntoViewIfNeeded();

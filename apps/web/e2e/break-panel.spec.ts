@@ -230,7 +230,9 @@ test("fault controls are unavailable while the simulation runs", async ({ page }
   await region.getByRole("button", { name: "Add fault", exact: true }).click();
   await expect(applyAndRestart(page)).toBeEnabled();
   await emit("RUNNING", "projection.updated");
-  await expect(region).toContainText("Fault controls are unavailable while the simulation runs");
+  // One line in the drawer's footer states it; the section's own notice is in the drawer's hint (#147).
+  await expect(experimentDrawer(page).locator(".experiment-drawer-footer")).toContainText("Changes are unavailable while the simulation runs or a command is in progress.");
+  await expect(experimentDrawer(page).locator("#experiment-help")).toContainText("Fault controls are unavailable while the simulation runs or a command is in progress. The applied faults stay listed.");
   for (const name of ["Add fault", "Edit student-fault-1", "Remove student-fault-1"]) {
     await expect(region.getByRole("button", { name })).toBeDisabled();
   }
