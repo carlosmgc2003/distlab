@@ -214,7 +214,11 @@ schemas for `scenario.action.dispatched` and
 state; databases and stores are keyed by owner, components by component ID, and
 an absent bus is `null`. A failed individual inspection is represented as `null`.
 Assessment projections use status `RUNNING` at boundary reads; host session
-projections use the simulation's actual status. This trusted read surface is not
+projections use the simulation's actual status. An assessment projection copies
+each state or history field on its first read inside the synchronous predicate
+call, so an `always` assertion, which is evaluated at every boundary, does not
+copy the history for a predicate that reads only committed rows. A predicate
+must read the projection during `evaluate` and must not keep it. This trusted read surface is not
 a student visibility-policy adapter.
 
 Reset recreates runtimes and assessment from normalized inputs and rebinds the

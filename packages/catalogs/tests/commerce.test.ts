@@ -304,3 +304,57 @@ for (const name of commerceLessonNames) {
     }
   });
 }
+
+/** The business invariants that are safety properties: they must hold at every event boundary (#163). */
+const safety = ["one-payment-per-order", "bounded-waiting", "bounded-notification-retries", "order-priced-at-checkout", "no-expired-cart-checkout",
+  "stock-never-negative", "one-reservation-per-unit"];
+
+test("#163 safety invariants are checked at every boundary; deadline invariants and scenario expectations keep a stated time", () => {
+  const seen = new Set<string>();
+  for (const name of commerceLessonNames) {
+    const checks = commerceChecks(name);
+    for (const assertion of assertionsOf(name)) {
+      const id = String(assertion.id);
+      const check = checks.find(item => item.id === id)!;
+      if (safety.includes(id)) {
+        seen.add(id);
+        assert.equal(check.kind, "invariant", `${name} ${id}`);
+        assert.equal(assertion.mode, "always", `${name} ${id}`);
+        assert.equal(assertion.at, undefined, `${name} ${id}`);
+      } else {
+        assert.equal(assertion.mode, "at", `${name} ${id}`);
+        assert.equal(typeof assertion.at, "number", `${name} ${id}`);
+      }
+    }
+  }
+  assert.deepEqual([...seen].sort(), [...safety].sort());
+});
+
+test("#163 commerce.rows and commerce.metrics accept an upper bound that holds before the first write", () => {
+  const projection = (databases: CanonicalValue, stores: CanonicalValue) =>
+    ({ time: 0, status: "RUNNING", history: [], components: {}, databases, stores, messageBus: {} }) as unknown as Parameters<NonNullable<ReturnType<typeof commerceAssessment.find>>["evaluate"]>[0]["projection"];
+  const rows = (count: number, parameters: CanonicalValue) => commerceAssessment.find("commerce.rows")!.evaluate({
+    parameters, projection: projection({ payments: { tables: { payments: Object.fromEntries(Array.from({ length: count }, (_, i) => [`payment-${i + 1}`, { status: "APPROVED" }])) } } }, {}),
+  });
+  const bound = { owner: "payments", table: "payments", maximum: 1 };
+  assert.deepEqual([0, 1, 2].map(count => rows(count, bound).pass), [true, true, false]);
+  assert.deepEqual(Object.keys(rows(2, bound).evidence as Record<string, unknown>), ["payment-1", "payment-2"]);
+  // An absent owner or table has no rows, so the bound holds; the exact form is unchanged.
+  assert.equal(commerceAssessment.find("commerce.rows")!.evaluate({ parameters: bound, projection: projection({}, {}) }).pass, true);
+  const exact = { owner: "payments", table: "payments", count: 1, key: "payment-1", expected: { status: "APPROVED" } };
+  assert.deepEqual([0, 1, 2].map(count => rows(count, exact).pass), [false, true, false]);
+
+  const metrics = (value: CanonicalValue | undefined, parameters: CanonicalValue) => commerceAssessment.find("commerce.metrics")!.evaluate({
+    parameters, projection: projection({}, { payments: value === undefined ? [] : [{ key: "dependency", value }] }),
+  });
+  const peak = { owner: "payments", maximum: { peakActive: 3 } };
+  // No dependency call yet: nothing has waited, so the bound holds. Equality at the bound holds too.
+  assert.equal(metrics(undefined, peak).pass, true);
+  assert.deepEqual([0, 2, 3, 4, 10].map(peakActive => metrics({ peakActive }, peak).pass), [true, true, true, false, false]);
+  // A recorded metric set without the bounded field is not silently accepted.
+  assert.equal(metrics({ active: 0 }, peak).pass, false);
+  // The equality form is unchanged, and both forms can be combined.
+  assert.equal(metrics({ peakActive: 3, calls: 5 }, { owner: "payments", expected: { calls: 5 } }).pass, true);
+  assert.equal(metrics({ peakActive: 3, calls: 6 }, { owner: "payments", expected: { calls: 5 } }).pass, false);
+  assert.equal(metrics({ peakActive: 4, calls: 5 }, { owner: "payments", expected: { calls: 5 }, maximum: { peakActive: 3 } }).pass, false);
+});

@@ -95,11 +95,17 @@ export const commerceAssessment: ScenarioAssessment = {
         const entries = record(projection.stores)[text(p.owner)];
         const entry = Array.isArray(entries) ? entries.find(item => record(item).key === "dependency") : undefined;
         const actual = entry ? record(record(entry).value!) : {};
-        const pass = Object.entries(record(p.expected!)).every(([key, value]) => actual[key] === value);
-        return { pass, evidence: actual };
+        // `expected` compares by equality. `maximum` is an upper bound that holds at every
+        // boundary: before the first dependency call no metrics exist, so nothing has exceeded it.
+        const equal = Object.entries(record(p.expected ?? {})).every(([key, value]) => actual[key] === value);
+        const bounded = !entry || Object.entries(record(p.maximum ?? {})).every(([key, value]) => typeof actual[key] === "number" && actual[key] <= (value as number));
+        return { pass: equal && bounded, evidence: actual };
       }
       // An owner without the database (an unfilled design slot) has no rows.
       const rows = tableRows(projection.databases, text(p.owner), text(p.table));
+      // `maximum` is an upper bound on the row count that holds at every boundary, including
+      // before the first commit; `count` is the exact count at one moment.
+      if (typeof p.maximum === "number") return { pass: Object.keys(rows).length <= p.maximum, evidence: rows };
       const expected = record(p.expected!);
       const row = rows[text(p.key)] ?? {};
       const pass = Object.keys(rows).length === p.count && Object.entries(expected).every(([key, value]) => record(row)[key] === value);

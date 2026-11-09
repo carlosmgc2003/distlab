@@ -233,15 +233,15 @@ share workloads, fault schedules, and seeds, changing model configuration.
 `commerceChecks(name)` classifies every packaged assertion, in document order,
 as a **business invariant** or a **scenario expectation** with a student-facing
 label (#96). Every lesson of a family states each invariant identically (same
-ID, predicate, parameters, and time), so PASS means HOLDS and FAIL means
+ID, predicate, parameters, mode, and time), so PASS means HOLDS and FAIL means
 VIOLATED whatever the design or design choice. Expectations confirm the setup
 and may differ within a pair. Catalog tests check that every assertion is
 classified and that each family shares its invariants.
 
 | Lesson name | Experiment | Business invariants (VIOLATED in this lesson) |
 | --- | --- | --- |
-| `retry-unsafe` | Drop the first payment response, time out at 20 ms, and retry with the same key. Two payment rows exist at t=30. | `one-payment-per-order` (violated) |
-| `retry-idempotent` | Same loss and retry with durable previous-result lookup; one payment row exists at t=30. | `one-payment-per-order` |
+| `retry-unsafe` | Drop the first payment response, time out at 20 ms, and retry with the same key. The second payment row commits at t=22, and the run ends at t=23. | `one-payment-per-order` (violated) |
+| `retry-idempotent` | Same loss and retry with durable previous-result lookup; one payment row exists when the run ends at t=23. | `one-payment-per-order` |
 | `saga-uncompensated` | Drop the shipment request. At t=30 and t=60 the order needs compensation, inventory remains reserved, and payment remains unrefunded. | `failed-order-cancelled`, `failed-order-releases-inventory`, `failed-order-refunded` (all violated) |
 | `saga-compensated` | Same shipment failure and visible inconsistency at t=30; by t=60 the order is cancelled, inventory released, and payment refunded. Compensation uses separate local transactions. | The same three |
 | `dual-write` | Crash Payments at t=5 after its payment commit and before direct publication. The payment survives restart, but no outbox or notification exists at t=50. | `payment-survives-restart`, `one-notification-per-payment` (violated), `payment-event-published` (violated) |
@@ -263,8 +263,30 @@ outbox documents' committed payment, absent notification, and outbox row at
 t=6, the CQRS reads at t=10, the cascade dependency and API metrics at
 t=120, the empty Notifications table at t=60, and the cache lessons' raised
 price at t=15 and rejected cart-2 checkout at t=60, and the inventory lessons'
-unchanged last unit at t=3. `bounded-waiting` compares `peakActive` with 3 by equality, because
-`commerce.metrics` compares fields by equality.
+unchanged last unit at t=3.
+
+Business invariants come in two kinds (#163):
+
+- A **safety invariant** forbids a state, so it uses `mode: "always"`: the
+  predicate runs after initialization and after every event boundary, fails at
+  the first boundary that violates it, and passes when the run completes. No
+  design choice or student fault can move its violation past a check time.
+  These are `one-payment-per-order` (at most one payment row),
+  `bounded-waiting` (`peakActive` at most 3), `bounded-notification-retries`,
+  `order-priced-at-checkout`, `no-expired-cart-checkout`,
+  `stock-never-negative`, and `one-reservation-per-unit`. Their predicates
+  hold before the first write.
+- A **deadline invariant** requires a state to be reached, so it keeps
+  `mode: "at"` with the time by which the lesson's design must have reached it:
+  the three saga invariants (t=60), the three outbox invariants (t=50), the two
+  CQRS invariants (t=60), and `order-confirmed-despite-notification-failure`
+  (t=50) and `failed-notification-dead-lettered` (t=60). An `always` assertion
+  cannot state them, because they are false until the design acts.
+
+Scenario expectations keep `at`. A catalog test runs every lesson at each
+combination of its parameters' domain edges, and with a delayed request on each
+link, and checks that no invariant passes while its predicate is false on the
+final state.
 
 ### Commerce assessment
 
@@ -274,10 +296,15 @@ unchanged last unit at t=3. `bounded-waiting` compares `peakActive` with 3 by eq
   requires the exact table row count and compares each expected field against
   the selected row. Evidence contains the table rows. An empty `expected`
   object permits a count-only assertion. An owner without a database, such as
-  an unfilled design slot, or a missing table has no rows.
-- `commerce.metrics` takes `owner` and `expected`. It reads that owner's KV
-  entry named `dependency`, compares each expected field by equality, and returns
-  the metrics as evidence.
+  an unfilled design slot, or a missing table has no rows. With a numeric
+  `maximum` instead, it passes while the table has at most that many rows and
+  ignores `count`, `key`, and `expected`; this form holds before the first
+  commit, so an `always` assertion can use it.
+- `commerce.metrics` takes `owner` and `expected`, `maximum`, or both. It
+  reads that owner's KV entry named `dependency` and returns the metrics as
+  evidence. Each `expected` field is compared by equality. Each `maximum` field
+  must be a number at most the given bound; while the owner has no `dependency`
+  entry, nothing has been measured and the bound holds.
 - `commerce.attempts` takes `destination` and `maximum`. It passes when no
   routing record of that destination has an attempt above `maximum`. Evidence
   lists each record's message ID, state, and attempt.
@@ -297,7 +324,8 @@ unchanged last unit at t=3. `bounded-waiting` compares `peakActive` with 3 by eq
   stock row's SKU may have at most `units` reservations with status `ACTIVE`.
   Evidence lists each SKU's units and active reservation IDs.
 
-Commerce documents use `at` assertions at their declared virtual times. The
+Commerce documents use `always` assertions for safety invariants and `at`
+assertions, at their declared virtual times, for everything else. The
 assessment component in `@distlab/scenario` owns scheduling, statuses, and
 boundary evaluation; the catalog predicates only inspect projections.
 

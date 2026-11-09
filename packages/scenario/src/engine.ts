@@ -147,7 +147,7 @@ function compose(scenario: ScenarioDefinition, catalog: ScenarioCatalog, assessm
         assertions: scenario.assertions,
         predicates,
         startTime: scenario.startTime,
-        project: time => project(scenario, bag, history, time, "RUNNING"),
+        project: time => project(scenario, bag, history, time, "RUNNING", true),
         record: input => observations.record(input),
       });
       cell.results = () => attempt.results;
@@ -262,23 +262,48 @@ function compose(scenario: ScenarioDefinition, catalog: ScenarioCatalog, assessm
   return new DeterministicScenarioSession(simulation, cell);
 }
 
-function project(scenario: ScenarioDefinition, bag: RuntimeBag, history: ExecutionHistoryReader, time: SimulationTime, status: SimulationStatus): AssessmentProjection {
+/**
+ * The detached read-only boundary. `lazy` is for assessment, which projects at every event
+ * boundary: each field is copied on its first read inside the synchronous predicate call and then
+ * kept, so a predicate that never reads the history does not pay for copying it. The values are
+ * the ones an eager projection would hold, because nothing runs between the call and the read.
+ */
+function project(scenario: ScenarioDefinition, bag: RuntimeBag, history: ExecutionHistoryReader, time: SimulationTime, status: SimulationStatus, lazy = false): AssessmentProjection {
   const read = (load: () => unknown): CanonicalValue => { try { return canonicalCopy(load()); } catch { return null; } };
-  const components: Record<string, CanonicalValue> = {};
-  for (const component of scenario.architecture.components) {
-    const client = bag.clients.get(component.id);
-    const service = bag.services.get(component.id);
-    const external = bag.externals.get(component.id);
-    components[component.id] = read(() => client ? client.inspect() : service ? service.inspect() : external ? external.boundary() : null);
+  const fields: Record<"history" | "components" | "databases" | "stores" | "messageBus", () => CanonicalValue> = {
+    components: () => {
+      const components: Record<string, CanonicalValue> = {};
+      for (const component of scenario.architecture.components) {
+        const client = bag.clients.get(component.id);
+        const service = bag.services.get(component.id);
+        const external = bag.externals.get(component.id);
+        components[component.id] = read(() => client ? client.inspect() : service ? service.inspect() : external ? external.boundary() : null);
+      }
+      return canonicalCopy(components);
+    },
+    databases: () => {
+      const databases: Record<string, CanonicalValue> = {};
+      for (const [owner, database] of bag.databases) databases[owner] = read(() => database.inspect());
+      return canonicalCopy(databases);
+    },
+    stores: () => {
+      const stores: Record<string, CanonicalValue> = {};
+      for (const store of scenario.architecture.stores) stores[store.owner] = read(() => bag.inspectStore(store.owner));
+      return canonicalCopy(stores);
+    },
+    history: () => read(() => history.export()),
+    messageBus: () => bag.inspectBus ? read(bag.inspectBus) : null,
+  };
+  if (!lazy) {
+    const components = fields.components(), databases = fields.databases(), stores = fields.stores();
+    return Object.freeze({ time, status, history: fields.history(), components, databases, stores, messageBus: fields.messageBus() });
   }
-  const databases: Record<string, CanonicalValue> = {};
-  for (const [owner, database] of bag.databases) databases[owner] = read(() => database.inspect());
-  const stores: Record<string, CanonicalValue> = {};
-  for (const store of scenario.architecture.stores) stores[store.owner] = read(() => bag.inspectStore(store.owner));
-  return Object.freeze({
-    time, status, history: read(() => history.export()), components: canonicalCopy(components), databases: canonicalCopy(databases),
-    stores: canonicalCopy(stores), messageBus: bag.inspectBus ? read(bag.inspectBus) : null,
-  });
+  const loaded = new Map<string, CanonicalValue>();
+  const projection = { time, status };
+  for (const [key, load] of Object.entries(fields)) {
+    Object.defineProperty(projection, key, { enumerable: true, get: () => { if (!loaded.has(key)) loaded.set(key, load()); return loaded.get(key)!; } });
+  }
+  return Object.freeze(projection) as AssessmentProjection;
 }
 
 function registerSchemas(setup: { registerObservationSchema: (type: string, validate: (data: CanonicalValue | undefined) => boolean) => void }): void {

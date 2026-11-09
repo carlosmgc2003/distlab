@@ -33,7 +33,16 @@ design, and the lessons of a family state it identically: it reads **HOLDS**
 when its assertion passes and **VIOLATED** when it fails. An unsafe lesson's
 finding is therefore a VIOLATED invariant, and Compare shows VIOLATED → HOLDS
 for the same invariant. A scenario expectation confirms that the run reproduced
-the lesson's setup and may differ within a pair. The runner prints both groups
+the lesson's setup and may differ within a pair.
+
+An invariant that forbids something, such as a second charge or negative stock,
+is checked after every event of the run (#163). It becomes VIOLATED at the first
+moment the forbidden state exists, and it reads HOLDS only when the whole run
+kept it, so its time is that first moment or the end of the run. Changing a
+timeout or delaying a request cannot move a violation out of its sight. An
+invariant that requires something to happen, such as "a failed order is
+cancelled", is checked once, at the time by which the lesson's design must have
+done it. The lesson sections give those times. The runner prints both groups
 and exits non-zero only when the run fails or an expectation is not reproduced.
 Assertion evidence includes the relevant database rows.
 
@@ -173,10 +182,15 @@ Payment and idempotency result are committed in the same local transaction.
 
 **Expected final state:**
 
-| Run | Payment rows | Returned payment ID |
-| --- | ---: | --- |
-| `npm run lesson -- retry-unsafe` | 2 | payment-2 |
-| `npm run lesson -- retry-idempotent` | 1 | payment-1 |
+| Run | Payment rows | Returned payment ID | Charged once |
+| --- | ---: | --- | --- |
+| `npm run lesson -- retry-unsafe` | 2 | payment-2 | VIOLATED at t=22 |
+| `npm run lesson -- retry-idempotent` | 1 | payment-1 | HOLDS |
+
+"A retried payment request charges the order once" allows at most one payment
+row at every moment of the run, which ends at t=23. With the client timeout at
+40 the retry commits the second payment at t=42, and the invariant is VIOLATED
+then.
 
 **Concept:** a timeout does not imply that the remote operation failed. Replaying
 the same seed reproduces the ambiguous boundary exactly. This lesson covers a
@@ -332,6 +346,11 @@ show CLOSED → OPEN → HALF_OPEN → CLOSED. `dependency.waiting` and
 | `npm run lesson -- cascade-unprotected` | 16 | 13 | 0 | 10 |
 | `npm run lesson -- cascade-breaker` | 5 | 3 | 11 | 3 |
 
+"No more than 3 payment requests wait on the slow risk provider at once" is
+checked after every event: the unprotected run violates it at t=36, when a
+fourth request starts waiting, and the breaker keeps the peak at 3. A design
+that keeps the peak lower also holds.
+
 All upstream work drains and healthy requests succeed. Tests also compare API,
 Orders, and Payments aggregate wait and peak concurrency: both are lower with
 protection. Metrics are available at each service's `dependency` key in its
@@ -378,13 +397,15 @@ timeout, so the delivery is NACKed and the bus schedules a retry.
 
 **Expected checks:**
 
-| Run | Order at t=50 | Dead-lettered by t=60 | Attempts by t=120 |
+| Run | Order at t=50 | Dead-lettered by t=60 | Attempts |
 | --- | --- | --- | ---: |
 | `npm run lesson -- notifications-unbounded` | `PENDING` (VIOLATED) | no (VIOLATED) | 6 (VIOLATED) |
 | `npm run lesson -- notifications-dlq` | `CONFIRMED` | yes | 3 |
 
-The scenario expectation confirms that no notification reached the provider
-before t=60. In the browser, the `OrderPlaced` state shows each delivery's state
+"No notification is attempted more than 3 times" is checked after every event,
+so the unbounded run violates it at t=49, when the bus starts a fourth attempt. The unbounded
+run ends at t=85 and the bounded one at t=60. The scenario expectation confirms
+that no notification reached the provider before t=60. In the browser, the `OrderPlaced` state shows each delivery's state
 and attempt and a **Dead-letter queue** list with the message ID, attempts used,
 and reason. The `messaging` state shows the provider's availability and the
 messages it accepted. Recorded history shows each `message.nacked`,
@@ -441,7 +462,8 @@ are empty.
 "An order is priced with the catalog price valid at checkout" compares each
 placed order's price with the history row valid at its `checkedOutAt`. "An
 expired cart cannot be checked out" requires each placed order to commit before
-its cart's `expiresAt`. The scenario expectations confirm the price change at
+its cart's `expiresAt`. Both are checked after every event, so the stale price
+is VIOLATED when order-1 commits at t=25. The scenario expectations confirm the price change at
 t=15 and the rejected cart-2 checkout at t=60.
 
 In the browser, each service's state lists its live KV entries with their key,
@@ -503,6 +525,8 @@ the story.
 
 "Stock is never negative" checks every stock row. "A unit has at most one
 active reservation" compares each SKU's ACTIVE reservations with its `units`.
+Both are checked after every event: the oversell is VIOLATED at t=7, when the
+partner's write commits, and the run ends at t=8.
 The scenario expectation confirms that the last unit was still available at
 t=3, while both reservations were being validated.
 

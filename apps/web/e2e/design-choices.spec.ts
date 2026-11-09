@@ -45,6 +45,19 @@ async function runToEnd(page: Page) {
   await expect(status(page)).toHaveText("COMPLETED");
 }
 
+test("#163 a longer client timeout does not hide the double charge: the invariant is VIOLATED when the second payment commits", async ({ page }) => {
+  await load(page, "retry-unsafe");
+  await openChoices(page);
+  await panel(page).getByLabel("Client timeout").fill("40");
+  await applyAndRestart(page).click();
+  await expect(status(page)).toHaveText("READY");
+  await expect(page.getByLabel("Run identity")).toContainText("timeout=40");
+  await runToEnd(page);
+  // The retry commits the second payment at t=42, after the time the lesson used to check (t=30).
+  await expect(checks(page)).toContainText("VIOLATED — A retried payment request charges the order once (checked at t=42)");
+  await expect(page.getByRole("complementary", { name: "Lesson", exact: true })).toContainText("1 of 1 business invariants violated");
+});
+
 test("switching idempotency on in the retry lesson changes the check outcome, and switching it off restores the packaged run", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   await captureCommands(page);
