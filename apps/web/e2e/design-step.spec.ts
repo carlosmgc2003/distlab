@@ -16,7 +16,8 @@ test("#164 the Lesson chooser states the missing design step on exactly the less
   await expect(lessonChooser(page)).toBeVisible();
   for (const lesson of scenarios) {
     const choice = lessonChoice(page, lesson.id);
-    if (designStepUnavailable(lesson.policy)) await expect(choice).toHaveAccessibleDescription(new RegExp(`${DESIGN_STEP_NOTICE.replace(/[.]/g, "\\.")}$`));
+    // The notice is part of the card's accessible description, read right after the instruction.
+    if (designStepUnavailable(lesson.policy)) await expect(choice).toHaveAccessibleDescription(`${lesson.description} ${DESIGN_STEP_NOTICE}`);
     else await expect(choice).not.toContainText("not available in the browser");
   }
   expect(scenarios.filter(lesson => designStepUnavailable(lesson.policy)).map(lesson => lesson.id)).toEqual([gap]);
