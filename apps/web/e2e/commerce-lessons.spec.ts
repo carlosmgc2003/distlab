@@ -1,14 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./support/test.ts";
 import { commerceLessonNames } from "../../../packages/catalogs/src/commerce/scenarios.ts";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { measureLayout, viewports } from "./layout-budget.ts";
 import { loadLesson } from "./support/lesson.ts";
 import { filterByType, viewButton } from "./support/history.ts";
+import { inServiceState } from "./support/service-state.ts";
 
-/** The lesson checks live in the Lesson panel's ③ Investigate (#141); service facts stay below the graph. */
+/** The lesson checks live in the Lesson panel's ③ Investigate (#141); service facts in the Service state dialog (#142). */
 const lessonChecks = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "Lesson checks", exact: true });
-const serviceState = (page: Page) => page.getByRole("region", { name: "Service knowledge and committed state", exact: true });
+const serviceText = (page: Page) => inServiceState(page, dialog => dialog.getByRole("region", { name: "Service knowledge and committed state", exact: true }).innerText());
 const summary = (page: Page) => page.locator(".lesson-step-investigate .lesson-outcome");
 
 /** Records every non-empty text the polite "Lesson outcome" live region takes, in order. */
@@ -59,7 +60,7 @@ for (const name of commerceLessonNames) {
     }
     const setup = state.getByRole("list", { name: "Scenario expectations", exact: true });
     if (await setup.count()) await expect(state.getByRole("heading", { name: "Lesson setup reproduced: yes" })).toBeVisible();
-    const recorded = [await state.innerText(), await serviceState(page).innerText()];
+    const recorded = [await state.innerText(), await serviceText(page)];
     await page.getByRole("button", { name: "Reset", exact: true }).click();
     await expect(status).toHaveText("READY");
     await expect(checks).toContainText("PENDING");
@@ -67,7 +68,7 @@ for (const name of commerceLessonNames) {
     await expect(summary(page)).toHaveText("Checks are pending: run the lesson");
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
-    expect([await state.innerText(), await serviceState(page).innerText()]).toEqual(recorded);
+    expect([await state.innerText(), await serviceText(page)]).toEqual(recorded);
     // One announcement per completed run, each the run's summary.
     await expect(summary(page)).toHaveText(outcome);
     expect(await announcements(page)).toEqual([outcome, outcome]);
@@ -125,37 +126,42 @@ test("compare replaces the experiment; commerce state fits a narrow viewport", a
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
-  await expect(page.getByRole("region", { name: "payments state", exact: true })).toContainText("payment-2");
+  await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "payments state", exact: true })).toContainText("payment-2"));
   await page.getByRole("button", { name: "Compare: Retry with idempotency", exact: true }).click();
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
-  await expect(page.getByRole("region", { name: "payments state", exact: true })).not.toContainText("payment-2");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await inServiceState(page, async dialog => {
+    await expect(dialog.getByRole("region", { name: "payments state", exact: true })).not.toContainText("payment-2");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    // The open dialog has no axe violations.
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
 test("the notifications pair shows the dead-letter queue only when the retry budget is bounded", async ({ page }) => {
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = serviceState(page);
-  const orderPlaced = state.getByRole("region", { name: "OrderPlaced state", exact: true });
   for (const [name, letters] of [["notifications-dlq", 1], ["notifications-unbounded", 0]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
-    await expect(orderPlaced).toContainText("Dead-letter queue");
-    const queue = orderPlaced.getByRole("list", { name: "OrderPlaced dead-letter queue", exact: true });
-    if (letters) {
-      await expect(queue.getByRole("listitem")).toHaveCount(1);
-      await expect(queue).toContainText("attempts: 3");
-      await expect(orderPlaced).toContainText("state: DEAD");
-    } else {
-      await expect(queue).toHaveCount(0);
-      await expect(orderPlaced).toContainText("No dead-lettered messages.");
-      await expect(orderPlaced).toContainText("attempt: 6");
-    }
+    await inServiceState(page, async dialog => {
+      const orderPlaced = dialog.getByRole("region", { name: "OrderPlaced state", exact: true });
+      await expect(orderPlaced).toContainText("Dead-letter queue");
+      const queue = orderPlaced.getByRole("list", { name: "OrderPlaced dead-letter queue", exact: true });
+      if (letters) {
+        await expect(queue.getByRole("listitem")).toHaveCount(1);
+        await expect(queue).toContainText("attempts: 3");
+        await expect(orderPlaced).toContainText("state: DEAD");
+      } else {
+        await expect(queue).toHaveCount(0);
+        await expect(orderPlaced).toContainText("No dead-lettered messages.");
+        await expect(orderPlaced).toContainText("attempt: 6");
+      }
+    });
   }
 });
 
@@ -163,32 +169,33 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   test.setTimeout(90_000);
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = serviceState(page);
-  const cart = state.getByRole("region", { name: "cart state", exact: true });
-  const catalog = state.getByRole("region", { name: "catalog state", exact: true });
-  const orders = state.getByRole("region", { name: "orders state", exact: true });
+  const region = (dialog: Locator, component: string) => dialog.getByRole("region", { name: `${component} state`, exact: true });
   const invariants = lessonChecks(page).getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     // Step until both carts are live: each entry shows its absolute expiry.
     const step = page.getByRole("button", { name: "Step", exact: true });
-    for (let i = 0; i < 80 && !(await cart.innerText()).includes("cart:cart-2"); i++) {
+    for (let i = 0; i < 80 && !(await inServiceState(page, dialog => region(dialog, "cart").innerText())).includes("cart:cart-2"); i++) {
       await step.click();
       await expect(status).toHaveText("PAUSED");
     }
-    await expect(cart).toContainText("cart:cart-1");
-    await expect(cart).toContainText("expires at t=31");
-    await expect(catalog).toContainText("price:sku-1");
-    await expect(catalog).toContainText("expires at t=101");
+    await inServiceState(page, async dialog => {
+      await expect(region(dialog, "cart")).toContainText("cart:cart-1");
+      await expect(region(dialog, "cart")).toContainText("expires at t=31");
+      await expect(region(dialog, "catalog")).toContainText("price:sku-1");
+      await expect(region(dialog, "catalog")).toContainText("expires at t=101");
+    });
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     // Every entry has expired by the end of the run; the committed rows remain.
-    await expect(cart).not.toContainText("cart:cart-1");
-    await expect(orders).toContainText(`price: ${price}`);
-    await expect(orders).toContainText(`priceSource: ${source}`);
-    await expect(orders).toContainText("reason: CART_EXPIRED");
-    await expect(catalog).toContainText("validFrom: 11");
+    await inServiceState(page, async dialog => {
+      await expect(region(dialog, "cart")).not.toContainText("cart:cart-1");
+      await expect(region(dialog, "orders")).toContainText(`price: ${price}`);
+      await expect(region(dialog, "orders")).toContainText(`priceSource: ${source}`);
+      await expect(region(dialog, "orders")).toContainText("reason: CART_EXPIRED");
+      await expect(region(dialog, "catalog")).toContainText("validFrom: 11");
+    });
     await expect(invariants.getByRole("listitem").filter({ hasText: "An order is priced with the catalog price valid at checkout" })).toContainText(verdict);
     await expect(invariants.getByRole("listitem").filter({ hasText: "An expired cart cannot be checked out" })).toContainText("HOLDS");
   }
@@ -207,19 +214,19 @@ test("the inventory pair shows stock with its version and each client's outcome,
   test.setTimeout(90_000);
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const state = serviceState(page);
-  const inventory = state.getByRole("region", { name: "inventory state", exact: true });
-  const partner = state.getByRole("region", { name: "partner-api state", exact: true });
   const invariants = lessonChecks(page).getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, stock, version, outcome, verdict] of [["inventory-oversell", -1, 3, "RESERVED", "VIOLATED"], ["inventory-optimistic", 0, 2, "OUT_OF_STOCK", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
-    await expect(inventory).toContainText(`stock: ${stock}`);
-    await expect(inventory).toContainText(`version: ${version}`);
-    await expect(inventory).toContainText("res-customer-app");
-    await expect(partner).toContainText(`status: ${outcome}`);
+    await inServiceState(page, async dialog => {
+      const inventory = dialog.getByRole("region", { name: "inventory state", exact: true });
+      await expect(inventory).toContainText(`stock: ${stock}`);
+      await expect(inventory).toContainText(`version: ${version}`);
+      await expect(inventory).toContainText("res-customer-app");
+      await expect(dialog.getByRole("region", { name: "partner-api state", exact: true })).toContainText(`status: ${outcome}`);
+    });
     for (const label of ["Stock is never negative", "A unit has at most one active reservation"]) {
       await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText(verdict);
     }

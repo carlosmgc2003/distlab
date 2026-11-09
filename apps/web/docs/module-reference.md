@@ -176,8 +176,12 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   command. The Lesson panel's collapsed state is shell state, so it survives tab
   switches and lesson loads. ③ Investigate opens with the outcome summary
   (`outcomeSummary` for a packaged commerce lesson, `runOutcome` for checkout),
-  then `LessonChecks` or the checkout evidence links, then the questions; the
-  commerce `ServiceStateGrid` stays below the graph. When the status first
+  then `LessonChecks` or the checkout evidence links, then the questions, then
+  **Show service state**, which opens `ServiceStateDialog` with the commerce
+  `ServiceStateGrid` or checkout's `DistributedState`. A Distributed state
+  evidence button closes the dialog before Recorded history takes focus; Close
+  and Escape return focus to the button. The Architecture tab panel holds only
+  `ArchitectureView`, and Advanced diagnostics holds only the engine counters. When the status first
   becomes COMPLETED or FAILED, the shell sets the summary in a polite
   “Lesson outcome” live region outside the panel and increments the panel's
   reveal token; leaving that state clears the region silently, so each ended
@@ -614,6 +618,20 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   does not prove denial or rollback. No staged transaction, provider counter,
   host-only state, or inferred operation duration enters the report.
 
+## `ServiceStateDialog.tsx`
+
+[Source](../src/ServiceStateDialog.tsx)
+
+- **Responsibility:** the Service state dialog (#142): a native modal dialog
+  named “Service state at t=‹virtual time›” with a Close button and a body that
+  scrolls on its own, at most 90 vh tall.
+- **Imports and boundaries:** React only. The shell passes the content.
+- **State and protocol:** the open state belongs to `App.tsx`; a native close
+  (Escape) is reported back so the shell can return focus to its opener. It
+  renders its content only while open.
+- **Presentation/runtime separation:** it shows projection facts the shell
+  already holds and sends no worker command.
+
 ## `FaultInspectionView.tsx`
 
 [Source](../src/FaultInspectionView.tsx)
@@ -642,7 +660,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **State and protocol:** `CommerceFacts` selects the named student-visible state
   and formats lifecycle, committed tables, KV entries, client-observed fields,
   declared external availability/visible state, and delivery records.
-  `ServiceStateGrid` lists the student components' facts below the graph.
+  `ServiceStateGrid` lists the student components' facts, inside the Service
+  state dialog.
   `commerceLessonChecks` reads assertions from the `commerce-client`
   projection, found by role, and maps them with `lessonChecks`; `LessonChecks`
   renders the business invariants and scenario expectations, with stored

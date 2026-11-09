@@ -8,6 +8,7 @@ import { commerceCatalogReference } from "../../../packages/catalogs/src/commerc
 import { ArchitectureView } from "./ArchitectureView.tsx";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import { ExperimentDrawer } from "./ExperimentDrawer.tsx";
+import { ServiceStateDialog } from "./ServiceStateDialog.tsx";
 import { FaultsSection } from "./FaultsSection.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
 import { LessonPanel } from "./LessonPanel.tsx";
@@ -65,6 +66,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [carryNotice, setCarryNotice] = useState("");
   // The Experiment drawer (#143) is UI state: it stays open across Apply and lesson loads, and Close keeps the draft.
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // The Service state dialog (#142) is UI state; Escape and Close return focus to its opener.
+  const [serviceStateOpen, setServiceStateOpen] = useState(false);
+  const serviceStateOpener = useRef<HTMLButtonElement>(null);
   const drawerTrigger = useRef<HTMLButtonElement>(null);
   // A design-choice field holding text that is not a value withholds Apply; Discard clears that text.
   const [choicesInvalid, setChoicesInvalid] = useState(false);
@@ -335,6 +339,14 @@ export function App({ host }: { readonly host: SimulationHost }) {
     <p>Reset and run again to compare the same virtual-time history.</p>
   </>;
   // The outcome comes first, then the verdicts or the evidence links, then the lesson's questions.
+  // Commerce shows every student component's facts; checkout shows Distributed state, whose evidence
+  // buttons close the dialog before Recorded history takes focus.
+  const closeServiceState = () => {
+    setServiceStateOpen(false);
+    serviceStateOpener.current?.focus();
+  };
+  const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} />
+    : report ? <DistributedState report={report} onShowEvidence={id => { setServiceStateOpen(false); showEvidence(id); }} /> : null : null;
   const lessonInvestigate = <>
     {checkView ? <>
       <p className="lesson-outcome"><strong>{summary}</strong></p>
@@ -342,12 +354,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
     </> : null}
     {runOverview}
     {imported ? <p>Seed: {lesson?.seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, check its results below the architecture, then use Recorded history to follow what happened.</p>
-      : !checkoutGuide ? <p>Seed: {lesson?.seed}. Observe the service state in Architecture, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p> : <>
+      : !checkoutGuide ? <p>Seed: {lesson?.seed}. Observe the service state, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p> : <>
       <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
       <p>Load a checkout, inspect the four component categories and their links, then Run, Pause, or Step through the timeline. Select a row to follow request or message movement and inspect each component’s state.</p>
       <p>For the response-lost experiment, find the processor authorization, the dropped response, and the Payments timeout. What does Payments know, and what does the processor know? Does the timeout prove that payment failed?</p>
     </>}
+    {/* What each service knows right now, in one dialog for both families (#142). */}
+    {serviceState ? <button ref={serviceStateOpener} type="button" className="show-service-state" aria-haspopup="dialog" aria-expanded={serviceStateOpen}
+      disabled={!projection} onClick={() => setServiceStateOpen(true)}>Show service state</button> : null}
   </>;
   const appliedChanges = snapshot.session ? `${snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters)}` : ""} · ${appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"}` : "";
   const lessonExperiment = <>
@@ -371,16 +386,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
     </button> : null}
     {/* An instructor's authoring aid. It is offered only for a packaged lesson, never for an imported document. */}
     {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>Save as scenario file</button>}
-    {/* Engine counters stay here; the committed run summary in the toolbar carries status and virtual time. */}
+    {/* Engine counters stay here; Distributed state moved to the Service state dialog (#142). */}
     {projection && report ? <details className="raw-state advanced-diagnostics">
       <summary>Advanced diagnostics</summary>
-      <div className="raw-state-body" tabIndex={0} aria-label="Distributed state details">
-        <dl className="diagnostics">
-          <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
-          <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
-        </dl>
-        <DistributedState report={report} onShowEvidence={showEvidence} />
-      </div>
+      <dl className="diagnostics" aria-label="Engine counters">
+        <dt>Random draws</dt><dd>{projection.simulation.randomDrawCount}</dd>
+        <dt>Observations</dt><dd>{projection.history.observations.length}</dd>
+      </dl>
     </details> : null}
   </>;
   // When a run ends, ③ Investigate is revealed and its summary announced once (#141). Focus does not
@@ -453,8 +465,6 @@ export function App({ host }: { readonly host: SimulationHost }) {
             {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
             {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
           {imported && importedScenario ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
-          {/* Service state stays below the graph until the Service state dialog (#136). */}
-          {commerce ? <ServiceStateGrid projection={projection} /> : null}
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
@@ -476,6 +486,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </section>
     </div>}
     <p className="sr-only" role="status" aria-live="polite" aria-label="Lesson outcome">{announcement}</p>
+    <ServiceStateDialog open={serviceStateOpen && serviceState !== null} time={projection?.simulation.time} onClose={closeServiceState}>{serviceState}</ServiceStateDialog>
     <LessonChooser open={chooserOpen} lessons={scenarios} current={imported ? null : loadedChoice?.id ?? null} busy={busy}
       discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onClose={closeChooser} />
   </main>;

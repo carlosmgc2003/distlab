@@ -2,6 +2,7 @@ import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { graphLaidOut, loadLesson } from "./support/lesson.ts";
+import { inServiceState } from "./support/service-state.ts";
 
 declare global {
   interface Window {
@@ -129,12 +130,8 @@ for (const scenario of ["normal", "response-lost"]) {
     const other = scenario === "normal" ? "response-lost" : "normal";
     await loadLesson(page, other);
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
-    // Advanced diagnostics is the Lesson panel's one disclosure; Distributed state nests its own raw-state disclosures.
-    const raw = page.locator(".lesson-panel details.advanced-diagnostics");
-    const rawToggle = raw.locator("> summary");
-    if ((await raw.getAttribute("open")) === null) await rawToggle.click();
-    await expect(page.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1");
-    await rawToggle.click();
+    // Distributed state is in the Service state dialog (#142).
+    await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1"));
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     await orders.click();
     await expect(inspector).toContainText("Database owned by orders: orders, outbox");

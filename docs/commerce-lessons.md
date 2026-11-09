@@ -38,10 +38,11 @@ and exits non-zero only when the run fails or an expectation is not reproduced.
 Assertion evidence includes the relevant database rows.
 
 In the browser, run `npm run dev`, press **Choose a lesson**, and choose a lesson
-in the Lesson chooser. Use **Step**, **Run**, and **Reset** as with checkout. The
-Architecture tab shows committed service state, client outcomes, and live KV
-entries with their expiry time below the graph; selecting a component also
-shows its facts. The lesson checks are in the Lesson panel's ③ Investigate,
+in the Lesson chooser. Use **Step**, **Run**, and **Reset** as with checkout.
+**Show service state** in the Lesson panel's ③ Investigate opens the **Service
+state** dialog: committed service state, client outcomes, and live KV entries
+with their expiry time for every service, side by side. Selecting a component
+in the graph also shows its facts. The lesson checks are in the Lesson panel's ③ Investigate,
 under a one-line outcome such as “3 of 3 business invariants violated”. When a
 run ends, the panel scrolls that section into view and announces the outcome
 once to assistive technology, without moving focus.

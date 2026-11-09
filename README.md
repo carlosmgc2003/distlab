@@ -215,9 +215,9 @@ Component state labeled `host` stays on the projection for assessment comparison
 
 The host accepts the two packaged checkout documents and seventeen packaged commerce
 lessons. Choose them in the Lesson chooser, a dialog that shows each failing lesson
-beside its fix and loads a lesson in one click; commerce lessons show service-owned
-state and assertion verdicts below the graph, business events in Story, and a
-Compare button for paired experiments. Compare loads a fresh session rather than
+beside its fix and loads a lesson in one click; commerce lessons show assertion
+verdicts in the Lesson panel, service-owned state in the **Service state** dialog,
+business events in Story, and a Compare button for paired experiments. Compare loads a fresh session rather than
 editing an active run. Runtime models remain worker-only.
 
 Modified or arbitrary scenarios are rejected with `INVALID_SCENARIO`. Queue,
@@ -241,7 +241,9 @@ stay in a compact toolbar. At a laptop width the architecture and a timeline
 share the remaining viewport, and the selected observation opens in the adjacent
 inspector. The Lesson panel beside the tabs reads as four numbered sections:
 Goal, Run, Investigate (the outcome, evidence links, and questions), and
-Experiment. Only its Advanced diagnostics, the distributed-state dump, stays
+Experiment. **Show service state** in Investigate opens a modal dialog with what
+each service knows right now: the commerce per-service facts, or checkout's
+distributed state. Only Advanced diagnostics, the engine counters, stays
 collapsed until opened, and **Hide lesson** folds the panel to a rail. Below 960px, including a phone width and the layout
 viewport Chrome uses at 200% zoom, Architecture, Timeline, and Inspection switch
 among those same panels. Timeline selection and filters survive that switch.
@@ -367,7 +369,7 @@ across empty, ready, running, paused, completed, and error states.
 Request links and subscriptions come from the architecture projection. The
 Orders publication relationship and model-owned resource descriptions are
 documented lesson copy, restricted to the two packaged checkout lessons and
-their model versions. The component inspector adds the student-visible facts for the selected component. Distributed state shows the loaded scenario name, seed, and fault rule, and it selects the matching timeline observation. A network timeout is described as a missing response, not as proof of denial or rollback. Changing the experiment after a session is loaded replaces the worker; fault rules are not edited during a run.
+their model versions. The component inspector adds the student-visible facts for the selected component. Distributed state, in the Service state dialog, shows the loaded scenario name, seed, and fault rule, and its evidence buttons close the dialog and select the matching timeline observation. A network timeout is described as a missing response, not as proof of denial or rollback. Changing the experiment after a session is loaded replaces the worker; fault rules are not edited during a run.
 Browser tests cover keyboard focus, desktop/mobile accessibility with axe,
 empty/error states, and unchanged worker history after UI interactions.
 

@@ -12,7 +12,7 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
     await expect(page.getByRole("complementary", { name: "Lesson", exact: true })).toBeVisible();
     // Engine counters stay behind the Lesson panel's one disclosure.
-    await expect(page.getByLabel("Distributed state details", { exact: true })).not.toBeVisible();
+    await expect(page.getByLabel("Engine counters", { exact: true })).not.toBeVisible();
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
     await page.getByRole("tab", { name: "Recorded history" }).click();

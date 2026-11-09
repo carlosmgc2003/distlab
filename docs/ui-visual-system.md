@@ -122,6 +122,12 @@ Rules that keep the regions distinct:
   opened it. The trigger reads **Choose a lesson** before any load and
   `Lesson: ‹title›` after one, and is unavailable while a command is outstanding
   or the simulation runs.
+- **Show service state**, at the end of ③ Investigate, opens the Service state
+  dialog, named "Service state at t=‹virtual time›": the commerce per-service
+  facts or checkout's Distributed state. Escape and **Close** return focus to the
+  button, and a Distributed state evidence button closes the dialog before
+  Recorded history selects the record. Advanced diagnostics keeps only the
+  engine counters.
 - The Experiment drawer edits the draft overlay as UI state
   (`docs/spec/adr/004-session-overlays.md`). `Apply and restart` is the one path
   that sends the student's edits, inside an ordinary `load`; `Discard changes`

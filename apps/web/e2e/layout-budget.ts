@@ -70,6 +70,15 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
  * 469/452 px → 446/430; 1534×897: checkout 562 px → 534, commerce 598 px → 569), and each control count is the
  * reading, one to four controls fewer than before.
  *
+ * #142 moved service state into a dialog, so the Architecture tab holds only the graph and no longer scrolls. The
+ * commerce bounds that #143 recorded were inflated: the commerce graph was taller than its scrolling panel, and this
+ * measure is cut by the viewport only, so it counted canvas hidden under the panel's own scroll region (at 1366×768
+ * on main: 469 px counted, 453 px inside the panel). Commerce now reads exactly as checkout does, and the readings
+ * are the true visible canvas: 433/416 px at 1366×768 and 562 px at 1534×897, so the mins are 412/396 and 534, the
+ * checkout values. Against the bounds recorded before #143 (387/371 and 426) commerce still gains canvas. The
+ * commerce control counts rose by one or two: ArchitectureView's Connections disclosure is now on screen below the
+ * graph, as it already was for checkout, and **Show service state** is on screen where ③ Investigate ends in view.
+ *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
  * stating the reason in its description.
  */
@@ -80,12 +89,12 @@ export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLess
       COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 396 }, controlsOutsideGraph: { max: 23 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 446 }, controlsOutsideGraph: { max: 15 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 430 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 412 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 396 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 446 }, controlsOutsideGraph: { max: 15 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 430 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 412 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 396 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
   },
   "1534x897": {
@@ -94,12 +103,12 @@ export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLess
       COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 534 }, controlsOutsideGraph: { max: 23 }, proseBlocks: { max: 2 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 569 }, controlsOutsideGraph: { max: 15 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 569 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 534 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 534 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 569 }, controlsOutsideGraph: { max: 15 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 569 }, controlsOutsideGraph: { max: 16 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 156 }, canvasVisible: { min: 534 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
+      COMPLETED: { topBarHeight: { max: 156 }, canvasVisible: { min: 534 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
     },
   },
 };
