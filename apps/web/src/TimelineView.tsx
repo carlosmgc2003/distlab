@@ -3,8 +3,8 @@ import type { Observation } from "@distlab/contracts";
 import { QUICK_VIEWS, QUICK_VIEW_HELP } from "./timeline-quick-views.ts";
 import { TIMELINE_FILTER_HELP, emptyTimelineDraft, parseTimelineQuery, visibleChoices, withExactValue, clearTimelineField } from "./timeline-query.ts";
 import type { ComponentTitle, FilterChoice, TextFilterField, TextMatchMode, TimelineDraft, TimelineSuggestions } from "./timeline-query.ts";
-import type { MovementEdge, SpanNode } from "./records.ts";
-import { correlation, payloadVisibility, traceView } from "./records.ts";
+import type { AssertionEvidence, MovementEdge, SpanNode } from "./records.ts";
+import { assertionEvidence, correlation, payloadVisibility, traceView } from "./records.ts";
 import { componentLabel } from "./timeline-query.ts";
 import { TIMELINE_ROW_HEIGHT, TIMELINE_VIEWPORT, changeEvidence, learningTimeline, payloadCopy, recordLabel } from "./timeline.ts";
 import type { GraphEmphasis, LearningTimelineItem } from "./timeline.ts";
@@ -28,10 +28,12 @@ const VIEW_CHOICES: readonly (readonly [ViewChoice, string])[] = [
  * constraints are active, and which record is revealed all live in
  * `review-navigation.ts`; this file decides none of it.
  */
-export function TimelineView({ observations, edges, componentTitles = [], onEmphasis, focusedObservationId, focusToken = 0 }: {
+export function TimelineView({ observations, edges, componentTitles = [], checkLabels = {}, onEmphasis, focusedObservationId, focusToken = 0 }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
   readonly componentTitles?: readonly ComponentTitle[];
+  /** Student-facing labels of the session's checks by assertion ID, shown with an assertion record's evidence (#165). */
+  readonly checkLabels?: Readonly<Record<string, string>>;
   readonly onEmphasis: (emphasis: GraphEmphasis | undefined) => void;
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
@@ -249,7 +251,7 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     </div>
     </section>
     {/* Observation detail is docked as the right column in every view, never floating (#146). */}
-    <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
+    <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles} checkLabels={checkLabels}
       hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
       onSelect={id => dispatch({ type: "reveal", observationId: id })}
       onShowTrace={traceId => dispatch({ type: "narrow-to-trace", traceId })}
@@ -600,10 +602,11 @@ function SuggestionField({ id, label, value, mode, choices, onValue, onMode, onC
   </div>;
 }
 
-function ObservationDetail({ observation, observations, componentTitles, hidden, onSelect, onShowTrace, onUseText, onUseEntity }: {
+function ObservationDetail({ observation, observations, componentTitles, checkLabels, hidden, onSelect, onShowTrace, onUseText, onUseEntity }: {
   readonly observation: Observation | undefined;
   readonly observations: readonly Observation[];
   readonly componentTitles: readonly ComponentTitle[];
+  readonly checkLabels: Readonly<Record<string, string>>;
   readonly hidden: boolean;
   readonly onSelect: (id: string) => void;
   readonly onShowTrace: (traceId: string) => void;
@@ -613,15 +616,16 @@ function ObservationDetail({ observation, observations, componentTitles, hidden,
   return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h2 id="observation-detail-heading">Observation detail</h2>
     {!observation ? <p className="detail-empty">Select an observation to see its detail.</p> : <DetailBody
-      observation={observation} observations={observations} componentTitles={componentTitles} hidden={hidden}
+      observation={observation} observations={observations} componentTitles={componentTitles} checkLabels={checkLabels} hidden={hidden}
       onSelect={onSelect} onShowTrace={onShowTrace} onUseText={onUseText} onUseEntity={onUseEntity} />}
   </section>;
 }
 
-function DetailBody({ observation, observations, componentTitles, hidden, onSelect, onShowTrace, onUseText, onUseEntity }: {
+function DetailBody({ observation, observations, componentTitles, checkLabels, hidden, onSelect, onShowTrace, onUseText, onUseEntity }: {
   readonly observation: Observation;
   readonly observations: readonly Observation[];
   readonly componentTitles: readonly ComponentTitle[];
+  readonly checkLabels: Readonly<Record<string, string>>;
   readonly hidden: boolean;
   readonly onSelect: (id: string) => void;
   readonly onShowTrace: (traceId: string) => void;
@@ -630,6 +634,7 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
 }) {
   const links = correlation(observations, observation);
   const evidence = changeEvidence(observation);
+  const checked = assertionEvidence(observation);
   const visibility = payloadVisibility(observation);
   const trace = observation.traceId !== undefined ? traceView(observations, observation.traceId) : undefined;
   const eventId = observation.eventId;
@@ -661,7 +666,8 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
     </dl>
     </details>
     <h3>Effect and evidence</h3>
-    {evidence.length === 0 ? <p>No before or after values were stored.</p> : <ul className="change-evidence">
+    {checked ? <CheckEvidence evidence={checked} time={observation.time} labels={checkLabels} />
+      : evidence.length === 0 ? <p>No before or after values were stored.</p> : <ul className="change-evidence">
       {evidence.map((item, index) => <li key={`${item.label}:${index}`}>
         <p>{item.label}</p>
         {Object.hasOwn(item, "before") ? <><h4>Before</h4><pre>{JSON.stringify(item.before, null, 2)}</pre></> : <p>Before was not stored.</p>}
@@ -713,6 +719,25 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
     </> : null}
     </details>
   </>;
+}
+
+/**
+ * A check's stored evidence, as rows above the fold (#165). It shows what the predicate stored at
+ * this boundary, never a re-evaluation; the settled verdict stays in the Lesson panel.
+ */
+function CheckEvidence({ evidence, time, labels }: { readonly evidence: AssertionEvidence; readonly time: number; readonly labels: Readonly<Record<string, string>> }) {
+  if (evidence.kind === "unavailable") return <p>The check's stored payload is {evidence.visibility}, so its evidence is not shown.</p>;
+  const label = evidence.assertionId !== undefined && Object.hasOwn(labels, evidence.assertionId) ? labels[evidence.assertionId] : undefined;
+  const result = evidence.passed === undefined ? "The check stored no result at this boundary."
+    : evidence.passed ? `The check passed at t=${time}.` : `The check did not pass at t=${time}.`;
+  return <div className="check-evidence">
+    <p><strong>{label ?? evidence.assertionId ?? "Check"}</strong> — {result}</p>
+    {evidence.kind === "none" ? <p>This check stored no evidence.</p>
+      : evidence.rows.length === 0 ? <p>The stored evidence is empty: no rows matched.</p>
+        : <ul aria-label="Stored evidence">{evidence.rows.map((row, index) => <li key={`${row.key ?? ""}:${index}`}>
+          {row.key !== undefined ? <><code>{row.key}</code> — </> : null}{row.text}
+        </li>)}</ul>}
+  </div>;
 }
 
 function CopyButton({ label, value }: { readonly label: string; readonly value: string }) {

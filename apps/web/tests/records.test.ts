@@ -5,6 +5,7 @@ import test from "node:test";
 import type { Observation } from "@distlab/contracts";
 import { simulationTime } from "@distlab/contracts";
 import {
+  assertionEvidence,
   attemptLabel,
   attemptOf,
   continuesHistory,
@@ -226,4 +227,35 @@ test("every teaching category is listed once, in legend order", () => {
     observation({ id: "b", sequence: 2, type: "runtime.log", source: "orders" }),
   ]);
   assert.deepEqual(story.map(milestone => milestone.observation.id), ["a"]);
+});
+
+test("#165 an assertion record's stored evidence reads as rows, from stored fields only", () => {
+  const evaluated = (data?: Observation["data"]) => observation({ type: "scenario.assertion.evaluated", source: "simulation", ...(data !== undefined ? { data } : {}) });
+  // Rows keyed by ID, as commerce.rows stores them: one keyed row per entry, in the Service state form.
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "one-payment-per-order", verdict: false, evidence: {
+    "payment-1": { paymentId: "payment-1", status: "APPROVED", orderId: "order-1", amount: 5000 },
+    "payment-2": { paymentId: "payment-2", status: "APPROVED", orderId: "order-1", amount: 5000 },
+  } })), { kind: "rows", assertionId: "one-payment-per-order", passed: false, rows: [
+    { key: "payment-1", text: "paymentId: payment-1 · status: APPROVED · orderId: order-1 · amount: 5000" },
+    { key: "payment-2", text: "paymentId: payment-2 · status: APPROVED · orderId: order-1 · amount: 5000" },
+  ] });
+  // A list, as commerce.stock stores it: one row per item.
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "stock-never-negative", verdict: false, evidence: [{ sku: "sku-1", stock: -1, version: 3 }] })),
+    { kind: "rows", assertionId: "stock-never-negative", passed: false, rows: [{ text: "sku: sku-1 · stock: -1 · version: 3" }] });
+  // Metrics, as commerce.metrics stores them: one row of scalars.
+  const metrics = assertionEvidence(evaluated({ assertionId: "bounded-waiting", verdict: true, evidence: { peakActive: 3, active: 0 } }));
+  assert.deepEqual(metrics, { kind: "rows", assertionId: "bounded-waiting", passed: true, rows: [{ text: "peakActive: 3 · active: 0" }] });
+  // Mixed groups, as commerce.dead-letters stores them: one keyed row per field.
+  const dead = assertionEvidence(evaluated({ assertionId: "failed-notification-dead-lettered", verdict: true, evidence: { exhausted: [{ messageId: "m-1", state: "DEAD", attempt: 3 }], deadLetters: ["m-1"] } }));
+  assert.deepEqual(dead?.kind === "rows" ? dead.rows : undefined, [
+    { key: "exhausted", text: "messageId: m-1 · state: DEAD · attempt: 3" }, { key: "deadLetters", text: "m-1" },
+  ]);
+  // Empty evidence gives no rows; a payload without evidence says so; the result is only what was stored.
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "priced", verdict: true, evidence: [] })), { kind: "rows", assertionId: "priced", passed: true, rows: [] });
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "priced" })), { kind: "none", assertionId: "priced" });
+  // A redacted or omitted payload is never reconstructed.
+  assert.deepEqual(assertionEvidence(evaluated({ redacted: true })), { kind: "unavailable", visibility: "redacted" });
+  assert.deepEqual(assertionEvidence(evaluated()), { kind: "unavailable", visibility: "omitted" });
+  // Any other record is not an assertion record.
+  assert.equal(assertionEvidence(observation({ type: "database.transaction.committed", source: "payments", data: { evidence: {} } })), undefined);
 });
