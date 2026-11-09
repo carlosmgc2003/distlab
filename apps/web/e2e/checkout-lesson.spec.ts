@@ -5,6 +5,7 @@ import { checkoutAssessment, checkoutCatalog, responseLostCheckout } from "@dist
 import { DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 import AxeBuilder from "@axe-core/playwright";
 import { loadLesson } from "./support/lesson.ts";
+import { inServiceState } from "./support/service-state.ts";
 
 declare global {
   interface Window {
@@ -120,16 +121,15 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   });
   expect(verdicts).toEqual(fixture.results);
 
-  // Advanced diagnostics is scoped: Distributed state nests its own raw-state disclosures.
-  const raw = lesson.locator("details.advanced-diagnostics");
-  if ((await raw.getAttribute("open")) === null) await raw.locator("> summary").click();
-  // Distributed state repeats the evidence links; use the ones in ③ Investigate.
+  // Distributed state is in the Service state dialog (#142); it repeats the evidence links, so use the ones in ③ Investigate.
   const evidence = (name: string) => lesson.locator(".execution-overview").getByRole("button", { name, exact: true });
-  const panel = page.getByRole("region", { name: "Distributed state" });
-  await expect(panel).toContainText("Status: selected");
-  await expect(panel).toContainText("NETWORK_TIMEOUT");
-  await expect(panel).toContainText("authorization-1 APPROVED");
-  await expect(panel).toContainText("not proof of denial or rollback");
+  await inServiceState(page, async dialog => {
+    const panel = dialog.getByRole("region", { name: "Distributed state" });
+    await expect(panel).toContainText("Status: selected");
+    await expect(panel).toContainText("NETWORK_TIMEOUT");
+    await expect(panel).toContainText("authorization-1 APPROVED");
+    await expect(panel).toContainText("not proof of denial or rollback");
+  });
   await evidence("Show fault selection").click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");

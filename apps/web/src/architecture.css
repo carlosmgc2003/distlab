@@ -499,10 +499,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .run-summary { align-items: center; }
 .run-status { color: var(--action-primary); }
 .detail-disclosure > summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-size: .85rem; font-weight: 650; }
-.panel-architecture:has(.commerce-state) { overflow: auto; }
-/* The graph fills the visible panel (at least 28rem); service state follows below it until the Service state dialog (#136). */
-.panel-architecture:has(.commerce-state) > .architecture-layout { flex: 0 0 auto; height: max(28rem, 100%); min-height: 28rem; }
-.commerce-state { flex: none; padding: 1rem; }
+/* The Service state dialog (#142): every service's facts, or checkout's Distributed state, side by side. */
+.service-state-dialog { width: min(72rem, calc(100vw - 32px)); max-height: 90vh; padding: 0; display: none; flex-direction: column; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-panel); color: var(--text-primary); box-shadow: 0 16px 40px rgba(23, 32, 51, .25); }
+.service-state-dialog[open] { display: flex; }
+.service-state-dialog::backdrop { background: rgba(23, 32, 51, .45); }
+.service-state-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border-subtle); }
+.service-state-header h2 { margin: 0; font-size: 1.1rem; }
+.service-state-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 20px 16px; }
+.commerce-state { flex: none; padding: 1rem 0; }
 .commerce-state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
 .commerce-state-grid > section { padding: 1rem; border: 1px solid var(--border-subtle, #dbe2ea); border-radius: 8px; }
 .commerce-facts { overflow-wrap: anywhere; font-size: .875rem; line-height: 1.5; }
