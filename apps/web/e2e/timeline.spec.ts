@@ -104,8 +104,6 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(detail).toContainText("After");
   await expect(detail).toContainText("Trace");
   await expect(detail).toContainText("Span");
-  const inspector = page.locator(".story-inspector");
-  if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
   await detail.getByText("Related evidence", { exact: true }).click();
   await expect(detail.getByRole("heading", { name: "Causation" })).toBeVisible();
   await page.getByRole("button", { name: "Show this trace" }).click();

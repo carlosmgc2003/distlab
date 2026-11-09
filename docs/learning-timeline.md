@@ -139,8 +139,17 @@ hint pills rather than permanent paragraphs.
 Panel space is bounded rather than allowed to overflow. The toolbar is two
 short rows, the view switch and the filter row, with no disclosure. The chip row
 appears only while a filter is active and scrolls on its own once several are
-active, and the rows keep a minimum height. The floating observation detail is
-positioned within the rows area, so it never covers the toolbar.
+active, and the rows keep a minimum height. Observation detail is docked as the
+panel's right column in every view (#146), so it never covers the rows, the
+toolbar, or the tabs; with nothing selected it reads "Select an observation to
+see its detail." While a filter is active, one count beside the filter row says
+how many rows are shown ("22 of 267 shown").
+
+The selection is stated once on screen, in the detail header: "Observation
+#‹sequence› · ‹label› · t=‹time›", then source → target. Recorded history has
+one polite live region, read and not shown, that announces each selection with
+its position among the visible rows ("Selected Observation #114: … Visible
+observation 3 of 22."), filter changes, and quick views.
 
 ## Learning view
 

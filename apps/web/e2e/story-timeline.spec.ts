@@ -187,14 +187,14 @@ test("response-lost Story milestones stay linked to their records without new co
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
   await dropRow.click();
-  await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${dropped.sequence}`);
+  await expect(page.locator("#timeline-feedback")).toContainText(`Selected Observation #${dropped.sequence}:`);
 
   // A timeout is a distinct stored fact from the dropped response and the commit.
   for (const [label, observation] of [["Request timed out", timedOut], ["Transaction rolled back", rolledBack]] as const) {
     await page.locator(rowSelector(observation)).click();
     const detail = page.locator("#inspection-panel");
     await expect(detail).toContainText(observation.id);
-    await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${observation.sequence}`);
+    await expect(page.locator("#timeline-feedback")).toContainText(`Selected Observation #${observation.sequence}:`);
     expect(await page.locator(".story-table tr[data-selected='true'] button").innerText()).toBe(label);
   }
   await expect(page.locator(".story-table tr[data-selected='true']")).toHaveCount(1);

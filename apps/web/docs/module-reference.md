@@ -509,8 +509,12 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 - **Responsibility:** render the one view switch (Story diagram, Story table,
   Learning, Raw), the Show / Component / More filters… row and its modal
-  dialog, Learning groups, virtualized Raw rows, observation details, and
-  stored correlation links.
+  dialog, Learning groups, virtualized Raw rows, the docked Observation detail
+  (the panel's right column in every view, #146), and stored correlation links.
+  The detail header is the one visible statement of the selection; review
+  feedback, including the selection, is announced through one `sr-only` polite
+  live region; an active filter shows one "‹n› of ‹m› shown" count beside the
+  filter row.
 - **Imports and boundaries:** React and `Observation`, plus `timeline-query.ts`,
   `timeline-quick-views.ts`, `records.ts`, `timeline.ts`, `story-timeline.ts`, and
   `HelpHint`. Receives observation snapshots, drawn-link identities, titles, and

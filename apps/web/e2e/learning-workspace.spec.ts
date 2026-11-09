@@ -22,19 +22,19 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     await expect(page.locator(".timeline-panel details")).toHaveCount(0);
     await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".story-table")).toHaveCount(0);
+    // The detail is docked, never floating, and starts empty (#146).
     await expect(page.locator(".story-inspector")).toHaveCount(0);
+    await expect(page.locator("#inspection-panel")).toContainText("Select an observation to see its detail.");
     if (width === 1366) {
       expect(await page.locator(".story-strip").evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
       const diagram = await page.locator(".story-strip").boundingBox();
       expect(diagram!.height).toBeGreaterThan(384);
     }
     await page.locator(".story-milestone").first().click();
-    await page.locator(".story-inspector > summary").click();
     await expect(page.locator(".event-path")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy observation id", exact: true })).not.toBeVisible();
     await page.getByText("Technical record", { exact: true }).click();
     await expect(page.getByRole("button", { name: "Copy observation id", exact: true })).toBeVisible();
-    await page.locator(".story-inspector > summary").click();
     await page.getByLabel("Component", { exact: true }).selectOption("payments");
     await expect(page.getByRole("list", { name: "Active filters" })).toContainText("payments");
     await expect(page.getByLabel("Component", { exact: true })).toHaveValue("payments");
@@ -47,9 +47,11 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     if (width === 1366) {
       const rows = await page.locator("#timeline-rows").boundingBox();
       expect(rows!.height).toBeGreaterThan(384);
-      // The rows fill the workspace column beside the Lesson panel (#140).
+      // The rows fill the workspace column beside the Lesson panel (#140), less the docked detail (#146).
       const column = await page.locator(".workspace-main").boundingBox();
-      expect(rows!.width).toBeGreaterThan(column!.width - 40);
+      const detail = await page.locator("#inspection-panel").boundingBox();
+      expect(detail!.x).toBeGreaterThanOrEqual(rows!.x + rows!.width);
+      expect(rows!.width).toBeGreaterThan(column!.width - detail!.width - 60);
       const filters = await page.locator(".story-filter-bar").boundingBox();
       expect(filters!.y + filters!.height).toBeLessThan(rows!.y);
       await viewButton(page, "Story table").click();

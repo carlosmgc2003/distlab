@@ -76,7 +76,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(selected).toBeInViewport();
   await expect(selected).toHaveCSS("outline-style", "solid");
   await expect(page.locator("#timeline-boundary")).toContainText("Previous and Next cannot move.");
-  await expect(page.locator("#timeline-feedback")).toContainText(`Selected #${selectedSequence}`);
+  await expect(page.locator("#timeline-feedback")).toContainText(`Selected Observation #${selectedSequence}:`);
   await expect(page.locator("#inspection-panel")).toContainText("network.response.dropped");
   const sequence = await selected.innerText();
   await page.keyboard.press("ArrowDown");
@@ -85,8 +85,6 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.keyboard.press("ArrowUp");
   expect(await selected.innerText()).toBe(sequence);
 
-  const inspector = page.locator(".story-inspector");
-  if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
   await page.locator("#inspection-panel").getByText("Related evidence", { exact: true }).click();
   await page.getByRole("button", { name: "Show this trace" }).click();
   // More filters opens on the applied draft: the trace is set and the type was cleared.
@@ -104,7 +102,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await page.getByRole("button", { name: /Select causing observation/ }).click();
   await expect(selected).toBeVisible();
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeInViewport();
-  await expect(page.locator("#timeline-feedback")).toContainText(/Selected #/);
+  await expect(page.locator("#timeline-feedback")).toContainText(/Selected Observation #/);
   await expect(selected).not.toContainText("network.response.dropped");
 
   await openMoreFilters(page);
@@ -129,7 +127,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(selected).toBeVisible();
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("external.effect.committed");
-  await expect(page.locator("#timeline-feedback")).toContainText("Selected #");
+  await expect(page.locator("#timeline-feedback")).toContainText("Selected Observation #");
   await expect(page.locator("#timeline-feedback")).toContainText("The type filter was cleared so this observation is visible.");
   await expect(page.getByRole("alert")).toHaveCount(0);
 

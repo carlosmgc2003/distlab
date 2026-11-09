@@ -271,9 +271,6 @@ test("observation detail gives each teaching event a plain-language summary-firs
   for (const item of cases) {
     await filterByType(page, item.type);
     await page.locator("#timeline-rows button").first().click();
-    // The inspector and its disclosures start collapsed.
-    const inspector = page.locator(".story-inspector");
-    if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
     const relatedEvidence = page.locator("#inspection-panel details.detail-disclosure").nth(1);
     if ((await relatedEvidence.getAttribute("open")) === null) await relatedEvidence.locator("> summary").click();
     const detail = page.locator("#inspection-panel");
