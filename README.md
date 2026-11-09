@@ -261,9 +261,9 @@ focus directly to the metadata panel. These interactions remain local to the UI
 and send no worker commands.
 
 The Architecture tab replays the movements a run has already recorded, so a
-reader watches the system in action. A **Recorded history** group on the command
-row — `Play timeline`, `Pause timeline`, `Restart timeline`,
-`Previous observation`, `Next observation`, plus a **Speed** select of Slow,
+reader watches the system in action. The **Replay** toolbar, one row at the top
+of the Architecture tab — `Play replay`, `Pause replay`, `Restart replay`,
+`Previous movement`, `Next movement`, plus a **Speed** select of Slow,
 Steady, or Fast — moves a cursor over recorded movements and paints a token on
 the link each movement used: `REQ` for a request, `RES` for a response, `MSG`
 for a message, `ACK` for an acknowledgement, `⊘` for a recorded drop, and `◷`
@@ -285,10 +285,9 @@ not end a wait, because the caller has recorded nothing. When virtual time
 advances between two movements, the playback position names both times, for
 example `t=55 → t=1025`, without painting the interval as a duration. The legend
 reserves its own column in the fitted view so it covers no node, and folds away
-on narrow canvases. It shares the command row with `Run`, `Pause`, `Step`,
-and `Reset` to keep the graph area tall, and is kept apart from them by a
-vertical rule, its own label, and the primary action paint on the simulation
-group alone. It shows only while the Architecture tab is active, because the
+on narrow canvases. Replay never shares a row with `Run`, `Pause`, `Step`, and
+`Reset`: those stay in the one-row top bar on both tabs, and only `Run` carries
+the primary action paint. Replay shows only in the Architecture tab, because the
 graph it animates is the graph it belongs to. A movement that arrived leaves the
 link highlighted, and the sending and receiving components carry a text badge.
 Beside the graph, a narration names the stored label, the route, and the
@@ -357,7 +356,7 @@ a transient movement cue and a text alternative. Play, pause, and the playback
 cursor are UI state: a host timer may advance that cursor, and it does not
 advance virtual time, record observations, or send worker commands. Play is
 unavailable when fewer than two rows are visible. On the last visible row the
-control is Restart timeline, which starts again at the first visible row. Pause
+control is Restart replay, which starts again at the first visible row. Pause
 timeline is available while that cursor is moving. Reset clears the selection,
 the filters, and the movement cue and shows the new run. A terminal failure
 says whether the published history is complete. Incomplete history is withheld

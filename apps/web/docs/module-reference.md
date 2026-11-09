@@ -154,7 +154,7 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   mapping, playback, timeline terminal formatting, checkout fault inspection,
   and local React presentation components. No runtime package imports.
 - **State and protocol:** subscribes with `useSyncExternalStore`; owns selected
-  and loaded choices, workspace tab, history-control visibility, graph emphasis,
+  and loaded choices, workspace tab, graph emphasis,
   and evidence-focus tokens. Busy checks guard session replacement, which calls
   `host.load`. Loaded family chooses checkout or commerce facts. Session keys
   include host attempt identity so reset can remount review state even when the
@@ -330,8 +330,11 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/SimulationControls.tsx)
 
-- **Responsibility:** present execution commands, committed simulation status,
-  transport progress, and structured errors.
+- **Responsibility:** the top bar's simulation part (#144): the **Simulation
+  execution** group and the one run summary (status, pending-command message,
+  virtual time, processed and pending events), on the bar's single row.
+  `SimulationAlert` renders a structured error, and the terminal-history notice
+  the shell passes, in their own row under the bar only while one exists.
 - **Imports and boundaries:** React's `ReactNode` type and host/snapshot types;
   controls invoke the injected host client.
 - **State and protocol:** Run and Step require READY or PAUSED with no busy
@@ -341,8 +344,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   buttons and call `run`, `pause`, `step`, or `reset`.
 - **Presentation/runtime separation:** commands cross the worker boundary.
   Status, virtual time, processed events, and pending events come directly from
-  the simulation projection. Child content can place playback controls beside
-  execution controls without combining their semantics.
+  the simulation projection. Replay is not rendered here: it lives in the
+  Architecture tab.
 
 ## `checkout-display.ts`
 
@@ -584,8 +587,10 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/ArchitecturePlayback.tsx)
 
-- **Responsibility:** render graph playback controls, cursor readout, and the
-  currently painted movement's narration.
+- **Responsibility:** render the **Replay** toolbar (`FlightControls`, a group
+  named “Replay recorded movements”, mounted by `App.tsx` at the top of the
+  Architecture tab panel), the cursor readout, and the currently painted
+  movement's narration.
 - **Imports and boundaries:** pace data from `flight.ts` and local playback,
   position, and step types; no host or runtime dependency.
 - **State and protocol:** `FlightControls` calls supplied cursor callbacks and

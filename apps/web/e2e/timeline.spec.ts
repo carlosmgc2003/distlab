@@ -56,8 +56,6 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // Simulation commands are hidden in history focus; keep them reachable for this canonical-row test.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   // This test reads canonical rows; the teaching Story view has its own spec.
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recorded history", exact: true })).toBeVisible();
@@ -126,9 +124,9 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   const commands = await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type));
   // Playback navigation lives with the architecture graph now.
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  await page.getByRole("button", { name: "Next observation" }).click();
-  await page.getByRole("button", { name: "Play timeline" }).click();
-  await page.getByRole("button", { name: "Pause timeline" }).click();
+  await page.getByRole("button", { name: "Next movement" }).click();
+  await page.getByRole("button", { name: "Play replay" }).click();
+  await page.getByRole("button", { name: "Pause replay" }).click();
   expect(await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type))).toEqual(commands);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   expect(requestText).toContain("network.request.sent");
@@ -241,8 +239,6 @@ test("redacted and omitted payloads stay unmarked and incomplete history is labe
     });
   });
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // Simulation commands are hidden in history focus.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   await expect(page.locator(".timeline-count")).toContainText("3 of 3");
   const rows = page.locator("#timeline-rows button");

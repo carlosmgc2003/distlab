@@ -47,8 +47,6 @@ test("response-lost selection shows remote authorization and local timeout as di
   const selected = page.locator("#timeline-rows button[aria-pressed='true']");
   await expect(selected).toContainText("network.request.timedout");
   await expect(selected).toBeFocused();
-  // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await openServiceState(page);
   await panel.getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(selected).toContainText("external.effect.committed");

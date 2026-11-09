@@ -133,7 +133,6 @@ test("More filters moves focus in and back, discards on Escape and Cancel, and n
 
 test("changing the view or the filters sends no worker command and keeps virtual time", async ({ page }) => {
   await completedHistory(page);
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   const before = await commands(page);
   const time = await virtualTime(page);
   for (const name of ["Story table", "Learning", "Raw", "Story diagram"] as const) await viewButton(page, name).click();

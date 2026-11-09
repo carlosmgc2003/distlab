@@ -17,7 +17,7 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
     await page.getByRole("tab", { name: "Recorded history" }).click();
     await expect(page.locator(".timeline-transport-row")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Play timeline", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Play replay", exact: true })).toHaveCount(0);
     // No disclosure in the history toolbar: one view switch and one filter row (#145).
     await expect(page.locator(".timeline-panel details")).toHaveCount(0);
     await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
@@ -62,7 +62,6 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
       const accessibility = await new AxeBuilder({ page }).analyze();
       expect(accessibility.violations).toEqual([]);
     }
-    await page.getByRole("button", { name: "Show simulation controls" }).click();
     await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   });
 }

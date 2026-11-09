@@ -118,8 +118,6 @@ test("single dropped response disables both boundaries and evidence navigation k
   await filterByType(page, "network.response.dropped");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
-  // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   // The evidence links sit in the Lesson panel's ③ Investigate section, visible on both tabs.
   await page.getByRole("complementary", { name: "Lesson", exact: true }).locator(".execution-overview")
     .getByRole("button", { name: "Show processor authorization", exact: true }).click();
@@ -187,8 +185,6 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await emit("READY", [], "loaded", true);
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // Simulation commands are hidden in history focus; reveal them to check the lifecycle here.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await expect(page.getByText("No observations have been recorded for this run.")).toBeVisible();
   await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
   await expect(button("Run")).toBeEnabled();

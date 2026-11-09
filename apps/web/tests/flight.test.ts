@@ -233,7 +233,7 @@ test("the transport states one position, one reason, and the two step directions
   const steps = flightSteps(projection.history.observations, checkoutEdges);
   const idle = flightTransport(-1, steps.length, "idle", false);
   assert.equal(idle.control.action, "play");
-  assert.equal(idle.control.label, "Play timeline");
+  assert.equal(idle.control.label, "Play replay");
   // With nothing selected, Previous states the last movement and Next the first.
   assert.equal(idle.previous, true);
   assert.equal(idle.next, true);
@@ -242,7 +242,7 @@ test("the transport states one position, one reason, and the two step directions
   assert.match(playing.reason, /waits at the end while the run records more/);
   const ended = flightTransport(steps.length - 1, steps.length, "idle", false);
   assert.equal(ended.control.action, "restart");
-  assert.equal(ended.control.label, "Restart timeline");
+  assert.equal(ended.control.label, "Restart replay");
   assert.equal(ended.next, false);
   const empty = flightTransport(-1, 0, "idle", false);
   assert.equal(empty.control.action, "unavailable");
@@ -250,11 +250,11 @@ test("the transport states one position, one reason, and the two step directions
   // The shared control copy states the action and the phase wording.
   assert.equal(playbackControl(-1, 0, false).action, "unavailable");
   assert.equal(playbackControl(0, 1, false).action, "unavailable");
-  assert.equal(playbackControl(-1, 4, false).label, "Play timeline");
+  assert.equal(playbackControl(-1, 4, false).label, "Play replay");
   assert.equal(playbackControl(1, 4, false).action, "play");
-  assert.equal(playbackControl(3, 4, false).label, "Restart timeline");
+  assert.equal(playbackControl(3, 4, false).label, "Restart replay");
   assert.equal(playbackControl(1, 4, true).action, "unavailable");
-  assert.match(playbackStatus("ended", playbackControl(3, 4, false)), /Restart timeline/);
+  assert.match(playbackStatus("ended", playbackControl(3, 4, false)), /Restart replay/);
   assert.match(playbackStatus("playing", playbackControl(1, 4, true)), /Pause/);
   assert.match(playbackStatus("paused", playbackControl(1, 4, false)), /paused/);
 

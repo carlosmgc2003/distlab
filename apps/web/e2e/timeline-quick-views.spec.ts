@@ -34,8 +34,6 @@ async function completed(page: Page) {
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // The committed-state summary lives in the command toolbar, hidden in history focus.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
 }
 
 /** Show: the one category control, a select of quick views with their counts (#145). */

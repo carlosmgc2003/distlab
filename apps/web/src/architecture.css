@@ -80,11 +80,6 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 /* One visible label per control group, so execution commands and history navigation never
    share a row of same-shaped buttons. */
 .control-group-label { flex: 0 0 auto; margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .01em; color: var(--text-secondary); }
-/* Recorded history navigation sits on the command row, kept apart by a rule and its own
-   label rather than by taking a second block of vertical space away from the graph. */
-.flight-nav-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-left: 4px; padding-left: 14px; border-left: 2px solid var(--border-subtle); }
-.flight-nav-group .control-buttons { gap: 6px; }
-.flight-nav-group .control-buttons button { min-height: 36px; min-width: 0; padding: 4px 10px; font-size: .85rem; }
 .flight-pace { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 600; }
 .flight-pace select { min-height: 36px; padding: 4px 8px; }
 /* The replay position and the graph explanations share the panel's own heading lines. */
@@ -480,18 +475,36 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 [role="alert"] { border-left: 4px solid #b91c1c; padding: 8px 12px; background: #fef2f2; }
 
 /* Learning-first shell: one primary work area, secondary tools on demand. */
-.app-shell { gap: 12px; padding: 16px 20px; }
-.command-toolbar { padding: 12px 16px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-panel); gap: 8px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); }
-.command-toolbar > .toolbar-row:first-child { grid-column: 1 / -1; }
-/* The command row holds both control groups, so it spans the toolbar; the committed run
-   summary keeps its own full-width line. */
-.command-toolbar .command-row { grid-column: 1 / -1; }
-.command-toolbar > .status-line { display: contents; }
-.command-toolbar .terminal-history, .command-toolbar [role="alert"], .command-toolbar .run-summary { grid-column: 1 / -1; }
-.command-toolbar .run-summary { justify-content: flex-end; }
+/* Tight vertical rhythm: the top bar stays on both tabs (#144), so every pixel goes to the graph or the history rows. */
+.app-shell { gap: 8px; padding: 12px 20px; }
+/* The top bar (#144): one row, at most 64 px, identical on both tabs. Only the lesson trigger gives
+   up width (its full title stays in the accessible name and tooltip), so nothing wraps at the
+   desktop baselines; a narrower window wraps the bar instead of overlapping its parts. */
+.command-toolbar.top-bar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 14px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-panel); }
+.top-bar .brand { flex: none; margin-right: 0; }
+.top-bar .scenario-picker { flex: 1 1 18rem; flex-wrap: nowrap; min-width: 0; }
+.top-bar .scenario-picker > button:not(.lesson-trigger) { flex: none; white-space: nowrap; }
+.top-bar .lesson-trigger { flex: 0 1 auto; min-width: 8rem; max-width: 22rem; }
+.execution-group { flex: none; display: flex; align-items: center; gap: 8px; }
+.execution-group .control-buttons { flex-wrap: nowrap; gap: 6px; }
+.execution-group .control-group-label { max-width: 5.5rem; line-height: 1.15; }
+.execution-group .control-buttons button { min-width: 0; padding: 8px 11px; }
+/* Each metric stacks its label over its value, so the summary keeps its words in one compact row. */
+.top-bar .run-summary { flex: 0 0 auto; margin-left: auto; flex-wrap: nowrap; justify-content: flex-end; align-items: center; gap: 4px 14px; font-size: .85rem; white-space: nowrap; }
+.top-bar .run-metrics { flex-wrap: nowrap; gap: 4px 14px; }
+/* A long status ("Choose a scenario to begin.") wraps to two short lines inside the row. */
+.top-bar .run-status { max-width: 11rem; margin: 0; white-space: normal; line-height: 1.15; }
+.top-bar .run-metrics > div { flex-direction: column; align-items: flex-start; gap: 0; }
+.top-bar .run-metrics dt { font-size: .7rem; line-height: 1.1; color: var(--text-secondary); font-weight: 600; }
+.top-bar .run-metrics dd { margin: 0; line-height: 1.2; font-weight: 650; }
+.top-bar-alerts { flex: none; display: flex; flex-direction: column; gap: 6px; }
+.top-bar-alerts p { margin: 0; }
+/* Replay (#144): a one-row toolbar inside the Architecture tab, above the graph it drives. */
+.replay-toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0 0 6px; }
+.replay-toolbar .control-buttons { gap: 6px; }
+.replay-toolbar .control-buttons button { min-height: 36px; min-width: 0; padding: 4px 10px; font-size: .85rem; }
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
-.brand span { color: var(--text-secondary); font-size: .8rem; }
 /* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) a fixed cap
    would wrap the lesson trigger and Open scenario file… at the desktop baselines. */
 .scenario-picker { flex: 0 1 auto; }
@@ -530,7 +543,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .workspace-tabs [role="tab"][aria-selected="true"] { background: var(--surface-panel); }
 .panel-architecture > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .history-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); }
-.timeline-panel { padding: 12px 16px; gap: 6px; border-color: var(--border-subtle); }
+.timeline-panel { padding: 8px 16px; gap: 6px; border-color: var(--border-subtle); }
 .filter-composer-note { grid-column: 1 / -1; margin: 4px 0; font-size: .8rem; color: var(--text-secondary); }
 /* More filters (#145): the advanced filters in one modal dialog with one footer. */
 .more-filters { width: min(40rem, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 16px 20px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-panel); color: var(--text-primary); box-shadow: 0 16px 40px rgba(23, 32, 51, .25); }
@@ -567,8 +580,10 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
   .observation-panel { max-height: 32rem; }
   .panel-architecture { height: 38rem; flex: none; }
   .architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(15rem, 1fr) minmax(0, 1fr); }
-  .command-toolbar { display: flex; }
-  .command-toolbar .run-summary { justify-content: flex-start; }
+  .top-bar .run-summary { flex: 1 1 100%; margin-left: 0; justify-content: flex-start; flex-wrap: wrap; white-space: normal; }
+  .top-bar .run-metrics { flex-wrap: wrap; }
+  .execution-group { flex: 1 1 100%; flex-wrap: wrap; }
+  .execution-group .control-buttons { flex-wrap: wrap; }
   .scenario-picker { flex: 1 1 100%; }
   .workspace-empty { padding: 24px; }
   /* At browser zoom the Lesson panel stacks above the tabs and keeps its own scroll. */
@@ -580,8 +595,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 /* History is a first-class canvas, not a list squeezed beside an empty inspector. */
 .workspace-navigation { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .workspace-navigation .workspace-tabs { flex: 1; }
-.history-controls-toggle { font-size: .8rem; }
-.history-focus .command-toolbar { display: none; }
 /* Observation detail is the docked right column of Recorded history in every view (#146). */
 /* The column narrows with the viewport so the history toolbar keeps its two rows beside it at 1366px. */
 .history-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 19vw, 340px); grid-template-rows: minmax(0, 1fr); }
@@ -612,11 +625,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .story-table-scroll { flex: 1; min-height: 0; overflow: auto; }
 .timeline-rows-frame { position: relative; flex: 1 1 0; min-height: 5.5rem; display: flex; flex-direction: column; }
 .timeline-rows-frame > .timeline-rows { flex: 1 1 0; }
-@media (max-width: 850px) {
-  .history-focus .investigation-workspace { min-height: 0; }
-  .history-focus .panel-history, .history-focus .history-layout { min-height: 0; }
-  .history-focus .timeline-panel { height: calc(100dvh - 100px); min-height: 36rem; }
-}
 /* Short viewports and browser zoom use document scrolling rather than clipping. */
 @media (max-height: 700px) {
   body { overflow: auto; }

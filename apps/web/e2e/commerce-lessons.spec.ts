@@ -202,7 +202,6 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
   // Raw renders a window of rows, so narrow it to the expiry records with the Type filter.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await filterByType(page, "kv.expired");
   const rows = page.locator("#timeline-rows");
   await expect(page.locator(".timeline-count")).toHaveText(/^3 of \d+ observations/);
@@ -234,7 +233,6 @@ test("the inventory pair shows stock with its version and each client's outcome,
   // The optimistic run is loaded: its rejected commit is in Recorded history.
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await filterByType(page, "database.transaction.rejected");
   await expect(page.locator(".timeline-count")).toHaveText(/^1 of \d+ observations/);
   await page.locator("#timeline-rows").getByRole("button", { name: /database.transaction.rejected inventory/ }).click();

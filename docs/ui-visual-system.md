@@ -52,9 +52,9 @@ at a time, so until they land the shipped shell can still differ from it.
 | Visible paragraphs of 8 or more words outside the lesson panel and graph area | ≤ 2 | ≤ 2 |
 
 The layout budget browser test (`apps/web/e2e/layout-budget.ts`) enforces the
-budgets. It holds the bounds measured before #136, and each issue of #136
-tightens them toward this table. Once the single-row top bar and the Replay
-toolbar land (#144), the canvas budget is final.
+budgets. Each issue of #136 tightened its bounds toward this table; with the
+single-row top bar and the Replay toolbar (#144), the top bar and canvas bounds
+are this table's values.
 
 DistLab is a desktop learning application. The supported desktop viewport
 baseline is 1366×768 and 1534×897, covered by browser tests. Mobile screen
@@ -77,8 +77,11 @@ Rules that keep the regions distinct:
 - Simulation commands and replay are two separate control groups in two
   regions. `Run`, `Pause`, `Step`, and `Reset` carry **Simulation execution** in
   the top bar; the replay controls carry **Replay** in the Architecture tab. Each
-  group is a `group` with its label as the accessible name, so the distinction
+  is a `group` with an accessible name (**Simulation execution**, and **Replay
+  recorded movements** for the visible label **Replay**), so the distinction
   survives without the styling, and only `Run` is painted as the primary action.
+  An error, or a terminal-history notice, takes its own row directly under the
+  top bar only while it exists.
 - Only Simulation execution changes the run. The Replay group states its
   boundary once: replaying does not change the simulation or its virtual time.
 - The top bar and the lesson panel are identical on both tabs. No tab hides the

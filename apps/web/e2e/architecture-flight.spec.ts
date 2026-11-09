@@ -49,7 +49,7 @@ async function runCheckout(page: Page, scenario: "normal" | "response-lost" = "r
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
 }
 
-const transport = (page: Page) => page.getByRole("group", { name: "Recorded history navigation" });
+const transport = (page: Page) => page.getByRole("group", { name: "Replay recorded movements" });
 const narration = (page: Page) => page.locator(".flight-narration");
 const position = (page: Page) => page.getByRole("status", { name: "Architecture playback position" });
 
@@ -61,7 +61,7 @@ async function narrationTitle(page: Page): Promise<string> {
 
 /** Steps the replay cursor to the first movement with this stored headline. */
 async function stepTo(page: Page, headline: string) {
-  const next = page.getByRole("button", { name: "Next observation" });
+  const next = page.getByRole("button", { name: "Next movement" });
   const wanted = `${glyphFor(headline)} ${headline}`;
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (await narrationTitle(page) === wanted) return;
@@ -150,39 +150,36 @@ async function headingAgreesWith(page: Page, motion: { x: number; y: number }) {
 test("the replay cursor walks recorded movements and paints a token on the graph", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
-  // A supported desktop baseline, where both control groups fit one command row.
+  // A supported desktop baseline.
   await page.setViewportSize({ width: 1534, height: 897 });
   await observeWorker(page);
   await loadScenario(page);
 
-  // The transport is recorded history navigation beside the simulation commands, not one of them.
+  // Replay is not a simulation command (#144): it lives in the Architecture tab, above the graph it
+  // drives, while Simulation execution stays in the one-row top bar.
   await expect(transport(page)).toBeVisible();
-  const commandRow = page.locator(".command-row");
-  await expect(commandRow.getByRole("group", { name: "Simulation execution" })).toBeVisible();
-  // Both groups share one row, kept apart by a rule and their own labels.
-  const rowBox = (await commandRow.boundingBox())!;
+  const topBar = page.locator("header.top-bar");
+  await expect(topBar.getByRole("group", { name: "Simulation execution" })).toBeVisible();
+  await expect(topBar.getByRole("group", { name: "Replay recorded movements" })).toHaveCount(0);
+  await expect(page.locator("#architecture-panel").getByRole("group", { name: "Replay recorded movements" })).toBeVisible();
+  const barBox = (await topBar.boundingBox())!;
   const transportBox = (await transport(page).boundingBox())!;
-  const executionBox = (await page.getByRole("group", { name: "Simulation execution" }).boundingBox())!;
-  const lastCommand = (await page.getByRole("button", { name: "Reset", exact: true }).boundingBox())!;
-  expect(Math.abs(transportBox.y - executionBox.y), "the two groups sit on one command row").toBeLessThan(rowBox.height);
-  expect(transportBox.x, "recorded history navigation follows the simulation commands").toBeGreaterThan(lastCommand.x + lastCommand.width);
-  expect(rowBox.height, "one line of commands at the supported baselines").toBeLessThanOrEqual(56);
-  // The groups are centred on one line rather than stacked.
-  const overlap = Math.min(lastCommand.y + lastCommand.height, transportBox.y + transportBox.height)
-    - Math.max(lastCommand.y, transportBox.y);
-  expect(overlap, "the two groups share the command row").toBeGreaterThan(20);
-  await expect(page.locator(".flight-nav-group")).toHaveCSS("border-left-style", "solid");
+  const canvasBox = (await page.locator(".graph-canvas").boundingBox())!;
+  expect(barBox.height, "the top bar is one row").toBeLessThanOrEqual(64);
+  expect(transportBox.y, "Replay sits below the top bar").toBeGreaterThan(barBox.y + barBox.height);
+  expect(transportBox.y + transportBox.height, "Replay sits above the graph").toBeLessThanOrEqual(canvasBox.y);
+  await expect(page.locator(".replay-toolbar .control-group-label")).toHaveText("Replay");
   // Only the simulation group's first command is painted as the primary action.
   await expect(page.getByRole("button", { name: "Run", exact: true })).toHaveCSS("background-color", "rgb(29, 78, 216)");
-  await expect(page.getByRole("button", { name: "Play timeline" })).not.toHaveCSS("background-color", "rgb(29, 78, 216)");
+  await expect(page.getByRole("button", { name: "Play replay" })).not.toHaveCSS("background-color", "rgb(29, 78, 216)");
   // Before the run there is nothing recorded to replay, and the transport says so.
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Play replay" })).toBeDisabled();
   await expect(position(page)).toHaveText("No recorded movements to replay.");
   await expect(narration(page)).toHaveCount(0);
   await expect(page.locator("[data-flight-token]")).toHaveCount(0);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
-  await expect(page.getByRole("button", { name: "Play timeline" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Play replay" })).toBeEnabled();
 
   await stepTo(page, "Request sent");
   const first = await position(page).innerText();
@@ -254,15 +251,15 @@ test("playback advances the cursor at the chosen pace and sends no worker comman
   await expect(page.locator("#flight-pace-help")).toContainText("does not change virtual time");
 
   const before = await page.evaluate(() => window.workerEvidence.commands.map(command => command.type));
-  await page.getByRole("button", { name: "Play timeline" }).click();
-  await expect(page.getByRole("button", { name: "Pause timeline" })).toBeVisible();
+  await page.getByRole("button", { name: "Play replay" }).click();
+  await expect(page.getByRole("button", { name: "Pause replay" })).toBeVisible();
   // Slow pace: the first advance takes longer than the token animation it paints.
   await expect.poll(async () => (await position(page).innerText()).includes("Movement 1 of"), { timeout: 4_000 }).toBe(true);
   await expect.poll(async () => (await position(page).innerText()).includes("Movement 2 of"), { timeout: 8_000 }).toBe(true);
   const after = await page.evaluate(() => window.workerEvidence.commands.map(command => command.type));
   expect(after, "playback is a browser cursor, not a simulation command").toEqual(before);
 
-  await page.getByRole("button", { name: "Pause timeline" }).click();
+  await page.getByRole("button", { name: "Pause replay" }).click();
   const paused = await position(page).innerText();
   await page.waitForTimeout(2_000);
   expect(await position(page).innerText(), "Pause stops the cursor").toBe(paused);
@@ -270,14 +267,14 @@ test("playback advances the cursor at the chosen pace and sends no worker comman
 
   // A faster pace reaches the end of the recorded movements; the last one stays painted.
   await page.getByLabel("Speed", { exact: true }).selectOption("fast");
-  await page.getByRole("button", { name: "Play timeline" }).click();
+  await page.getByRole("button", { name: "Play replay" }).click();
   await expect.poll(async () => (await position(page).innerText()).includes("Movement 13 of"), { timeout: 30_000 }).toBe(true);
-  // At the recorded end the primary control becomes Restart timeline, as the transport states.
-  await expect(page.getByRole("button", { name: "Restart timeline" })).toBeVisible();
+  // At the recorded end the primary control becomes Restart replay, as the transport states.
+  await expect(page.getByRole("button", { name: "Restart replay" })).toBeVisible();
   await expect(page.locator(".flight-boundaries")).toContainText("waits for the run to record more");
   await expect(page.locator("[data-flight-token]")).toHaveCount(1);
   // At the recorded end the transport offers Restart, which plays from the first movement.
-  await page.getByRole("button", { name: "Restart timeline" }).click();
+  await page.getByRole("button", { name: "Restart replay" }).click();
   await expect.poll(async () => (await position(page).innerText()).includes("Movement 1 of"), { timeout: 5_000 }).toBe(true);
   expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(before);
 });
@@ -295,7 +292,7 @@ test("speed changes the painted interval, not the recorded run", async ({ page }
   await page.getByLabel("Speed", { exact: true }).selectOption("fast");
   await expect.poll(async () => page.locator("[data-flight-token]").evaluate(token => getComputedStyle(token).getPropertyValue("--flight-duration").trim()))
     .toBe("217ms");
-  await page.getByRole("button", { name: "Play timeline" }).click();
+  await page.getByRole("button", { name: "Play replay" }).click();
   await expect.poll(async () => (await position(page).innerText()).includes("Movement 2 of"), { timeout: 8_000 }).toBe(true);
   // Neither the pace nor playback touches the recorded projection the worker published.
   const stateAfter = await page.evaluate(() => window.workerEvidence.events.filter(event => event.type === "projection.updated").length);
@@ -352,11 +349,8 @@ test("the graph keeps its fit while the narration column opens and closes", asyn
   await observeWorker(page);
   await runCheckout(page);
   const canvas = () => page.locator(".graph-canvas");
-  // The command row carries both control groups on one line at the supported baselines,
-  // so the graph area keeps its height.
-  for (const row of await page.locator(".toolbar-row").all()) {
-    expect((await row.boundingBox())!.height).toBeLessThanOrEqual(56);
-  }
+  // The top bar is one row at the supported baselines, so the graph area keeps its height.
+  expect((await page.locator("header.top-bar").boundingBox())!.height).toBeLessThanOrEqual(64);
   const fits = async (label: string) => {
     const box = (await canvas().boundingBox())!;
     expect(box.height, `${label}: the graph canvas keeps a readable height`).toBeGreaterThan(240);
@@ -439,7 +433,7 @@ test("components show idle, processing, or waiting from the records at the curso
   await runCheckout(page);
   const status = async () => page.getByRole("status", { name: "Simulation status" }).innerText();
   // Virtual time, processed events, and pending events, as the status line states them.
-  const counters = async () => page.locator(".status-line").innerText();
+  const counters = async () => page.locator(".run-summary").innerText();
   const recorded = { status: await status(), counters: await counters() };
   const node = (name: string) => page.getByRole("button", { name, exact: true });
   const badge = (id: string) => page.locator(`${nodeSelector(id)} .activity-badge`);
