@@ -379,7 +379,7 @@ export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
 
 export interface PlaybackControl {
   readonly action: "play" | "restart" | "unavailable";
-  readonly label: "Play timeline" | "Restart timeline";
+  readonly label: "Play replay" | "Restart replay";
   readonly reason: string;
 }
 
@@ -388,27 +388,27 @@ export function playbackControl(index: number, count: number, playing: boolean):
   if (playing) {
     return {
       action: "unavailable",
-      label: "Play timeline",
+      label: "Play replay",
       reason: "Playing the visible timeline. Pause stops the cursor.",
     };
   }
-  if (count <= 0) return { action: "unavailable", label: "Play timeline", reason: "No visible observations to play." };
-  if (count === 1) return { action: "unavailable", label: "Play timeline", reason: "Only one visible observation. Playback cannot advance." };
+  if (count <= 0) return { action: "unavailable", label: "Play replay", reason: "No visible observations to play." };
+  if (count === 1) return { action: "unavailable", label: "Play replay", reason: "Only one visible observation. Playback cannot advance." };
   if (index >= 0 && index >= count - 1) {
     return {
       action: "restart",
-      label: "Restart timeline",
-      reason: "At the end of the visible results. Restart timeline plays from the first visible observation.",
+      label: "Restart replay",
+      reason: "At the end of the visible results. Restart replay plays from the first visible observation.",
     };
   }
-  if (index < 0) return { action: "play", label: "Play timeline", reason: "Play timeline starts at the first visible observation." };
-  return { action: "play", label: "Play timeline", reason: "Play timeline continues from the selected observation." };
+  if (index < 0) return { action: "play", label: "Play replay", reason: "Play replay starts at the first visible observation." };
+  return { action: "play", label: "Play replay", reason: "Play replay continues from the selected observation." };
 }
 
 export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): string {
   if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor.";
   if (phase === "paused") return "Playback is paused.";
-  if (phase === "ended") return "Playback reached the end of the visible results. Restart timeline plays from the first visible observation.";
+  if (phase === "ended") return "Playback reached the end of the visible results. Restart replay plays from the first visible observation.";
   return control.reason;
 }
 
@@ -438,7 +438,7 @@ export function flightAdvance(cursor: number, count: number, phase: PlaybackPhas
 
 export interface FlightTransport {
   readonly control: PlaybackControl;
-  readonly pauseLabel: "Pause timeline";
+  readonly pauseLabel: "Pause replay";
   readonly status: string;
   readonly reason: string;
   readonly previous: boolean;
@@ -452,7 +452,7 @@ export function flightTransport(cursor: number, count: number, phase: PlaybackPh
   const steps = selectionAvailability(cursor, count);
   return {
     control,
-    pauseLabel: "Pause timeline",
+    pauseLabel: "Pause replay",
     status: playbackStatus(phase, control),
     reason: recording && playing
       ? "Playing recorded movements. The cursor waits at the end while the run records more."

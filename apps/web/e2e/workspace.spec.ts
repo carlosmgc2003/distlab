@@ -84,12 +84,9 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       await page.setViewportSize(viewport);
       await loadScenario(page, scenario);
       await pageFits(page);
-      const rows = page.locator(".toolbar-row");
-      await expect(rows).toHaveCount(2);
-      for (const row of await rows.all()) {
-        const box = await row.boundingBox();
-        expect(box!.height).toBeLessThanOrEqual(56);
-      }
+      // The top bar is one row of at most 64 px (#144).
+      const bar = page.locator("header.top-bar");
+      expect((await bar.boundingBox())!.height).toBeLessThanOrEqual(64);
       for (const target of [
         lessonTrigger(page),
         page.getByRole("button", { name: "Run", exact: true }),
@@ -99,7 +96,7 @@ test("desktop baselines expose exactly two investigation tabs with one committed
         page.getByRole("status", { name: "Simulation status" }),
         page.locator(".run-summary"),
       ]) await boxInViewport(page, target, 16);
-      // Execution commands and recorded-history navigation never share a row of same-shaped buttons.
+      // Simulation execution is in the top bar; Replay is a separate group inside the Architecture tab.
       await expect(page.getByRole("group", { name: "Simulation execution" })).toBeVisible();
       // The tab set is the desktop-only investigation workspace: exactly two tabs.
       const tablist = page.getByRole("tablist", { name: "Investigation workspace" });
@@ -127,7 +124,7 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       // History is a first-class canvas: the Story view renders without transport controls,
       // and the observation detail appears only after a record is selected.
       await expect(page.locator(".story-view")).toBeVisible();
-      await expect(page.getByRole("group", { name: "Recorded history navigation" })).toHaveCount(0);
+      await expect(page.getByRole("group", { name: "Replay recorded movements" })).toHaveCount(0);
       await page.getByRole("tab", { name: "Architecture", exact: true }).click();
       await expect(page.locator(".graph-canvas")).toBeVisible();
       // Engine counters stay collapsed in the Lesson panel; the summary and both control groups stay out of it.
@@ -146,8 +143,6 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       expect(effectAt).toBeGreaterThanOrEqual(0);
       expect(relatedAt).toBeGreaterThan(effectAt);
       expect(technicalAt).toBeGreaterThan(relatedAt);
-      // Reveal the simulation commands again to finish the run from the history tab.
-      await page.getByRole("button", { name: "Show simulation controls" }).click();
       await page.getByRole("button", { name: "Run", exact: true }).click();
       await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
       const summary = page.locator(".run-summary");
@@ -181,8 +176,6 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   // Start on the Recorded history tab; this test reads canonical rows.
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(page.locator("#history-panel")).toBeFocused();
-  // Simulation commands are hidden in history focus; reveal them for this lifecycle test.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await viewButton(page, "Raw").click();
   await filterByType(page, "simulation.created");
   const activeFilters = page.getByRole("list", { name: "Active filters", exact: true });

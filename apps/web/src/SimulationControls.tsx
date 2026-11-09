@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import type { SimulationHost, HostSnapshot } from "./host.ts";
 
-export function SimulationControls({ host, snapshot, children, notices }: {
+/**
+ * The top bar's simulation part (#144): the **Simulation execution** group and the one run summary,
+ * both on the bar's single row. The same component renders on both tabs.
+ */
+export function SimulationControls({ host, snapshot }: {
   readonly host: SimulationHost;
   readonly snapshot: HostSnapshot;
-  readonly children?: ReactNode;
-  readonly notices?: ReactNode;
 }) {
   const { projection, pendingCommands, loading, error } = snapshot;
   const status = projection?.simulation.status;
@@ -23,7 +25,7 @@ export function SimulationControls({ host, snapshot, children, notices }: {
   const simulation = projection?.simulation;
 
   return <>
-    <div className="toolbar-row command-row">
+    <div className="execution-group">
       <h2 id="execution-label" className="control-group-label">Simulation execution</h2>
       <div className="control-buttons" role="group" aria-labelledby="execution-label" aria-describedby="controls-help">
         {/* aria-disabled keeps keyboard focus on a control while its command settles. */}
@@ -32,28 +34,33 @@ export function SimulationControls({ host, snapshot, children, notices }: {
         <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.step().catch(() => {}); }}>Step</button>
         <button aria-disabled={!canReset} onClick={() => { if (canReset) void host.reset().catch(() => {}); }}>Reset</button>
       </div>
-      <p id="controls-help" className="sr-only">These four controls change the simulation. Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again. Reading recorded history uses a separate group of controls that leaves the simulation unchanged.</p>
-      {children}
+      <p id="controls-help" className="sr-only">These four controls change the simulation. Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again. Replay, in the Architecture tab, is a separate group of controls that leaves the simulation unchanged.</p>
     </div>
-    <div className="status-line">
-      {/* The one visible presentation of the committed run: status, virtual time, and boundary counts. */}
-      <section className="run-summary" aria-labelledby="run-summary-label">
-        <h2 id="run-summary-label" className="sr-only">Committed simulation state</h2>
-        <p className="run-status" role="status" aria-label="Simulation status" aria-atomic="true">
-          {statusLabel}
-          {pendingMessage ? ` · ${pendingMessage}` : ""}
-        </p>
-        <dl className="run-metrics">
-          <div><dt>Virtual time</dt><dd>{simulation ? simulation.time : "—"}</dd></div>
-          <div><dt>Processed events</dt><dd>{simulation ? simulation.processedEvents : "—"}</dd></div>
-          <div><dt>Pending events</dt><dd>{simulation ? simulation.pendingEvents : "—"}</dd></div>
-        </dl>
-      </section>
-      {error ? <div role="alert">
-        <p>{error.code}: {error.message}</p>
-        {error.context !== null ? <details><summary>Error details</summary><pre>{JSON.stringify(error.context, null, 2)}</pre></details> : null}
-      </div> : null}
-      {notices}
-    </div>
+    {/* The one visible presentation of the committed run: status, virtual time, and boundary counts. */}
+    <section className="run-summary" aria-labelledby="run-summary-label">
+      <h2 id="run-summary-label" className="sr-only">Committed simulation state</h2>
+      <p className="run-status" role="status" aria-label="Simulation status" aria-atomic="true">
+        {statusLabel}
+        {pendingMessage ? ` · ${pendingMessage}` : ""}
+      </p>
+      <dl className="run-metrics">
+        <div><dt>Virtual time</dt><dd>{simulation ? simulation.time : "—"}</dd></div>
+        <div><dt>Processed events</dt><dd>{simulation ? simulation.processedEvents : "—"}</dd></div>
+        <div><dt>Pending events</dt><dd>{simulation ? simulation.pendingEvents : "—"}</dd></div>
+      </dl>
+    </section>
   </>;
+}
+
+/** The error row directly under the top bar, rendered only while an error or a terminal notice exists. */
+export function SimulationAlert({ snapshot, notices }: { readonly snapshot: HostSnapshot; readonly notices?: ReactNode }) {
+  const { error } = snapshot;
+  if (!error && !notices) return null;
+  return <div className="top-bar-alerts">
+    {error ? <div role="alert">
+      <p>{error.code}: {error.message}</p>
+      {error.context !== null ? <details><summary>Error details</summary><pre>{JSON.stringify(error.context, null, 2)}</pre></details> : null}
+    </div> : null}
+    {notices}
+  </div>;
 }

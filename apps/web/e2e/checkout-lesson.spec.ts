@@ -133,8 +133,6 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   await evidence("Show fault selection").click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("fault.effect.selected");
-  // Evidence navigation switches to history focus; reveal the command toolbar to reach the next link.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   await evidence("Show processor authorization").click();
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
   await evidence("Show Payments timeout").click();

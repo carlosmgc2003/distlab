@@ -44,8 +44,6 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // These assertions read canonical rows; the teaching Story view has its own spec.
   await viewButton(page, "Raw").click();
-  // Simulation commands are hidden in history focus; reveal them to run from this tab.
-  await page.getByRole("button", { name: "Show simulation controls" }).click();
   const active = page.getByRole("list", { name: "Active filters" });
   const dialog = moreFilters(page);
   const typeInput = dialog.getByLabel("Type", { exact: true });

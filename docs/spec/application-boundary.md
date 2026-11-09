@@ -278,7 +278,7 @@ session only when no command is outstanding and the simulation is not running.
 
 Timeline filters, the selected observation, evidence and trace navigation, graph
 gestures, and playback stay in the UI. They do not advance virtual time, record
-observations, or send worker commands. Restart timeline moves the playback
+observations, or send worker commands. Restart replay moves the playback
 cursor to the first visible observation and leaves the simulation where it is.
 
 Presentation is layered, and the layering is not a boundary of its own. The
@@ -310,8 +310,8 @@ and it takes effect at an event boundary.
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
 | Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
 | Evidence, causation, and trace | Not shown | Select the recorded observation, show its row and detail, and move focus to that row. A filter cleared to reveal it is announced | Same read-only navigation | Same read-only navigation | Same read-only navigation | Not shown when history is withheld |
-| Play / Restart | Not shown | Play moves the cursor through visible rows. Zero or one visible row leaves Play unavailable. On the last visible row the control is Restart timeline | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
-| Pause timeline | Not shown | Unavailable until playback is running | Stop the cursor | Stop the cursor | Stop the cursor | Not shown when history is withheld |
+| Play / Restart | Not shown | Play moves the cursor through visible rows. Zero or one visible row leaves Play unavailable. On the last visible row the control is Restart replay | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
+| Pause replay | Not shown | Unavailable until playback is running | Stop the cursor | Stop the cursor | Stop the cursor | Not shown when history is withheld |
 | Previous / Next | Not shown | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Not shown when history is withheld |
 
 Empty means no session is loaded. Error means a host error is showing. A terminal

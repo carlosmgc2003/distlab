@@ -8,22 +8,23 @@ const TRANSPORT_HELP = "These controls move a browser cursor over movements the 
   + "They send no simulation command, do not change virtual time, and do not record observations.";
 
 /**
- * Recorded history navigation for the architecture graph, shown on the command row
- * beside the simulation commands and kept visually apart from them. This group
- * replays movements that are already recorded; it never changes the simulation.
+ * The **Replay** toolbar (#144): a one-row toolbar inside the Architecture tab, above the graph it
+ * drives. It moves a browser cursor over movements the run already recorded and never changes the
+ * simulation, so it shares no row or name with **Simulation execution** in the top bar.
  */
 export function FlightControls({ playback }: { readonly playback: FlightPlayback }) {
   const { transport, pace } = playback;
   const control = transport.control;
-  return <div className="flight-nav-group">
-    <h2 className="control-group-label">Recorded history</h2>
-    <div className="control-buttons" role="group" aria-label="Recorded history navigation" aria-describedby="flight-controls-help">
-      {playback.phase === "playing" ? <button type="button" onClick={playback.pause}>Pause timeline</button>
+  return <div className="replay-toolbar">
+    {/* The visible group label; the group itself is named "Replay recorded movements". */}
+    <span className="control-group-label" aria-hidden="true">Replay</span>
+    <div className="control-buttons" role="group" aria-label="Replay recorded movements" aria-describedby="flight-controls-help">
+      {playback.phase === "playing" ? <button type="button" onClick={playback.pause}>{transport.pauseLabel}</button>
         : <button type="button" disabled={control.action === "unavailable"}
           // The label states the action: at the recorded end it promises a restart from the first movement.
           onClick={control.action === "restart" ? playback.restart : playback.play}>{control.label}</button>}
-      <button type="button" disabled={!transport.previous} onClick={playback.previous}>Previous observation</button>
-      <button type="button" disabled={!transport.next} onClick={playback.next}>Next observation</button>
+      <button type="button" disabled={!transport.previous} onClick={playback.previous}>Previous movement</button>
+      <button type="button" disabled={!transport.next} onClick={playback.next}>Next movement</button>
     </div>
     <div className="flight-pace">
       <label htmlFor="flight-pace">Speed</label>

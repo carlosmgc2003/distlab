@@ -24,7 +24,7 @@ import { FlightControls } from "./ArchitecturePlayback.tsx";
 import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
-import { SimulationControls } from "./SimulationControls.tsx";
+import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
 import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedScenario } from "./scenarios.ts";
 import type { SimulationHost } from "./host.ts";
@@ -47,7 +47,6 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
-  const [showHistoryControls, setShowHistoryControls] = useState(false);
   // The Lesson chooser is the one way to choose a packaged lesson (#139). Choosing one loads it.
   const [chooserOpen, setChooserOpen] = useState(false);
   // The Lesson panel's collapsed rail is UI state: it survives tab switches and lesson loads (#140).
@@ -413,32 +412,27 @@ export function App({ host }: { readonly host: SimulationHost }) {
     step={currentStep(status, projection?.simulation.processedEvents)}
     goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} revealInvestigate={revealToken} />;
 
-  return <main className={`app-shell${tab === "history" && projection && !showHistoryControls ? " history-focus" : ""}`}>
-    {tab === "history" && projection && !showHistoryControls ? <h1 className="sr-only">DistLab · Recorded history</h1> : null}
-    <header className="command-toolbar">
-      <div className="toolbar-row">
-        <div className="brand"><h1>DistLab</h1><span>Distributed systems, explained</span></div>
-        {/* A scenario file may also be dropped here. Open and drop are available only when Load is. */}
-        <div className="scenario-picker"
-          onDragOver={event => { if (!busy && event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
-          onDrop={event => { event.preventDefault(); void openFile(event.dataTransfer.files[0]); }}>
-          <button ref={lessonTrigger} type="button" className="lesson-trigger" disabled={busy} aria-haspopup="dialog" aria-expanded={chooserOpen}
-            aria-describedby="scenario-help" title={triggerLabel} onClick={event => openChooser(event.currentTarget)}>
-            <span className="lesson-trigger-label">{triggerLabel}</span><span className="lesson-trigger-caret" aria-hidden="true">▾</span>
-          </button>
-          <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>Open scenario file…</button>
-          <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Scenario file" hidden disabled={busy}
-            onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
-          <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
-        </div>
+  // The top bar (#144) is one row and identical on both tabs: name, lesson trigger, Simulation
+  // execution, and the run summary. Errors get their own row under it, only while one exists.
+  return <main className="app-shell">
+    <header className="command-toolbar top-bar">
+      <div className="brand"><h1>DistLab</h1></div>
+      {/* A scenario file may also be dropped here. Open and drop are available only when Load is. */}
+      <div className="scenario-picker"
+        onDragOver={event => { if (!busy && event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
+        onDrop={event => { event.preventDefault(); void openFile(event.dataTransfer.files[0]); }}>
+        <button ref={lessonTrigger} type="button" className="lesson-trigger" disabled={busy} aria-haspopup="dialog" aria-expanded={chooserOpen}
+          aria-describedby="scenario-help" title={triggerLabel} onClick={event => openChooser(event.currentTarget)}>
+          <span className="lesson-trigger-label">{triggerLabel}</span><span className="lesson-trigger-caret" aria-hidden="true">▾</span>
+        </button>
+        <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>Open scenario file…</button>
+        <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Scenario file" hidden disabled={busy}
+          onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
+        <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       </div>
-      <SimulationControls host={host} snapshot={snapshot} notices={<>
-        {mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null}
-      </>}>
-        {/* Recorded history navigation shares the command row, kept apart by its own rule and label. */}
-        {tab === "architecture" && projection ? <FlightControls playback={playback} /> : null}
-      </SimulationControls>
+      <SimulationControls host={host} snapshot={snapshot} />
     </header>
+    <SimulationAlert snapshot={snapshot} notices={mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null} />
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}
     {projection ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
@@ -452,13 +446,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
             className={tab === id ? "is-active" : undefined}
             onClick={() => showTab(id)}>{label}</button>)}
         </div>
-        {tab === "history" ? <button type="button" className="history-controls-toggle" aria-expanded={showHistoryControls}
-          onClick={() => setShowHistoryControls(current => !current)}>{showHistoryControls ? "Hide simulation controls" : "Show simulation controls"}</button> : null}
         </div>
         {/* Docked beside both tab panels and non-modal, so Pick on graph keeps working. */}
         {experimentDrawer}
         <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
+          {/* Replay lives where the graph is (#144): a one-row toolbar above it. */}
+          <FlightControls playback={playback} />
           <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
             {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
             {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
