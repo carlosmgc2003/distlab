@@ -526,6 +526,10 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .commerce-state-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; }
 .commerce-state-grid > section { padding: 1rem; border: 1px solid var(--border-subtle, #dbe2ea); border-radius: 8px; }
 .commerce-facts { overflow-wrap: anywhere; font-size: .875rem; line-height: 1.5; }
+/* A check's stored evidence in Observation detail (#165), in the same row form as Service state. */
+.check-evidence { overflow-wrap: anywhere; font-size: .875rem; line-height: 1.5; }
+.check-evidence p { margin: 0 0 6px; }
+.check-evidence ul { margin: 0; padding-left: 1.25rem; }
 /* Lesson checks (#96): invariants lead; the setup group is de-emphasised. */
 .lesson-checks ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .lesson-checks > p { margin: 0 0 8px; color: var(--text-secondary); font-size: .85rem; }

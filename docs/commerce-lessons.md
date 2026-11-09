@@ -58,7 +58,11 @@ once to assistive technology, without moving focus.
 Business invariants come first, marked HOLDS or VIOLATED in words and a symbol
 as well as colour. The scenario expectations follow under **Lesson setup
 reproduced**. Each settled check has **Show evidence**, which opens Recorded
-history at its `scenario.assertion.evaluated` record.
+history at its `scenario.assertion.evaluated` record. Observation detail shows
+the check's label, whether it passed at that boundary, and the rows its
+predicate stored as evidence, such as both payment rows of a double charge
+(#165). It reads the stored record only and never re-evaluates the check. The
+record stays in the Raw view, the one view that lists every record ungrouped.
 **Recorded history → Story** includes business logs such as compensation and
 breaker transitions, as well as network, DB, and fault milestones. The Story
 diagram and Story table views select the same underlying observations.

@@ -101,6 +101,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
     ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name) : null, [projection, lesson]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
+  // The session's check labels by assertion ID: the packaged lesson's classification, or the imported document's own labels.
+  const checkLabels = useMemo((): Readonly<Record<string, string>> => imported ? importedScenario?.presentation.assertions ?? {}
+    : loadedChoice?.family === "commerce" ? Object.fromEntries(loadedChoice.checks.map(check => [check.id, check.label])) : {}, [imported, importedScenario, loadedChoice]);
   // Replay state lives in the shell, so the cursor and the narration survive a tab switch.
   // Choosing a record in Recorded history takes the graph highlight back, so the cursor stands
   // down. A record that travels no link has no pulse id, so its movement text is the fallback
@@ -474,7 +477,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
-          <TimelineView key={`${sessionName}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} onEmphasis={onEmphasis}
+          <TimelineView key={`${sessionName}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} checkLabels={checkLabels} onEmphasis={onEmphasis}
             {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
         </div>
       </div>

@@ -163,7 +163,11 @@ Rules that keep the regions distinct:
 Observation detail is summary-first, in this order: **Event summary**
 (plain-language stored event label, sequence, virtual time, source, target,
 payload visibility), **Effect and evidence** (before/after changes when stored,
-otherwise an explicit statement that none were stored), **Related evidence**
+otherwise an explicit statement that none were stored; for a
+`scenario.assertion.evaluated` record, the check's label, whether its predicate
+passed at that boundary, and its stored evidence as rows in the Service state
+form, or a statement that the payload is redacted, omitted, or stored no
+evidence), **Related evidence**
 (causing observation, effects, current trace, event/entity filters),
 **Technical record** (canonical IDs, trace/span/event IDs, visibility statement,
 stored JSON). Headings for requests, commits, faults, dropped responses,

@@ -367,6 +367,60 @@ export function recordedChanges(observation: Observation): readonly RecordedChan
   return changes;
 }
 
+/** One row of an assertion's stored evidence: an optional key and its stored fields as text. */
+export interface EvidenceRow {
+  readonly key?: string;
+  readonly text: string;
+}
+
+/**
+ * What a `scenario.assertion.evaluated` record stored (#165): the predicate's result at that
+ * boundary and its evidence as rows. Undefined for any other record. Pure: it reads stored fields
+ * only and never re-evaluates a predicate. A redacted or omitted payload, or a payload without
+ * evidence, says so and reconstructs nothing.
+ */
+export type AssertionEvidence =
+  | { readonly kind: "unavailable"; readonly visibility: Exclude<PayloadVisibility, "visible"> }
+  | { readonly kind: "none"; readonly assertionId?: string; readonly passed?: boolean }
+  | { readonly kind: "rows"; readonly assertionId?: string; readonly passed?: boolean; readonly rows: readonly EvidenceRow[] };
+
+export function assertionEvidence(observation: Observation): AssertionEvidence | undefined {
+  if (observation.type !== "scenario.assertion.evaluated") return undefined;
+  const visibility = payloadVisibility(observation);
+  if (visibility !== "visible") return { kind: "unavailable", visibility };
+  const data = isRecord(observation.data) ? observation.data : {};
+  const assertionId = typeof data.assertionId === "string" && data.assertionId.length > 0 ? data.assertionId : undefined;
+  const passed = typeof data.verdict === "boolean" ? data.verdict : undefined;
+  const common = { ...(assertionId !== undefined ? { assertionId } : {}), ...(passed !== undefined ? { passed } : {}) };
+  if (!Object.hasOwn(data, "evidence")) return { kind: "none", ...common };
+  return { kind: "rows", ...common, rows: evidenceRows(data.evidence!) };
+}
+
+/** Stored fields as one line, the form Service state uses: `field: value · field: value`. */
+function fieldText(value: CanonicalValue): string {
+  if (!isRecord(value)) return value === null || typeof value !== "object" ? String(value) : JSON.stringify(value);
+  const entries = Object.entries(value);
+  if (entries.length === 0) return "No stored fields.";
+  return entries.map(([key, item]) => `${key}: ${item !== null && typeof item === "object" ? JSON.stringify(item) : String(item)}`).join(" · ");
+}
+
+/**
+ * Evidence as rows. A list gives one row per item; an object whose values are all objects (rows
+ * keyed by ID) gives one keyed row per entry; an object of scalars (metrics) gives one row; any
+ * other object gives one keyed row per field. An empty list or object gives no rows.
+ */
+function evidenceRows(evidence: CanonicalValue): readonly EvidenceRow[] {
+  if (Array.isArray(evidence)) return evidence.map(item => ({ text: fieldText(item) }));
+  if (!isRecord(evidence)) return [{ text: fieldText(evidence) }];
+  const entries = Object.entries(evidence);
+  if (entries.length === 0) return [];
+  if (entries.every(([, value]) => isRecord(value))) return entries.map(([key, value]) => ({ key, text: fieldText(value) }));
+  if (entries.every(([, value]) => value === null || typeof value !== "object")) return [{ text: fieldText(evidence) }];
+  return entries.map(([key, value]) => ({
+    key, text: Array.isArray(value) ? (value.length ? value.map(item => fieldText(item)).join("; ") : "None.") : fieldText(value),
+  }));
+}
+
 /** The stored ids and states of one external change entry, or none. */
 export function externalChanges(observation: Observation, key: string): readonly string[] {
   const entry = isRecord(observation.data) ? observation.data[key] : undefined;
