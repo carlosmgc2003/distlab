@@ -580,7 +580,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .history-focus .command-toolbar { display: none; }
 /* Observation detail is the docked right column of Recorded history in every view (#146). */
 /* The column narrows with the viewport so the history toolbar keeps its two rows beside it at 1366px. */
-.history-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 21vw, 340px); grid-template-rows: minmax(0, 1fr); }
+.history-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 19vw, 340px); grid-template-rows: minmax(0, 1fr); }
 .history-layout > .observation-panel { min-height: 0; overflow: auto; }
 @media (max-width: 850px) {
   .history-layout { display: flex; flex-direction: column; }
