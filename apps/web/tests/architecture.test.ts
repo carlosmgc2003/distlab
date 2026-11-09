@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ArchitectureDefinition, ArchitectureProjection, ComponentNodeProjection, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { duration } from "@distlab/contracts/kernel";
-import { deriveSymbol, mapArchitecture, movementEdges, symbolLabels } from "../src/architecture-view.ts";
+import { DATA_STROKE, deriveSymbol, mapArchitecture, movementEdges, symbolLabels } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { detached } from "../src/protocol.ts";
@@ -172,8 +172,10 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
       assert.equal(edge.source, edge.data!.owner);
       assert.equal(edge.target, `resource:${edge.data!.resource === "database" ? "db" : "kv"}:${edge.data!.owner}`);
       assert.equal(edge.id, `ownership:${edge.data!.owner}:${edge.target}`);
-      assert.equal(edge.sourceHandle, "bottom"); assert.equal(edge.targetHandle, "top");
-      assert.equal(edge.style?.strokeWidth, 1); assert.equal(edge.markerEnd, undefined);
+      // Data links leave the owner by the south side and enter the resource from the north (ELK port sides).
+      assert.equal(edge.sourceHandle, "south"); assert.equal(edge.targetHandle, "north");
+      assert.equal(edge.data!.link, "data");
+      assert.equal(edge.style?.stroke, DATA_STROKE); assert.equal(edge.style?.strokeWidth, 1.5); assert.equal(edge.markerEnd, undefined);
       assert.equal(edge.selectable, false); assert.equal(edge.focusable, false); assert.equal(edge.deletable, false);
     }
     for (const node of graph.resourceNodes) {
@@ -181,7 +183,7 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
       assert.equal(node.selectable, true); assert.equal(node.focusable, true); assert.equal(node.ariaRole, "button");
       assert.equal(node.ariaLabel, `${node.data.kind === "database" ? "Database" : "KeyValueStore"} owned by ${node.data.owner}`);
       assert.equal(node.className, `resource-node resource-${node.data.kind} nopan`);
-      assert.deepEqual(node.handles, [{ id: "top", type: "target", position: "top", x: 57.5, y: 0 }]);
+      assert.deepEqual(node.handles, [{ id: "north", type: "target", position: "top", x: 57.5, y: 0 }]);
       assert.equal("role" in node.data, false);
       assert.equal("roleLabel" in node.data, false);
       assert.equal("flight" in node.data, false);

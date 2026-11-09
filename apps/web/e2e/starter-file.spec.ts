@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { WorkerCommand } from "@distlab/contracts";
 import { hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";

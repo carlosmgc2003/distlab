@@ -30,3 +30,13 @@ export async function loadLesson(page: Page, id: string): Promise<void> {
   await lessonChoice(page, id).click();
   await expect(lessonChooser(page)).toBeHidden();
 }
+
+/**
+ * The architecture graph is laid out by ELK after React Flow measures it, then fitted to the canvas.
+ * Until both are done the canvas is aria-busy and its nodes are hidden. Geometry checks wait for this.
+ */
+export async function graphLaidOut(page: Page): Promise<void> {
+  const canvas = page.locator(".graph-canvas");
+  await expect(canvas).toBeVisible();
+  await expect(canvas).not.toHaveAttribute("aria-busy", "true");
+}

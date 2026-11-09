@@ -1,10 +1,10 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import { simulationTime } from "@distlab/contracts";
 import type { Observation, RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { projection } from "../tests/support.ts";
-import { lessonTrigger, loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, lessonTrigger, loadLesson } from "./support/lesson.ts";
 import { applyMoreFilters, fillFilterField, filterByType, openMoreFilters, viewButton } from "./support/history.ts";
 
 declare global {
@@ -209,6 +209,8 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#3");
   await expect(page.locator("#timeline-boundary")).toContainText("Next cannot move.");
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
+  // Focus lands only on a shown node: wait until the graph is laid out and fitted again.
+  await graphLaidOut(page);
   await page.getByRole("button", { name: "orders, Internal service" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("button", { name: "orders, Internal service" })).toHaveAttribute("aria-pressed", "true");

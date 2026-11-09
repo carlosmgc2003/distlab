@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { checkoutAssessment, checkoutCatalog, responseLostCheckout } from "@distlab/catalogs";

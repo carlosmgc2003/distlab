@@ -6,6 +6,7 @@ import { checkoutDisplay } from "./checkout-display.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { FlightPace, FlightStep } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
+import type { EdgeRoute, LinkKind } from "./layout/elk-layout.ts";
 
 export const categoryLabels = {
   client: "Client",
@@ -38,9 +39,15 @@ export type ArchitectureNode = Node<{
   activity?: ComponentActivity;
   /** Applied student faults that target this component. */
   faults?: readonly string[];
+  /** Presentation-only layout tier override (see `TIERS` in layout/elk-layout.ts). */
+  tier?: number;
 }, "component">;
 export type ArchitectureEdge = Edge<{
   relationship: "request" | "subscription" | "publication";
+  /** Layout link kind: requests are sync, bus relationships async. Data links are ownership edges only. */
+  link: Exclude<LinkKind, "data">;
+  /** ELK route in canvas coordinates, once the graph is laid out. */
+  route?: EdgeRoute;
   /** The recorded movement currently painted on this link, if any. */
   flight?: FlightStep;
   /** The chosen playback pace, so the token paints over the same interval the cursor waits. */
@@ -68,6 +75,8 @@ export interface OwnershipEdgeData {
   readonly [key: string]: unknown;
   readonly owner: ComponentId;
   readonly resource: ResourceKind;
+  readonly link: "data";
+  readonly route?: EdgeRoute;
 }
 
 export type OwnershipEdge = Edge<OwnershipEdgeData>;
@@ -80,6 +89,9 @@ const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly 
   "payment-processor": { x: 800, y: 420 },
 };
 
+/** Data links (owner to its database or store) get their own color, apart from the slate request and bus links. */
+export const DATA_STROKE = "#b45309";
+
 /** Horizontal distance between layout columns: long enough that a token visibly travels a short link. */
 const COLUMN_GAP = 380;
 
@@ -87,6 +99,17 @@ const relationshipMarkers = {
   request: { type: MarkerType.ArrowClosed, color: "#334155", width: 20, height: 20 },
   subscription: { type: MarkerType.Arrow, color: "#334155", width: 20, height: 20 },
   publication: { type: MarkerType.ArrowClosed, color: "#334155", width: 12, height: 12 },
+} as const;
+
+/**
+ * Handle per side, matching the ELK port sides: requests leave east and enter
+ * west, bus relationships use the north side, data links leave by the south.
+ */
+export const handleFor = {
+  request: { source: "east", target: "west" },
+  subscription: { source: "north-out", target: "north-in" },
+  publication: { source: "north-out", target: "north-in" },
+  ownership: { source: "south", target: "north" },
 } as const;
 
 /** Derive the presentation symbol from the component kind and, for infrastructure, the destination kind. */
@@ -156,8 +179,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const label = subscription ? `Subscribe · ${link.source}` : publication ? `Publish · ${link.target}` : `Request${link.label ? ` · ${link.label}` : ""}`;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
-      type: "link", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship },
-      sourceHandle: subscription ? "bottom" : "right", targetHandle: subscription ? "top" : "left",
+      type: "elk", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
+      sourceHandle: handleFor[relationship].source, targetHandle: handleFor[relationship].target,
       markerEnd: relationshipMarkers[relationship],
       style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5],
@@ -185,7 +208,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     return {
       id, type: kind, data: { kind, owner, definition },
       position: { x: ownerNode.position.x + offsetX, y: ownerNode.position.y + 120 },
-      handles: [{ id: "top", type: "target", position: Position.Top, x: 57.5, y: 0 }],
+      handles: [{ id: handleFor.ownership.target, type: "target", position: Position.Top, x: 57.5, y: 0 }],
       draggable: false, connectable: false, deletable: false, selectable: true, focusable: true,
       ariaRole: "button", ariaLabel: title,
       className: `resource-node resource-${kind} nopan`,
@@ -193,9 +216,9 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
   });
   const resourceEdges: OwnershipEdge[] = resourceNodes.map(node => ({
     id: `ownership:${node.data.owner}:${node.id}`,
-    source: node.data.owner, target: node.id, sourceHandle: "bottom", targetHandle: "top",
-    data: { owner: node.data.owner, resource: node.data.kind },
-    style: { stroke: "#94a3b8", strokeWidth: 1 },
+    source: node.data.owner, target: node.id, sourceHandle: handleFor.ownership.source, targetHandle: handleFor.ownership.target,
+    type: "elk", data: { owner: node.data.owner, resource: node.data.kind, link: "data" },
+    style: { stroke: DATA_STROKE, strokeWidth: 1.5 },
     selectable: false, focusable: false, deletable: false,
   }));
   const publisher = nodes.find(node => node.id === "orders");
@@ -204,8 +227,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     && nodes.some(node => node.id === topic.id && node.data.component.kind === "infrastructure")) {
     edges.push({
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
-      sourceHandle: "bottom", targetHandle: "top", type: "link",
-      label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication" },
+      sourceHandle: handleFor.publication.source, targetHandle: handleFor.publication.target, type: "elk",
+      label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication", link: "async" },
       markerEnd: relationshipMarkers.publication,
       style: { stroke: "#334155", strokeWidth: 2, strokeDasharray: "2 5" },
       labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5], labelBgStyle: { fill: "#fff" },

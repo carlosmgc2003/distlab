@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import { budgets, measureLayout, viewports } from "./layout-budget.ts";
 import type { BudgetLesson, BudgetState, BudgetViewport, LayoutBudget, LayoutMeasures } from "./layout-budget.ts";

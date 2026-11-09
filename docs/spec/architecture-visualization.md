@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Implementation-ready |
 | Owner | DistLab core team |
-| Last updated | 2026-10-28 |
+| Last updated | 2026-11-06 |
 | Related issues | None |
 
 ## Responsibility
@@ -28,6 +28,7 @@ projections and packaged metadata.
 | Architecture playback is presentation over records | `docs/spec/observability.md` | Flight tokens, emphasis, and roles apply to component links only; owned-resource nodes never receive movement |
 | Playback direction and activity are read from records | `docs/spec/observability.md` | A token travels from the record's origin to its destination whatever the drawn link's direction; activity (idle, processing, waiting) is derived only from records at or before the cursor and never from records that were not written |
 | Contract names are authoritative | `docs/spec/contracts.md` | Reuses `DatabaseDefinition`, `KeyValueDefinition`, `DestinationKind` (`"queue" | "topic"`); introduces no new contract aliases; new node types are UI-local presentation types |
+| Layout is presentation state | `docs/spec/application-boundary.md` | ELK positions and edge routes are computed in a presentation worker from measured node sizes; they never enter projections, worker commands, `RunInputs`, or history (see "Phase 5 — Automatic layout with ELK") |
 
 Resolved decisions (both settled by the Phase 2 design; rationale in
 "Phase 2 — Owned-resource satellite nodes"):
@@ -67,7 +68,7 @@ readable without color (color is retained as a secondary cue).
 Edge semantics are already partially encoded and become part of the same
 legend: request = solid with arrowhead, subscription = long dash with
 arrowhead, publication = dotted with arrowhead, ownership (new) = short thin
-solid line, no arrowhead, non-focusable.
+amber line (the data link color), no arrowhead, non-focusable.
 
 ## Plan
 
@@ -146,7 +147,7 @@ export type ResourceNode = Node<ResourceNodeData, ResourceKind>;
   visible or connectable is exposed; because React Flow cannot anchor an edge
   to a handle-less node, the node instead declares one invisible declarative
   handle (the `node.handles` API — anchor data only):
-  `{ id: "top", type: "target", position: Position.Top, x: 57.5, y: 0 }`
+  `{ id: "north", type: "target", position: Position.Top, x: 57.5, y: 0 }`
   (the library adds the handle's 1-px default width, so the anchor lands a
   sub-pixel from top-center).
 - `mapArchitecture` returns `{ nodes, edges, resourceNodes, resourceEdges,
@@ -170,11 +171,12 @@ export type OwnershipEdge = Edge<OwnershipEdgeData>;
 - Edge identity: `ownership:<owner>:<resource node id>`, for example
   `ownership:orders:resource:db:orders`. No index suffix: owner plus kind is
   unique, so the id is stable across input reorderings.
-- Style: a thin solid line — `stroke: "#94a3b8"`, `strokeWidth: 1`, no dash
-  array, no `markerEnd`, no label — with `selectable: false`, `focusable:
-  false`, `deletable: false`; `sourceHandle: "bottom"` (the owner
-  component's existing bottom source handle) and `targetHandle: "top"` (the
-  resource node's declarative top handle).
+- Style: a thin solid data line — `stroke: DATA_STROKE` (`#b45309`),
+  `strokeWidth: 1.5`, no dash array, no `markerEnd`, no label — with
+  `selectable: false`, `focusable: false`, `deletable: false`; `data.link:
+  "data"`; `sourceHandle: "south"` (the owner component's south source
+  handle) and `targetHandle: "north"` (the resource node's declarative north
+  handle). Handle ids name the ELK port side they match (Phase 5).
 - Exclusion from movement and playback is structural, not conventional.
   Ownership edges live only in `resourceEdges`, so `movementEdges(graph.edges)`
   never sees them; `MovementEdge["relationship"]` keeps exactly
@@ -187,9 +189,12 @@ export type OwnershipEdge = Edge<OwnershipEdgeData>;
   mapped through the selection flag only (`selected`, `aria-pressed`,
   `aria-controls`) — never roles, involvement, or flight data.
 
-#### Placement
+#### Seed placement
 
-One uniform rule covers both layouts, because the checkout map, its fallback,
+`mapArchitecture` still returns the coordinates below. Since Phase 5 they are
+the seed placement: React Flow renders and measures the nodes there (hidden),
+and the ELK layout replaces them before the graph is shown. They remain the
+fallback when a layout fails. One uniform rule covers both layouts, because the checkout map, its fallback,
 and the commerce grid all place component boxes on a 210-px vertical pitch
 with 90-px-tall boxes (the 215×90 card): the satellite hangs in a reserved
 sub-row of its owner's cell. Resource nodes are 115×56 px. The first
@@ -213,12 +218,9 @@ cell.
   `resource:db:notifications` at `(980, 120)`; cqrs `orders` `(360, 120)`
   and `reporting` `(360, 330)`; cascade `resource:kv:api` `(360, 120)`,
   `resource:kv:orders` `(670, 120)`, `resource:kv:payments` `(980, 120)`.
-- Edge routes may pass behind a satellite (in cqrs, the OrderUpdated →
-  reporting subscription edge crosses the orders satellite's sub-row). This
-  is accepted: nodes paint above edges, both elements are non-interactive,
-  the satellite stays fully visible, and the crossing edge stays identified
-  by its label and endpoints. No placement depends on measured path
-  geometry.
+- With the seed placement alone, edge routes may pass behind a satellite.
+  The ELK layout (Phase 5) removes this: an owner and its satellites form one
+  block that every route avoids.
 - Placement reads owner positions only; no host timer, no measured reflow,
   and no `Date.now`/`setTimeout`-driven state is involved. The graph bounds
   grow (checkout now spans to y 596); `FitToCanvas` and the fit buttons adapt
@@ -259,8 +261,9 @@ existing `mapArchitecture` style):
    payments); outbox two (payments, notifications); cqrs two (orders,
    reporting); cascade three key-value stores (api, orders, payments). Edge
    assertions: `source` is the owner, `target` is the resource id,
-   `sourceHandle: "bottom"`, `targetHandle: "top"`, `strokeWidth: 1`, no
-   `markerEnd`, `selectable: false`, `focusable: false`.
+   `sourceHandle: "south"`, `targetHandle: "north"`, `strokeWidth: 1.5`,
+   `stroke: DATA_STROKE`, no `markerEnd`, `selectable: false`,
+   `focusable: false`.
 2. **No metadata**: `mapArchitecture(architecture)` without metadata
    returns empty `resourceNodes` and `resourceEdges` with today's
    `nodes`/`edges`; the empty-graph assertion becomes `{ nodes: [], edges:
@@ -291,7 +294,7 @@ existing `mapArchitecture` style):
 7. **Gating**: the version-mismatched fixture (orders at 2.0.0) emits no
    `resource:db:orders`; a definition naming an owner absent from the
    projection emits nothing and leaves `error` null.
-8. **Placement**: exact coordinates per the rule above — checkout
+8. **Seed placement**: exact coordinates per the rule above — checkout
    `resource:db:orders` `(360, 120)` and `resource:db:payments` `(360, 540)`;
    saga `inventory` `(670, 330)`; cqrs `reporting` `(360, 330)`; cascade
    `resource:kv:payments` `(980, 120)`.
@@ -318,7 +321,8 @@ static facts only in the inspector.
   assert `ArchitectureProjection` inputs are never mutated.
 - Browser smoke test: update selectors/aria assertions for the new shapes and
   legend; verify resource nodes are visible for commerce lessons.
-- `npm run test:boundaries` must keep passing (no new runtime imports).
+- `npm run test:boundaries` must keep passing (Phase 5 adds only the ELK
+  API and its worker URL).
 - Reproducibility is unaffected: no `RunInputs`, clock, randomness, or history
   change; golden outputs must be byte-identical before and after.
 
@@ -327,6 +331,79 @@ remain selectable, presentation-only satellites; their metadata eligibility,
 placement, labels, and ownership-edge semantics are specified above and require
 no further design decision.
 
+### Phase 5 — Automatic layout with ELK
+
+React Flow does not place nodes or route edges. The graph is laid out by
+ELK's layered algorithm (`elkjs`) so that no two nodes overlap, edges are
+orthogonal, no edge passes through a node other than its own ends, and edges
+cross as little as ELK can manage.
+
+- **Module.** `apps/web/src/layout/elk-layout.ts` exports
+  `elkLayout(nodes, edges, options)`: pure and async, returns the same nodes
+  with new positions and the same edges with `data.route`. The ELK engine is
+  injected; the browser uses `layout/elk-engine.ts`, which runs ELK in its own
+  presentation worker (`elk-worker.min.js`), apart from the simulation worker.
+- **Options.** `elk.algorithm: layered`, `elk.direction: RIGHT`,
+  `elk.edgeRouting: ORTHOGONAL`, `elk.layered.nodePlacement.strategy:
+  NETWORK_SIMPLEX`, a fixed `elk.randomSeed`, and generous spacing (node to
+  node, between layers, edge to node, edge to edge). Every option name was
+  checked against `knownLayoutOptions()` of the pinned `elkjs` version.
+- **Tiers.** `elk.partitioning.activate` with one partition per tier:
+  0 ingress (client), 1 gateway, 2 services, 3 MessageBus destinations,
+  4 persistence, 5 external services. The tier derives from the node type
+  and symbol; an optional presentation field `data.tier` overrides it.
+  Packaged lessons have no gateway kind, so tier 1 is used only through the
+  override.
+- **Ports.** One port per link end with `elk.portConstraints: FIXED_SIDE`:
+  requests leave east and enter west, bus links (publication and
+  subscription) leave and enter by the north side, data links leave by the
+  south. Component handles carry the same side names (`east`, `west`,
+  `north-out`, `north-in`, `south`); resource nodes keep one declarative
+  `north` handle.
+- **Satellites.** A database or key-value store whose only link is its
+  owner's data link hangs in a row under the owner (gap 30 px). ELK sees the
+  owner and its row as one block, so every route avoids the row. A first
+  FIXED_SIDE pass lets ELK order the block's ports; a second pass pins them,
+  in that order, to the owner's part of each side (`FIXED_POS`). Data links
+  drop straight from the owner's bottom side to each satellite.
+- **Measured sizes.** Layout runs once React Flow has measured every node
+  (`useNodesInitialized`, with the controlled nodes carrying the `measured`
+  sizes React Flow reports), and again only when the graph's structure (node
+  ids, edge ids and labels) changes. Badges that appear during playback grow a
+  node but never move the graph. Edge labels are measured with the canvas
+  font, and ELK reserves their space (`elk.edgeLabels.placement: CENTER`).
+  The canvas is `aria-busy` and its nodes hidden until the laid-out graph is
+  fitted.
+- **Routes.** `ElkEdge` draws `startPoint → bendPoints → endPoint` with
+  slightly rounded corners and puts the label where ELK placed it. ELK
+  reports a section's points relative to the edge's container; `elkLayout`
+  converts them to canvas coordinates, while child node positions stay
+  relative to their parent, as `parentId` expects. Packaged graphs have no
+  groups; the conversion is covered by a test with a compound node
+  (`elk.hierarchyHandling: INCLUDE_CHILDREN`). Flight tokens follow the drawn
+  route, and each recorded movement mounts its own token.
+- **Bus links.** The MessageBus is already one node per destination.
+  `asyncEdges: "layout"` (default) lets bus links take part in placement;
+  `"route-after"` places nodes from request and data links only, then routes
+  bus links in a second pass that keeps every node on its side and in its row
+  order (one partition per first-pass column, interactive layering,
+  semi-interactive crossing minimization). On the platform fixture the
+  default leaves fewer crossings (8 against 22).
+- **Not editable.** Nodes are not draggable, so there is no live re-routing
+  and no "re-layout" control.
+
+Acceptance (`apps/web/tests/elk-layout.test.ts`, `elk-path.test.ts`): for a
+fixed graph, every packaged lesson under both bus strategies, and the
+platform fixture (one client, one gateway, eight services, four bus
+destinations, five databases, two externals), no two nodes overlap, no
+segment enters a node other than its source or target, every route starts
+and ends on its own node, and no two edges are drawn over each other. Tiers
+appear left to right; ports sit on their sides; each satellite sits under its
+owner; layout is deterministic and does not mutate its inputs. On the
+platform fixture the seed placement with smooth-step edges has 0 overlaps,
+4 crossings, 4 edges through nodes, and 24 pairs of edges drawn over each
+other; the ELK layout has 0, 8, 0, and 0.
+
 ## Guardrails
 
 - No changes to `@distlab/contracts` types; no new worker commands; review
@@ -334,4 +411,5 @@ no further design decision.
 - All new graph elements are presentation state only and must never enter
   `RunInputs`, scheduling, assertions, or canonical history.
 - Determinism rules apply as everywhere else in the UI (no `Date.now`,
-  `setTimeout`-driven state).
+  `setTimeout`-driven state). ELK runs with a fixed random seed, so the same
+  graph and measured sizes always give the same layout.

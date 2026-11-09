@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import { commerceLessonNames } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import type { Page } from "@playwright/test";
 import { measureLayout, viewports } from "./layout-budget.ts";

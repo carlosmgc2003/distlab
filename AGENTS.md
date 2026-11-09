@@ -96,6 +96,11 @@ never validates or applies an overlay itself, and its inputs and Apply are
 unavailable while a command is outstanding or the simulation runs. Design
 choices offer only the parameters a lesson's policy declares and never edit the
 seed or the lesson checks.
+Graph layout in `apps/web/src/layout/` is presentation: `elk-layout.ts` is a
+pure, async ELK layered layout over measured node sizes, and ELK runs in its
+own presentation worker, never in the simulation worker. Positions and edge
+routes never enter projections, worker commands, or history
+(`docs/spec/architecture-visualization.md`, Phase 5).
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns

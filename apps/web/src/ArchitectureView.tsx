@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
-import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useReactFlow, useStore } from "@xyflow/react";
-import type { EdgeProps, FitViewOptions, NodeChange, NodeProps } from "@xyflow/react";
+import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useNodesInitialized, useReactFlow, useStore } from "@xyflow/react";
+import type { EdgeProps, FitViewOptions, NodeChange, NodeProps, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { flightTokenStyle, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
+import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
@@ -13,6 +13,10 @@ import { ComponentInspector } from "./ComponentInspector.tsx";
 import { HelpHint } from "./ui-hint.tsx";
 import { movementPulseClass } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
+import { elkLayout } from "./layout/elk-layout.ts";
+import type { EdgeRoute, ElkLayoutOptions, Size } from "./layout/elk-layout.ts";
+import { browserElk, edgeLabelMeasurer } from "./layout/elk-engine.ts";
+import { roundedPath, routeMidpoint } from "./layout/elk-path.ts";
 import "@xyflow/react/dist/style.css";
 import "./architecture.css";
 
@@ -134,7 +138,7 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
         <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
         <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
         <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
-        <li><EdgeSample relationship="ownership" label="Short thin solid line without arrowhead" /><span>Ownership</span></li>
+        <li><EdgeSample relationship="ownership" label="Short thin amber line without arrowhead" /><span>Ownership (data)</span></li>
       </ul>
     </section>
     <section aria-labelledby="legend-movements-heading">
@@ -158,8 +162,9 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
 
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
   return <>
-    <Handle id="top" type="target" position={Position.Top} />
-    <Handle id="left" type="target" position={Position.Left} />
+    {/* One handle per ELK port side: requests enter west, bus links use the north side. */}
+    <Handle id={handleFor.request.target} type="target" position={Position.Left} />
+    <Handle id={handleFor.subscription.target} type="target" position={Position.Top} />
     <div className="node-body">
       <div className="node-shape" aria-hidden="true">
         <svg viewBox="0 0 215 90" preserveAspectRatio="none" className="shape-svg">
@@ -179,13 +184,14 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
         </span> : null}
       </div>
     </div>
-    <Handle id="right" type="source" position={Position.Right} />
-    <Handle id="bottom" type="source" position={Position.Bottom} />
+    <Handle id={handleFor.request.source} type="source" position={Position.Right} />
+    <Handle id={handleFor.subscription.source} type="source" position={Position.Top} />
+    <Handle id={handleFor.ownership.source} type="source" position={Position.Bottom} />
   </>;
 });
 const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<ResourceNode>) {
   return <>
-    <span className="target resource-anchor" data-handleid="top" data-handlepos="top" aria-hidden="true" />
+    <span className="target resource-anchor" data-handleid={handleFor.ownership.target} data-handlepos="top" aria-hidden="true" />
     <div className={`resource-body resource-body-${data.kind}`}>
     {data.kind === "database" ? <svg viewBox="0 0 115 56" aria-hidden="true">
       <path d="M2 9a55.5 7 0 1 0 111 0a55.5 7 0 1 0-111 0 M2 9v38a55.5 7 0 0 0 111 0V9" />
@@ -242,15 +248,32 @@ function activityBadgeId(componentId: string): string {
   return `activity-${componentId.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
-/** The token follows the measured link path, so the link is drawn here instead of by a built-in edge. */
-const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
+/**
+ * Draws the route ELK computed: start point, bend points, end point, with
+ * slightly rounded corners, and the label where ELK reserved its space. The
+ * route is already in canvas coordinates (elk-layout converts container-relative
+ * points). Before a layout lands, or if it fails, the edge falls back to a
+ * smooth-step path between its handles. The flight token follows the same path.
+ */
+const ElkEdge = memo(function ElkEdge(props: EdgeProps<ArchitectureEdge | OwnershipEdge>) {
   const { id, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
     markerEnd, markerStart, style, label, labelStyle, labelShowBg, labelBgStyle, labelBgPadding, labelBgBorderRadius, pathOptions, data } = props;
-  const [path, labelX, labelY] = getSmoothStepPath({
-    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
-    borderRadius: pathOptions?.borderRadius, offset: pathOptions?.offset, stepPosition: pathOptions?.stepPosition,
-  });
-  const flight = data?.flight;
+  const route = data?.route;
+  const [path, labelX, labelY] = useMemo((): [string, number, number] => {
+    if (route && route.points.length > 1) {
+      const at = route.label ?? routeMidpoint(route.points);
+      return [roundedPath(route.points), at.x, at.y];
+    }
+    const [fallback, x, y] = getSmoothStepPath({
+      sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+      borderRadius: pathOptions?.borderRadius, offset: pathOptions?.offset, stepPosition: pathOptions?.stepPosition,
+    });
+    return [fallback, x, y];
+  }, [route, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, pathOptions]);
+  // Ownership (data) links never carry a recorded movement.
+  const movement = data && data.link !== "data" ? data : undefined;
+  const flight = movement?.flight;
+  const pace = movement?.pace;
   // The token is drawn in graph coordinates, so it is scaled back against the
   // canvas zoom to stay the same readable size at any zoom level.
   const zoom = useStore(state => state.transform[2]);
@@ -263,11 +286,12 @@ const LinkEdge = memo(function LinkEdge(props: EdgeProps<ArchitectureEdge>) {
       {...(labelBgBorderRadius !== undefined ? { labelBgBorderRadius } : {})}
       {...(style !== undefined ? { style } : {})}
       {...(markerEnd !== undefined ? { markerEnd } : {})} {...(markerStart !== undefined ? { markerStart } : {})} />
-    {flight ? <FlightToken flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(data?.pace ?? "slow") * 0.62)} /> : null}
+    {/* Keyed by observation: each recorded movement mounts its own token, so its CSS animation always starts from the leg's start. */}
+    {flight ? <FlightToken key={flight.observationId} flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
   </>;
 });
 const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
-const edgeTypes = { link: LinkEdge };
+const edgeTypes = { elk: ElkEdge };
 const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
   "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
@@ -311,13 +335,72 @@ function fitOptionsFor(canvas: HTMLElement): FitViewOptions {
 /** Small enough that the default fit never has to clip the checkout graph on a narrow canvas. */
 const minZoom = 0.15;
 
+/**
+ * Event links take part in placement ("layout"), or nodes are placed from
+ * request and data links only and event links are routed afterwards
+ * ("route-after"). See `ElkLayoutOptions.asyncEdges`.
+ */
+export const ASYNC_EDGE_STRATEGY: NonNullable<ElkLayoutOptions["asyncEdges"]> = "layout";
+
+/** ELK positions and routes for one graph structure. Presentation state only. */
+interface GraphLayout {
+  readonly key: string;
+  readonly positions: ReadonlyMap<string, XYPosition>;
+  readonly routes: ReadonlyMap<string, EdgeRoute>;
+}
+
+/**
+ * Lays the graph out once React Flow has measured every node, and again only
+ * when the graph's structure changes. Badges that appear during playback grow a
+ * node but never move the graph. A failed layout keeps the seed placement.
+ */
+function ElkLayoutRunner({ layoutKey, nodes, edges, container, onLayout }: {
+  readonly layoutKey: string;
+  readonly nodes: readonly (ArchitectureNode | ResourceNode)[];
+  readonly edges: readonly (ArchitectureEdge | OwnershipEdge)[];
+  readonly container: RefObject<HTMLDivElement | null>;
+  readonly onLayout: (layout: GraphLayout) => void;
+}) {
+  // True once every node in `nodes` carries the `measured` size React Flow reported for it.
+  const initialized = useNodesInitialized();
+  const latest = useRef({ nodes, edges, onLayout });
+  latest.current = { nodes, edges, onLayout };
+  useEffect(() => {
+    const { nodes: current, edges: currentEdges } = latest.current;
+    if (!initialized || !current.every(node => node.measured?.width && node.measured.height)) return;
+    let cancelled = false;
+    const element = container.current;
+    elkLayout(current, currentEdges, {
+      engine: browserElk(), asyncEdges: ASYNC_EDGE_STRATEGY,
+      ...(element ? { measureLabel: edgeLabelMeasurer(element) } : {}),
+    }).then(result => {
+      if (cancelled) return;
+      latest.current.onLayout({
+        key: layoutKey,
+        positions: new Map(result.nodes.map(node => [node.id, node.position])),
+        routes: new Map(result.edges.flatMap(edge => edge.data?.route ? [[edge.id, edge.data.route]] : [])),
+      });
+    }, (error: unknown) => {
+      if (cancelled) return;
+      console.warn("Architecture layout failed; keeping the seed placement.", error);
+      latest.current.onLayout({ key: layoutKey, positions: new Map(), routes: new Map() });
+    });
+    return () => { cancelled = true; };
+  }, [initialized, layoutKey, container]);
+  return null;
+}
+
 /** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
-function FitToCanvas({ container, sessionKey, legendOpen, onMeasure }: {
+function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure, onFitted }: {
   readonly container: RefObject<HTMLDivElement | null>;
   readonly sessionKey: string;
+  /** Changes when a new ELK layout is applied, so the fitted view follows the laid-out graph. */
+  readonly layoutKey: string;
   /** Opening or closing the legend changes the space it reserves. */
   readonly legendOpen: boolean;
   readonly onMeasure: (width: number) => void;
+  /** Reports the layout the view was just fitted to. */
+  readonly onFitted: (layoutKey: string) => void;
 }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
@@ -348,9 +431,12 @@ function FitToCanvas({ container, sessionKey, legendOpen, onMeasure }: {
   useEffect(() => {
     const element = container.current;
     // Measure after the legend has painted at its new size.
-    const frame = requestAnimationFrame(() => { void fitView(element ? fitOptionsFor(element) : fitViewOptions); });
-    return () => cancelAnimationFrame(frame);
-  }, [container, fitView, sessionKey, legendOpen]);
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      void fitView(element ? fitOptionsFor(element) : fitViewOptions).then(() => { if (!cancelled) onFitted(layoutKey); });
+    });
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [container, fitView, sessionKey, layoutKey, legendOpen, onFitted]);
   return null;
 }
 
@@ -422,6 +508,21 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   const architectureKey = JSON.stringify(architecture);
   const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName), [architectureKey, metadata, scenarioName]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Layout follows structure only: ids and labels, never playback state or badges.
+  const layoutKey = useMemo(() => JSON.stringify([
+    [...graph.nodes, ...graph.resourceNodes].map(node => node.id),
+    [...graph.edges, ...graph.resourceEdges].map(edge => [edge.id, String(edge.label ?? "")]),
+  ]), [graph]);
+  const [layout, setLayout] = useState<GraphLayout | null>(null);
+  const layoutKeyRef = useRef(layoutKey);
+  layoutKeyRef.current = layoutKey;
+  const laidOut = layout?.key === layoutKey ? layout : null;
+  // The graph stays hidden (and the canvas busy) until the laid-out graph is fitted to the canvas.
+  const [fittedKey, setFittedKey] = useState<string | null>(null);
+  const ready = laidOut !== null && fittedKey === layoutKey;
+  // Sizes React Flow measured for this structure. A new structure starts unmeasured, so layout waits for fresh sizes.
+  const [measuredSizes, setMeasuredSizes] = useState<{ readonly key: string; readonly sizes: ReadonlyMap<string, Size> }>({ key: layoutKey, sizes: new Map() });
+  const sizes = measuredSizes.key === layoutKey ? measuredSizes.sizes : undefined;
   const flight = playback.step;
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
@@ -433,8 +534,11 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     // Activity is shown only while the cursor stands on a record, and only from records at or before it.
     const activity = flight ? activityOf(playback.activity, node.id) : undefined;
     const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : ""].filter(Boolean).join(" ");
+    const size = sizes?.get(node.id);
     return {
       ...node,
+      position: laidOut?.positions.get(node.id) ?? node.position,
+      ...(size ? { measured: size } : {}),
       className: classes,
       data: {
         ...node.data,
@@ -449,15 +553,19 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
         ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
       },
     };
-  }), [graph.nodes, selectedId, painted, flight, playback.activity, faultMarks]);
+  }), [graph.nodes, selectedId, painted, flight, playback.activity, faultMarks, laidOut, sizes]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
+    position: laidOut?.positions.get(node.id) ?? node.position,
+    ...(sizes?.get(node.id) ? { measured: sizes.get(node.id)! } : {}),
     ...(faultMarks?.nodes.get(node.id)?.length ? { data: { ...node.data, faults: faultMarks.nodes.get(node.id)! }, className: `${node.className ?? ""} has-fault` } : {}),
     selected: node.id === selectedId,
     domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
-  })), [graph.resourceNodes, selectedId, faultMarks]);
+  })), [graph.resourceNodes, selectedId, faultMarks, laidOut, sizes]);
   const nodes = useMemo(() => [...componentNodes, ...resourceNodes], [componentNodes, resourceNodes]);
-  const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(edge => {
+  const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(routed => {
+    const route = laidOut?.routes.get(routed.id);
+    const edge: ArchitectureEdge = route && routed.data ? { ...routed, data: { ...routed.data, route } } : routed;
     const marks = faultMarks?.links.get(`${edge.source}->${edge.target}`);
     const marked: ArchitectureEdge = marks?.length ? {
       ...edge, className: "has-fault", label: `✕ ${String(edge.label)}`,
@@ -467,10 +575,25 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     const styled = emphasize(marked, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
     return { ...styled, data: { ...styled.data!, flight, pace: playback.pace } };
-  }), [graph.edges, painted, flight, playback.pace, faultMarks]);
-  const edges = useMemo<(ArchitectureEdge | OwnershipEdge)[]>(() => [...componentEdges, ...graph.resourceEdges], [componentEdges, graph.resourceEdges]);
-  // Accept only selection changes. Positions and graph structure are immutable presentation inputs.
+  }), [graph.edges, painted, flight, playback.pace, faultMarks, laidOut]);
+  const ownershipEdges = useMemo<OwnershipEdge[]>(() => graph.resourceEdges.map(edge => {
+    const route = laidOut?.routes.get(edge.id);
+    return route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
+  }), [graph.resourceEdges, laidOut]);
+  const edges = useMemo<(ArchitectureEdge | OwnershipEdge)[]>(() => [...componentEdges, ...ownershipEdges], [componentEdges, ownershipEdges]);
+  // Accept selection changes and React Flow's size measurements. Positions come only from the
+  // ELK layout; graph structure is an immutable presentation input.
   const onNodesChange = useCallback((changes: NodeChange<ArchitectureNode | ResourceNode>[]) => {
+    const measuredChanges = changes.flatMap(change => change.type === "dimensions" && change.dimensions
+      ? [[change.id, { width: change.dimensions.width, height: change.dimensions.height }] as const] : []);
+    if (measuredChanges.length) {
+      setMeasuredSizes(previous => {
+        const base = previous.key === layoutKeyRef.current ? previous.sizes : new Map<string, Size>();
+        const next = new Map(base);
+        for (const [id, size] of measuredChanges) next.set(id, size);
+        return { key: layoutKeyRef.current, sizes: next };
+      });
+    }
     setSelectedId(previous => {
       let next = previous;
       for (const change of changes) {
@@ -506,7 +629,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       : <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>}
     {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
     <div className={`architecture-layout${selectedId || flight ? " has-selection" : ""}${onPick ? " is-picking" : ""}`}>
-      <div className="graph-canvas" ref={canvas} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
+      <div className={`graph-canvas${ready ? "" : " is-laying-out"}`} ref={canvas} aria-busy={ready ? undefined : true} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
         if (event.key === "Escape") {
@@ -522,7 +645,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}
           minZoom={minZoom} maxZoom={1.8}
           ariaLabelConfig={ariaLabelConfig}>
-          <FitToCanvas container={canvas} sessionKey={sessionKey} legendOpen={legendOpen} onMeasure={setCanvasWidth} />
+          <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
+          <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
+            onMeasure={setCanvasWidth} onFitted={setFittedKey} />
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />

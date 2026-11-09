@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand } from "@distlab/contracts";
 import { commerceScenario } from "@distlab/catalogs";

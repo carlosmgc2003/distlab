@@ -1,10 +1,10 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 import { viewButton } from "./support/history.ts";
 
 declare global {
@@ -40,6 +40,7 @@ async function loadScenario(page: Page, scenario: "normal" | "response-lost" = "
   await page.goto("/");
   await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+  await graphLaidOut(page);
 }
 
 async function runCheckout(page: Page, scenario: "normal" | "response-lost" = "response-lost") {
@@ -105,15 +106,45 @@ async function tokenPath(page: Page): Promise<{ x: number; y: number }[]> {
 const distance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /**
+ * The way the token travels where it stands: the link path's tangent at the
+ * token, in screen space, pointing toward the link's target for a forward
+ * movement and toward its source for a reversed one. ELK routes bend, so the
+ * net motion over a sample window can point another way than the token does.
+ */
+async function travelDirection(page: Page): Promise<{ x: number; y: number }> {
+  return page.evaluate(() => {
+    const token = document.querySelector("[data-flight-token]")!;
+    const path = token.closest(".react-flow__edge")!.querySelector<SVGPathElement>("path.react-flow__edge-path")!;
+    const box = token.getBoundingClientRect();
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const screen = (length: number) => path.getPointAtLength(length).matrixTransform(path.getScreenCTM()!);
+    const total = path.getTotalLength();
+    let nearest = 0;
+    for (let length = 0, best = Infinity; length <= total; length += 1) {
+      const point = screen(length);
+      const gap = Math.hypot(point.x - at.x, point.y - at.y);
+      if (gap < best) { best = gap; nearest = length; }
+    }
+    const before = screen(Math.max(0, nearest - 3)), after = screen(Math.min(total, nearest + 3));
+    const sign = token.getAttribute("data-flight-direction") === "reverse" ? -1 : 1;
+    return { x: (after.x - before.x) * sign, y: (after.y - before.y) * sign };
+  });
+}
+
+/**
  * The heading mark sits ahead of the token in its direction of travel. Its offset
- * from the token centre must point the same way as the token's own motion.
+ * from the token centre must point the same way the token moves along its path,
+ * and that way must lead toward the destination the trail approaches.
  */
 async function headingAgreesWith(page: Page, motion: { x: number; y: number }) {
   const token = await centre(page, "[data-flight-token]");
   const heading = await centre(page, "[data-flight-heading] .flight-heading-mark");
   const ahead = { x: heading.x - token.x, y: heading.y - token.y };
-  const dot = ahead.x * motion.x + ahead.y * motion.y;
-  expect(dot / (Math.hypot(ahead.x, ahead.y) * Math.hypot(motion.x, motion.y)), "the arrowhead points the way the token travels").toBeGreaterThan(0.9);
+  const local = await travelDirection(page);
+  const cosine = (a: { x: number; y: number }, b: { x: number; y: number }) => (a.x * b.x + a.y * b.y) / (Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y));
+  expect(cosine(ahead, local), "the arrowhead points the way the token travels").toBeGreaterThan(0.9);
+  // The local direction is not backwards: it never points away from the net motion.
+  expect(cosine(local, motion), "the token travels toward its destination").toBeGreaterThan(-0.1);
 }
 
 test("the replay cursor walks recorded movements and paints a token on the graph", async ({ page }) => {

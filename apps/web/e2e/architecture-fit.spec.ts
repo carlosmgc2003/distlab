@@ -1,9 +1,9 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
-import { loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-63");
 
@@ -83,6 +83,7 @@ async function loadScenario(page: Page, scenario: string) {
   await loadLesson(page, scenario);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expect(page.locator(".react-flow__node")).toHaveCount(7);
+  await graphLaidOut(page);
 }
 
 test("the default view shows the whole checkout graph at the supported desktop baselines", async ({ page }) => {

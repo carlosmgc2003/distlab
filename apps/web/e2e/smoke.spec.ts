@@ -1,7 +1,7 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 
 declare global {
   interface Window {
@@ -53,6 +53,8 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(inspector).toHaveCount(0);
     await expect(architecture.locator(".react-flow__node")).toHaveCount(7);
     await expect(architecture.locator(".react-flow__edge")).toHaveCount(6);
+    // Positions and the viewport are read below; they are final only once ELK has laid out and fitted the graph.
+    await graphLaidOut(page);
     const legend = architecture.getByRole("region", { name: "Architecture legend" });
     await expect(legend).toHaveCount(1);
     await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
@@ -63,7 +65,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(legend).toContainText("Ownership");
     await expect(legend.getByRole("img", { name: "Cylinder" })).toBeVisible();
     await expect(legend.getByRole("img", { name: "Layered box with key" })).toBeVisible();
-    await expect(legend.getByRole("img", { name: "Short thin solid line without arrowhead" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Short thin amber line without arrowhead" })).toBeVisible();
     await expect(legend).toContainText("Client");
     await expect(legend).toContainText("Internal service");
     await expect(legend).toContainText("External service");
@@ -192,7 +194,7 @@ test("commerce owned resources are visible and keyboard-inspectable with static 
     await expect(legend).toContainText("Ownership");
     await expect(legend.getByRole("img", { name: "Cylinder" })).toBeVisible();
     await expect(legend.getByRole("img", { name: "Layered box with key" })).toBeVisible();
-    await expect(legend.getByRole("img", { name: "Short thin solid line without arrowhead" })).toBeVisible();
+    await expect(legend.getByRole("img", { name: "Short thin amber line without arrowhead" })).toBeVisible();
     for (const id of resourceIds) {
       const resource = page.locator(`.react-flow__node[data-id="${id}"]`);
       await expect(resource).toBeVisible();
