@@ -5,7 +5,7 @@
 | Status | Proposed. Nothing here is decided. |
 | Date | 2026-11-09 |
 | Evidence | [Student evaluation, ITBA 73.40](../evaluations/2026-11-itba-73-40/README.md) |
-| Related issues | #97, #103, #104, #112, #124, #136, #147 |
+| Related issues | #97, #103, #104, #112, #124, #136, #147, #163, #164, #165, #166 |
 | Decides | Positioning, and the order of the next work. It changes no contract. |
 
 ## Summary
@@ -43,7 +43,7 @@ sequence in [Order of work](#order-of-work), not by size.
 
 ### P1. Verdicts a student can trust
 
-Problem: evaluation F1. Every packaged assertion is `mode: "at"` with a time
+Problem: evaluation F1, tracked in #163. Every packaged assertion is `mode: "at"` with a time
 that fits the packaged story. A design choice or a student fault can move the
 violation past that time, and the panel then reads HOLDS.
 
@@ -166,9 +166,10 @@ editor.
 
 ## Order of work
 
-1. **Before any student sees it.** P1 step 1 and step 2; remove or mark the
-   design lesson that cannot be completed (F2); make Show evidence show the
-   evidence (F3); keep the graph legible at 1366×768 with panels open (F4).
+1. **Before any student sees it.** P1 step 1 and step 2 (#163); remove or mark
+   the design lesson that cannot be completed (F2, #164); make Show evidence
+   show the evidence (F3, #165); keep the graph legible at 1366×768 with panels
+   open (F4, #166).
 2. **Pilot.** Three to five students of the course, one guide, two lessons,
    three written questions before and after. The pilot decides whether the
    order below is right.

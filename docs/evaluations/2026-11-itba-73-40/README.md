@@ -182,11 +182,12 @@ worth continuing. Three consequences need attention:
 ## Findings
 
 Severity: **Blocker** means fix before any release to students. Evidence is
-reproducible on the build named above.
+reproducible on the build named above. F1 to F4 have issues; F5 to F11 are
+matters of direction and are taken up in RFC 0001.
 
 ### F1. A business invariant reads HOLDS while the final state violates it
 
-Blocker. Teaching correctness.
+Blocker. Teaching correctness. Tracked in #163.
 
 Steps: load *Retry without idempotency*; in the Experiment drawer set Client
 timeout to 40; Apply and restart; Run.
@@ -215,7 +216,7 @@ structure, so it should be checked for each one.
 
 ### F2. The design lesson cannot be completed in the browser
 
-Blocker. Dead end.
+Blocker. Dead end. Tracked in #164.
 
 *Outbox: design the notifications consumer* is offered in the Lesson chooser.
 Its goal says "Fill the slot, give it a database, and subscribe it." The
@@ -228,7 +229,7 @@ not yet available in the browser.
 
 ### F3. Show evidence does not show the evidence
 
-High.
+High. Tracked in #165.
 
 Show evidence on a VIOLATED invariant opens Recorded history in the Raw view at
 `scenario.assertion.evaluated`, among scheduler records. The detail panel says
@@ -239,7 +240,7 @@ violation are inside the collapsed *Technical record*, as JSON.
 
 ### F4. The graph becomes unreadable at the supported baseline
 
-High. Measured at 1366×768.
+High. Tracked in #166. Measured at 1366×768.
 
 | State | Canvas width | Zoom | Node label size |
 | --- | --- | --- | --- |
@@ -252,7 +253,7 @@ budget test protects the canvas height, not what is legible inside it.
 
 ![Graph at 268 px beside three panels](squeezed-graph.png)
 
-Epic #136 left the graph area for its own examination; this is input for it.
+Epic #136 left the graph area for its own examination; #166 is input for it.
 
 ### F5. Two timelines, and a Step that shows nothing
 
