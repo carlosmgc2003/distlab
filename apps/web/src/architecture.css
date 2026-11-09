@@ -698,6 +698,13 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .architecture-layout.is-picking .graph-canvas { outline: 3px dashed var(--status-error); outline-offset: -3px; cursor: crosshair; }
 .architecture-layout.is-picking .react-flow__edge { cursor: crosshair; }
 /* A student fault on a component, a resource, or a link. */
+/* An empty design slot (#164): the badge says it in words; the dashed outline only reinforces it. */
+.is-empty-slot .shape-stroke { stroke-dasharray: 6 4; }
+.is-empty-slot .shape-fill { fill: var(--surface-subtle, #f8fafc); }
+.empty-slot-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1.5px dashed var(--text-secondary); border-radius: 999px; background: #fff; color: var(--text-primary); font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.inspector-empty-slot { padding: 8px 10px; border-left: 3px dashed var(--text-secondary); background: var(--surface-subtle, #f8fafc); }
+.design-step-notice { color: var(--status-warning); font-weight: 600; }
+p.design-step-notice { margin: 8px 0 0; padding: 6px 10px; border-left: 3px solid var(--status-warning); background: var(--status-warning-bg); }
 .fault-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1.5px solid var(--status-error); border-radius: 999px; background: var(--status-error-bg); color: var(--status-error); font-size: .7rem; font-weight: 700; white-space: nowrap; }
 .resource-body .fault-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); margin: 0; }
 .react-flow__edge.has-fault .react-flow__edge-text { fill: var(--status-error); font-weight: 700; }

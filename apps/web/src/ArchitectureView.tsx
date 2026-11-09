@@ -4,6 +4,7 @@ import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position,
 import type { EdgeProps, FitViewOptions, NodeChange, NodeProps, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
+import { EMPTY_SLOT_LABEL } from "./design-step.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
@@ -175,6 +176,7 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
       <div className="node-content">
         <span className="category-label">{symbolLabels[data.symbol]}</span>
         <strong>{data.title}</strong>
+        {data.emptySlot ? <span className="empty-slot-badge">{EMPTY_SLOT_LABEL}</span> : null}
         {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
         {data.faults?.length ? <FaultBadge faults={data.faults} /> : null}
         {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>

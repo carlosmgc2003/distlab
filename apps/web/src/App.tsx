@@ -30,6 +30,7 @@ import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedScenario } from "./scenarios.ts";
 import type { SimulationHost } from "./host.ts";
 import { experimentLabel, packagedMetadata, scenarios } from "./scenarios.ts";
+import { DESIGN_STEP_NOTICE, designStepUnavailable } from "./design-step.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 
@@ -340,6 +341,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
       {loadedChoice?.family === "commerce" ? null
         : <p className="lesson-goal-question">{loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</p>}
       <p>{loadedChoice?.family === "commerce" ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</p>
+      {loadedChoice && designStepUnavailable(loadedChoice.policy) ? <p className="design-step-notice" role="note">{DESIGN_STEP_NOTICE}</p> : null}
     </>;
   const lessonRun = <>
     <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>

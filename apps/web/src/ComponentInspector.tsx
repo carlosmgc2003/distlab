@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { ArchitectureNode, ResourceNode } from "./architecture-view.ts";
 import { categoryLabels, resourceLabels } from "./architecture-view.ts";
+import { EMPTY_SLOT_DESCRIPTION, EMPTY_SLOT_LABEL } from "./design-step.ts";
 
 export function ComponentInspector({ node, children }: {
   readonly node: ArchitectureNode | ResourceNode | undefined;
@@ -10,6 +11,7 @@ export function ComponentInspector({ node, children }: {
     <h3 id="inspector-heading">Component inspector</h3>
     {node ? node.type === "component" ? <>
       <h4>{node.data.title}</h4>
+      {node.data.emptySlot ? <p className="inspector-empty-slot"><strong>{EMPTY_SLOT_LABEL}.</strong> {EMPTY_SLOT_DESCRIPTION}</p> : null}
       {children}<details className="inspector-metadata">
         <summary>Static architecture metadata</summary>
       <dl>

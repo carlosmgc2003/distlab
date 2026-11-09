@@ -3,6 +3,7 @@ import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
+import { EMPTY_SLOT_LABEL, isEmptySlot } from "./design-step.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { FlightPace, FlightStep } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
@@ -41,6 +42,8 @@ export type ArchitectureNode = Node<{
   faults?: readonly string[];
   /** Presentation-only layout tier override (see `TIERS` in layout/elk-layout.ts). */
   tier?: number;
+  /** The component's declared model is a placeholder: the slot is empty (#164). */
+  emptySlot?: boolean;
 }, "component">;
 export type ArchitectureEdge = Edge<{
   relationship: "request" | "subscription" | "publication";
@@ -146,6 +149,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const destination = component.kind === "infrastructure" ? destinations.get(component.id) : undefined;
     const symbol = deriveSymbol(component, destination);
     const copy = matches ? checkoutDisplay(scenarioName, component) : undefined;
+    const emptySlot = matches && isEmptySlot(instance.model, instance.version);
     const title = destination ? `MessageBus · ${component.label}` : copy?.title ?? component.label;
     const resources = matches ? [
       ...(copy?.resource ? [copy.resource] : []),
@@ -158,7 +162,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     rows.set(column, row + 1);
     return {
       id: component.id, type: "component", data: {
-        component, symbol, title, resources,
+        component, symbol, title, resources, ...(emptySlot ? { emptySlot } : {}),
         configuration: matches ? instance.configuration : destination ? {
           deliveryDelay: destination.deliveryDelay, ackTimeout: destination.ackTimeout,
           retryDelay: destination.retryDelay, maxAttempts: destination.maxAttempts, capacity: destination.capacity,
@@ -167,8 +171,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       position: commerce ? { x: column * COLUMN_GAP, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
       sourcePosition: Position.Bottom, targetPosition: Position.Top,
       draggable: false, connectable: false, deletable: false, focusable: true,
-      ariaRole: "button", ariaLabel: `${title}, ${symbolLabels[symbol]}`,
-      className: `component-node category-${component.kind} symbol-${symbol} nopan`,
+      ariaRole: "button", ariaLabel: `${title}, ${symbolLabels[symbol]}${emptySlot ? `, ${EMPTY_SLOT_LABEL.toLowerCase()}` : ""}`,
+      className: `component-node category-${component.kind} symbol-${symbol}${emptySlot ? " is-empty-slot" : ""} nopan`,
     };
   });
   const edges = projection.links.map((link, index): ArchitectureEdge => {

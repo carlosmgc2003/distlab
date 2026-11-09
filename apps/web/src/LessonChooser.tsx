@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { lessonPairs } from "./lesson-pairs.ts";
 import type { PackagedScenario } from "./scenarios.ts";
 import { experimentLabel } from "./scenarios.ts";
+import { DESIGN_STEP_NOTICE, designStepUnavailable } from "./design-step.ts";
 
 /**
  * The modal Lesson chooser (#139). It lists the packaged lessons as their failing/fixed pairs, and
@@ -49,7 +50,9 @@ export function LessonChooser({ open, lessons, current, busy, discardsDraft, onC
               aria-labelledby={`lesson-choice-${lesson.id}`} aria-describedby={`lesson-choice-${lesson.id}-description`}
               onClick={() => onChoose(lesson.id)}>
               <span id={`lesson-choice-${lesson.id}`} className="lesson-choice-title">{experimentLabel(lesson)}</span>
-              <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lesson.description}</span>
+              <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lesson.description}
+                {/* Inside the description, so the notice is read wherever the instruction is (#164). */}
+                {designStepUnavailable(lesson.policy) ? <span className="design-step-notice"> {DESIGN_STEP_NOTICE}</span> : null}</span>
               {/* aria-current carries this to assistive technology; the badge is its visible text. */}
               {lesson.id === current ? <span className="lesson-choice-current" aria-hidden="true">Loaded</span> : null}
             </button>

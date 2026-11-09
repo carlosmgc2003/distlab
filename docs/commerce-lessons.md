@@ -588,6 +588,17 @@ The browser's Design editor (#112) will offer these edits; until then the
 worker accepts them in a `load` overlay, and catalog tests run the fixture
 designs above.
 
+Until the Design editor exists, the browser says so (#164). The Lesson chooser
+card and ① Goal of every lesson whose overlay policy allows architecture edits
+add: "The design step is not available in the browser yet. You can run the
+lesson with the empty slot and see what is missing." The `notifications` node
+carries an **Empty slot** badge and a dashed outline, its accessible name ends
+in "empty slot", and the Component inspector explains that no model fills it.
+A component is an empty slot when its declared model is a placeholder
+(`placeholder: true` in its data-only descriptor). Setting
+`DESIGN_EDITOR_AVAILABLE` in `apps/web/src/design-step.ts` removes the notice;
+the empty-slot marks stay, because they describe the architecture.
+
 ## Extension points and boundaries
 
 The implementation uses versioned `ScenarioModel` factories in
