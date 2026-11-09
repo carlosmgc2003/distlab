@@ -368,7 +368,7 @@ test("navigation clears only the filters that hide the destination", () => {
   assert.match(revealMessage(hidden.cleared, cause), /The type filter was cleared so this observation is visible/);
   const visible = revealTimelineObservation({ ...emptyTimelineDraft, component: "payment-processor" }, cause);
   assert.equal(visible.changed, false);
-  assert.match(revealMessage(visible.cleared, cause), /^Selected #174 external\.effect\.committed at virtual time 5\.$/);
+  assert.match(revealMessage(visible.cleared, cause), /^Selected Observation #174: external\.effect\.committed at virtual time 5\.$/);
   const prefixed = revealTimelineObservation({
     ...emptyTimelineDraft, type: "external", typeMode: "prefix", component: "pay", componentMode: "prefix",
   }, cause);
@@ -410,7 +410,7 @@ test("navigation clears only the filters that hide the destination", () => {
   const opened = narrowToTrace(emptyTimelineDraft, "trace-9");
   assert.equal(opened.cleared.length, 0);
   assert.match(traceFilterMessage("trace-9", opened), /The timeline now shows trace trace-9\.$/);
-  assert.match(movementMessage(cause, 0, 1), /Selected #174/);
+  assert.match(movementMessage(cause, 0, 1), /Selected Observation #174:/);
   assert.match(movementMessage(cause, 0, 1), /cannot move/);
   assert.deepEqual(cause, before);
 });

@@ -328,7 +328,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-help, .timeline-count, #timeline-order, .timeline-boundary, .timeline-quick-count { max-width: 85ch; color: #475569; }
 .timeline-quick-count { margin: 0; font-size: .8rem; }
 .timeline-count, #timeline-order { margin: 2px 0; }
-.timeline-cursor { margin: 2px 0 0; padding: 5px 8px; border-left: 4px solid #1d4ed8; background: #eff6ff; font-size: .8rem; font-weight: 650; }
 .timeline-mode { display: flex; gap: 8px; margin: 0; }
 /* The advanced form scrolls inside the tools region; the quick views, active filters,
    playback, and the result count stay outside it. */
@@ -394,8 +393,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .story-table tr[data-selected="true"] { background: var(--selection-bg); }
 .timeline-rows .story-table button[aria-pressed="true"] { background: var(--selection-bg); box-shadow: inset 4px 0 0 var(--selection-border); font-weight: 650; }
 .timeline-rows .story-table button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: -3px; }
-.timeline-feedback:empty { position: absolute; inset: 0 auto auto 0; width: 1px; height: 1px; padding: 0; margin: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.timeline-feedback:not(:empty) { max-width: 85ch; margin: 8px 0; border-left: 4px solid #1d4ed8; background: #eff6ff; padding: 10px 12px; }
 /* The rows take only the leftover space, so the tools region keeps its share of the
    panel and scrolls its own content instead of pushing the rows out. */
 .timeline-rows { flex: 1 1 0; min-height: 5.5rem; height: auto; overflow: auto; margin: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; }
@@ -547,12 +544,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-view-switch button:first-child { border-radius: 8px 0 0 8px; }
 .timeline-view-switch button:last-child { border-radius: 0 8px 8px 0; }
 .timeline-count { font-size: .75rem; }
-.timeline-feedback:not(:empty) { margin: 0; padding: 4px 8px; font-size: .8rem; }
 .timeline-transport-row .control-group-note { font-size: .75rem; }
 .timeline-detail { padding: 16px; border-color: var(--border-subtle); }
 .detail-disclosure { border-block-start: 1px solid var(--border-subtle); margin: 12px 0; }
 .event-path { font-weight: 650; line-height: 1.6; }
-.event-time { color: var(--text-secondary); font-size: .85rem; }
+.detail-header { font-size: 1rem; }
 .workspace-empty { max-width: 48rem; margin: auto; padding: 40px; background: var(--surface-panel); border: 1px solid var(--border-subtle); border-radius: 16px; line-height: 1.7; }
 .workspace-empty h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); line-height: 1.2; }
 .workspace-empty p, .workspace-empty li { color: var(--text-secondary); }
@@ -582,11 +578,19 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .workspace-navigation .workspace-tabs { flex: 1; }
 .history-controls-toggle { font-size: .8rem; }
 .history-focus .command-toolbar { display: none; }
-.history-layout { display: flex; position: relative; }
-.history-layout > .timeline-panel { flex: 1; }
+/* Observation detail is the docked right column of Recorded history in every view (#146). */
+/* The column narrows with the viewport so the history toolbar keeps its two rows beside it at 1366px. */
+.history-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 19vw, 340px); grid-template-rows: minmax(0, 1fr); }
+.history-layout > .observation-panel { min-height: 0; overflow: auto; }
+@media (max-width: 850px) {
+  .history-layout { display: flex; flex-direction: column; }
+}
+.detail-empty { color: var(--text-secondary); }
+.timeline-shown { margin-left: auto; color: var(--text-secondary); font-size: .85rem; font-weight: 650; font-variant-numeric: tabular-nums; }
 .story-filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: none; }
 .story-filter-bar label { color: var(--text-secondary); font-size: .85rem; font-weight: 650; }
-.story-filter-bar select { min-width: 0; max-width: 100%; min-height: 44px; }
+/* Capped so the filter row stays one row beside the docked detail (#146); the option list is not truncated. */
+.story-filter-bar select { min-width: 0; max-width: min(100%, 11rem); min-height: 44px; }
 .story-stage { overflow: hidden; display: flex; flex-direction: column; }
 .story-stage .story-view { flex: 1; min-height: 0; padding: 8px; }
 .story-view-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; flex: none; }
@@ -604,9 +608,6 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .story-table-scroll { flex: 1; min-height: 0; overflow: auto; }
 .timeline-rows-frame { position: relative; flex: 1 1 0; min-height: 5.5rem; display: flex; flex-direction: column; }
 .timeline-rows-frame > .timeline-rows { flex: 1 1 0; }
-.story-inspector { position: absolute; z-index: 5; right: 16px; bottom: 16px; width: min(390px, calc(100% - 32px)); max-height: calc(100% - 16px); overflow: auto; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-panel); box-shadow: 0 8px 24px #17203322; }
-.story-inspector > summary { min-height: 44px; padding: 12px; cursor: pointer; font-weight: 650; font-size: .85rem; }
-.story-inspector .observation-panel { max-height: min(55dvh, 32rem); border: 0; border-top: 1px solid var(--border-subtle); border-radius: 0 0 10px 10px; }
 @media (max-width: 850px) {
   .history-focus .investigation-workspace { min-height: 0; }
   .history-focus .panel-history, .history-focus .history-layout { min-height: 0; }

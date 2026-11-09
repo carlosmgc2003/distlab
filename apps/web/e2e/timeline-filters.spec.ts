@@ -109,9 +109,6 @@ test("discoverable filters suggest the current run and keep partial matching exp
   const selected = page.locator("#timeline-rows button").first();
   await selected.click();
   await expect(selected).toHaveAttribute("aria-pressed", "true");
-  // Detail actions live inside the collapsed inspector and its disclosures.
-  const inspector = page.locator(".story-inspector");
-  if ((await inspector.getAttribute("open")) === null) await inspector.locator("> summary").click();
   await page.locator("#inspection-panel").getByText("Record fields & filter shortcuts", { exact: true }).click();
   await page.getByRole("button", { name: "Use source as component filter" }).click();
   // Component has one control, in the toolbar.
@@ -132,10 +129,6 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await dialog.getByLabel("Filter by", { exact: true }).selectOption("type");
   await expect(typeInput).toHaveValue("");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  // The detail actions are done. Close the floating detail: beside the Lesson panel (#140) the history
-  // column is narrower, and the floating panel can cover the filter bar until #146 docks it.
-  await inspector.locator("> summary").click();
-  await expect(inspector).not.toHaveAttribute("open", "");
 
   await page.getByRole("button", { name: "Clear all filters" }).click();
   await openMoreFilters(page);

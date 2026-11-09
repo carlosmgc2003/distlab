@@ -228,6 +228,7 @@ export function selectionStep(index: number, count: number, delta: -1 | 1): numb
   return next;
 }
 
+/** The position among visible rows. It is part of the live announcement only, never visible text (#146). */
 export function boundaryCopy(index: number, count: number): string {
   if (count <= 0) return "No visible observations.";
   if (index < 0) {
@@ -242,9 +243,12 @@ export function boundaryCopy(index: number, count: number): string {
   return position;
 }
 
-/** The review position, naming the stored type. Rows and the detail panel carry the wording. */
+/**
+ * The review position, naming the stored type. It is announced through Recorded history's one
+ * polite live region and never shown: the docked detail's header is the visible statement (#146).
+ */
 export function selectionMessage(observation: Observation): string {
-  return `Selected #${observation.sequence} ${observation.type} at virtual time ${observation.time}.`;
+  return `Selected Observation #${observation.sequence}: ${observation.type} at virtual time ${observation.time}.`;
 }
 
 export function revealMessage(cleared: readonly string[], observation: Observation): string {

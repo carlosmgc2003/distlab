@@ -176,11 +176,8 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
       </div>
       <HelpHint label="Row order" bodyId="timeline-order" className="timeline-help">Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.</HelpHint>
     </div>
-    {/* The review position only. Run status and virtual time have one home, the committed-state summary. */}
-    <p className={selected ? "timeline-cursor" : "sr-only"} role="status" aria-live="polite">{selected
-      ? `Reviewing observation ${selected.sequence} at virtual t=${selected.time}.`
-      : "No observation selected."}</p>
-    <p id="timeline-quick-count" className={filtersActive ? "timeline-quick-count" : "sr-only"}>{quickCopy}</p>
+    {/* The selection is stated once, in the docked detail's header (#146). The quick-view summary is read, not shown. */}
+    <p id="timeline-quick-count" className="sr-only">{quickCopy}</p>
     {/* One control per filter dimension: Show (category), Component, and More filters… for the rest. */}
     <div className="story-filter-bar">
       <label htmlFor="story-quick-view">Show</label>
@@ -199,10 +196,13 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         {componentChips.map(chip => <option key={chip.value} value={chip.value}>{chip.label}</option>)}
       </select>
       <button ref={moreTrigger} type="button" className="more-filters-trigger" aria-haspopup="dialog" aria-expanded={moreOpen} onClick={openMore}>More filters…</button>
+      {/* The one visible result count, only while a filter narrows the rows. */}
+      {filtersActive ? <span className="timeline-shown">{filtered.length} of {observations.length} shown</span> : null}
     </div>
     <p id="timeline-quick-help" className="sr-only">{QUICK_VIEW_HELP}</p>
     <p id="timeline-boundary" className="timeline-boundary sr-only">{boundaryCopy}</p>
-    <p id="timeline-feedback" className="timeline-feedback" role="status" aria-live="polite" aria-atomic="true">{navigation.feedback}</p>
+    {/* The one polite live region for review feedback, including the selection. It is read, not shown. */}
+    <p id="timeline-feedback" className="timeline-feedback sr-only" role="status" aria-live="polite" aria-atomic="true">{navigation.feedback}</p>
     {/* Chips only remove. They appear only while a filter is active. */}
     <div className="timeline-chip-row" hidden={!filtersActive} tabIndex={0} role="group" aria-label="Active filters and reset">
       {viewChip !== null || chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">
@@ -227,7 +227,6 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
     {navigation.view === "learning" ? <>
       <div className="learning-column-headings" aria-hidden="true"><span>Summary</span><span>Virtual time · sequence</span><span>Component / destination</span></div>
     </> : null}
-    {/* The floating detail is positioned within the rows area, so it never covers the toolbar (#145). */}
     <div className="timeline-rows-frame">
     <div id="timeline-rows" ref={scrollerRef} className={`timeline-rows${navigation.view === "story" ? " story-stage" : ""}`}  tabIndex={0} aria-describedby="timeline-order"
       aria-label={navigation.view === "story" ? "Story milestone strip and table" : navigation.view === "learning" ? "Learning timeline observations" : "Raw timeline observations"} onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
@@ -247,17 +246,15 @@ export function TimelineView({ observations, edges, componentTitles = [], onEmph
         {view.rawRows.map(item => <RawRow key={item.observation.id} observation={item.observation} index={item.index} selectedId={navigation.selectedId} onChoose={id => dispatch({ type: "select", observationId: id })} />)}
       </div> : null}
     </div>
-    {selected ? <details className="story-inspector">
-      <summary>Selected event details · #{selected.sequence}</summary>
-      <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
-        hidden={!filtered.some(item => item.id === selected.id)}
-        onSelect={id => dispatch({ type: "reveal", observationId: id })}
-        onShowTrace={traceId => dispatch({ type: "narrow-to-trace", traceId })}
-        onUseText={(field, value) => dispatch({ type: "set-draft", draft: withExactValue(navigation.draft, field, value) })}
-        onUseEntity={(kind, id) => dispatch({ type: "set-draft", draft: withExactValue(withExactValue(navigation.draft, "entityKind", kind), "entityId", id) })} />
-    </details> : null}
     </div>
     </section>
+    {/* Observation detail is docked as the right column in every view, never floating (#146). */}
+    <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles}
+      hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
+      onSelect={id => dispatch({ type: "reveal", observationId: id })}
+      onShowTrace={traceId => dispatch({ type: "narrow-to-trace", traceId })}
+      onUseText={(field, value) => dispatch({ type: "set-draft", draft: withExactValue(navigation.draft, field, value) })}
+      onUseEntity={(kind, id) => dispatch({ type: "set-draft", draft: withExactValue(withExactValue(navigation.draft, "entityKind", kind), "entityId", id) })} />
   </div>;
 }
 
@@ -612,7 +609,7 @@ function ObservationDetail({ observation, observations, componentTitles, hidden,
 }) {
   return <section id="inspection-panel" className="timeline-detail observation-panel" tabIndex={0} aria-labelledby="observation-detail-heading">
     <h2 id="observation-detail-heading">Observation detail</h2>
-    {!observation ? <p>Select a milestone to see what happened and which components were involved. Technical details are available when you need them.</p> : <DetailBody
+    {!observation ? <p className="detail-empty">Select an observation to see its detail.</p> : <DetailBody
       observation={observation} observations={observations} componentTitles={componentTitles} hidden={hidden}
       onSelect={onSelect} onShowTrace={onShowTrace} onUseText={onUseText} onUseEntity={onUseEntity} />}
   </section>;
@@ -639,9 +636,9 @@ function DetailBody({ observation, observations, componentTitles, hidden, onSele
   const heading = recordLabel(observation);
   return <>
     {hidden ? <p>This observation is hidden by the current filters.</p> : null}
-    <h3>{heading}</h3>
+    {/* The one visible statement of the selection: Observation #, plain-language label, virtual time. */}
+    <h3 className="detail-header">Observation #{observation.sequence} · {heading} · t={observation.time}</h3>
     <p className="event-path">{componentLabel(observation.source, componentTitles)}{target ? ` → ${componentLabel(target, componentTitles)}` : ""}</p>
-    <p className="event-time">Virtual time {observation.time} · Step #{observation.sequence}</p>
     <details className="detail-disclosure">
     <summary>Record fields & filter shortcuts</summary>
     <dl>

@@ -145,7 +145,11 @@ Rules that keep the regions distinct:
   **Component**, and **More filters…**, a modal dialog for advanced filters.
 - Active filters appear as chips only while a filter is active.
 - Observation detail is docked as the right column of the tab, never floating.
-- The selection is stated once, in the observation detail header.
+- The selection is stated once, in the observation detail header
+  ("Observation #‹sequence› · ‹label› · t=‹time›"). One polite live region,
+  read and not shown, announces it; no banner or position line restates it.
+- While a filter is active, the result count is shown once, beside the filter
+  row ("22 of 267 shown").
 
 Observation detail is summary-first, in this order: **Event summary**
 (plain-language stored event label, sequence, virtual time, source, target,
