@@ -58,6 +58,9 @@ for (const scenario of ["normal", "response-lost"]) {
     await graphLaidOut(page);
     const legend = architecture.getByRole("region", { name: "Architecture legend" });
     await expect(legend).toHaveCount(1);
+    // The legend starts collapsed (#166); one click opens it.
+    await expect(legend.getByRole("heading", { name: "Nodes" })).toBeHidden();
+    await legend.getByRole("button", { name: "Show legend" }).click();
     await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
     await expect(legend.getByRole("heading", { name: "Relationships" })).toBeVisible();
     await expect(legend.getByRole("heading", { name: "Recorded movements" })).toBeVisible();
@@ -183,6 +186,9 @@ test("commerce owned resources are visible and keyboard-inspectable with static 
     const architecture = page.getByRole("tabpanel", { name: "Architecture", exact: true });
     const legend = architecture.getByRole("region", { name: "Architecture legend" });
     await expect(legend).toHaveCount(1);
+    // The legend starts collapsed (#166); one click opens it.
+    await expect(legend.getByRole("heading", { name: "Nodes" })).toBeHidden();
+    await legend.getByRole("button", { name: "Show legend" }).click();
     await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
     await expect(legend.getByRole("heading", { name: "Relationships" })).toBeVisible();
     await expect(legend.getByRole("heading", { name: "Recorded movements" })).toBeVisible();

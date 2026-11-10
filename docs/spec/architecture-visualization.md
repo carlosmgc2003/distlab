@@ -346,8 +346,10 @@ cross as little as ELK can manage.
 - **Options.** `elk.algorithm: layered`, `elk.direction: RIGHT`,
   `elk.edgeRouting: ORTHOGONAL`, `elk.layered.nodePlacement.strategy:
   NETWORK_SIMPLEX`, a fixed `elk.randomSeed`, and generous spacing (node to
-  node, between layers, edge to node, edge to edge). Every option name was
-  checked against `knownLayoutOptions()` of the pinned `elkjs` version.
+  node, edge to node, edge to edge). Between layers the spacing is 12: edge
+  labels already get layers of their own, and wider gaps pushed the default
+  view below a legible scale (#166). Every option name was checked against
+  `knownLayoutOptions()` of the pinned `elkjs` version.
 - **Tiers.** `elk.partitioning.activate` with one partition per tier:
   0 ingress (client), 1 gateway, 2 services, 3 MessageBus destinations,
   4 persistence, 5 external services. The tier derives from the node type
@@ -374,6 +376,20 @@ cross as little as ELK can manage.
   font, and ELK reserves their space (`elk.edgeLabels.placement: CENTER`).
   The canvas is `aria-busy` and its nodes hidden until the laid-out graph is
   fitted.
+- **Default view (#166).** `layout/legible-fit.ts` computes it from measured
+  sizes: the plain fit, never below the zoom at which the smallest component
+  name renders at 10 px (`MIN_NAME_PX`) and never above 1.25. When the whole
+  graph does not fit at that zoom, the view starts at the graph's left and top
+  edges, where the clients are, and the reader pans; when it fits, it is
+  centered. The space kept clear is measured from the overlays: the zoom
+  controls' column, the pan buttons' row, and the legend's header row, or its
+  column when open. The legend starts collapsed. **Fit View** returns to this
+  view; the zoom-out button still reaches the whole graph at any size. At
+  1534×897 every packaged lesson loads whole, with 15–20 % of zoom to spare.
+  At 1366×768 the widest lessons fit within about 2 % of the legible floor, so
+  font metrics decide whether they are whole; either way the names are legible
+  and the view starts at the clients. The viewport is presentation only and
+  never enters projections, commands, or history.
 - **Routes.** `ElkEdge` draws `startPoint → bendPoints → endPoint` with
   slightly rounded corners and puts the label where ELK placed it. ELK
   reports a section's points relative to the edge's container; `elkLayout`

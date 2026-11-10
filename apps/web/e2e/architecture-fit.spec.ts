@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import { graphLaidOut, loadLesson } from "./support/lesson.ts";
+import { expectLegibleView } from "./support/graph.ts";
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-63");
 
@@ -86,19 +87,22 @@ async function loadScenario(page: Page, scenario: string) {
   await graphLaidOut(page);
 }
 
-test("the default view shows the whole checkout graph at the supported desktop baselines", async ({ page }) => {
+test("the default view shows the whole checkout graph at 1534×897 and legible names at every size", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
+  // The whole graph is checked where its fit has room to spare. At 1366×768 the checkout graph fits within
+  // about 2 % of the legible floor, so font metrics decide whether it is whole; below that it never is (#166).
   const viewports = [
-    { name: "1534x897", width: 1534, height: 897 },
-    { name: "1366x768", width: 1366, height: 768 },
-    { name: "1024x768", width: 1024, height: 768 },
+    { name: "1534x897", width: 1534, height: 897, whole: true },
+    { name: "1366x768", width: 1366, height: 768, whole: false },
+    { name: "1024x768", width: 1024, height: 768, whole: false },
   ];
   for (const scenario of ["normal", "response-lost"]) {
     for (const viewport of viewports) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await loadScenario(page, scenario);
-      await expectGraphFits(page, `${viewport.name} ${scenario}`);
+      await expectLegibleView(page, `${viewport.name} ${scenario}`, { whole: viewport.whole });
+      if (viewport.whole) await expectGraphFits(page, `${viewport.name} ${scenario}`);
       await page.screenshot({ path: path.join(evidenceDir, `${viewport.name}-${scenario}.png`) });
     }
   }
@@ -111,12 +115,13 @@ test("the inspector, tab switches, and window resizes refit the graph", async ({
   await loadScenario(page, "normal");
   const defaultView = await expectGraphFits(page, "1534x897 default");
 
-  // The two-column workspace narrows the canvas when a component is inspected.
+  // The two-column workspace narrows the canvas when a component is inspected. The graph refits at a legible
+  // scale, starting at the clients, rather than shrinking the names to keep every node on screen (#166).
   const payments = page.getByRole("button", { name: "Payments, Internal service", exact: true });
   await payments.focus();
   await payments.press("Enter");
   await expect(page.getByRole("complementary", { name: "Component inspector" })).toBeVisible();
-  await expectGraphFits(page, "1534x897 with the inspector open");
+  await expectLegibleView(page, "1534x897 with the inspector open");
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-inspector-open.png") });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("complementary", { name: "Component inspector" })).toHaveCount(0);
@@ -124,7 +129,7 @@ test("the inspector, tab switches, and window resizes refit the graph", async ({
 
   for (const size of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }, { width: 1534, height: 897 }]) {
     await page.setViewportSize(size);
-    await expectGraphFits(page, `${size.width}x${size.height} after resizing`);
+    await expectLegibleView(page, `${size.width}x${size.height} after resizing`, { whole: size.width === 1534 });
   }
 
   // Keyboard users reach the same fit: the pan buttons move the view, the fit button restores it.
@@ -172,7 +177,7 @@ test("Reset and a new scenario return to the fitted default view", async ({ page
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-after-reset.png") });
 });
 
-test("the legend covers no node at the default fit of any packaged lesson", async ({ page }) => {
+test("the legend starts collapsed, and once opened covers no node at the default fit of any packaged lesson", async ({ page }) => {
   test.setTimeout(240_000);
   const { scenarios } = await import("../src/scenarios.ts");
   expect(scenarios).toHaveLength(19);
@@ -183,6 +188,9 @@ test("the legend covers no node at the default fit of any packaged lesson", asyn
       await loadLesson(page, scenario.id);
       await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
       const legend = page.getByRole("region", { name: "Architecture legend" });
+      // Collapsed by default (#166), it takes no column of the canvas; opened, the fit makes room for it.
+      await expect(legend.getByRole("heading", { name: "Nodes" })).toBeHidden();
+      await legend.getByRole("button", { name: "Show legend" }).click();
       await expect(legend.getByRole("heading", { name: "Nodes" })).toBeVisible();
       const covered = async () => page.evaluate(() => {
         const box = document.querySelector(".graph-legend")!.getBoundingClientRect();
