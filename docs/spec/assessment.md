@@ -273,7 +273,7 @@ customer-app ──▶ orders ──▶ inventory
 - **orders** runs the checkout as an orchestrated saga: reserve inventory,
   authorize payment, confirm the order, publish `OrderConfirmed`. On a failed or
   ambiguous step it either leaves the order `NEEDS_COMPENSATION` or compensates
-  in reverse order (release, void), by option.
+  the steps it attempted in reverse order (void, then release), by option.
 - **payments** authorizes against the processor. By option it sends an
   idempotency key and, after a timeout, retries a bounded number of times with
   the same key.
@@ -281,9 +281,9 @@ customer-app ──▶ orders ──▶ inventory
   sent, and supports `void`.
 - **notifications** consumes `OrderConfirmed` and sends through **messaging**.
   By option it keeps an inbox keyed by the event ID. It treats an error reply
-  from messaging as a failed send and NACKs the delivery, so the bus redelivers
-  it by rethrowing the reply's code ([service runtime](service-runtime.md),
-  #126), as `commerce.notify-sender` does.
+  from messaging as a failed send: it rethrows the reply's code, which NACKs the
+  delivery ([service runtime](service-runtime.md), #126), so the bus redelivers
+  it.
 - **orders** also exposes `POST /relay`, which publishes unsent outbox events.
   The base document packages one relay request late in the run, which does
   nothing when the outbox is empty.
@@ -320,10 +320,10 @@ Every row checks every invariant. A row passes when all its invariants hold
 | --- | --- | --- |
 | The customer is charged at most once | safety | The processor never holds more than one approved, unvoided authorization per order |
 | A failed order keeps no charge | deadline | Every order not `CONFIRMED` by the deadline has no approved, unvoided authorization |
-| A confirmed order is notified exactly once | safety + deadline | Never more than one notification per order; one by the deadline for each confirmed order |
+| A confirmed order is notified exactly once | safety + deadline (one `at` check) | Never more than one notification per order; one by the deadline for each confirmed order |
 | Every order reaches a final state | deadline | Every order is `CONFIRMED` or `CANCELLED` by the deadline |
 
-Expected outcomes, which the catalog tests would pin:
+Expected outcomes, which `packages/catalogs/tests/reliable-checkout.test.ts` pins (ASSESS-AC-4):
 
 | Design | Happy | Duplicate | Inventory | Response lost | Provider down | Crash |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -335,6 +335,38 @@ the checkout's critical path, and the bus redelivers it once the provider is bac
 before the deadline; vision §21 lists it as PASS for the same reason. "Crash
 after local commit" passes with `outbox` only if orders restarts and the relay
 runs, which **D-8** makes possible.
+
+### Pinned by the implementation
+
+The catalog work (plan step 2) settles what this section left open:
+
+- **Home.** The models live in `packages/catalogs/src/commerce/reliable.ts`:
+  `commerce.reliable-orders`, `-inventory`, `-payments`, `-processor`, and
+  `-notifications`, all version `1.0.0`. Messaging reuses
+  `commerce.messaging-provider`. The data-only module
+  `src/commerce/reliable-checkout.ts` holds the document `reliable-checkout@1`,
+  its overlay policy, its check classification, and `assessmentDefinitions`.
+  Until the browser view (plan step 3), the lesson is catalog only: the worker
+  does not accept it and the Lesson chooser does not list it.
+- **Timing.** The checkout starts at t=1, the relay request is sent at t=100,
+  and the three deadline checks run at t=200. The default design commits the
+  confirmed order at t=8 and publishes at t=18. No design choice moves either
+  time when no step fails, so the crash row crashes orders at t=12 and restarts
+  it 20 ms later. The provider row makes messaging UNAVAILABLE at t=0 and
+  AVAILABLE at t=60. The duplicate row's copy follows 5 ms after the original.
+  Notifications acknowledges 5 ms after recording its send, so the copy finds
+  the first send recorded, as a redelivery after a lost ACK would.
+- **Checks.** The assertions, in column order, are `charged-at-most-once`
+  (`always`, predicate `commerce.charges`), and `failed-order-uncharged`,
+  `notified-exactly-once`, and `order-final` (`at` t=200, predicates
+  `commerce.unconfirmed-charges`, `commerce.notifications`, and
+  `commerce.final-orders`). Messaging's `sent` list only grows, so the single
+  `at` check of "notified exactly once" also catches a second send made before
+  the deadline. In every suite row, for both designs the tests pin, the last
+  message and request happen before t=200.
+- **Policy.** The policy allows every fault kind the rows use, crash and
+  external availability, and `maxEntries` 4. Every row holds at most two
+  entries (**D-6**).
 
 ## Minimal examples
 
