@@ -1,9 +1,10 @@
 // This catalog module contains scenario data and lesson copy only, never model factories.
-import type { LessonOverlayPolicy, ScenarioDefinition } from "@distlab/contracts";
+import type { AssessmentDefinition, LessonOverlayPolicy, ScenarioDefinition } from "@distlab/contracts";
 import { detached } from "./protocol.ts";
 import { checkoutCatalogReference, checkoutLesson, checkoutOverlayPolicy, normalCheckout, responseLostCheckout } from "../../../packages/catalogs/src/scenarios.ts";
 
 import { commerceCatalogReference, commerceChecks, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import { reliableCheckoutAssessment, reliableCheckoutChecks, reliableCheckoutOverlayPolicy, reliableCheckoutScenario } from "../../../packages/catalogs/src/commerce/reliable-checkout.ts";
 
 export { checkoutLesson };
 
@@ -53,3 +54,16 @@ export function packagedMetadata(choice: PackagedScenario): ScenarioDefinition {
 export function experimentLabel(choice: PackagedScenario): string {
   return choice.family === "commerce" ? choice.title : choice.id === "response-lost" ? "Lost processor response" : "Normal checkout";
 }
+
+/**
+ * Packaged assessments (#97, D-7): a definition and its base lesson's packaged
+ * document, policy, and check labels, all data. The Lesson chooser lists them in
+ * their own group. Running one sends ordinary loads of the base document.
+ */
+export const assessments = [
+  { id: "reliable-checkout", title: reliableCheckoutAssessment.title, definition: reliableCheckoutAssessment as AssessmentDefinition,
+    description: "Run one design of your own against six fault scenarios. A scenario passes when every business invariant holds.",
+    scenario: detached(reliableCheckoutScenario), policy: reliableCheckoutOverlayPolicy as LessonOverlayPolicy, checks: reliableCheckoutChecks },
+] as const;
+
+export type PackagedAssessment = (typeof assessments)[number];

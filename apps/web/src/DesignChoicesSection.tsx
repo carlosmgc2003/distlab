@@ -17,6 +17,8 @@ export interface DesignChoicesSectionProps {
   readonly onInvalidChange: (invalid: boolean) => void;
   /** Changes when the drawer discards the draft, so half-typed field text is cleared too. */
   readonly resetToken: number;
+  /** The heading; "Design choices" in the Experiment drawer. */
+  readonly title?: string;
 }
 
 /**
@@ -26,7 +28,7 @@ export interface DesignChoicesSectionProps {
  * here edits a running simulation, and the seed, workload, and checks stay the lesson's.
  * While it is not editable, the drawer's footer says so; the reasoning is in the drawer's hint (#147).
  */
-export function DesignChoicesSection({ policy, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken }: DesignChoicesSectionProps) {
+export function DesignChoicesSection({ policy, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken, title = "Design choices" }: DesignChoicesSectionProps) {
   const ids = useId();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
   const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
@@ -46,13 +48,13 @@ export function DesignChoicesSection({ policy, draft, onDraftChange, editable, r
   };
 
   return <section className="design-choices" aria-labelledby={`${ids}-heading`}>
-    <h3 id={`${ids}-heading`}>Design choices</h3>
+    <h3 id={`${ids}-heading`}>{title}</h3>
     <div className="design-choices-body">
       <div className="design-choices-grid">
         {policy.parameters.map(parameter => {
           const key = parameter.key;
           const id = `${ids}-${key}`;
-          const { label, hint } = choiceCopy(key);
+          const { label, hint } = choiceCopy(key, policy.lesson);
           const value = values.get(key);
           const error = errors[key] ?? rejected.get(key);
           const defaultText = `Lesson default: ${formatChoice(parameter.domain.default)}.`;

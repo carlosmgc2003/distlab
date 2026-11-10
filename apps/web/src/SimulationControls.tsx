@@ -5,23 +5,26 @@ import type { SimulationHost, HostSnapshot } from "./host.ts";
  * The top bar's simulation part (#144): the **Simulation execution** group and the one run summary,
  * both on the bar's single row. The same component renders on both tabs.
  */
-export function SimulationControls({ host, snapshot }: {
+export function SimulationControls({ host, snapshot, locked = false }: {
   readonly host: SimulationHost;
   readonly snapshot: HostSnapshot;
+  /** An assessment suite is running (#97): it owns the session until it ends, so every control waits. */
+  readonly locked?: boolean;
 }) {
   const { projection, pendingCommands, loading, error } = snapshot;
   const status = projection?.simulation.status;
-  const busy = pendingCommands.length > 0 || loading;
+  const busy = pendingCommands.length > 0 || loading || locked;
   const canAdvance = !busy && (status === "READY" || status === "PAUSED");
-  const canPause = (status === "RUNNING" || ((status === "READY" || status === "PAUSED") && pendingCommands.includes("run")))
+  const canPause = !locked && (status === "RUNNING" || ((status === "READY" || status === "PAUSED") && pendingCommands.includes("run")))
     && !pendingCommands.some(type => type !== "run");
   const canReset = !busy && status !== "RUNNING" && (projection !== null || error?.code === "SIMULATION_FAILED");
   const pendingMessage = pendingCommands.includes("pause") ? "Pause requested; waiting for an event boundary…"
     : pendingCommands.includes("reset") ? "Resetting scenario…"
     : pendingCommands.includes("step") ? "Stepping one event…"
     : pendingCommands.includes("run") ? "Run in progress…"
-    : loading ? "Loading…" : "";
-  const statusLabel = status ?? (error?.code === "SIMULATION_FAILED" ? "FAILED" : error ? "Simulation unavailable." : "Choose a scenario to begin.");
+    : loading ? "Loading…" : locked ? "Assessment running…" : "";
+  // Between two assessment rows no session is loaded yet; that is not a request to choose one.
+  const statusLabel = status ?? (error?.code === "SIMULATION_FAILED" ? "FAILED" : error ? "Simulation unavailable." : locked ? "Assessment running." : "Choose a scenario to begin.");
   const simulation = projection?.simulation;
 
   return <>
