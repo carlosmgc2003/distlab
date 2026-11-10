@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Draft, for review before implementation. Open decisions are marked **D-n**; D-8 would amend ADR-004. |
+| Status | Accepted 2026-11-10: decisions **D-1** to **D-8** take their recommendations; D-8 amends ADR-004. Implementation follows the plan below. |
 | Owner | DistLab maintainers |
 | Last updated | 2026-11-10 |
 | Related issues | #97 (this view), #104 (epic), #95 (design choices, done by #89), #96 (lesson checks), #163 (safety invariants), #112 (Design editor) |
@@ -308,7 +308,7 @@ A design passes "Notification provider down" because the notification is not on
 the checkout's critical path, and the bus redelivers it once the provider is back
 before the deadline; vision §21 lists it as PASS for the same reason. "Crash
 after local commit" passes with `outbox` only if orders restarts and the relay
-runs, which depends on **D-8**.
+runs, which **D-8** makes possible.
 
 ## Minimal examples
 
@@ -370,9 +370,10 @@ time: <failure time>, evidence: null }`, and the suite continues.
 | Export | ASSESS-AC-5 |
 | Reliable Checkout outcomes | ASSESS-AC-4 |
 
-## Open decisions
+## Decisions
 
-Each has a recommendation. Implementation waits for the maintainer's answer.
+Each was open with a recommendation. The maintainer accepted every
+recommendation on 2026-11-10; the alternatives are kept for the record.
 
 - **D-1. Where the Reliable Checkout models live.** Recommended: new versioned
   models in the commerce catalog (`commerce.lessons`), so the existing catalog
@@ -406,15 +407,16 @@ Each has a recommendation. Implementation waits for the maintainer's answer.
   component (STARTING, then RUNNING), validated statically as a pair. That also
   lets student crash faults tell a recovery story in other lessons.
   Alternative: drop the crash row and the `outbox` key from this increment, and
-  add them when restarts are decided.
+  add them when restarts are decided. Accepted: the ADR-004 amendment
+  "Crash with restart" and OVL-AC-7.
 
 ## Implementation plan
 
 Three pull requests, each with its tests:
 
 1. Contracts and validation: `src/assessment.ts`, definition validation, and the
-   catalog test for ASSESS-AC-2. If D-8 is accepted, the ADR-004 amendment and
-   the crash/restart pair validation come first, in their own pull request.
+   catalog test for ASSESS-AC-2. The ADR-004 amendment and the crash/restart
+   pair validation (D-8) come first, in their own pull request.
 2. The Reliable Checkout models, document, policy, check classification, and
    catalog tests for ASSESS-AC-4.
 3. The browser view: suite runner, matrix, evidence, export, and the browser

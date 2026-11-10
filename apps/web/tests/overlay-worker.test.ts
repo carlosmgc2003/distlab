@@ -62,6 +62,26 @@ test("load accepts a packaged lesson with an allowed overlay and returns the app
   assert.equal(finished.simulation.runId, headless.simulation.history.export().runId);
 });
 
+test("#97 D-8 a crash with a restart loads, keeps its restart in the session, and replays on reset", async () => {
+  const { send, latest } = harness();
+  const overlay = { version: 1, faults: [], parameters: [],
+    scheduledFaults: [{ id: "student-crash", at: 2, kind: "fault", fault: { id: "student-crash-payments", kind: "crash", target: "payments" }, restart: { after: 10 } }] };
+  const [loaded] = await send({ type: "load", scenario: normalCheckout, overlay: overlay as unknown as CanonicalValue });
+  assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
+  assert.deepEqual(loaded.session.overlay, overlay, "the session shows the student's entry, not the generated lifecycle actions");
+  const initial = latest();
+  await send({ type: "run" });
+  const finished = latest();
+  assert.equal(finished.simulation.status, "COMPLETED");
+  const lifecycle = finished.history.observations.filter(item => item.type === "service.lifecycle.changed" && item.source === "payments")
+    .map(item => `${item.time}:${(item.data as { after: string }).after}`);
+  assert.deepEqual(lifecycle, ["0:RUNNING", "2:CRASHED", "12:STARTING", "13:RUNNING"]);
+  await send({ type: "reset" });
+  assert.deepEqual(latest(), initial);
+  await send({ type: "run" });
+  assert.deepEqual(latest(), finished);
+});
+
 test("the same overlay and seed give identical history in fresh worker sessions", async () => {
   const exports: RuntimeProjectionSet[] = [];
   for (const cadence of ["run", "step"] as const) {

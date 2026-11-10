@@ -40,7 +40,8 @@ type Doc = Record<string, CanonicalValue>;
 
 const faultPoints = new Set<string>(["network.request", "network.response", "message.delivery", "database.commit"]);
 const overlayKeys = ["version", "faults", "scheduledFaults", "parameters", "architecture"];
-const scheduledKeys = ["id", "at", "kind", "fault"];
+const scheduledKeys = ["id", "at", "kind", "fault", "restart"];
+const restartKeys = ["after"];
 const parameterKeys = ["key", "value"];
 
 /**
@@ -129,7 +130,38 @@ function readScheduled(value: CanonicalValue, path: string, allowance: LessonOve
     if (typeof fault.kind !== "string") push(`${path}/fault/kind`, fault.kind === undefined ? DiagnosticCodes.REQUIRED : DiagnosticCodes.TYPE);
     else if (!(allowance.scheduled as readonly string[]).includes(fault.kind)) push(`${path}/fault/kind`, OverlayDiagnosticCodes.OVERLAY_NOT_ALLOWED);
   }
+  if (action.restart !== undefined) {
+    // A restart is allowed wherever a crash is: it is a crash's recovery, never an action of its own.
+    if (fault?.kind !== "crash") push(`${path}/restart`, OverlayDiagnosticCodes.OVERLAY_NOT_ALLOWED);
+    const restart = record(action.restart, `${path}/restart`, restartKeys, push);
+    if (restart) {
+      const after = restart.after;
+      if (after === undefined) push(`${path}/restart/after`, DiagnosticCodes.REQUIRED);
+      else if (typeof after !== "number" || !Number.isSafeInteger(after) || after < 1) push(`${path}/restart/after`, DiagnosticCodes.TIME);
+    }
+  }
   return action;
+}
+
+/**
+ * The applied actions of one overlay scheduled fault: the fault action itself and, for a crash
+ * with `restart`, a STARTING action `after` ms later and a RUNNING action 1 ms after that. The
+ * generated IDs extend the entry's student ID, so they keep the student prefix.
+ */
+function scheduledActions(entry: Doc): readonly CanonicalValue[] {
+  const { restart, ...action } = entry;
+  if (restart === undefined) return [action];
+  const after = (restart as Doc).after as number;
+  const target = (action.fault as Doc).target as CanonicalValue;
+  // An invalid `at` is reported at the fault action; the restart actions copy it so one entry always
+  // expands to the same number of actions, which keeps diagnostic paths aligned.
+  const at = action.at ?? null;
+  if (typeof at !== "number") return [action, { id: `${String(action.id)}-restart`, at, kind: "service", target, state: "STARTING" }, { id: `${String(action.id)}-ready`, at, kind: "service", target, state: "RUNNING" }];
+  return [
+    action,
+    { id: `${String(action.id)}-restart`, at: at + after, kind: "service", target, state: "STARTING" },
+    { id: `${String(action.id)}-ready`, at: at + after + 1, kind: "service", target, state: "RUNNING" },
+  ];
 }
 
 function readParameters(value: CanonicalValue | undefined, declared: readonly LessonParameter[], push: Push): readonly ParameterOverride[] | undefined {
@@ -186,7 +218,9 @@ function composeDocument(packaged: CanonicalValue, policy: LessonOverlayPolicy |
   const document = structuredClone(canonicalCopy(source)) as Doc;
   const provenance = overlay.architecture ? applyArchitectureEdits(document, overlay.architecture, policy?.architecture, catalog) : undefined;
   if (overlay.faults.length) document.faults = [...((source.faults ?? []) as CanonicalValue[]), ...(overlay.faults as unknown as CanonicalValue[])];
-  if (overlay.scheduledFaults.length) document.actions = [...((source.actions ?? []) as CanonicalValue[]), ...(overlay.scheduledFaults as unknown as CanonicalValue[])];
+  if (overlay.scheduledFaults.length) {
+    document.actions = [...((source.actions ?? []) as CanonicalValue[]), ...(overlay.scheduledFaults as unknown as Doc[]).flatMap(scheduledActions)];
+  }
   for (const override of overlay.parameters) {
     const parameter = policy?.parameters.find(item => item.key === override.key);
     if (!parameter) throw new TypeError(`Undeclared parameter ${override.key}`);
@@ -291,12 +325,23 @@ function translator(packaged: CanonicalValue, policy: LessonOverlayPolicy | unde
       return location ? [{ path: location.path, overlay: `/parameters/${index}/value` }] : [];
     });
   });
+  // One overlay path per appended action: a crash's generated restart actions map to its `restart`.
+  const scheduled = input !== null && typeof input === "object" && !Array.isArray(input) && Array.isArray((input as Doc).scheduledFaults) ? (input as Doc).scheduledFaults as CanonicalValue[] : [];
+  const actionPaths = scheduled.flatMap((entry, index) => {
+    const restart = entry !== null && typeof entry === "object" && !Array.isArray(entry) && (entry as Doc).restart !== undefined;
+    return restart ? [`/scheduledFaults/${index}`, `/scheduledFaults/${index}/restart`, `/scheduledFaults/${index}/restart`] : [`/scheduledFaults/${index}`];
+  });
   return path => {
     const entry = /^\/(faults|actions)\/(\d+)(\/.*)?$/.exec(path);
     if (entry) {
       const index = Number(entry[2]);
       const offset = entry[1] === "faults" ? faultCount : actionCount;
-      if (index >= offset) return `/${entry[1] === "faults" ? "faults" : "scheduledFaults"}/${index - offset}${entry[3] ?? ""}`;
+      if (index >= offset && entry[1] === "faults") return `/faults/${index - offset}${entry[3] ?? ""}`;
+      if (index >= offset) {
+        const base = actionPaths[index - offset];
+        if (base === undefined) return undefined;
+        return base.endsWith("/restart") ? base : `${base}${entry[3] ?? ""}`;
+      }
     }
     return targets.find(target => path === target.path || path.startsWith(`${target.path}/`))?.overlay;
   };

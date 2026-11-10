@@ -199,3 +199,65 @@ test("overlaid sessions replay deterministically and change the input-derived ru
   await plain.simulation.run();
   assert.notEqual(runs[0]!.runId, plain.simulation.history.export().runId);
 });
+
+const crashAndRestart = (id: string, at: number, after: unknown) => ({ ...crash(id, at), restart: { after } });
+
+test("ADR-004 amendment (#97 D-8): a crash with a restart expands into the crash and two lifecycle actions", () => {
+  const result = composeOverlay(document, policy, overlay({ scheduledFaults: [crashAndRestart("student-crash", 3, 10)] }), value => engine.validate(value));
+  assert.ok(result.ok, JSON.stringify(result));
+  // The normalized overlay keeps the restart as submitted, so it is part of the session identity.
+  assert.deepEqual(JSON.parse(JSON.stringify(result.overlay.scheduledFaults)), [crashAndRestart("student-crash", 3, 10)]);
+  const actions = (result.document as { actions: unknown[] }).actions;
+  assert.deepEqual(JSON.parse(JSON.stringify(actions.slice(packaged.actions.length))), [
+    crash("student-crash", 3),
+    { id: "student-crash-restart", at: 13, kind: "service", target: "svc", state: "STARTING" },
+    { id: "student-crash-ready", at: 14, kind: "service", target: "svc", state: "RUNNING" },
+  ]);
+  // Without a restart nothing changes: the crash is the only appended action.
+  const plain = composeOverlay(document, policy, overlay({ scheduledFaults: [crash("student-crash", 3)] }), value => engine.validate(value));
+  assert.ok(plain.ok);
+  assert.deepEqual(JSON.parse(JSON.stringify((plain.document as { actions: unknown[] }).actions.slice(packaged.actions.length))), [crash("student-crash", 3)]);
+});
+
+test("ADR-004 amendment (#97 D-8): a restart is checked at the overlay's own paths", () => {
+  const check = (entry: unknown) => {
+    const result = composeOverlay(document, policy, overlay({ scheduledFaults: [entry] }), value => engine.validate(value));
+    return result.ok ? [] : codes(result.diagnostics);
+  };
+  for (const after of [0, -1, 1.5, "10"]) assert.deepEqual(check(crashAndRestart("student-c", 1, after)), ["/scheduledFaults/0/restart/after TIME"], String(after));
+  assert.deepEqual(check({ ...crash("student-c"), restart: {} }), ["/scheduledFaults/0/restart/after REQUIRED"]);
+  assert.deepEqual(check({ ...crash("student-c"), restart: { after: 5, when: "later" } }), ["/scheduledFaults/0/restart/when UNSUPPORTED"]);
+  assert.deepEqual(check({ ...crash("student-c"), restart: 5 }), ["/scheduledFaults/0/restart TYPE"]);
+  // Only a crash restarts; the lesson must allow the other kind for its own check to pass first.
+  const open = { ...policy, faults: { ...policy.faults, scheduled: ["crash", "external-availability"] } } as LessonOverlayPolicy;
+  const outage = { id: "student-x", at: 1, kind: "fault", fault: { id: "student-y", kind: "external-availability", target: "ext", state: "UNAVAILABLE" }, restart: { after: 5 } };
+  const result = composeOverlay(document, open, overlay({ scheduledFaults: [outage] }), value => engine.validate(value));
+  assert.ok(!result.ok);
+  assert.deepEqual(codes(result.diagnostics), ["/scheduledFaults/0/restart OVERLAY_NOT_ALLOWED"]);
+  // A diagnostic in a generated action is reported at the entry's `restart`, and later entries keep their paths.
+  const clash = composeOverlay(document, policy, overlay({ scheduledFaults: [crashAndRestart("student-a", 1, 5), crash("student-a-ready", 2)] }), value => engine.validate(value));
+  assert.ok(!clash.ok);
+  // The duplicate is the later entry, which starts after the three actions entry 0 expanded into.
+  assert.deepEqual(codes(clash.diagnostics), ["/scheduledFaults/1/id DUPLICATE"]);
+  const generated = composeOverlay(document, policy, overlay({ scheduledFaults: [crash("student-a-restart", 1), crashAndRestart("student-a", 2, 5)] }), value => engine.validate(value));
+  assert.ok(!generated.ok);
+  assert.deepEqual(codes(generated.diagnostics), ["/scheduledFaults/1/restart DUPLICATE"]);
+});
+
+test("ADR-004 amendment (#97 D-8): a crashed service restarts and the run replays identically", async () => {
+  const input = overlay({ scheduledFaults: [crashAndRestart("student-crash", 3, 10)] });
+  const exports = [];
+  for (let index = 0; index < 2; index++) {
+    const result = composeOverlay(document, policy, input, value => engine.validate(value));
+    assert.ok(result.ok);
+    const session = engine.create(result.document);
+    await session.simulation.run();
+    assert.equal(session.simulation.status, "COMPLETED");
+    exports.push(session.simulation.history.export());
+  }
+  assert.equal(canonicalEncode(exports[0] as unknown as CanonicalValue), canonicalEncode(exports[1] as unknown as CanonicalValue));
+  const lifecycle = exports[0]!.observations.filter(item => item.type === "service.lifecycle.changed" && item.source === "svc")
+    .map(item => [item.time, (item.data as { after: string }).after]);
+  assert.deepEqual(lifecycle.map(([, state]) => state), ["RUNNING", "CRASHED", "STARTING", "RUNNING"]);
+  assert.deepEqual(lifecycle.map(([time]) => time), [0, 3, 13, 14]);
+});

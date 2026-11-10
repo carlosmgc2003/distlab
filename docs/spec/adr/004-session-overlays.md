@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Accepted |
-| Date | 2026-10-31 |
+| Date | 2026-10-31; amended 2026-11-10 (crash with restart, #97 D-8) |
 | Scope | Application boundary, worker protocol, scenario composition; contracts and implementation follow in #94, #95, #97 |
 | Related issues | #93, #94, #95, #96, #97, #104 |
 
@@ -42,6 +42,7 @@ packaged lesson. It has three parts:
 - **Fault rules**: `FaultRule` values, unchanged from the fault engine.
 - **Scheduled faults**: scenario actions of kind `fault`, so each one carries
   its virtual time `at` and a `ScheduledFault` (crash or external availability).
+  A crash may also carry a **restart** (see below).
 - **Parameter overrides**: `{ key, value }` pairs for parameters that the
   lesson declares.
 
@@ -54,7 +55,38 @@ redaction.
 
 An overlay cannot add, remove, or edit assertions, client workload, service
 lifecycle actions, external behavior, topology, the seed, or the start time.
-Restoring a crashed service, choosing a seed, and assertion editing are deferred.
+The one lifecycle change it can make is the restart that a student crash
+carries. Choosing a seed and assertion editing are deferred.
+
+### Crash with restart (amendment, #97 D-8)
+
+A service cannot move from RUNNING to STARTING
+([service runtime](../service-runtime.md)), so a packaged lesson cannot hold
+an unconditional restart, and before this amendment a student crash was
+permanent for the rest of the run. Recovery is half of a crash lesson: an
+outbox relays only once its service runs again, and a retry is safe only if
+the restarted service answers it from durable state.
+
+A scheduled fault whose `ScheduledFault` is a `crash` may therefore carry
+`restart: { after }`, where `after` is a safe integer of at least 1 virtual
+millisecond. The crash and its restart are one entry. They count once toward
+the fault entry limit, are allowed whenever the policy allows `crash`, and are
+validated together:
+
+- `restart` on any other scheduled-fault kind is `OVERLAY_NOT_ALLOWED`.
+- A missing `after` is `REQUIRED`; a value that is not a safe integer of at
+  least 1 is `TIME`; unknown keys are `UNSUPPORTED`.
+
+Composition expands the entry into the crash action and two ordinary service
+lifecycle actions on the crash's target, appended right after it:
+`<id>-restart` (STARTING at `at + after`) and `<id>-ready` (RUNNING at
+`at + after + 1`), where `<id>` is the entry's `student-` action ID. The
+applied document never holds `restart`; the runtime, kernel, and service
+lifecycle rules are unchanged. A diagnostic on a generated action, such as a
+duplicate ID, is translated to `/scheduledFaults/<i>/restart`.
+
+A student can still not restart a service the packaged lesson crashed, and
+cannot add a lifecycle action on its own.
 
 ### Lesson overlay policy (allow-list)
 
@@ -114,7 +146,8 @@ The worker validates in this order, and stops at the first stage that fails:
    otherwise `INVALID_SCENARIO` (unchanged).
 3. **Overlay against the policy.** The worker checks the overlay schema, unknown
    or duplicate parameter keys, value types and ranges, allowed point and effect
-   pairs, allowed scheduled-fault kinds, and the entry limit. Every student fault
+   pairs, allowed scheduled-fault kinds, a restart only on a crash and its
+   `after`, and the entry limit. Every student fault
    rule ID, scheduled-fault action ID, and `ScheduledFault` ID must start with
    `student-`. Failures return `INVALID_OVERLAY`.
 4. **Applied document.** The worker applies the overlay, then runs the unchanged
@@ -150,7 +183,8 @@ the normalized overlay. It runs in the worker, before `ScenarioEngine.create`.
    equal applied documents have one overlay identity.
 2. **Compose.**
    - `faults` = packaged faults, then overlay fault rules.
-   - `actions` = packaged actions, then overlay scheduled faults.
+   - `actions` = packaged actions, then overlay scheduled faults. A crash
+     with a restart is followed by its two generated lifecycle actions.
    - Each parameter override replaces the value at every target of that parameter.
    - Every other field of the document is unchanged, including `name`, `seed`,
      `startTime`, `external`, `assertions`, and `configuration`.
@@ -262,7 +296,10 @@ above. The shapes reuse existing fault and scenario types instead of
 redeclaring them.
 
 ```ts
-type OverlayScheduledFault = Extract<ScenarioAction, { kind: "fault" }>;
+type OverlayScheduledFault = Extract<ScenarioAction, { kind: "fault" }> & {
+  /** Only on a crash (amendment, #97 D-8): STARTING `after` ms later, RUNNING 1 ms after that. */
+  readonly restart?: { readonly after: Duration };
+};
 
 interface ParameterOverride {
   readonly key: string;
@@ -360,6 +397,14 @@ reuses OVL-AC-2 for its export equality.
   packaged value and lies in its domain, targets are disjoint, no packaged ID
   uses the student prefix, and every declared preset reproduces its paired
   document.
+- **OVL-AC-7 Crash with restart (amendment).** A crash with a restart composes
+  into the crash and its STARTING and RUNNING actions at `at + after` and
+  `at + after + 1`; the run records RUNNING, CRASHED, STARTING, RUNNING at those
+  times and replays identically. Every restart diagnostic above has a rejection
+  test. Every lesson whose policy allows `crash` runs to completion with a
+  crash and restart on each eligible target. On the retry lessons a restarted
+  payments service answers the retry: one payment under idempotency, two
+  without it.
 
 ## Alternatives considered
 
@@ -397,14 +442,17 @@ reuses OVL-AC-2 for its export equality.
   packages and the kernel are unchanged. The dependency direction is unchanged.
 - Packaged assertions can FAIL under an overlay. The UI must not present that
   as a broken simulator. #96 gives the presentation for it.
-- Restoring a crashed service is not an overlay capability. A lesson that wants
-  crash and recovery must keep packaging the restart actions.
+- A student crash may carry a restart (amendment, #97 D-8), so a student can
+  tell a recovery story; the restart is generated as ordinary lifecycle
+  actions, and the kernel and runtime models are unchanged. A crash without a
+  restart still lasts for the rest of the run, and a crash the lesson packages
+  can only be restarted by the lesson.
 - Fault IDs written by students are visible in Recorded history and exports.
   They are canonical data, so they follow the existing visibility policy.
 
 ## Verification and traceability
 
-OVL-AC-1 to OVL-AC-6, APP-AC-5 to APP-AC-7, and the existing FAULT-AC-5 and
+OVL-AC-1 to OVL-AC-7, APP-AC-5 to APP-AC-7, and the existing FAULT-AC-5 and
 SCENARIO-AC-5 verify this decision. It serves the vision's activity loop (§12),
 reproducibility (§15), and failure injection (§16). It adds no simulation semantics
 and refines only the application boundary, as architecture §40 requires.

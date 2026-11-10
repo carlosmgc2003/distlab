@@ -207,6 +207,10 @@ test("every fault kind a policy offers runs its lesson to completion instead of 
       assert.ok(targets.length, `${lesson.id} has a target for ${kind}`);
       for (const target of targets) for (const at of [0, 3, 10]) for (const state of kind === "crash" ? [undefined] : ["UNAVAILABLE", "RATE_LIMITED", "DEGRADED"]) {
         overlays.push({ version: 1, scheduledFaults: [{ id: "student-scheduled", at, kind: "fault", fault: { id: "student-scheduled-fault", kind, target: target.id, ...(state ? { state } : {}) } }] });
+        // A crash may carry a restart (ADR-004 amendment, #97 D-8): the restarted service must not end the run either.
+        if (kind === "crash") for (const after of [1, 10]) {
+          overlays.push({ version: 1, scheduledFaults: [{ id: "student-scheduled", at, kind: "fault", fault: { id: "student-scheduled-fault", kind, target: target.id }, restart: { after } }] });
+        }
       }
     }
     for (const overlay of overlays) {
@@ -412,4 +416,22 @@ test("#163 fresh, reset, and stepped runs agree on the verdicts of a changed exp
       assert.deepEqual(other.results, fresh.results);
     }
   }
+});
+
+test("#97 D-8 a crashed Payments restarts and answers the retry from its durable result", async () => {
+  // Payments crashes at t=2, after committing payment-1, and restarts at t=12 (RUNNING at t=13), before the retry at t=21.
+  const overlay = { version: 1, scheduledFaults: [{ id: "student-crash", at: 2, kind: "fault", fault: { id: "student-crash-payments", kind: "crash", target: "payments" }, restart: { after: 10 } }] };
+  const lifecycle = (result: HarnessExport) => result.history.observations.filter(item => item.type === "service.lifecycle.changed" && item.source === "payments")
+    .map(item => `${item.time}:${(item.data as { after: string }).after}`);
+  const payments = (result: HarnessExport) => Object.keys((result.state as { databases: Record<string, { tables: Record<string, Record<string, unknown>> }> }).databases.payments!.tables.payments!);
+  const safe = await run(lessons.find(item => item.id === "retry-idempotent")!, overlay);
+  assert.equal(safe.status, "COMPLETED");
+  assert.deepEqual(lifecycle(safe), ["0:RUNNING", "2:CRASHED", "12:STARTING", "13:RUNNING"]);
+  assert.deepEqual(payments(safe), ["payment-1"]);
+  assert.deepEqual(safe.results.map(item => [item.id, item.status]), [["one-payment-per-order", "PASS"]]);
+  const unsafe = await run(lessons.find(item => item.id === "retry-unsafe")!, overlay);
+  assert.deepEqual(payments(unsafe), ["payment-1", "payment-2"]);
+  assert.deepEqual(unsafe.results.map(item => [item.id, item.status]), [["one-payment-per-order", "FAIL"]]);
+  // Same lesson, overlay, and seed: same run.
+  assert.equal((await run(lessons.find(item => item.id === "retry-idempotent")!, overlay)).digest, safe.digest);
 });
