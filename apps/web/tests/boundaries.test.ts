@@ -88,7 +88,8 @@ test("OVL-AC-5 and ARCH-AC-7: the main thread reads overlay policies from data-o
   const mainThread = files(app).filter(file => !file.startsWith(resolve(app, "worker")));
   for (const file of mainThread) {
     const text = readFileSync(file, "utf8");
-    for (const name of ["composeOverlay", "applyOverlay", "validateOverlay", "resolveTarget", "applyArchitectureEdits", "readArchitectureEdits", "attributeDiagnostic", "@distlab/scenario", "@distlab/catalogs\""]) {
+    // Assessment definition validation composes every row's overlay, so it stays off the main thread too (docs/spec/assessment.md).
+    for (const name of ["composeOverlay", "applyOverlay", "validateOverlay", "resolveTarget", "applyArchitectureEdits", "readArchitectureEdits", "attributeDiagnostic", "validateAssessmentDefinition", "@distlab/scenario", "@distlab/catalogs\""]) {
       assert.ok(!text.includes(name), `${file} must not reference ${name}`);
     }
   }

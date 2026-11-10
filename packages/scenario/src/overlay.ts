@@ -347,7 +347,8 @@ function translator(packaged: CanonicalValue, policy: LessonOverlayPolicy | unde
   };
 }
 
-function sortDiagnostics(found: readonly ScenarioDiagnostic[]): readonly ScenarioDiagnostic[] {
+/** Sorted by path, then code, without duplicates. Shared with assessment definition validation; not exported from the package. */
+export function sortDiagnostics(found: readonly ScenarioDiagnostic[]): readonly ScenarioDiagnostic[] {
   const sorted = [...found].sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : left.code < right.code ? -1 : left.code > right.code ? 1 : 0);
   return Object.freeze(sorted.filter((item, index) => index === 0 || item.path !== sorted[index - 1]!.path || item.code !== sorted[index - 1]!.code)
     .map(item => Object.freeze({ path: item.path, code: item.code })));

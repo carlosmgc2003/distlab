@@ -8,3 +8,4 @@ export {
   SUPPORTED_FORMAT_VERSIONS, documentDigest, parseDocumentText, resolveHostedCatalog, validateScenarioDocument,
   type DocumentParse, type DocumentStage, type DocumentValidation, type HostedCatalog, type HostedCatalogRegistry,
 } from "./document.js";
+export { validateAssessmentDefinition, type AssessmentBaseLesson } from "./assessment-definition.js";

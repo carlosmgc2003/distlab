@@ -12,7 +12,8 @@ headless simulation runner and deterministic virtual request/response network.
 `@distlab/catalogs` provides versioned checkout
 models, two checkout scenarios, and seventeen commerce lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
-deterministic event boundaries. In the browser, the **Experiment drawer** (**Change the
+deterministic event boundaries. It also validates an assessment definition against its packaged
+base lesson (`validateAssessmentDefinition`, [Assessment](docs/spec/assessment.md)). In the browser, the **Experiment drawer** (**Change the
 experiment…**) lets a student add deterministic faults to a loaded lesson before Run, as a session
 overlay that the lesson's policy allows ([ADR-004](docs/spec/adr/004-session-overlays.md)), and
 change the settings a lesson declares (idempotency, timeout, compensation, outbox, circuit breaker)
@@ -51,7 +52,7 @@ DistLab models the semantics that matter for learning rather than emulating spec
   - [Database](docs/spec/database.md) and [KeyValueStore](docs/spec/kv-store.md)
   - [Service Runtime](docs/spec/service-runtime.md), [Client Runtime](docs/spec/client-runtime.md), and [External Service Runtime](docs/spec/external-service-runtime.md)
   - [Fault Engine](docs/spec/fault-engine.md) and [Scenario Engine](docs/spec/scenario-engine.md)
-  - [Assessment](docs/spec/assessment.md) (draft): running one student design against a suite of fault scenarios (#97)
+  - [Assessment](docs/spec/assessment.md): running one student design against a suite of fault scenarios (#97)
 - [Architecture decisions](docs/spec/adr/) records significant decisions about simulation semantics.
 - [Evaluations](docs/evaluations/) records assessments of the product against a real use, such as the [student evaluation for ITBA 73.40](docs/evaluations/2026-11-itba-73-40/README.md). [RFCs](docs/rfc/) propose direction before a decision is made; an accepted proposal becomes issues and, where semantics change, an ADR.
 - [Unattended agent workflow](docs/agents/workflow.md) describes how agent sessions pick, implement, and hand over issues for review. Claude Code cloud sessions install dependencies with the SessionStart hook in `.claude/hooks/session-start.sh`.
