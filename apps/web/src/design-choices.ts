@@ -27,8 +27,22 @@ const copy: Readonly<Record<string, ChoiceCopy>> = {
   "cache-invalidation": { label: "Invalidate cache on price change", hint: "Catalog deletes the cached price when the back office changes it, instead of letting it live until its TTL ends." },
 };
 
-export function choiceCopy(key: string): ChoiceCopy {
-  return copy[key] ?? { label: key, hint: "" };
+/**
+ * Copy for one lesson where a key means something different there. Reliable Checkout (#97) puts
+ * the outbox in Orders and adds payment retries.
+ */
+const lessonCopy: Readonly<Record<string, Readonly<Record<string, ChoiceCopy>>>> = {
+  "reliable-checkout@1": {
+    retries: { label: "Payment retries", hint: "How many times Payments repeats an authorization that timed out." },
+    idempotency: { label: "Idempotency key", hint: "Payments sends the order ID as an idempotency key; the processor answers a repeated key with the authorization it already holds." },
+    compensation: { label: "Compensation", hint: "Orders voids the payment and releases the inventory when a checkout step fails, then cancels the order." },
+    outbox: { label: "Transactional outbox", hint: "Orders records OrderConfirmed in the same commit as the confirmation and publishes it from a later relay." },
+  },
+};
+
+/** The copy for a parameter key, in `lesson` (a packaged scenario name) when that lesson words it differently. */
+export function choiceCopy(key: string, lesson?: string): ChoiceCopy {
+  return (lesson ? lessonCopy[lesson]?.[key] : undefined) ?? copy[key] ?? { label: key, hint: "" };
 }
 
 /** Every declared parameter, with the value the draft gives it (its default when absent). */

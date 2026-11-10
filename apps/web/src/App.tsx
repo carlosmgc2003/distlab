@@ -27,25 +27,35 @@ import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.t
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
 import { TimelineView } from "./TimelineView.tsx";
-import type { PackagedScenario } from "./scenarios.ts";
+import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
+import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, AssessmentMatrix, AssessmentRun, useAssessmentSuite } from "./AssessmentView.tsx";
 import type { SimulationHost } from "./host.ts";
-import { experimentLabel, packagedMetadata, scenarios } from "./scenarios.ts";
+import { assessments, experimentLabel, packagedMetadata, scenarios } from "./scenarios.ts";
 import { DESIGN_STEP_NOTICE, designStepUnavailable } from "./design-step.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 
-type WorkspaceTab = "architecture" | "history";
+type WorkspaceTab = "assessment" | "architecture" | "history";
 
 const tabs = [
   ["architecture", "Architecture"],
   ["history", "Recorded history"],
 ] as const satisfies readonly (readonly [WorkspaceTab, string])[];
+// An open assessment (#97, D-7) puts its results first; the system and its history stay one tab away.
+const assessmentTabs = [["assessment", "Assessment results"], ...tabs] as const satisfies readonly (readonly [WorkspaceTab, string])[];
 
 export function App({ host }: { readonly host: SimulationHost }) {
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
   const { projection, loading, pendingCommands } = snapshot;
-  const busy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
+  const commandBusy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
+  // An open assessment replaces the loaded lesson; its suite state is UI state (docs/spec/assessment.md).
+  const [assessment, setAssessment] = useState<PackagedAssessment | null>(null);
+  // Evidence of a reloaded row is shown once that row's session has settled (ASSESS-AC-6).
+  const [pendingEvidence, setPendingEvidence] = useState<string | null>(null);
+  const suite = useAssessmentSuite(host, assessment, commandBusy, useCallback((id: string) => setPendingEvidence(id), []));
+  const suiteActive = suite.running || suite.reopening !== null;
+  const busy = commandBusy || suiteActive;
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
@@ -88,10 +98,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const imported = importedFile !== null;
   const importedScenario = imported ? snapshot.document ?? importedDocument : null;
   // An imported session has no packaged copy: its scenario, policy, and family come from the validated document.
-  const lesson: ScenarioDefinition | undefined = useMemo(() => imported ? importedScenario?.scenario : loadedChoice ? packagedMetadata(loadedChoice) : undefined, [imported, importedScenario, loadedChoice]);
-  const policy: LessonOverlayPolicy | undefined = imported ? importedScenario?.overlayPolicy : loadedChoice?.policy;
-  const commerce = imported ? importedScenario?.catalog.id === commerceCatalogReference.id : loadedChoice?.family === "commerce";
-  const sessionName = imported ? `imported:${importedFile.name}` : loadedChoice?.id ?? "none";
+  const lesson: ScenarioDefinition | undefined = useMemo(() => imported ? importedScenario?.scenario
+    : assessment ? assessment.scenario as unknown as ScenarioDefinition : loadedChoice ? packagedMetadata(loadedChoice) : undefined, [imported, importedScenario, assessment, loadedChoice]);
+  // An assessment takes no Experiment drawer: its rows are the faults, and its design form is in the Lesson panel.
+  const policy: LessonOverlayPolicy | undefined = imported ? importedScenario?.overlayPolicy : assessment ? undefined : loadedChoice?.policy;
+  const commerce = imported ? importedScenario?.catalog.id === commerceCatalogReference.id : assessment ? true : loadedChoice?.family === "commerce";
+  // Every suite row is its own run, so an assessment's session name follows the loaded row.
+  const sessionName = imported ? `imported:${importedFile.name}` : assessment ? `assessment:${assessment.id}:${projection?.simulation.runId ?? ""}` : loadedChoice?.id ?? "none";
   const documentError = snapshot.error?.code === "INVALID_DOCUMENT" && importedFile ? { name: importedFile.name, diagnostics: errorDiagnostics(snapshot.error.context) ?? [] } : null;
   // Student fault rules come from the session the worker applied; the report lists them beside the packaged rules.
   const studentRules = snapshot.session?.overlay.faults;
@@ -103,7 +116,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
   // The session's check labels by assertion ID: the packaged lesson's classification, or the imported document's own labels.
   const checkLabels = useMemo((): Readonly<Record<string, string>> => imported ? importedScenario?.presentation.assertions ?? {}
-    : loadedChoice?.family === "commerce" ? Object.fromEntries(loadedChoice.checks.map(check => [check.id, check.label])) : {}, [imported, importedScenario, loadedChoice]);
+    : assessment ? Object.fromEntries(assessment.checks.map(check => [check.id, check.label]))
+    : loadedChoice?.family === "commerce" ? Object.fromEntries(loadedChoice.checks.map(check => [check.id, check.label])) : {}, [imported, importedScenario, assessment, loadedChoice]);
   // Replay state lives in the shell, so the cursor and the narration survive a tab switch.
   // Choosing a record in Recorded history takes the graph highlight back, so the cursor stands
   // down. A record that travels no link has no pulse id, so its movement text is the fallback
@@ -148,12 +162,18 @@ export function App({ host }: { readonly host: SimulationHost }) {
     lessonTrigger.current?.focus();
   }, [chooserOpen, busy]);
   useEffect(() => { setEvidenceFocus(null); }, [sessionKey]);
+  // After the session-key reset above, so a reloaded row's evidence survives its own reload.
+  useEffect(() => {
+    if (!pendingEvidence || busy || !projection) return;
+    setPendingEvidence(null);
+    showEvidence(pendingEvidence);
+  });
   useEffect(() => {
     const requested = tabRequest.current;
     if (!requested) return;
     tabRequest.current = null;
     if (!requested.focusPanel) return;
-    document.getElementById(requested.tab === "architecture" ? "architecture-panel" : "history-panel")?.focus();
+    document.getElementById(`${requested.tab}-panel`)?.focus();
   }, [tab]);
 
   const showTab = (next: WorkspaceTab, focusPanel = true) => {
@@ -170,17 +190,17 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const onTabKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
-    const order: WorkspaceTab[] = ["architecture", "history"];
+    const order: WorkspaceTab[] = workspaceTabs.map(([id]) => id);
     const current = order.indexOf(tab);
     let next: WorkspaceTab = tab;
     if (event.key === "ArrowRight") next = order[(current + 1) % order.length]!;
     else if (event.key === "ArrowLeft") next = order[(current - 1 + order.length) % order.length]!;
-    else if (event.key === "Home") next = "architecture";
-    else if (event.key === "End") next = "history";
+    else if (event.key === "Home") next = order[0]!;
+    else if (event.key === "End") next = order.at(-1)!;
     // Arrow navigation activates the tab but keeps focus on the tab itself;
     // only direct activation moves focus into the panel.
     showTab(next, false);
-    document.getElementById(next === "architecture" ? "tab-architecture" : "tab-history")?.focus();
+    document.getElementById(`tab-${next}`)?.focus();
   };
   /** Resets the draft for a new load and returns the overlay to send, if any. */
   const startDraft = (overlay?: SessionOverlay): SessionOverlay | undefined => {
@@ -195,6 +215,13 @@ export function App({ host }: { readonly host: SimulationHost }) {
     if (!overlay) setCarryNotice("");
     return sent;
   };
+  /** Choosing a lesson or a file closes an open assessment; its results are UI state and are dropped. */
+  const leaveAssessment = () => {
+    if (!assessment) return;
+    setAssessment(null);
+    suite.reset();
+    if (tab === "assessment") setTab("architecture");
+  };
   /**
    * Every path that changes inputs is one load: an exact packaged document, or the text of an
    * imported scenario file, plus an optional overlay.
@@ -204,6 +231,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     const choice = scenarios.find(item => item.id === id);
     if (!choice) return;
     setLoadedChoice(choice);
+    leaveAssessment();
     // Choosing another scenario discards the imported document (ADR-006).
     setImportedFile(null);
     setImportedDocument(null);
@@ -214,6 +242,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const loadFile = (file: ScenarioFile, overlay?: SessionOverlay) => {
     if (busy) return;
     setImportedFile(file);
+    leaveAssessment();
     const sent = startDraft(overlay);
     // The text goes to the worker exactly as read: the main thread never parses or validates it.
     void host.loadDocument(file.text, sent as unknown as CanonicalValue | undefined).catch(() => {});
@@ -280,7 +309,27 @@ export function App({ host }: { readonly host: SimulationHost }) {
     setChooserOpen(false);
     replaceSession(id);
   };
-  const triggerLabel = imported ? `Lesson: ${importedScenario?.presentation.title ?? importedFile.name}`
+  /**
+   * Opening an assessment loads its base lesson without an overlay, so its architecture is on view
+   * before the first run. Each suite row is then an ordinary load of the same document (D-7).
+   */
+  const chooseAssessment = (id: string) => {
+    if (busy) return;
+    const choice = assessments.find(item => item.id === id);
+    if (!choice) return;
+    chooserOpener.current = null;
+    focusTriggerWhenIdle.current = true;
+    setChooserOpen(false);
+    setAssessment(choice);
+    suite.reset();
+    setLoadedChoice(null);
+    setImportedFile(null);
+    setImportedDocument(null);
+    startDraft();
+    setTab("assessment");
+    void host.load(choice.scenario).catch(() => {});
+  };
+  const triggerLabel = assessment ? `Lesson: ${assessment.title} assessment` : imported ? `Lesson: ${importedScenario?.presentation.title ?? importedFile.name}`
     : loadedChoice ? `Lesson: ${experimentLabel(loadedChoice)}` : "Choose a lesson";
 
   const editable = !busy && (projection !== null || overlayError !== null);
@@ -423,9 +472,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
       setRevealToken(token => token + 1);
     } else if (!endsRun(status)) setAnnouncement("");
   }, [status, summary]);
-  const lessonPanel = <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
+  const lessonPanel = assessment ? <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
+    step={suite.results.length && !suiteActive ? "investigate" : "run"}
+    goal={<AssessmentGoal choice={assessment} />} run={<AssessmentRun choice={assessment} suite={suite} busy={commandBusy} />}
+    investigate={<AssessmentInvestigate choice={assessment} suite={suite} onShowResults={() => showTab("assessment")} />}
+    experiment={<AssessmentExperiment />} />
+    : <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
     step={currentStep(status, projection?.simulation.processedEvents)}
     goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} revealInvestigate={revealToken} />;
+  const workspaceTabs = assessment ? assessmentTabs : tabs;
 
   // The top bar (#144) is one row and identical on both tabs: name, lesson trigger, Simulation
   // execution, and the run summary. Errors get their own row under it, only while one exists.
@@ -445,18 +500,18 @@ export function App({ host }: { readonly host: SimulationHost }) {
           onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
         <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       </div>
-      <SimulationControls host={host} snapshot={snapshot} />
+      <SimulationControls host={host} snapshot={snapshot} locked={suiteActive} />
     </header>
     <SimulationAlert snapshot={snapshot} notices={mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null} />
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}
-    {projection ? <div className="investigation-workspace has-lesson-panel">
+    {projection || assessment ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
       <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>
         <div className="workspace-navigation">
         <div className="workspace-tabs" role="tablist" aria-label="Investigation workspace" onKeyDown={onTabKeyDown}>
-          {tabs.map(([id, label]) => <button key={id} type="button" role="tab"
-            id={id === "architecture" ? "tab-architecture" : "tab-history"}
-            aria-selected={tab === id} aria-controls={id === "architecture" ? "architecture-panel" : "history-panel"}
+          {workspaceTabs.map(([id, label]) => <button key={id} type="button" role="tab"
+            id={`tab-${id}`}
+            aria-selected={tab === id} aria-controls={`${id}-panel`}
             tabIndex={tab === id ? 0 : -1}
             className={tab === id ? "is-active" : undefined}
             onClick={() => showTab(id)}>{label}</button>)}
@@ -464,6 +519,11 @@ export function App({ host }: { readonly host: SimulationHost }) {
         </div>
         {/* Docked beside both tab panels and non-modal, so Pick on graph keeps working. */}
         {experimentDrawer}
+        {assessment ? <section id="assessment-panel" className="panel-assessment" role="tabpanel" tabIndex={-1}
+          aria-labelledby="tab-assessment" hidden={tab !== "assessment"}>
+          <AssessmentMatrix choice={assessment} suite={suite} busy={busy} />
+        </section> : null}
+        {projection ? <>
         <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
           {/* Replay lives where the graph is (#144): a one-row toolbar above it. */}
@@ -480,6 +540,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <TimelineView key={`${sessionName}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} checkLabels={checkLabels} onEmphasis={onEmphasis}
             {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
         </div>
+        </> : <section className="panel-loading" role="tabpanel" aria-labelledby={`tab-${tab}`} hidden={tab === "assessment"}>
+          {/* Between two assessment rows the worker holds no session yet. */}
+          <p>Loading the next run…</p>
+        </section>}
       </div>
     </div> : overlayError && (loadedChoice || imported) ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
@@ -496,7 +560,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
     </div>}
     <p className="sr-only" role="status" aria-live="polite" aria-label="Lesson outcome">{announcement}</p>
     <ServiceStateDialog open={serviceStateOpen && serviceState !== null} time={projection?.simulation.time} onClose={closeServiceState}>{serviceState}</ServiceStateDialog>
-    <LessonChooser open={chooserOpen} lessons={scenarios} current={imported ? null : loadedChoice?.id ?? null} busy={busy}
-      discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onClose={closeChooser} />
+    <LessonChooser open={chooserOpen} lessons={scenarios} assessments={assessments}
+      current={assessment ? `assessment:${assessment.id}` : imported ? null : loadedChoice?.id ?? null} busy={busy}
+      discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onChooseAssessment={chooseAssessment} onClose={closeChooser} />
   </main>;
 }

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted 2026-11-10: decisions **D-1** to **D-8** take their recommendations; D-8 amends ADR-004. Implementation follows the plan below. |
+| Status | Accepted 2026-11-10: decisions **D-1** to **D-8** take their recommendations; D-8 amends ADR-004. Implemented 2026-11-10 in the three planned steps (#175, #177, and the browser view); ASSESS-AC-9 waits for #112. |
 | Owner | DistLab maintainers |
 | Last updated | 2026-11-10 |
 | Related issues | #97 (this view), #104 (epic), #95 (design choices, done by #89), #96 (lesson checks), #163 (safety invariants), #112 (Design editor) |
@@ -346,8 +346,9 @@ The catalog work (plan step 2) settles what this section left open:
   `commerce.messaging-provider`. The data-only module
   `src/commerce/reliable-checkout.ts` holds the document `reliable-checkout@1`,
   its overlay policy, its check classification, and `assessmentDefinitions`.
-  Until the browser view (plan step 3), the lesson is catalog only: the worker
-  does not accept it and the Lesson chooser does not list it.
+  Since the browser view (plan step 3), the worker accepts it as a packaged
+  lesson and `hostedCatalogs` reserves its name; no lesson card lists it, only
+  the Assessment group.
 - **Timing.** The checkout starts at t=1, the relay request is sent at t=100,
   and the three deadline checks run at t=200. The default design commits the
   confirmed order at t=8 and publishes at t=18. No design choice moves either
@@ -367,6 +368,37 @@ The catalog work (plan step 2) settles what this section left open:
 - **Policy.** The policy allows every fault kind the rows use, crash and
   external availability, and `maxEntries` 4. Every row holds at most two
   entries (**D-6**).
+
+The browser view (plan step 3) settles the rest:
+
+- **Layout (D-7).** The Lesson chooser lists the assessment in an
+  **Assessment** group after the lesson pairs. Choosing it loads the base
+  document without an overlay, so its architecture is on view, and the top-bar
+  trigger reads "Lesson: Reliable Checkout assessment". The Lesson panel shows
+  the requirements in ① Goal; the Design choices section, titled "Your design",
+  with **Run assessment**, **Stop**, and the progress log in ② Run; the
+  one-line summary and **Export result** in ③ Investigate. The workspace gains
+  an **Assessment results** tab, first, with the matrix: one row per scenario,
+  a Result column (PASS, FAIL, or INCOMPLETE), and one column per invariant
+  showing HOLDS, VIOLATED, or INCOMPLETE as words with a glyph. The Experiment
+  drawer is not offered: the rows are the faults (**D-6**).
+- **Code.** `apps/web/src/assessment.ts` is the pure model: row overlays,
+  cells from stored verdicts, row outcomes, the export, and the announcements.
+  `assessment-runner.ts` sends the loads and runs over `SimulationHost`.
+  `AssessmentView.tsx` holds the suite state and the view.
+- **Progress.** The live region is a polite log (`role="log"`, named
+  "Assessment progress"). A row's finish and the next row's start can land in
+  one render, so each message is appended rather than replacing the last. While
+  a suite or a reload runs, the four simulation controls are unavailable.
+- **Evidence.** A cell links the row run's latest
+  `scenario.assertion.evaluated` record. For the last row, which the worker
+  still holds, it opens Recorded history at once. For another row it loads and
+  runs that row again, compares the `runId`, and opens the record only when it
+  matches; a mismatch is reported in ② Run.
+- **Export.** The file `<assessment id>-result.json` holds the
+  `AssessmentResult` as canonical JSON: object keys sorted, no insignificant
+  whitespace, one trailing newline, the same encoding as the kernel's
+  `canonicalEncode`.
 
 ## Minimal examples
 

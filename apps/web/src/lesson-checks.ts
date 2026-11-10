@@ -33,7 +33,8 @@ export interface LessonCheckView {
 const invariantVerdicts: Readonly<Record<string, InvariantVerdict>> = { PASS: "HOLDS", FAIL: "VIOLATED", PENDING: "PENDING", INCOMPLETE: "INCOMPLETE" };
 const expectationVerdicts: Readonly<Record<string, ExpectationVerdict>> = { PASS: "reproduced", FAIL: "not reproduced", PENDING: "pending", INCOMPLETE: "incomplete" };
 
-function latestEvaluations(observations: readonly Observation[]): ReadonlyMap<string, string> {
+/** The latest `scenario.assertion.evaluated` record ID per assertion, from stored fields only. */
+export function latestEvaluations(observations: readonly Observation[]): ReadonlyMap<string, string> {
   const latest = new Map<string, string>();
   for (const observation of observations) {
     if (observation.type !== "scenario.assertion.evaluated") continue;

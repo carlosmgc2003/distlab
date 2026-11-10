@@ -1551,7 +1551,8 @@ DistLab should remain intentionally smaller than the distributed systems it teac
 
 ## Packaged browser lessons and boundary counters
 
-The browser hosts the two checkout documents and seventeen commerce lessons through
+The browser hosts the two checkout documents, seventeen commerce lessons, and the
+Reliable Checkout assessment's base lesson through
 worker-only catalog composition. Main-thread imports are limited to contracts
 and data-only scenario documents, plus the React, React Flow, and ELK
 presentation libraries; ELK layout runs in its own presentation worker. Committed business facts, live KV entries and

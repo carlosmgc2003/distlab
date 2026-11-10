@@ -9,9 +9,11 @@ const root = fileURLToPath(new URL("../../..", import.meta.url));
 const app = resolve(root, "apps/web/src");
 const dataModule = resolve(root, "packages/catalogs/src/scenarios.ts");
 const commerceDataModule = resolve(root, "packages/catalogs/src/commerce/scenarios.ts");
+// The Reliable Checkout base lesson and its packaged assessment definition (#97): data only.
+const assessmentDataModule = resolve(root, "packages/catalogs/src/commerce/reliable-checkout.ts");
 // Data-only model descriptors (ADR-005): the main thread may import them.
 const descriptorModules = [resolve(root, "packages/catalogs/src/descriptors.ts"), resolve(root, "packages/catalogs/src/commerce/descriptors.ts")];
-const dataModules = new Set([dataModule, commerceDataModule, ...descriptorModules]);
+const dataModules = new Set([dataModule, commerceDataModule, assessmentDataModule, ...descriptorModules]);
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(resolve(directory, entry.name)) : /\.tsx?$/.test(entry.name) ? [resolve(directory, entry.name)] : []);
 }
@@ -40,7 +42,10 @@ test("main-thread import graph uses application contracts and data, never runtim
     // Architecture edit and allowance shapes (ADR-005). Types only: no validation or application code.
     "ArchitectureEdits", "SlotEdit", "BindingEdit", "ResourceEdit", "SubscriptionEdit", "LessonArchitectureAllowance",
     // Scenario document shapes (ADR-006). Types only: no parser, validator, or registry.
-    "CatalogReference", "ScenarioDocument", "ScenarioDocumentPresentation", "SessionOrigin"]);
+    "CatalogReference", "ScenarioDocument", "ScenarioDocumentPresentation", "SessionOrigin",
+    // Assessment shapes (docs/spec/assessment.md). Types only: no definition validation.
+    "AssessmentDefinition", "AssessmentRow", "AssessmentConfiguration", "AssessmentVerdict", "AssessmentCell", "AssessmentRowResult", "AssessmentResult",
+    "Duration"]);
   // Contract constants the main thread shares with the worker (ADR-006 "Bounded size"). Data only.
   const allowedValues = new Set(["ScenarioDocumentLimits"]);
   const visited = new Set<string>();
@@ -53,7 +58,9 @@ test("main-thread import graph uses application contracts and data, never runtim
         assert.ok(dependency.typeOnly || dependency.names.every(name => allowedValues.has(name)), `Contracts must be type-only on main thread, apart from shared constants: ${file}`);
         assert.ok(dependency.names.every(name => dependency.typeOnly ? allowed.has(name) : allowedValues.has(name)), `Low-level contract in ${file}`);
       } else if (dependency.path.startsWith(".")) {
-        const target = resolve(dirname(file), dependency.path);
+        // Package sources import siblings by their emitted `.js` name; the walk reads the `.ts` source.
+        const named = resolve(dirname(file), dependency.path);
+        const target = !named.startsWith(app) && named.endsWith(".js") ? named.replace(/\.js$/, ".ts") : named;
         assert.ok(target.startsWith(app) || dataModules.has(target), `Only the catalog's data-only source may cross a source boundary: ${target}`);
         if (!target.endsWith(".css")) walk(target);
       } else assert.ok([
@@ -67,6 +74,7 @@ test("main-thread import graph uses application contracts and data, never runtim
   assert.ok(visited.has(resolve(app, "host.ts")));
   assert.ok(visited.has(dataModule));
   assert.ok(visited.has(commerceDataModule));
+  assert.ok(visited.has(assessmentDataModule), "the assessment view reads its definition from the data-only module");
   // #116: the starter file builder is on the main thread, so the walk above holds it to contract types and data-only modules.
   assert.ok(visited.has(resolve(app, "starter-file.ts")));
   // Descriptor modules obey the same data-only rules whether or not the app imports them yet.
@@ -94,7 +102,7 @@ test("OVL-AC-5 and ARCH-AC-7: the main thread reads overlay policies from data-o
     }
   }
   const policies = imports(resolve(app, "scenarios.ts")).filter(item => item.path.startsWith(".") && item.names.some(name => name.endsWith("OverlayPolicy")));
-  assert.deepEqual(policies.map(item => resolve(app, item.path)).sort(), [commerceDataModule, dataModule].sort());
+  assert.deepEqual(policies.map(item => resolve(app, item.path)).sort(), [assessmentDataModule, commerceDataModule, dataModule].sort());
   // The worker resolves the policy from its own catalog, never from a command.
   const adapter = imports(resolve(app, "worker/adapter.ts"));
   const catalog = adapter.find(item => item.path === "@distlab/catalogs");

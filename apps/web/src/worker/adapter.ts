@@ -1,5 +1,5 @@
 import type { ArchitectureDefinition, ArchitectureProjection, CanonicalValue, CatalogReference, LessonOverlayPolicy, RuntimeProjectionSet, ScenarioDiagnostic, ScenarioDocument, SessionIdentity, SessionOrigin, WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { checkoutAssessment, checkoutCatalog, checkoutCatalogReference, checkoutOverlayPolicy, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceCatalogReference, commerceLessonNames, commerceOverlayPolicy, commerceScenario, hostedCatalogs } from "@distlab/catalogs";
+import { checkoutAssessment, checkoutCatalog, checkoutCatalogReference, checkoutOverlayPolicy, normalCheckout, responseLostCheckout, commerceAssessment, commerceCatalog, commerceCatalogReference, commerceLessonNames, commerceOverlayPolicy, commerceScenario, hostedCatalogs, reliableCheckoutOverlayPolicy, reliableCheckoutScenario } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, composeOverlay, normalizeScenario, validateScenarioDocument } from "@distlab/scenario";
 import type { DeterministicScenarioSession, HostedCatalog } from "@distlab/scenario";
@@ -26,6 +26,8 @@ const packagedLessons: readonly Lesson[] = [
   { scenario: normalCheckout, policy: checkoutOverlayPolicy("normal"), hosted: checkoutHosted, origin: packagedOrigin },
   { scenario: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), hosted: checkoutHosted, origin: packagedOrigin },
   ...commerceLessonNames.map(name => ({ scenario: commerceScenario(name), policy: commerceOverlayPolicy(name), hosted: commerceHosted, origin: packagedOrigin })),
+  // The Reliable Checkout assessment's base lesson (#97): each suite row is an ordinary load of it with an overlay.
+  { scenario: reliableCheckoutScenario, policy: reliableCheckoutOverlayPolicy, hosted: commerceHosted, origin: packagedOrigin },
 ];
 
 const sameReference = (left: CatalogReference, right: CatalogReference) => left.id === right.id && left.version === right.version;

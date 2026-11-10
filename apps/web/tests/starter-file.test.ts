@@ -5,7 +5,7 @@ import { hostedCatalogs } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, openHarness, resolveHostedCatalog, validateScenarioDocument } from "@distlab/scenario";
 import type { HarnessExport } from "@distlab/scenario";
-import { scenarios } from "../src/scenarios.ts";
+import { assessments, scenarios } from "../src/scenarios.ts";
 import { starterDocument, starterFile, starterName } from "../src/starter-file.ts";
 
 // #116: save a packaged lesson as a starter scenario file (ADR-006 "Follow-up work" item 4, DOC-AC-2).
@@ -64,7 +64,8 @@ test("checkout starters carry no assertion labels, so each check shows its ID", 
 });
 
 test("DOC-AC-2 every packaged lesson's starter file validates with no diagnostics and gives the packaged assertion results", async () => {
-  assert.equal(scenarios.length, hostedCatalogs.reservedNames.length);
+  // Every lesson card, plus each assessment's base lesson, which has no card of its own (#97).
+  assert.equal(scenarios.length + assessments.length, hostedCatalogs.reservedNames.length);
   for (const choice of scenarios) {
     const file = starterFile(choice);
     const validated = validateScenarioDocument(file.text, hostedCatalogs);

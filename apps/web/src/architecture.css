@@ -747,3 +747,33 @@ p.design-step-notice { margin: 8px 0 0; padding: 6px 10px; border-left: 3px soli
 .document-diagnostics h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .document-diagnostics ul { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 1.25rem; }
 .document-diagnostics .file-name { font-weight: 650; }
+
+/* Assessment (#97, D-7): the results matrix fills its tab; verdicts are words with a glyph, colour only reinforces them. */
+.panel-assessment { min-height: 0; overflow: auto; padding: 4px 2px 12px; }
+.assessment-matrix-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.assessment-matrix-header h2 { margin: 0; font-size: 1.05rem; }
+.assessment-matrix-header > button { margin-left: auto; }
+.assessment-matrix-scroll { overflow-x: auto; }
+.assessment-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .9rem; }
+.assessment-table th, .assessment-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); text-align: left; vertical-align: top; }
+.assessment-table thead th { font-size: .8rem; color: var(--text-secondary); font-weight: 600; vertical-align: bottom; }
+.assessment-table tbody th { font-weight: 600; min-width: 9rem; }
+.assessment-outcome { white-space: nowrap; }
+.assessment-outcome.is-pass, .assessment-cell.is-holds .assessment-verdict { color: var(--status-approved); }
+.assessment-outcome.is-fail, .assessment-cell.is-violated .assessment-verdict { color: var(--status-error); }
+.assessment-cell.is-violated { background: var(--status-error-bg); }
+.assessment-cell.is-incomplete .assessment-verdict, .assessment-outcome.is-incomplete { color: var(--status-warning); }
+.assessment-cell { min-width: 8rem; }
+.assessment-verdict { display: block; font-weight: 600; white-space: nowrap; }
+.assessment-cell button { margin-top: 4px; min-height: 32px; padding: 2px 8px; font-size: .8rem; }
+.assessment-pending, .assessment-failed { color: var(--text-secondary); }
+.assessment-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.assessment-progress { margin: 4px 0; color: var(--text-secondary); font-size: .85rem; }
+.assessment-progress:empty { display: none; }
+.assessment-problem { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--status-error); border-radius: 6px; background: var(--status-error-bg); }
+.assessment-problem p { margin: 0 0 4px; }
+.assessment-requirements-heading { margin: 10px 0 4px; font-size: .9rem; }
+.assessment-requirements { margin: 0; padding-left: 1.2rem; font-size: .9rem; }
+.panel-loading { padding: 16px; color: var(--text-secondary); }
+.lesson-chooser-assessments { margin-top: 16px; }
+.lesson-chooser-assessments h3 { margin: 0 0 8px; font-size: 1rem; }
