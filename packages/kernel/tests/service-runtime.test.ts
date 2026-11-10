@@ -596,3 +596,72 @@ test("a caught log sink failure preserves the KV commit and seals the run", asyn
   assert.equal(sim.history.query({ type: "simulation.completed" }).length, 0);
   assert.equal(sim.history.query({ type: "service.handler.completed" }).length, 0);
 });
+
+test("SVC-AC-6: an endpoint rethrows a peer's reply code as its own error reply (#126)", async () => {
+  let front!: DeterministicServiceRuntime, client!: VirtualNetwork;
+  const replies: unknown[] = [];
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["client", "front", "back"], links: [
+    { source: "client", target: "front" }, { source: "front", target: "back" },
+  ] } }).createSimulation(inputs, setup => {
+    client = setup.networkFor("client");
+    const common = { setup, taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner, events };
+    front = new DeterministicServiceRuntime({ ...common, id: "front", version: "1", resolve: () => definition("front", {
+      call: function* (_, ctx) {
+        const reply = (yield ctx.http.request({ target: "back", endpoint: "answer", body: null })) as unknown as { status: string; body: { code: string } };
+        if (reply.status !== "ok") throwSimulationError(reply.body.code);
+        return { status: "ok", body: "unreachable" };
+      },
+    }) });
+    // `back` never leaves STARTING, so the network answers with a TARGET_UNAVAILABLE reply.
+    new DeterministicServiceRuntime({ ...common, id: "back", version: "1", resolve: () => definition("back", { answer: () => ({ status: "ok", body: 42 }) }) });
+    setup.registerHandler("client.call", "client", function* (): ControlledTask { replies.push(yield client.request({ target: "front", endpoint: "call", body: null })); });
+    setup.schedule({ time: simulationTime(0), type: front.lifecycleEventType, payload: { next: "RUNNING" } });
+    setup.schedule({ time: simulationTime(1), type: "client.call", payload: null });
+  });
+  await sim.run();
+  assert.equal(JSON.stringify(replies), JSON.stringify([{ status: "error", body: { code: "TARGET_UNAVAILABLE" } }]));
+  const failed = sim.history.query({ type: "service.handler.failed" }).map(item => item.data as Record<string, unknown>);
+  assert.deepEqual(failed.map(item => [item.kind, item.code]), [["endpoint", "TARGET_UNAVAILABLE"]]);
+});
+
+test("SVC-AC-6: a consumer NACKs by rethrowing any reply error code, and background work records a failed task (#126)", async () => {
+  const codes = ["TARGET_UNAVAILABLE", "ENDPOINT_NOT_FOUND", "EXTERNAL_UNAVAILABLE", "EXTERNAL_RATE_LIMITED"];
+  let runtime!: DeterministicServiceRuntime, receiver!: MessageReceiver;
+  const results: string[] = [];
+  const controller: MessageBusController = { subscribe: (_destination, _consumer, value) => { receiver = value; },
+    acknowledge: (_id, outcome) => results.push(outcome), consumerChanged: () => {} };
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["service"], links: [] } }).createSimulation(inputs, setup => {
+    runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, busController: controller,
+      resolve: () => ({ id: "service", version: "1", endpoints: {},
+        background: { work: () => throwSimulationError("EXTERNAL_RATE_LIMITED") },
+        consumers: { queue: delivery => { throwSimulationError(delivery.message.type); } } }),
+      taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner, events });
+    setup.registerHandler("fixture.deliver", "service", event => { receiver.accept(event.payload as unknown as Delivery); });
+    setup.schedule({ time: simulationTime(0), type: runtime.lifecycleEventType, payload: { next: "RUNNING" } });
+    codes.forEach((code, index) => setup.schedule({ time: simulationTime(index + 1), type: "fixture.deliver", payload: {
+      messageId: code, deliveryId: code, destination: "queue", attempt: 1, message: { type: code, body: null } } }));
+    setup.schedule({ time: simulationTime(10), type: runtime.backgroundEventType, payload: { name: "work", data: null } });
+  });
+  await sim.run();
+  assert.deepEqual(results, ["nack", "nack", "nack", "nack"]);
+  const failed = sim.history.query({ type: "service.handler.failed" }).map(item => item.data as Record<string, unknown>);
+  assert.deepEqual(failed.map(item => [item.kind, item.code]), [...codes.map(code => ["consumer", code]), ["background", "EXTERNAL_RATE_LIMITED"]]);
+});
+
+test("SVC-AC-6: a code that is neither modeled nor a reply code still seals the run (#126)", async () => {
+  let runtime!: DeterministicServiceRuntime, receiver!: MessageReceiver;
+  const controller: MessageBusController = { subscribe: (_destination, _consumer, value) => { receiver = value; },
+    acknowledge: () => {}, consumerChanged: () => {} };
+  const sim = new HeadlessSimulationFactory({ network: { targets: ["service"], links: [] } }).createSimulation(inputs, setup => {
+    runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, busController: controller,
+      resolve: () => ({ id: "service", version: "1", endpoints: {}, background: {},
+        consumers: { queue: () => { throwSimulationError("SEND_REJECTED"); } } }),
+      taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner, events });
+    setup.registerHandler("fixture.deliver", "service", event => { receiver.accept(event.payload as unknown as Delivery); });
+    setup.schedule({ time: simulationTime(0), type: runtime.lifecycleEventType, payload: { next: "RUNNING" } });
+    setup.schedule({ time: simulationTime(1), type: "fixture.deliver", payload: {
+      messageId: "m", deliveryId: "d", destination: "queue", attempt: 1, message: { type: "m", body: null } } });
+  });
+  await assert.rejects(sim.run(), (error: { code?: string }) => error.code !== undefined);
+  assert.equal(sim.history.query({ type: "service.handler.failed" }).length, 0);
+});

@@ -91,7 +91,11 @@ export const ModeledErrorCodes = {
   KV_COUNTER_OVERFLOW: ErrorCodes.KV_COUNTER_OVERFLOW,
 } as const;
 
-/** Stable codes placed in `NetworkReply.body` rather than thrown as kernel errors. */
+/**
+ * Stable codes placed in `NetworkReply.body` rather than thrown as kernel errors.
+ * A service handler may rethrow one it received in an error reply to fail its own
+ * work as modeled: an error reply, a NACK, or a failed task (service-runtime.md, #126).
+ */
 export const ReplyErrorCodes = {
   TARGET_UNAVAILABLE: ErrorCodes.TARGET_UNAVAILABLE,
   ENDPOINT_NOT_FOUND: ErrorCodes.ENDPOINT_NOT_FOUND,

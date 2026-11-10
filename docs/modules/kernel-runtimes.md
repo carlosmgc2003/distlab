@@ -208,7 +208,10 @@ Network admission and broker readiness require `RUNNING`. Pause does not
 abandon admitted work. Endpoint and consumer dispatch ignore payloads from an
 old generation; background dispatch outside `RUNNING` records skipped work.
 Endpoints reply through the network. Consumers acknowledge successful work
-with ACK and uncaught modeled failure with NACK. Background handlers and
+with ACK and uncaught modeled failure with NACK. A handler may also rethrow
+the code of an error reply it received (`ReplyErrorCodes`, #126): an endpoint
+then answers with that code, a consumer NACKs, and background work fails as
+modeled; any other thrown code is still terminal. Background handlers and
 consumers must return `undefined`; endpoints return replies. All three support
 controlled generators; promises and async iterators are rejected.
 
