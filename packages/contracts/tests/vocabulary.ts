@@ -4,10 +4,18 @@
  */
 import type {
   ArchitectureEdits,
+  AssessmentCell,
+  AssessmentConfiguration,
+  AssessmentDefinition,
+  AssessmentResult,
+  AssessmentRow,
+  AssessmentRowResult,
+  AssessmentVerdict,
   BindingEdit,
   BusMessage,
   CatalogReference,
   ComponentId,
+  Duration,
   LessonArchitectureAllowance,
   LessonOverlayPolicy,
   ModelDescriptor,
@@ -56,6 +64,13 @@ type Vocabulary = {
   SubscriptionEdit: SubscriptionEdit;
   ArchitectureEdits: ArchitectureEdits;
   LessonArchitectureAllowance: LessonArchitectureAllowance;
+  AssessmentDefinition: AssessmentDefinition;
+  AssessmentRow: AssessmentRow;
+  AssessmentConfiguration: AssessmentConfiguration;
+  AssessmentVerdict: AssessmentVerdict;
+  AssessmentCell: AssessmentCell;
+  AssessmentRowResult: AssessmentRowResult;
+  AssessmentResult: AssessmentResult;
 };
 
 declare const vocabulary: Vocabulary;
@@ -106,3 +121,27 @@ declare const document: ScenarioDocument;
 const packagedLoaded: WorkerEvent = { version: 1, requestId: "r1", type: "loaded", projection, session: packagedSession };
 const importedLoaded: WorkerEvent = { version: 1, requestId: "r2", type: "loaded", projection, session: importedSession, document };
 void [packagedLoaded, importedLoaded];
+
+/** docs/spec/assessment.md: a row reuses overlay fault shapes; a result carries no wall-clock time. */
+const row: AssessmentRow = {
+  id: "processor-response-lost", label: "Processor response lost",
+  faults: [{ id: "student-row-lost-response", point: "network.response", source: "payment-processor", target: "payments",
+    name: "POST /authorize", from: 0 as SimulationTime, probability: 1, maxApplications: 1, effect: { kind: "drop" } }],
+  scheduledFaults: [{ id: "student-row-crash", at: 5 as SimulationTime, kind: "fault",
+    fault: { id: "student-row-crash-fault", kind: "crash", target: "orders" }, restart: { after: 10 as Duration } }],
+};
+const assessment: AssessmentDefinition = {
+  version: 1, id: "reliable-checkout-assessment@1", title: "Reliable Checkout", requirements: ["Charge a customer at most once."],
+  base: "reliable-checkout@1", rows: [row], invariants: [{ id: "order-final", label: "Every order reaches a final state" }],
+};
+const incomplete: AssessmentCell = { invariant: "order-final", verdict: "INCOMPLETE", time: 40 as SimulationTime, evidence: null };
+const result: AssessmentResult = {
+  format: "distlab.assessment-result", formatVersion: 1, assessment: assessment.id, base: assessment.base, seed: "seed-1",
+  configuration: { parameters: [{ key: "idempotency", value: true }] },
+  rows: [{ row: row.id, runId: "run-1", status: "FAILED", cells: [incomplete] }],
+};
+// @ts-expect-error A verdict is HOLDS, VIOLATED, or INCOMPLETE; students never see a bare PASS.
+const bare: AssessmentVerdict = "PASS";
+// @ts-expect-error A row adds faults only; the configuration carries the parameters.
+const parameterRow: AssessmentRow = { ...row, parameters: [] };
+void [assessment, result, bare, parameterRow];

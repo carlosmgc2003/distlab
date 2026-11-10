@@ -150,6 +150,31 @@ overlay policy:
 Packaged definitions are validated by a catalog test. They are never accepted
 from a command or a file in this increment.
 
+The validator is `validateAssessmentDefinition(definition, base, validate)` in
+`@distlab/scenario` (`src/assessment-definition.ts`), beside the overlay code
+it reuses. `base` is the caller's resolution of `definition.base` from its own
+catalog: the packaged document, its overlay policy, and its check
+classification, such as `commerceChecks(name)`, or `undefined` when no
+packaged lesson has that name. `validate` is the base catalog's unchanged
+`ScenarioEngine.validate`, as for `composeOverlay`. Like the overlay code, it is
+pure, and the main thread never imports it.
+
+It returns `ScenarioDiagnostic` values whose paths point into the definition,
+sorted by path, then code. They reuse existing codes:
+
+| Path | Code | Meaning |
+| --- | --- | --- |
+| `/base` | `REFERENCE` | No packaged lesson has that name |
+| `/rows`, `/invariants` | `REQUIRED` | The list is empty |
+| `/rows/<i>/id`, `/invariants/<i>/id` | `DUPLICATE` | An earlier entry has the same ID |
+| `/invariants/<i>/id` | `REFERENCE` | The base document has no assertion with that ID |
+| `/invariants/<i>/id` | `KIND` | The classification does not mark that assertion a business invariant |
+| `/rows/<i>/faults/…`, `/rows/<i>/scheduledFaults/…` | overlay and translated scenario codes | The row's overlay, with `version: 1` and no parameters, fails `composeOverlay` under the base policy |
+| `/base` | a scenario code | The applied document fails for a reason no row entry explains: a defect of the base lesson |
+
+When `base` is unresolved, only the `/rows` and `/invariants` list rules are
+checked beside `/base`.
+
 #### Running a suite
 
 1. The student sets a configuration with the base lesson's design choices. The
@@ -414,11 +439,13 @@ recommendation on 2026-11-10; the alternatives are kept for the record.
 
 Three pull requests, each with its tests:
 
-1. Contracts and validation: `src/assessment.ts`, definition validation, and the
-   catalog test for ASSESS-AC-2. The ADR-004 amendment and the crash/restart
-   pair validation (D-8) come first, in their own pull request.
-2. The Reliable Checkout models, document, policy, check classification, and
-   catalog tests for ASSESS-AC-4.
+1. Contracts and validation: `src/assessment.ts` and definition validation,
+   proven by test-fixture definitions over existing packaged lessons. The
+   ADR-004 amendment and the crash/restart pair validation (D-8) come first, in
+   their own pull request.
+2. The Reliable Checkout models, document, policy, check classification, the
+   first packaged definition with the ASSESS-AC-2 catalog test over packaged
+   definitions, and catalog tests for ASSESS-AC-4.
 3. The browser view: suite runner, matrix, evidence, export, and the browser
    tests for ASSESS-AC-1, -3, -5 to -8.
 
