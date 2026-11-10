@@ -10,12 +10,18 @@ import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.j
 import { cacheCartModel, cacheCatalogModel, cacheOrdersModel } from "./cache.js";
 import { inventoryModel } from "./inventory.js";
 import { placeholderExternalModel, placeholderServiceModel } from "./placeholder.js";
+import { reliableInventoryModel, reliableNotificationsModel, reliableOrdersModel, reliablePaymentsModel, reliableProcessorModel } from "./reliable.js";
 export { commerceCatalogReference, commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
 export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
+export {
+  assessmentDefinitions, reliableCheckoutAssessment, reliableCheckoutChecks, reliableCheckoutName, reliableCheckoutOverlayPolicy,
+  reliableCheckoutScenario, reliableCheckoutTimes,
+} from "./reliable-checkout.js";
 
 const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel,
   notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel, inventoryModel,
+  reliableOrdersModel, reliableInventoryModel, reliablePaymentsModel, reliableProcessorModel, reliableNotificationsModel,
   placeholderServiceModel, placeholderExternalModel];
 export const commerceCatalog: ScenarioCatalog = {
   id: "commerce.lessons", version: "1.0.0",
@@ -36,15 +42,54 @@ function tableRows(databases: CanonicalValue, owner: string, table: string): Rec
   const found = tables && typeof tables === "object" && !Array.isArray(tables) ? record(tables)[table] : undefined;
   return found && typeof found === "object" && !Array.isArray(found) ? record(found) : {};
 }
+/** The declared visible state of an external component, or an empty one before its first operation. */
+function visible(components: CanonicalValue, id: string): Record<string, CanonicalValue> {
+  const boundary = record(components)[id];
+  const state = boundary && typeof boundary === "object" && !Array.isArray(boundary) ? record(boundary).visible : undefined;
+  return state && typeof state === "object" && !Array.isArray(state) ? record(state) : {};
+}
+const list = (value: CanonicalValue | undefined): readonly Record<string, CanonicalValue>[] => Array.isArray(value) ? value.map(item => record(item)) : [];
+/** Approved, unvoided authorizations the processor holds. */
+const approved = (components: CanonicalValue, processor: string) =>
+  list(visible(components, processor).authorizations).filter(entry => entry.status === "APPROVED");
+const countBy = (values: readonly string[]) => values.reduce<Record<string, number>>((counts, value) => ({ ...counts, [value]: (counts[value] ?? 0) + 1 }), {});
 const placed = (orders: Record<string, CanonicalValue>) =>
   Object.entries(orders).map(([key, row]) => [key, record(row)] as const).filter(([, row]) => row.status === "PLACED");
 
 export const commerceAssessment: ScenarioAssessment = {
   version: "1.0.0",
   find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters", "commerce.pricing", "commerce.live-carts",
-    "commerce.stock", "commerce.reservations"].includes(id) ? undefined : {
+    "commerce.stock", "commerce.reservations", "commerce.charges", "commerce.unconfirmed-charges", "commerce.notifications", "commerce.final-orders"].includes(id) ? undefined : {
     id, version: "1.0.0", evaluate({ parameters, projection }) {
       const p = record(parameters);
+      if (id === "commerce.charges") {
+        // No order holds more than `maximum` approved, unvoided authorizations at the processor.
+        const evidence = countBy(approved(projection.components, text(p.processor)).map(entry => text(entry.orderId)));
+        return { pass: Object.values(evidence).every(count => count <= (p.maximum as number)), evidence };
+      }
+      if (id === "commerce.unconfirmed-charges") {
+        // Every approved, unvoided authorization belongs to a CONFIRMED order.
+        const orders = tableRows(projection.databases, text(p.owner), text(p.table));
+        const evidence = approved(projection.components, text(p.processor)).map(entry => ({
+          authorizationId: entry.authorizationId!, orderId: entry.orderId!, order: record(orders[text(entry.orderId)] ?? {}).status ?? null,
+        }));
+        return { pass: evidence.every(item => item.order === "CONFIRMED"), evidence };
+      }
+      if (id === "commerce.notifications") {
+        // No order is notified twice, and every CONFIRMED order is notified once.
+        const sent = countBy(list(visible(projection.components, text(p.provider)).sent).map(entry => text(entry.orderId)));
+        const orders = tableRows(projection.databases, text(p.owner), text(p.table));
+        const ids = [...new Set([...Object.keys(orders), ...Object.keys(sent)])].sort();
+        const evidence = ids.map(orderId => ({ orderId, status: record(orders[orderId] ?? {}).status ?? null, sent: sent[orderId] ?? 0 }));
+        return { pass: evidence.every(item => item.sent <= 1 && (item.status !== "CONFIRMED" || item.sent === 1)), evidence };
+      }
+      if (id === "commerce.final-orders") {
+        // Every order is in one of the final states.
+        const states = (p.states as readonly CanonicalValue[]).map(text);
+        const evidence = Object.entries(tableRows(projection.databases, text(p.owner), text(p.table)))
+          .map(([orderId, row]) => ({ orderId, status: record(row).status ?? null }));
+        return { pass: evidence.every(item => typeof item.status === "string" && states.includes(item.status)), evidence };
+      }
       if (id === "commerce.pricing") {
         // Each placed order's price equals the catalog price valid when the order was placed:
         // the history row of its SKU with the latest `validFrom` at or before `checkedOutAt`.

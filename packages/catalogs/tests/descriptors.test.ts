@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { CanonicalValue, ModelDescriptor, ModelPeer, Observation } from "@distlab/contracts";
 import {
   checkoutAssessment, checkoutCatalog, checkoutDescriptors, checkoutScenario,
-  commerceAssessment, commerceCatalog, commerceDescriptors, commerceLessonNames, commerceScenario,
+  commerceAssessment, commerceCatalog, commerceDescriptors, commerceLessonNames, commerceScenario, reliableCheckoutScenario,
 } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, openHarness, type ScenarioAssessment, type ScenarioCatalog } from "@distlab/scenario";
 
@@ -18,6 +18,7 @@ const object = (value: CanonicalValue | undefined): Doc => {
 const lessons: readonly Lesson[] = [
   ...(["normal", "response-lost"] as const).map(variant => ({ name: `checkout-${variant}`, document: object(checkoutScenario(variant)), catalog: checkoutCatalog, assessment: checkoutAssessment, descriptors: checkoutDescriptors })),
   ...commerceLessonNames.map(name => ({ name, document: object(commerceScenario(name)), catalog: commerceCatalog, assessment: commerceAssessment, descriptors: commerceDescriptors })),
+  { name: "reliable-checkout", document: object(reliableCheckoutScenario), catalog: commerceCatalog, assessment: commerceAssessment, descriptors: commerceDescriptors },
 ];
 const components = (document: Doc): readonly Component[] => object(document.architecture).components as unknown as Component[];
 const descriptorOf = (lesson: Lesson, component: Component): ModelDescriptor => {
@@ -148,7 +149,8 @@ test("ARCH-AC-5 models read every peer from configuration, never from a literal 
       }
     }
   }
-  assert.equal(rebindings, 22);
+  // 22 in the packaged lessons, plus Reliable Checkout's four: orders.inventory, orders.payments, payments.processor, notifications.provider.
+  assert.equal(rebindings, 26);
 });
 
 test("ARCH-AC-1 every packaged document passes the composition rules, and each peer link is required", () => {

@@ -5,7 +5,7 @@ import { STUDENT_ID_PREFIX } from "@distlab/contracts";
 import { canonicalEncode } from "@distlab/kernel";
 import {
   checkoutAssessment, checkoutCatalog, checkoutOverlayPolicy, commerceAssessment, commerceCatalog, commerceChecks, commerceLessonNames,
-  commerceOverlayPolicy, commerceScenario, normalCheckout, responseLostCheckout,
+  commerceOverlayPolicy, commerceScenario, normalCheckout, reliableCheckoutOverlayPolicy, reliableCheckoutScenario, responseLostCheckout,
 } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, composeOverlay, inDomain, openHarness, resolveTarget } from "@distlab/scenario";
 import type { HarnessExport, ScenarioCatalog } from "@distlab/scenario";
@@ -24,6 +24,8 @@ const lessons: readonly Lesson[] = [
   { id: "normal", document: normalCheckout, policy: checkoutOverlayPolicy("normal"), engine: checkoutEngine, catalog: checkoutCatalog },
   { id: "response-lost", document: responseLostCheckout, policy: checkoutOverlayPolicy("response-lost"), engine: checkoutEngine, catalog: checkoutCatalog },
   ...commerceLessonNames.map(name => ({ id: name, document: commerceScenario(name), policy: commerceOverlayPolicy(name), engine: commerceEngine, catalog: commerceCatalog })),
+  // Catalog-only until the assessment view (#97), but held to every overlay rule a packaged lesson is.
+  { id: "reliable-checkout", document: reliableCheckoutScenario, policy: reliableCheckoutOverlayPolicy, engine: commerceEngine, catalog: commerceCatalog },
 ];
 const definition = (lesson: Lesson) => lesson.document as unknown as ScenarioDefinition;
 const encode = (value: unknown) => canonicalEncode(value as CanonicalValue);

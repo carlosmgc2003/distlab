@@ -115,6 +115,57 @@ export const inventoryDescriptor: ModelDescriptor = {
 };
 
 /**
+ * Reliable Checkout (docs/spec/assessment.md, #97): the assessment's fault-free
+ * base lesson. Orders orchestrates the checkout saga: reserve, authorize,
+ * confirm, publish `OrderConfirmed`. `compensate` undoes a failed checkout in
+ * reverse order; `outbox` records the event in the confirming commit and
+ * publishes it only from `POST /relay`.
+ */
+export const reliableOrdersDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.reliable-orders", version: VERSION, kind: "service", endpoints: ["POST /checkout", "POST /relay"],
+  publishes: ["OrderConfirmed"],
+  peers: [
+    { name: "inventory", kinds: ["service"], calls: ["POST /reserve", "POST /release"], default: "inventory" },
+    { name: "payments", kinds: ["service"], calls: ["POST /authorize", "POST /void"], default: "payments" },
+  ],
+  storage: tables("orders", "outbox"), options: [flag("compensate"), flag("outbox")],
+};
+
+/** Holds one reservation per order; releasing an order that holds none is a no-op. */
+export const reliableInventoryDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.reliable-inventory", version: VERSION, kind: "service", endpoints: ["POST /reserve", "POST /release"],
+  storage: tables("reservations"),
+};
+
+/**
+ * Authorizes through the processor. `idempotent` sends the order ID as the
+ * idempotency key; `retries` repeats an authorization that timed out, with the
+ * same key when there is one.
+ */
+export const reliablePaymentsDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.reliable-payments", version: VERSION, kind: "service", endpoints: ["POST /authorize", "POST /void"],
+  peers: [{ name: "processor", kinds: ["external"], calls: ["POST /authorize", "POST /void"], default: "payment-processor" }],
+  storage: tables("payments"),
+  options: [{ key: "retries", domain: { type: "integer", default: 0, minimum: 0, maximum: 3 } }, flag("idempotent")],
+};
+
+/** Records authorizations, deduplicated by idempotency key when one is sent; `void` voids an order's approved ones. */
+export const reliableProcessorDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.reliable-processor", version: VERSION, kind: "external", operations: ["POST /authorize", "POST /void"],
+};
+
+/**
+ * Sends one notification per `OrderConfirmed` through the provider. A rejected
+ * or timed-out send NACKs the delivery (#126). `idempotent` keeps an inbox
+ * keyed by the event ID and ignores an event it already processed.
+ */
+export const reliableNotificationsDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.reliable-notifications", version: VERSION, kind: "service", consumers: ["OrderConfirmed"],
+  peers: [{ name: "provider", kinds: ["external"], calls: ["POST /send"], default: "messaging" }],
+  storage: tables("notifications", "inbox"), options: [flag("idempotent")],
+};
+
+/**
  * Placeholder models (ADR-005) fill an empty slot. Each exposes the endpoints or
  * operations listed in its configuration field `interface` and answers every
  * request with a `NOT_IMPLEMENTED` error. They consume and publish nothing,
@@ -128,5 +179,6 @@ export const commerceDescriptors: readonly ModelDescriptor[] = [
   outboxDescriptor, orderReadDescriptor, orderWriteDescriptor, dependencyDescriptor, riskDescriptor,
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
   cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor, inventoryDescriptor,
+  reliableOrdersDescriptor, reliableInventoryDescriptor, reliablePaymentsDescriptor, reliableProcessorDescriptor, reliableNotificationsDescriptor,
   placeholderServiceDescriptor, placeholderExternalDescriptor,
 ];
