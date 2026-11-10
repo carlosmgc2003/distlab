@@ -5,6 +5,7 @@ import { checkoutAssessment, checkoutCatalog, responseLostCheckout } from "@dist
 import { DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 import AxeBuilder from "@axe-core/playwright";
 import { loadLesson } from "./support/lesson.ts";
+import { expectLegibleView } from "./support/graph.ts";
 import { inServiceState } from "./support/service-state.ts";
 
 declare global {
@@ -38,23 +39,17 @@ async function latestProjection(page: Page): Promise<RuntimeProjectionSet> {
   });
 }
 
-test("default architecture fit contains every checkout node after desktop and narrow workspace sizing", async ({ page }) => {
+test("Fit View shows the whole checkout graph on a desktop canvas and a legible start on a narrow one", async ({ page }) => {
   await page.goto("/");
   const button = (name: string) => page.getByRole("button", { name, exact: true });
   for (const value of ["normal", "response-lost"]) {
     await loadLesson(page, value);
     await expect(page.locator(".react-flow__node")).toHaveCount(7);
-    for (const viewport of [{ width: 1534, height: 897 }, { width: 900, height: 800 }]) {
+    // On a narrow canvas the names stay legible and the reader pans to the rest of the graph (#166).
+    for (const [viewport, whole] of [[{ width: 1534, height: 897 }, true], [{ width: 900, height: 800 }, false]] as const) {
       await page.setViewportSize(viewport);
       await button("Fit View").click();
-      await expect.poll(() => page.evaluate(() => {
-        const canvas = document.querySelector(".graph-canvas")!.getBoundingClientRect();
-        return [...document.querySelectorAll<HTMLElement>(".react-flow__node")].every(node => {
-          const rect = node.getBoundingClientRect();
-          return rect.left >= canvas.left + 4 && rect.right <= canvas.right - 4
-            && rect.top >= canvas.top + 4 && rect.bottom <= canvas.bottom - 4;
-        });
-      })).toBe(true);
+      await expectLegibleView(page, `${value} at ${viewport.width}×${viewport.height}`, { whole });
     }
   }
 });

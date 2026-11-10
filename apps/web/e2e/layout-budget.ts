@@ -15,6 +15,11 @@ export interface LayoutMeasures {
    * and `.sr-only`. The Lesson panel is where lesson prose belongs (#137 budget: outside the lesson panel and graph area).
    */
   readonly proseBlocks: number;
+  /**
+   * The smallest rendered size, in CSS pixels, of a component name on the architecture graph: each node's title
+   * font size times the graph's current scale (#166). `0` when no graph is drawn.
+   */
+  readonly smallestName: number;
 }
 
 export type BudgetViewport = "1366x768" | "1534x897";
@@ -30,6 +35,7 @@ export interface LayoutBudget {
   readonly canvasVisible: { readonly min: number };
   readonly controlsOutsideGraph: { readonly max: number };
   readonly proseBlocks: { readonly max: number };
+  readonly smallestName: { readonly min: number };
   /** Commerce lessons after Run only. */
   readonly firstVerdictVisible?: boolean;
 }
@@ -92,36 +98,39 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
  * counts stay at 1 and 2: what they count is the Architecture tab's playback readout and movement cue, graph-area
  * text that #136 and #147 leave alone. The drawer and the dialogs are closed while these are measured.
  *
+ * #166 adds `smallestName`: every component name on the graph renders at 10 px or more. Before it, the default
+ * fit shrank the graph to the canvas, and names rendered at 5–8 px at 1366×768 for most lessons.
+ *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
  * stating the reason in its description.
  */
 export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLesson, Readonly<Record<BudgetState, LayoutBudget>>>>>> = {
   "1366x768": {
     "response-lost": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 }, smallestName: { min: 10 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
   },
   "1534x897": {
     "response-lost": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 } },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 }, smallestName: { min: 10 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 21 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 21 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
   },
 };
@@ -178,6 +187,14 @@ export async function measureLayout(page: Page): Promise<LayoutMeasures> {
       .filter(element => (element.textContent ?? "").trim().split(/\s+/).filter(Boolean).length >= 8)
       .filter(shown).length;
 
-    return { topBarHeight, canvasVisible, firstVerdictVisible, controlsOutsideGraph, proseBlocks };
+    // The graph's scale is read from each node's drawn width against its own layout width, so no transform is parsed.
+    const names = [...document.querySelectorAll<HTMLElement>(".react-flow__node")].flatMap(node => {
+      const title = node.querySelector<HTMLElement>(".node-content strong");
+      if (!title || node.offsetWidth === 0) return [];
+      return [parseFloat(getComputedStyle(title).fontSize) * node.getBoundingClientRect().width / node.offsetWidth];
+    });
+    const smallestName = names.length ? +Math.min(...names).toFixed(2) : 0;
+
+    return { topBarHeight, canvasVisible, firstVerdictVisible, controlsOutsideGraph, proseBlocks, smallestName };
   });
 }

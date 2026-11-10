@@ -35,6 +35,7 @@ function expectWithinBudget(measures: LayoutMeasures, budget: LayoutBudget, cont
   expect.soft(measures.canvasVisible, name("canvasVisible", "≥", budget.canvasVisible.min)).toBeGreaterThanOrEqual(budget.canvasVisible.min);
   expect.soft(measures.controlsOutsideGraph, name("controlsOutsideGraph", "≤", budget.controlsOutsideGraph.max)).toBeLessThanOrEqual(budget.controlsOutsideGraph.max);
   expect.soft(measures.proseBlocks, name("proseBlocks", "≤", budget.proseBlocks.max)).toBeLessThanOrEqual(budget.proseBlocks.max);
+  expect.soft(measures.smallestName, name("smallestName", "≥", budget.smallestName.min)).toBeGreaterThanOrEqual(budget.smallestName.min);
   if (budget.firstVerdictVisible !== undefined) {
     expect.soft(measures.firstVerdictVisible, name("firstVerdictVisible", "is a list:", "present")).not.toBeNull();
     if (budget.firstVerdictVisible) {

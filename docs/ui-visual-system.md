@@ -29,7 +29,7 @@ at a time, so until they land the shipped shell can still differ from it.
 | Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, `Pause`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no replay controls, no tagline. |
 | Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run and Step do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
 | Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds a one-row **Replay** toolbar above the architecture graph, and nothing below the graph. |
-| Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds Design choices and Faults with one footer: `Apply and restart`, `Discard changes`, `Close`. | No other overlay is added. |
+| Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds Design choices and Faults with one footer: `Apply and restart`, `Discard changes`, `Close`. While it is open, the movement detail and the Component inspector go under the graph instead of beside it, so the canvas keeps the panel's width (#166). | No other overlay is added. |
 
 ### Vocabulary
 
@@ -47,6 +47,7 @@ at a time, so until they land the shipped shell can still differ from it.
 | --- | --- | --- |
 | Top bar height | ≤ 64 px | ≤ 64 px |
 | Graph canvas height inside the viewport, lesson loaded, no overlay open | ≥ 440 px | ≥ 560 px |
+| Smallest rendered component name on the graph, in every state (#166) | ≥ 10 px | ≥ 10 px |
 | First business invariant verdict after a commerce run completes | Inside the viewport without user scrolling | Same |
 | Disclosures to open before the lesson guide or evidence links are visible | 0 | 0 |
 | Visible paragraphs of 8 or more words outside the lesson panel and graph area | ≤ 2 | ≤ 2 |

@@ -5,6 +5,7 @@ import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { graphLaidOut, loadLesson } from "./support/lesson.ts";
+import { expectLegibleView } from "./support/graph.ts";
 import { viewButton } from "./support/history.ts";
 
 declare global {
@@ -342,7 +343,7 @@ test("selecting a record in Recorded history takes the graph highlight back", as
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-history-selection-wins.png") });
 });
 
-test("the graph keeps its fit while the narration column opens and closes", async ({ page }) => {
+test("the graph keeps a legible view while the narration column opens and closes", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
   await page.setViewportSize({ width: 1534, height: 897 });
@@ -351,22 +352,13 @@ test("the graph keeps its fit while the narration column opens and closes", asyn
   const canvas = () => page.locator(".graph-canvas");
   // The top bar is one row at the supported baselines, so the graph area keeps its height.
   expect((await page.locator("header.top-bar").boundingBox())!.height).toBeLessThanOrEqual(64);
-  const fits = async (label: string) => {
+  // The side column narrows the canvas; the names stay legible and the view starts at the graph's start (#166).
+  const fits = async (label: string, whole = false) => {
     const box = (await canvas().boundingBox())!;
     expect(box.height, `${label}: the graph canvas keeps a readable height`).toBeGreaterThan(240);
-    const nodes = await page.locator(".react-flow__node").evaluateAll((elements, area) => elements.map(element => {
-      const rect = element.getBoundingClientRect();
-      return { id: element.getAttribute("data-id"), left: rect.left - area.x, top: rect.top - area.y, right: rect.right - area.x, bottom: rect.bottom - area.y };
-    }), { x: box.x, y: box.y });
-    expect(nodes.length).toBe(7);
-    for (const node of nodes) {
-      expect(node.left, `${label}: ${node.id} left padding`).toBeGreaterThan(1);
-      expect(node.top, `${label}: ${node.id} top padding`).toBeGreaterThan(1);
-      expect(box.width - node.right, `${label}: ${node.id} right padding`).toBeGreaterThan(1);
-      expect(box.height - node.bottom, `${label}: ${node.id} bottom padding`).toBeGreaterThan(1);
-    }
+    expect((await expectLegibleView(page, label, { whole })).nodes).toBe(7);
   };
-  await fits("no narration open");
+  await fits("no narration open", true);
   await stepTo(page, "Request sent");
   await fits("narration open");
   // The inspector and the narration share the side column rather than squeezing the graph away.

@@ -201,6 +201,9 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .pan-controls button { width: 36px; height: 36px; min-height: 36px; padding: 0; }
 .architecture-layout { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; align-items: stretch; }
 .architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr) minmax(200px, 300px); }
+/* With the Experiment drawer docked beside the graph, a third column left the canvas 270 px wide at
+   1366×768 (#166). The movement detail and the inspector go under the graph instead, and scroll. */
+.workspace-main.experiment-open .architecture-layout.has-selection { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 2fr); }
 .graph-canvas { height: 100%; min-height: 240px; min-width: 0; background: #fff; border: 1px solid #94a3b8; border-radius: 12px; overflow: hidden; }
 /* Nodes render (and are measured) before ELK places them; keep them out of sight until the layout lands.
    React Flow writes an inline `visibility: visible` on every measured node, so only !important wins here. */

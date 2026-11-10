@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useNodesInitialized, useReactFlow, useStore } from "@xyflow/react";
-import type { EdgeProps, FitViewOptions, NodeChange, NodeProps, XYPosition } from "@xyflow/react";
+import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import { EMPTY_SLOT_LABEL } from "./design-step.ts";
+import { legibleViewport, legibleZoom } from "./layout/legible-fit.ts";
+import type { Insets } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
@@ -298,12 +300,10 @@ const ariaLabelConfig = {
   "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
   "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
 };
-// Let fitView choose a scale for each measured canvas, including narrow workspaces.
-const fitViewOptions = { padding: 0.18 };
-/** Below this canvas width the legend starts collapsed, so it never covers the graph. */
-const NARROW_CANVAS = 720;
-/** Gap kept between the legend and the nearest node at the fitted view. */
+/** Gap kept between the graph and the legend, the zoom controls, the pan buttons, and the canvas edge. */
 const LEGEND_GAP = 16;
+/** The canvas edge's own margin around the graph at the default view. */
+const EDGE_MARGIN = 24;
 
 /**
  * The legend shares the left edge with the zoom controls. Its height is capped by
@@ -319,23 +319,53 @@ function reserveControls(canvas: HTMLElement): void {
 }
 
 /**
- * The fit for this canvas. An open legend reserves its own column on the left,
- * so no node sits under it at the fitted view; a collapsed legend reserves its
- * header row. The other sides keep the default padding.
+ * The space the default view keeps clear, measured from the overlays themselves (#166). An open
+ * legend reserves its own column on the left; a collapsed legend and the pan buttons reserve the top
+ * row; the zoom controls reserve the left column. No node sits under any of them at the default view.
  */
-function fitOptionsFor(canvas: HTMLElement): FitViewOptions {
-  const legend = canvas.querySelector<HTMLElement>(".graph-legend");
-  if (!legend) return fitViewOptions;
+function insetsFor(canvas: HTMLElement): Insets {
   const area = canvas.getBoundingClientRect();
-  const box = legend.getBoundingClientRect();
-  if (box.width < 1 || area.width < 1) return fitViewOptions;
-  if (legend.classList.contains("is-collapsed")) {
-    return { padding: { top: `${Math.ceil(box.bottom - area.top + LEGEND_GAP)}px`, right: 0.18, bottom: 0.18, left: 0.18 } };
-  }
-  return { padding: { top: 0.18, right: 0.18, bottom: 0.18, left: `${Math.ceil(box.right - area.left + LEGEND_GAP)}px` } };
+  const box = (selector: string) => {
+    const element = canvas.querySelector<HTMLElement>(selector);
+    const rect = element?.getBoundingClientRect();
+    return rect && rect.width >= 1 && rect.height >= 1 ? rect : undefined;
+  };
+  const legend = box(".graph-legend");
+  const controls = box(".react-flow__controls");
+  const pan = box(".pan-controls");
+  let top = EDGE_MARGIN, left = EDGE_MARGIN;
+  if (controls) left = Math.max(left, Math.ceil(controls.right - area.left + LEGEND_GAP));
+  if (pan) top = Math.max(top, Math.ceil(pan.bottom - area.top + LEGEND_GAP));
+  if (legend && canvas.querySelector(".graph-legend.is-collapsed")) top = Math.max(top, Math.ceil(legend.bottom - area.top + LEGEND_GAP));
+  else if (legend) left = Math.max(left, Math.ceil(legend.right - area.left + LEGEND_GAP));
+  return { top, right: EDGE_MARGIN, bottom: EDGE_MARGIN, left };
 }
-/** Small enough that the default fit never has to clip the checkout graph on a narrow canvas. */
+
+/** The smallest unscaled font size among the component names drawn on this canvas. */
+function smallestNamePx(canvas: HTMLElement): number {
+  const sizes = [...canvas.querySelectorAll<HTMLElement>(".react-flow__node .node-content strong")]
+    .map(name => parseFloat(getComputedStyle(name).fontSize)).filter(size => size > 0);
+  return sizes.length ? Math.min(...sizes) : 0;
+}
+
+/**
+ * The default view (#166): the whole graph when its component names stay legible, otherwise the
+ * graph's start at a legible scale, to be panned. The Fit View button returns to this same view;
+ * the zoom-out button still reaches the whole graph at any size.
+ */
+function fitLegibly(flow: ReactFlowInstance<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>, canvas: HTMLElement): Promise<boolean> {
+  const area = canvas.getBoundingClientRect();
+  const nodes = flow.getNodes();
+  if (!nodes.length || area.width < 1 || area.height < 1) return Promise.resolve(false);
+  const viewport = legibleViewport(flow.getNodesBounds(nodes), area, insetsFor(canvas),
+    { minZoom: Math.min(maxZoom, Math.max(minZoom, legibleZoom(smallestNamePx(canvas)))), maxZoom: FIT_MAX_ZOOM });
+  return flow.setViewport(viewport);
+}
+/** Small enough that a reader can still zoom out to the whole checkout graph on a narrow canvas. */
 const minZoom = 0.15;
+const maxZoom = 1.8;
+/** The default view never magnifies a small graph beyond this, so a three-node lesson does not look zoomed in. */
+const FIT_MAX_ZOOM = 1.25;
 
 /**
  * Event links take part in placement ("layout"), or nodes are placed from
@@ -393,18 +423,17 @@ function ElkLayoutRunner({ layoutKey, nodes, edges, container, onLayout }: {
 }
 
 /** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
-function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure, onFitted }: {
+function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }: {
   readonly container: RefObject<HTMLDivElement | null>;
   readonly sessionKey: string;
   /** Changes when a new ELK layout is applied, so the fitted view follows the laid-out graph. */
   readonly layoutKey: string;
   /** Opening or closing the legend changes the space it reserves. */
   readonly legendOpen: boolean;
-  readonly onMeasure: (width: number) => void;
   /** Reports the layout the view was just fitted to. */
   readonly onFitted: (layoutKey: string) => void;
 }) {
-  const { fitView } = useReactFlow();
+  const flow = useReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>();
   useEffect(() => {
     const element = container.current;
     if (!element) return;
@@ -417,8 +446,7 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure, 
       if (current === measured || width < 1 || height < 1) return;
       measured = current;
       reserveControls(element);
-      onMeasure(width);
-      void fitView(fitOptionsFor(element));
+      void fitLegibly(flow, element);
     };
     // A ResizeObserver sees every layout-driven canvas change: window resizes, panel switches, and the two-column inspector.
     const observer = new ResizeObserver(() => {
@@ -428,17 +456,17 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onMeasure, 
     observer.observe(element);
     apply();
     return () => { if (queued) cancelAnimationFrame(queued); observer.disconnect(); };
-  }, [container, fitView, onMeasure]);
+  }, [container, flow]);
   // Loading a scenario, resetting the simulation, or toggling the legend returns the view to the fitted default.
   useEffect(() => {
     const element = container.current;
     // Measure after the legend has painted at its new size.
     let cancelled = false;
     const frame = requestAnimationFrame(() => {
-      void fitView(element ? fitOptionsFor(element) : fitViewOptions).then(() => { if (!cancelled) onFitted(layoutKey); });
+      void (element ? fitLegibly(flow, element) : Promise.resolve(false)).then(() => { if (!cancelled) onFitted(layoutKey); });
     });
     return () => { cancelled = true; cancelAnimationFrame(frame); };
-  }, [container, fitView, sessionKey, layoutKey, legendOpen, onFitted]);
+  }, [container, flow, sessionKey, layoutKey, legendOpen, onFitted]);
   return null;
 }
 
@@ -453,11 +481,11 @@ function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined):
   };
 }
 
-/** Fit View with the same legend-aware padding as the default fit, so both give one view. */
+/** Fit View returns to the default view, so the button and the automatic fit give one view (#166). */
 function LegendAwareFit({ container }: { readonly container: RefObject<HTMLDivElement | null> }) {
-  const { fitView } = useReactFlow();
+  const flow = useReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>();
   return <ControlButton className="react-flow__controls-fitview" aria-label="Fit View" title="Fit View"
-    onClick={() => { void fitView(container.current ? fitOptionsFor(container.current) : fitViewOptions); }}>
+    onClick={() => { if (container.current) void fitLegibly(flow, container.current); }}>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 30" aria-hidden="true">
       <path d="M3.692 4.63c0-.53.4-.938.939-.938h5.215V0H4.708C2.13 0 0 2.054 0 4.63v5.216h3.692V4.631zM27.354 0h-5.2v3.692h5.17c.53 0 .984.4.984.939v5.215H32V4.631A4.624 4.624 0 0027.354 0zm.954 24.83c0 .532-.4.94-.939.94h-5.215v3.768h5.215c2.577 0 4.631-2.13 4.631-4.707v-5.139h-3.692v5.139zm-23.677.94c-.531 0-.939-.4-.939-.94v-5.138H0v5.139c0 2.577 2.13 4.707 4.708 4.707h5.138V25.77H4.631z" />
     </svg>
@@ -610,11 +638,10 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   }, []);
   const clearSelection = useCallback(() => setSelectedId(null), []);
   const canvas = useRef<HTMLDivElement | null>(null);
-  // null keeps the automatic choice: open unless the canvas is narrow. A reader's toggle wins afterwards.
-  const [legendChoice, setLegendChoice] = useState<boolean | null>(null);
-  const [canvasWidth, setCanvasWidth] = useState(0);
-  const legendOpen = legendChoice ?? (canvasWidth === 0 || canvasWidth >= NARROW_CANVAS);
-  const toggleLegend = useCallback(() => setLegendChoice(!legendOpen), [legendOpen]);
+  // The legend starts collapsed (#166): open, it took a third of the canvas width at 1366×768 and
+  // shrank every graph with it. One click opens it, and the reader's choice then holds.
+  const [legendOpen, setLegendOpen] = useState(false);
+  const toggleLegend = useCallback(() => setLegendOpen(open => !open), []);
 
   if (graph.error) return <p role="alert">{graph.error}</p>;
   if (!nodes.length) return <p>No architecture components to display.</p>;
@@ -645,11 +672,11 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           nodesDraggable={false} nodesConnectable={false} edgesReconnectable={false}
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}
-          minZoom={minZoom} maxZoom={1.8}
+          minZoom={minZoom} maxZoom={maxZoom}
           ariaLabelConfig={ariaLabelConfig}>
           <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
-            onMeasure={setCanvasWidth} onFitted={setFittedKey} />
+            onFitted={setFittedKey} />
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />
