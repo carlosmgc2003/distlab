@@ -105,8 +105,10 @@ the envelope fields do not. Two files that differ only in their title therefore
 produce the same `runId`.
 
 A **hosted catalog** is a model catalog paired with the assessment catalog the
-worker uses with it. Today there are two: `mvp.checkout@1.0.0` (checkout models
-and `mvp.*` predicates) and `commerce.lessons@1.0.0` (commerce models and
+worker uses with it. Today there are three: `mvp.checkout@1.0.0` (checkout models
+and `mvp.*` predicates), `mvp.checkout@1.1.0` (the same models, with `mvp.*`
+predicates `1.1.0`, which take optional `processor`, `payments`, and `orders`
+component IDs, #148), and `commerce.lessons@1.0.0` (commerce models and
 `commerce.*` predicates). The worker resolves the reference from its own
 registry. A document cannot name a model or predicate outside the catalog it
 references. The worker never infers the catalog from model names, because that

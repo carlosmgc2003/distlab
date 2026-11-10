@@ -66,6 +66,7 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | --- | --- |
 | `checkoutCatalog` | `ScenarioCatalog` with ID `mvp.checkout`, version `1.0.0`. |
 | `checkoutAssessment` | `ScenarioAssessment` with version `1.0.0`. |
+| `checkoutCatalogV11`, `checkoutAssessmentV11` | `mvp.checkout@1.1.0`: the same models, with the `1.1.0` checkout assessment whose checks name their components (#148). |
 | `checkoutScenario(variant)` | Returns a `CanonicalValue` document for `"normal"` or `"response-lost"`. |
 | `normalCheckout`, `responseLostCheckout` | Preconstructed checkout documents. |
 | `checkoutLesson` | Read-only title and explanation strings indexed by checkout variant. |
@@ -172,10 +173,20 @@ Each predicate returns `pass` plus canonical evidence, without changing state.
 | `mvp.authorization-disagreement-visible` | `orderId` | One provider authorization exists while the local payment is `UNKNOWN` with a null authorization ID. |
 | `mvp.payments-authorized` | `orderId` | The payment is `AUTHORIZED` with a string authorization ID. |
 
-All six predicates have version `1.0.0`. Both documents use the first three;
+All six predicates have version `1.0.0` in `checkoutAssessment` and read the
+packaged component IDs: `payment-processor`, `payments` (its database and the
+timeout source), and `orders`. Both documents use the first three;
 the normal document adds the authorized check, and the response-lost document
 adds the unknown and disagreement checks. Their assertions use `eventually`
 mode. Unknown predicate IDs resolve to `undefined`.
+
+`checkoutAssessmentV11` (version `1.1.0`, hosted as `mvp.checkout@1.1.0`) has the
+same six checks. Each also accepts optional `processor`, `payments`, and `orders`
+parameters naming the components it judges, defaulting to the packaged IDs, so
+an assertion without them gives the `1.0.0` status and evidence. A present ID
+parameter that is not a non-empty string fails the check with evidence
+`{ invalidParameters: [...] }`. Packaged lessons and starter files stay on
+`1.0.0`; a scenario document that renames its components names `1.1.0` (#148).
 
 ## Commerce models
 
