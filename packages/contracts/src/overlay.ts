@@ -1,5 +1,6 @@
 import type { CanonicalValue } from "./kernel/canonical.js";
 import type { ComponentId } from "./kernel/identities.js";
+import type { Duration } from "./kernel/time.js";
 import type { FaultEffect, FaultPoint, FaultRule, ScheduledFault } from "./fault.js";
 import type { NetworkPolicy } from "./network.js";
 import type { ScenarioAction } from "./scenario.js";
@@ -24,7 +25,14 @@ export const OverlayDiagnosticCodes = {
 
 export type OverlayDiagnosticCode = (typeof OverlayDiagnosticCodes)[keyof typeof OverlayDiagnosticCodes];
 
-export type OverlayScheduledFault = Extract<ScenarioAction, { kind: "fault" }>;
+/**
+ * A scheduled fault in an overlay. A crash may carry `restart` (ADR-004, amended for #97 D-8): the
+ * crashed service moves to STARTING `after` virtual milliseconds later and to RUNNING 1 ms after that.
+ * Composition expands it into those two ordinary lifecycle actions; the applied document never holds it.
+ */
+export type OverlayScheduledFault = Extract<ScenarioAction, { kind: "fault" }> & {
+  readonly restart?: { readonly after: Duration };
+};
 
 export interface ParameterOverride {
   readonly key: string;

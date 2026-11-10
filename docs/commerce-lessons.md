@@ -134,7 +134,14 @@ faults its architecture has and its models survive:
 | `cache-*` | request, response, database commit | crash |
 | `inventory-*` | request, response, database commit | crash |
 
-Every lesson allows up to four student faults. Saga resources and the outbox
+Every lesson allows up to four student faults. A scheduled crash may carry a
+restart `after` some virtual milliseconds (ADR-004 amendment, #97 D-8): the
+service moves to STARTING then and to RUNNING 1 ms later, so a crash can tell a
+recovery story. In `retry-idempotent`, a payments service restarted before the
+retry answers it from its durable result and the order is charged once; in
+`retry-unsafe` it charges again. The crash and its restart count as one fault.
+The Faults section does not offer the restart field yet; today the worker
+accepts it in a `load` overlay, and the assessment rows (#97) will use it. Saga resources and the outbox
 payment service already script their own crash and restart, so a student crash
 there would end the run instead of telling a story. The checkout payments model
 treats a provider error as a handler failure, so checkout does not offer
