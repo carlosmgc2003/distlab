@@ -3,7 +3,7 @@ import type { HostedCatalogRegistry } from "@distlab/scenario";
 import { checkoutCatalog } from "./models.js";
 import { checkoutAssessment } from "./assessment.js";
 import { checkoutScenario } from "./scenarios.js";
-import { commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario } from "./commerce/index.js";
+import { commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario, reliableCheckoutName } from "./commerce/index.js";
 
 const nameOf = (document: CanonicalValue) => (document as { readonly name: string }).name;
 
@@ -21,5 +21,7 @@ export const hostedCatalogs: HostedCatalogRegistry = Object.freeze({
   reservedNames: Object.freeze([
     ...(["normal", "response-lost"] as const).map(variant => nameOf(checkoutScenario(variant))),
     ...commerceLessonNames.map(name => nameOf(commerceScenario(name))),
+    // The assessment's base lesson (#97) is packaged too, though no Lesson chooser card lists it.
+    reliableCheckoutName,
   ]),
 });

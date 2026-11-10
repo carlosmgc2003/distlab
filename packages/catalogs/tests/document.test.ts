@@ -10,6 +10,7 @@ import { canonicalEncode } from "@distlab/kernel";
 import {
   checkoutAssessment, checkoutCatalog, checkoutCatalogReference, checkoutOverlayPolicy, checkoutScenario,
   commerceAssessment, commerceCatalog, commerceCatalogReference, commerceLessonNames, commerceOverlayPolicy, commerceScenario, hostedCatalogs,
+  reliableCheckoutOverlayPolicy, reliableCheckoutScenario,
 } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, compareExports, openHarness, validateScenarioDocument } from "@distlab/scenario";
 import type { HarnessExport, HostedCatalogRegistry } from "@distlab/scenario";
@@ -47,6 +48,7 @@ const commerceEngine = new DeterministicScenarioEngine({ catalog: commerceCatalo
 const packaged: Packaged[] = [
   ...(["normal", "response-lost"] as const).map(variant => ({ name: variant, scenario: checkoutScenario(variant), policy: checkoutOverlayPolicy(variant), reference: checkoutCatalogReference, engine: checkoutEngine })),
   ...commerceLessonNames.map(name => ({ name, scenario: commerceScenario(name), policy: commerceOverlayPolicy(name), reference: commerceCatalogReference, engine: commerceEngine })),
+  { name: "reliable-checkout", scenario: reliableCheckoutScenario, policy: reliableCheckoutOverlayPolicy, reference: commerceCatalogReference, engine: commerceEngine },
 ];
 
 /** ADR-006 "Packaged lessons as starters": the packaged scenario under a new name, its catalog reference, and its policy for that name. */
@@ -66,7 +68,7 @@ test("the hosted registry pairs each catalog with its assessment and reserves ev
   assert.deepEqual({ id: checkoutCatalog.id, version: checkoutCatalog.version }, checkoutCatalogReference);
   assert.deepEqual({ id: commerceCatalog.id, version: commerceCatalog.version }, commerceCatalogReference);
   assert.deepEqual(hostedCatalogs.reservedNames, packaged.map(lesson => (lesson.scenario as Doc).name));
-  assert.equal(new Set(hostedCatalogs.reservedNames).size, 2 + commerceLessonNames.length);
+  assert.equal(new Set(hostedCatalogs.reservedNames).size, 2 + commerceLessonNames.length + 1);
 });
 
 test("DOC-AC-1 the vision §19 document validates against mvp.checkout@1.0.0 and records the lost-response story", async () => {
@@ -86,7 +88,8 @@ test("DOC-AC-1 the vision §19 document validates against mvp.checkout@1.0.0 and
 });
 
 test("DOC-AC-2 every packaged lesson, renamed and wrapped with its catalog reference and policy, validates and gives the packaged assertion results", async () => {
-  assert.equal(packaged.length, 19);
+  // Two checkout lessons, seventeen commerce lessons, and the Reliable Checkout assessment base (#97).
+  assert.equal(packaged.length, 20);
   for (const lesson of packaged) {
     const document = starter(lesson);
     assert.ok(!hostedCatalogs.reservedNames.includes((document.scenario as Doc).name as string));
