@@ -130,7 +130,7 @@ faults its architecture has and its models survive:
 | `dual-write`, `outbox-*` | request, response, message delivery, database commit | none |
 | `cqrs-delayed` | request, response, message delivery, database commit | crash |
 | `cascade-*` | request, response | crash, external availability |
-| `notifications-*` | request, response, message delivery, database commit | crash |
+| `notifications-*` | request, response, message delivery, database commit | crash, external availability |
 | `cache-*` | request, response, database commit | crash |
 | `inventory-*` | request, response, database commit | crash |
 
@@ -145,9 +145,13 @@ accepts it in a `load` overlay, and the assessment rows (#97) will use it. Saga 
 payment service already script their own crash and restart, so a student crash
 there would end the run instead of telling a story. The checkout payments model
 treats a provider error as a handler failure, so checkout does not offer
-external availability, and neither does the notifications pair: its sender NACKs
-only a modeled failure such as a send timeout, so a provider rejection reply
-would end the run. A catalog test runs every offered kind to completion.
+external availability. The notifications pair does (#126): when the Messaging
+Provider is UNAVAILABLE or RATE_LIMITED, it answers a send with an error reply,
+and the sender rethrows that reply's code, so the bus NACKs and redelivers the
+notification exactly as it does after a send timeout. Recorded history names the
+rejection (`service.handler.failed` with `EXTERNAL_RATE_LIMITED`), and the
+provider's availability shows in its component state. A catalog test runs every
+offered kind to completion.
 Packaged lesson checks still run against the changed experiment. A business
 invariant may become VIOLATED and a scenario expectation "not reproduced": that
 means the faults changed the story, not that the simulator failed.

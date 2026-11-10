@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalValue, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
-import { checkoutAssessment, checkoutCatalog, commerceScenario, normalCheckout } from "@distlab/catalogs";
-import { DeterministicScenarioEngine } from "@distlab/scenario";
+import { checkoutAssessment, checkoutCatalog, commerceAssessment, commerceCatalog, commerceOverlayPolicy, commerceScenario, normalCheckout } from "@distlab/catalogs";
+import { DeterministicScenarioEngine, composeOverlay } from "@distlab/scenario";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { SimulationHost } from "../src/host.ts";
 import { isWorkerEvent } from "../src/protocol.ts";
@@ -80,6 +80,36 @@ test("#97 D-8 a crash with a restart loads, keeps its restart in the session, an
   assert.deepEqual(latest(), initial);
   await send({ type: "run" });
   assert.deepEqual(latest(), finished);
+});
+
+test("#126: a RATE_LIMITED Messaging Provider loads as an overlay, NACKs rejected sends, and matches the headless run", async () => {
+  const outage = (state: string, at: number, id: string) =>
+    ({ id: `student-${id}`, at, kind: "fault", fault: { id: `student-${id}-fault`, kind: "external-availability", target: "messaging", state } });
+  const overlay = { version: 1, faults: [], parameters: [], scheduledFaults: [outage("RATE_LIMITED", 80, "rate-limited"), outage("AVAILABLE", 110, "recovered")] };
+  const { send, latest } = harness();
+  const [loaded] = await send({ type: "load", scenario: commerceScenario("notifications-unbounded"), overlay: overlay as unknown as CanonicalValue });
+  assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
+  const initial = latest();
+  // Run to t=90: the student projection shows the provider rate-limited.
+  while ((latest().simulation.time as number) < 90) await send({ type: "step" });
+  const during = latest().components.find(item => item.componentId === "messaging" && item.visibility === "student");
+  assert.equal((during?.state as { availability?: string } | undefined)?.availability, "RATE_LIMITED");
+  while (latest().simulation.status !== "COMPLETED") await send({ type: "run" });
+  const finished = latest();
+  const rejected = finished.history.observations.filter(item => item.type === "service.handler.failed" && (item.data as { code: string }).code === "EXTERNAL_RATE_LIMITED");
+  assert.ok(rejected.length > 0, "a rejected send NACKs instead of ending the run");
+  await send({ type: "reset" });
+  assert.deepEqual(latest(), initial);
+  await send({ type: "run" });
+  assert.deepEqual(latest(), finished);
+
+  const engine = new DeterministicScenarioEngine({ catalog: commerceCatalog, assessment: commerceAssessment });
+  const composed = composeOverlay(commerceScenario("notifications-unbounded"), commerceOverlayPolicy("notifications-unbounded"), overlay as unknown as CanonicalValue, value => engine.validate(value), commerceCatalog);
+  assert.ok(composed.ok);
+  const headless = engine.create(composed.document);
+  await headless.simulation.run();
+  assert.deepEqual(finished.history.observations, structuredClone(headless.simulation.history.all()));
+  assert.equal(finished.simulation.runId, headless.simulation.history.export().runId);
 });
 
 test("the same overlay and seed give identical history in fresh worker sessions", async () => {

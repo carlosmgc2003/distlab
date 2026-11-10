@@ -1,7 +1,7 @@
 import type { BackgroundHandler, BusMessage, ConsumerHandler, Database, Delivery, KeyValueStore, LogLevel, MessageBus, MessageBusController, NetworkController, NetworkReply, NetworkRequest, RuntimeLogger, ServiceContext, ServiceDefinition, ServiceState, VirtualNetwork } from "@distlab/contracts";
 import { ServiceObservationTypes, RuntimeObservationTypes } from "@distlab/contracts";
 import type { CanonicalValue, ComponentId, ControlledOperation, ControlledTask, HandlerContext, ScheduleMetadata, ScheduledEvent, ScheduledHandle, SimulationSetup, TaskLifecycleController } from "@distlab/contracts/kernel";
-import { ErrorCodes, ModeledErrorCodes, throwSimulationError } from "@distlab/contracts/kernel";
+import { ErrorCodes, ModeledErrorCodes, ReplyErrorCodes, throwSimulationError } from "@distlab/contracts/kernel";
 import { canonicalCopy } from "./canonical.js";
 import { registerRuntimeLogSchema } from "./runtime-log.js";
 import type { RuntimeSetup } from "./simulation.js";
@@ -18,6 +18,12 @@ const states = new Set<string>(Object.keys(allowed));
 const kinds = new Set<string>(["endpoint", "consumer", "background"]);
 const levels = new Set<string>(["debug", "info", "warn", "error"]);
 const modeled = new Set<string>(Object.values(ModeledErrorCodes));
+/**
+ * Failures a handler may end its work with: modeled port failures, and the code of an
+ * error reply the handler rethrows (#126). Port calls never throw a reply code, so `#invoke`
+ * keeps the narrower set and a reply code thrown by a port would still seal the run.
+ */
+const handlerFailures = new Set<string>([...modeled, ...Object.values(ReplyErrorCodes)]);
 const registeredSchemas = new WeakSet<SimulationSetup>();
 type WorkKind = "endpoint" | "consumer" | "background";
 type Work = { readonly kind: WorkKind; readonly name: string; readonly reference: string; readonly generation: number };
@@ -271,7 +277,7 @@ export class DeterministicServiceRuntime {
       complete(value); this.#finish(work, context, event, "completed");
     } catch (error) {
       const code = codeOf(error);
-      if (this.#violated || !code || !modeled.has(code)) throw error;
+      if (this.#violated || !code || !handlerFailures.has(code)) throw error;
       failed(code); this.#finish(work, context, event, "failed", code);
     }
   }
@@ -281,7 +287,7 @@ export class DeterministicServiceRuntime {
     try { result = invoke(); }
     catch (error) {
       const code = codeOf(error);
-      if (this.#violated || !code || !modeled.has(code)) throw error;
+      if (this.#violated || !code || !handlerFailures.has(code)) throw error;
       failed(code); this.#finish(work, context, event, "failed", code); return;
     }
     if (result && typeof (result as unknown as Promise<unknown>).then === "function") this.#violation(ErrorCodes.UNCONTROLLED_ASYNC);

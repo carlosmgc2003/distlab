@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-09-19 |
-| Related issues | None |
+| Last updated | 2026-11-10 |
+| Related issues | #126 (rethrown reply codes) |
 
 ## Responsibility
 
@@ -113,6 +113,16 @@ Unexpected exceptions, native promises, invalid yields, invalid replies, and
 capability violations remain terminal simulator errors; they do not masquerade
 as a modeled crash. Runtime code may catch modeled failures explicitly.
 
+An error reply is a value, not a thrown failure. A handler that decides its work
+failed because a peer rejected it rethrows that reply's code (#126). The reply
+error codes `TARGET_UNAVAILABLE`, `ENDPOINT_NOT_FOUND`, `EXTERNAL_UNAVAILABLE`,
+and `EXTERNAL_RATE_LIMITED` are modeled failures when a handler throws them, so
+a consumer NACKs its delivery, an endpoint passes the same code back to its
+caller as an error reply, and background work records a failed task. The
+`service.handler.failed` observation names the code. Port calls never throw
+these codes: they arrive only in a reply body. Any other code a handler throws
+stays a terminal simulator error.
+
 On CRASHED or STOPPED, trusted cleanup runs in task-ID allocation order:
 invalidate affected waits/wakes, revoke task resource capabilities, discard
 uncommitted transactions, abandon generators without `finally`, and remove tasks
@@ -204,6 +214,10 @@ restart events → STARTING → RUNNING; durable order remains
   unexpected errors terminate; modeled failures become reply/NACK/task failure.
 - **SVC-AC-5:** Fresh/reset execution matches; restart retains DB/KV while reset
   restores initial values. Sink failure preserves commits and seals the run.
+- **SVC-AC-6:** A reply error code rethrown by an endpoint, consumer, or
+  background handler becomes an error reply with that code, a NACK, or a failed
+  task, and `service.handler.failed` names it; an unknown thrown code still
+  terminates (#126).
 
 ## Acceptance coverage
 
@@ -212,7 +226,7 @@ restart events → STARTING → RUNNING; durable order remains
 | SVC-INV-1 | SVC-AC-1, SVC-AC-4 |
 | SVC-INV-2 | SVC-AC-3, SVC-AC-5 |
 | SVC-INV-3 | SVC-AC-1, SVC-AC-2, SVC-AC-5 |
-| Construction, handler registration/dispatch, reset | SVC-AC-1, SVC-AC-4, SVC-AC-5 |
+| Construction, handler registration/dispatch, reset | SVC-AC-1, SVC-AC-4, SVC-AC-5, SVC-AC-6 |
 | state, transition | SVC-AC-2, SVC-AC-3 |
 | RuntimeLogger.write | SVC-AC-1, SVC-AC-4, SVC-AC-5 |
 

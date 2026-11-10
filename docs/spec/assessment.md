@@ -282,7 +282,8 @@ customer-app ──▶ orders ──▶ inventory
 - **notifications** consumes `OrderConfirmed` and sends through **messaging**.
   By option it keeps an inbox keyed by the event ID. It treats an error reply
   from messaging as a failed send and NACKs the delivery, so the bus redelivers
-  it. (The current `commerce.notify-sender` NACKs only a send timeout; see #126.)
+  it by rethrowing the reply's code ([service runtime](service-runtime.md),
+  #126), as `commerce.notify-sender` does.
 - **orders** also exposes `POST /relay`, which publishes unsent outbox events.
   The base document packages one relay request late in the run, which does
   nothing when the outbox is empty.

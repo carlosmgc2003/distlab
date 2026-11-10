@@ -1,4 +1,5 @@
 import type { CanonicalValue, NetworkReply, ServiceDefinition } from "@distlab/contracts";
+import { throwSimulationError } from "@distlab/contracts/kernel";
 import type { ScenarioModel } from "@distlab/scenario";
 import { peer } from "../peer.js";
 import { messagingDescriptor, notifyOrdersDescriptor, notifySenderDescriptor } from "./descriptors.js";
@@ -39,6 +40,9 @@ export const notifyOrdersModel: ScenarioModel = {
 /**
  * The send does not catch a timeout: the uncaught modeled failure NACKs the
  * delivery, and the destination's `maxAttempts` decides when it goes to DEAD.
+ * A provider that answers with an error reply (UNAVAILABLE or RATE_LIMITED)
+ * rejected the send: the sender rethrows the reply's code, which NACKs the
+ * delivery the same way (service-runtime.md, #126).
  */
 export const notifySenderModel: ScenarioModel = {
   ...notifySenderDescriptor, checks: {},
@@ -49,7 +53,11 @@ export const notifySenderModel: ScenarioModel = {
         const orderId = text(record(delivery.message.body).orderId);
         ctx.log.write("info", "notification.sending", { orderId, attempt: delivery.attempt });
         const reply = (yield ctx.http.request({ target: provider, endpoint: "POST /send", body: { orderId } })) as unknown as NetworkReply;
-        if (reply.status !== "ok") throw new Error(`Unexpected ${provider} failure`);
+        if (reply.status !== "ok") {
+          const code = text(record(reply.body).code);
+          ctx.log.write("warn", "notification.rejected", { orderId, attempt: delivery.attempt, code });
+          throwSimulationError(code);
+        }
         yield* save(ctx, "notifications", orderId, { orderId, status: "SENT", attempt: delivery.attempt });
         yield ctx.events.publish("NotificationSent", { type: "NotificationSent", body: { orderId } });
         ctx.log.write("info", "notification.sent", { orderId, attempt: delivery.attempt });

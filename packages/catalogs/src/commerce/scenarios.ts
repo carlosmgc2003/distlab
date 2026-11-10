@@ -353,9 +353,10 @@ export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPo
   const rules = family === "cascade" ? network
     : family === "cqrs" || family === "outbox" || family === "dual" || family === "notifications" ? [...network, delivery, commit]
     : [...network, commit];
-  const scheduled: ScheduledFault["kind"][] = family === "cascade" ? ["crash", "external-availability"]
+  // Notifications senders NACK a provider's rejection as well as a timeout (#126), so a student can take Messaging down.
+  const scheduled: ScheduledFault["kind"][] = family === "cascade" || family === "notifications" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
-    : family === "retry" || family === "cqrs" || family === "notifications" || family === "cache" || family === "inventory" ? ["crash"] : [];
+    : family === "retry" || family === "cqrs" || family === "cache" || family === "inventory" ? ["crash"] : [];
   const architecture = commerceArchitecture(name);
   return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name), ...architecture ? { architecture } : {} };
 }
