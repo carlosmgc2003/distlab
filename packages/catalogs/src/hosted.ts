@@ -1,7 +1,7 @@
 import type { CanonicalValue } from "@distlab/contracts";
 import type { HostedCatalogRegistry } from "@distlab/scenario";
-import { checkoutCatalog } from "./models.js";
-import { checkoutAssessment } from "./assessment.js";
+import { checkoutCatalog, checkoutCatalogV11 } from "./models.js";
+import { checkoutAssessment, checkoutAssessmentV11 } from "./assessment.js";
 import { checkoutScenario } from "./scenarios.js";
 import { commerceAssessment, commerceCatalog, commerceLessonNames, commerceScenario, reliableCheckoutName } from "./commerce/index.js";
 
@@ -16,6 +16,8 @@ const nameOf = (document: CanonicalValue) => (document as { readonly name: strin
 export const hostedCatalogs: HostedCatalogRegistry = Object.freeze({
   catalogs: Object.freeze([
     Object.freeze({ catalog: checkoutCatalog, assessment: checkoutAssessment }),
+    // Checks that name their components, for documents whose components use other IDs (#148).
+    Object.freeze({ catalog: checkoutCatalogV11, assessment: checkoutAssessmentV11 }),
     Object.freeze({ catalog: commerceCatalog, assessment: commerceAssessment }),
   ]),
   reservedNames: Object.freeze([

@@ -126,3 +126,10 @@ export const checkoutCatalog: ScenarioCatalog = {
   find: (name, version) => models.find(model => model.model === name && model.version === version),
   versions: name => models.filter(model => model.model === name).map(model => model.version),
 };
+
+/**
+ * `mvp.checkout@1.1.0` (#148): the same models as `1.0.0`, hosted with the
+ * `1.1.0` checkout assessment, whose checks may name the components they judge.
+ * A hosted catalog version is immutable (ADR-006), so `1.0.0` stays as it was.
+ */
+export const checkoutCatalogV11: ScenarioCatalog = { ...checkoutCatalog, version: "1.1.0" };

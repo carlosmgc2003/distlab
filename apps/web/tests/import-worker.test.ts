@@ -238,9 +238,33 @@ function renamedCheckout(): Doc {
       subscriptions: (architecture.subscriptions as Doc[]).map(subscription => ({ ...subscription, consumer: rename(subscription.consumer) })) },
     external: (scenario.external as Doc[]).map(entry => ({ ...entry, target: rename(entry.target) })),
     actions: (scenario.actions as Doc[]).map(action => ({ ...action, target: rename(action.target) })),
-    // The checkout predicates read fixed component IDs, so this document states no checks.
+    // mvp.checkout@1.0.0's predicates read fixed component IDs, so this document states no checks;
+    // the 1.1.0 variant below names the components in its assertions (#148).
     assertions: [] }, presentation: { title: "Renamed checkout" } };
 }
+
+test("#148: a renamed checkout document against mvp.checkout@1.1.0 names its components and its check passes, as the fixture's does", async () => {
+  const original = fixture();
+  const named = renamedCheckout();
+  const assertions = ((original.scenario as Doc).assertions as Doc[]).map(assertion => ({ ...assertion,
+    parameters: { ...(assertion.parameters as Doc), processor: "psp", payments: "billing", orders: "order-service" } }));
+  const document = { ...named, catalog: { id: "mvp.checkout", version: "1.1.0" }, scenario: { ...(named.scenario as Doc), assertions } };
+  const verdicts = async (value: Doc) => {
+    const { send, latest, load } = harness();
+    const loaded = await load(text(value));
+    assert.ok(loaded.type === "loaded", JSON.stringify(loaded).slice(0, 600));
+    await send({ type: "run" });
+    const finished = latest();
+    assert.equal(finished.simulation.status, "COMPLETED");
+    const client = finished.components.find(item => item.visibility === "student" && Array.isArray((item.state as Doc).assertions));
+    return { runId: finished.simulation.runId, verdicts: ((client?.state as Doc).assertions as Doc[]).map(item => `${String(item.id)}:${String(item.status)}`) };
+  };
+  const renamedRun = await verdicts(document);
+  assert.deepEqual(renamedRun.verdicts, (await verdicts(original)).verdicts);
+  assert.deepEqual(renamedRun.verdicts, ["order-not-charged-twice:PASS"]);
+  // Equal inputs, equal run: a second fresh worker reproduces the runId.
+  assert.equal((await verdicts(document)).runId, renamedRun.runId);
+});
 
 test("a checkout document with renamed component IDs shows correct student state", async () => {
   const { send, latest, load } = harness();
