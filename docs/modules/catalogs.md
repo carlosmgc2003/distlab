@@ -24,7 +24,7 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/peer.ts`](../../packages/catalogs/src/peer.ts) | Resolves a declared peer from component configuration or the descriptor default. |
 | [`src/assessment.ts`](../../packages/catalogs/src/assessment.ts) | Six checkout predicates and `checkoutAssessment`. |
 | [`src/scenarios.ts`](../../packages/catalogs/src/scenarios.ts) | Data-only checkout documents, document builder, and lesson copy. |
-| [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers twenty commerce models, defines commerce assessment, and re-exports commerce scenario data. |
+| [`src/commerce/index.ts`](../../packages/catalogs/src/commerce/index.ts) | Registers twenty-five commerce models, defines commerce assessment, and re-exports commerce scenario and Reliable Checkout data. |
 | [`src/commerce/common.ts`](../../packages/catalogs/src/commerce/common.ts) | Shared payload/reply/transaction helpers and the commerce client factory. |
 | [`src/commerce/retry.ts`](../../packages/catalogs/src/commerce/retry.ts) | Payment model with optional durable request idempotency. |
 | [`src/commerce/saga.ts`](../../packages/catalogs/src/commerce/saga.ts) | Saga coordinator, configurable resource service, and external carrier. |
@@ -34,10 +34,12 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/notify.ts`](../../packages/catalogs/src/commerce/notify.ts) | Orders that confirms at checkout or after `NotificationSent`, a notification sender, and an external Messaging Provider. |
 | [`src/commerce/cache.ts`](../../packages/catalogs/src/commerce/cache.ts) | Catalog with a cache-aside price cache and optional invalidation, a TTL cart, and Orders that records the price it used. |
 | [`src/commerce/inventory.ts`](../../packages/catalogs/src/commerce/inventory.ts) | Inventory that reserves the last unit with check-then-act or with optimistic concurrency. |
+| [`src/commerce/reliable.ts`](../../packages/catalogs/src/commerce/reliable.ts) | Reliable Checkout models: saga Orders with optional compensation and outbox, Inventory, Payments with optional retries and idempotency key, the Payment Processor, and Notifications with an optional inbox. |
 | [`src/commerce/placeholder.ts`](../../packages/catalogs/src/commerce/placeholder.ts) | Placeholder service and external models that fill an empty design slot and answer `NOT_IMPLEMENTED`. |
 | [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for seventeen commerce documents, their checks, and their overlay policies. |
+| [`src/commerce/reliable-checkout.ts`](../../packages/catalogs/src/commerce/reliable-checkout.ts) | Data-only Reliable Checkout base document, its overlay policy and check classification, and the packaged assessment definition (`assessmentDefinitions`). |
 | [`src/hosted.ts`](../../packages/catalogs/src/hosted.ts) | `hostedCatalogs`: the ADR-006 hosted catalog registry and the reserved packaged scenario names. Worker and headless tools only. |
-| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the twenty commerce models. |
+| [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the twenty-five commerce models. |
 | [`examples/commerce.ts`](../../packages/catalogs/examples/commerce.ts) | Headless CLI lesson runner with timeline, stepping, JSON export, and replay. |
 | [`examples/scenario.ts`](../../packages/catalogs/examples/scenario.ts) | Headless `check` command for instructor scenario documents. |
 
@@ -45,7 +47,9 @@ The two `scenarios.ts` modules import only contract types from
 `@distlab/contracts`. Their functions construct serializable inputs; they do not
 instantiate models or run simulations. The two `descriptors.ts` modules import
 only the `ModelDescriptor` type and export plain descriptor values. Main-thread
-browser code may import these four modules directly. The package root and `commerce/index.ts` also reach runtime
+browser code may import these four modules directly. `commerce/reliable-checkout.ts`
+is data-only in the same way; the browser does not import it until the assessment
+view (#97) adds it to the boundary test's list. The package root and `commerce/index.ts` also reach runtime
 factories and belong in the worker or headless composition path.
 
 The [package manifest](../../packages/catalogs/package.json) declares only the
@@ -175,7 +179,7 @@ mode. Unknown predicate IDs resolve to `undefined`.
 
 ## Commerce models
 
-`src/commerce/index.ts` registers the following twenty models. Repeated service
+`src/commerce/index.ts` registers the following twenty-five models. Repeated service
 instances share a model definition but receive fresh factory-created handlers.
 
 | Source | Model | Interface and behavior |
@@ -192,12 +196,17 @@ instances share a model definition but receive fresh factory-created handlers.
 | `circuit.ts` | `commerce.dependency` | Service `POST /check`; calls configuration `target` and records dependency metrics in KV. Configuration `breaker` enables the circuit policy. Used by API, Orders, and Payments. |
 | `circuit.ts` | `commerce.risk` | External `POST /check`; returns `APPROVED`, with empty internal and visible state. |
 | `notify.ts` | `commerce.notify-orders` | Service `POST /checkout` and consumer `NotificationSent`; commits the order and publishes `OrderPlaced`. Configuration `decoupled` commits `CONFIRMED` at checkout; otherwise the order stays `PENDING` until `NotificationSent` confirms it. |
-| `notify.ts` | `commerce.notify-sender` | Service consumer `OrderPlaced`; sends through peer `provider` (default `messaging`), then commits a `SENT` row and publishes `NotificationSent`. It does not catch a send timeout, so the uncaught `NETWORK_TIMEOUT` NACKs the delivery and the destination's `maxAttempts` bounds the retries. |
+| `notify.ts` | `commerce.notify-sender` | Service consumer `OrderPlaced`; sends through peer `provider` (default `messaging`), then commits a `SENT` row and publishes `NotificationSent`. It does not catch a send timeout, so the uncaught `NETWORK_TIMEOUT` NACKs the delivery and the destination's `maxAttempts` bounds the retries. A provider error reply (`EXTERNAL_UNAVAILABLE`, `EXTERNAL_RATE_LIMITED`) is logged as `notification.rejected` and its code rethrown, which NACKs the same way (#126). |
 | `notify.ts` | `commerce.messaging-provider` | External `POST /send`; appends the order ID to its `sent` list, which is also its visible state, and returns `SENT`. |
 | `cache.ts` | `commerce.cache-catalog` | Service `GET /price` and `POST /price`; owns tables `prices` and `price-history` and a KeyValueStore. A read returns the cached `price:<sku>` entry, or reads the database and caches it for configuration `ttl` (default 100). A change commits the current price and a history row with `validFrom` in one transaction. Configuration `invalidate` then deletes the cached key. |
 | `cache.ts` | `commerce.cache-cart` | Service `POST /cart` and `GET /cart`; keeps `cart:<id>` in its KeyValueStore for configuration `ttl` (default 30) and records that deadline in the cart as `expiresAt`. A read of an expired cart returns `EXPIRED`. |
 | `cache.ts` | `commerce.cache-orders` | Service `POST /checkout`; reads the cart through peer `cart` and the price through peer `catalog`. It commits a `REJECTED` row for an expired cart, or a `PLACED` row with the price, its version and source, the cart's `expiresAt`, and `checkedOutAt`. A timed-out or failed call returns `UNAVAILABLE` without a row. |
 | `inventory.ts` | `commerce.inventory` | Service `POST /reserve`; owns tables `stock` and `reservations`. It reads the SKU's stock row and answers `OUT_OF_STOCK` when `stock` is below 1, waits 5 ms, then decrements `stock`, increments `version`, and inserts an `ACTIVE` reservation in one commit. Without configuration `optimistic`, the read is a closed snapshot and the write is a fresh transaction that decrements the stock it finds then. With `optimistic`, the read and the write share one transaction; on `TRANSACTION_CONFLICT` it re-reads once. |
+| `reliable.ts` | `commerce.reliable-orders` | Service `POST /checkout` and `POST /relay`; owns tables `orders` and `outbox`; publishes `OrderConfirmed`. Commits the order `PENDING`, then calls peer `inventory` `POST /reserve` and peer `payments` `POST /authorize`. A step that times out or fails records `NEEDS_COMPENSATION`; configuration `compensate` instead undoes the attempted steps in reverse order (`POST /void`, then `POST /release`) and records `CANCELLED`. On success it commits `CONFIRMED`, waits 10 ms, and publishes; with configuration `outbox` the confirming commit records the event and only the relay publishes it. |
+| `reliable.ts` | `commerce.reliable-inventory` | Service `POST /reserve` and `POST /release`; owns table `reservations`. Release of an order with no `RESERVED` row answers `NONE`. |
+| `reliable.ts` | `commerce.reliable-payments` | Service `POST /authorize` and `POST /void`; owns table `payments`; calls peer `processor`. Configuration `idempotent` sends the order ID as `idempotencyKey`; configuration `retries` (0–3) repeats an authorization that timed out. After the last timeout it records `UNKNOWN` and rethrows `NETWORK_TIMEOUT`; a processor error reply is rethrown as its code. |
+| `reliable.ts` | `commerce.reliable-processor` | External `POST /authorize` and `POST /void`. Its visible `authorizations` list records each authorization's order, key, and `APPROVED` or `VOIDED` status. A repeated idempotency key returns the existing authorization; `POST /void` voids an order's approved ones. |
+| `reliable.ts` | `commerce.reliable-notifications` | Service consumer `OrderConfirmed`; owns tables `notifications` and `inbox`; sends through peer `provider` (default `messaging`). A provider error reply rethrows its code and a send timeout propagates, so either NACKs (#126). Configuration `idempotent` ignores an event ID already in the inbox. It acknowledges 5 ms after recording the send. |
 | `placeholder.ts` | `commerce.placeholder-service` | Placeholder (ADR-005) for an empty service slot. Registers the endpoints listed in configuration `interface` (none when absent) and answers each with an error reply `{ code: "NOT_IMPLEMENTED" }`. Consumes, publishes, and stores nothing. |
 | `placeholder.ts` | `commerce.placeholder-external` | Placeholder for an empty external slot. Exposes the operations listed in configuration `interface` and answers each with the same `NOT_IMPLEMENTED` error reply, without changing its empty state or visible state. |
 
@@ -290,7 +299,7 @@ final state.
 
 ### Commerce assessment
 
-`commerceAssessment.find` resolves only eight version-`1.0.0` predicates:
+`commerceAssessment.find` resolves only twelve version-`1.0.0` predicates:
 
 - `commerce.rows` takes `owner`, `table`, `count`, `key`, and `expected`. It
   requires the exact table row count and compares each expected field against
@@ -323,11 +332,35 @@ final state.
 - `commerce.reservations` takes `owner`, `stock`, and `reservations`. Each
   stock row's SKU may have at most `units` reservations with status `ACTIVE`.
   Evidence lists each SKU's units and active reservation IDs.
+- `commerce.charges` takes `processor` and `maximum`. No order may hold more
+  than `maximum` `APPROVED` authorizations in the processor's visible state.
+  Evidence counts approved authorizations per order.
+- `commerce.unconfirmed-charges` takes `processor`, `owner`, and `table`. Every
+  `APPROVED` authorization must belong to an order whose row is `CONFIRMED`.
+  Evidence lists each approved authorization with its order's status.
+- `commerce.notifications` takes `provider`, `owner`, and `table`. No order may
+  appear more than once in the provider's visible `sent` list, and every
+  `CONFIRMED` order must appear exactly once. Evidence lists each order's status
+  and send count.
+- `commerce.final-orders` takes `owner`, `table`, and `states`. Every order row's
+  status must be one of `states`. Evidence lists each order's status.
 
 Commerce documents use `always` assertions for safety invariants and `at`
 assertions, at their declared virtual times, for everything else. The
 assessment component in `@distlab/scenario` owns scheduling, statuses, and
 boundary evaluation; the catalog predicates only inspect projections.
+
+### Reliable Checkout
+
+`reliableCheckoutScenario` (`reliable-checkout@1`) is the fault-free base lesson
+of the Reliable Checkout assessment ([Assessment](../spec/assessment.md), #97).
+Its five design choices are declared in `reliableCheckoutOverlayPolicy`, every
+assertion is a business invariant in `reliableCheckoutChecks`, and
+`reliableCheckoutAssessment` holds the six suite rows. It is catalog only: it is
+not one of the packaged lessons the worker accepts or the Lesson chooser lists
+until the assessment view. `tests/reliable-checkout.test.ts` validates every
+packaged definition (ASSESS-AC-2) and pins the expected-outcomes matrix
+(ASSESS-AC-4).
 
 ## Headless example and verification
 
