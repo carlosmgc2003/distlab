@@ -92,8 +92,9 @@ export const BASE_OPTIONS: Readonly<LayoutOptions> = {
   "elk.randomSeed": "1",
   "elk.spacing.nodeNode": "60",
   // Edge labels get layers of their own, which already widen the gap between two node layers, so
-  // the layers themselves sit close (#166): wide gaps pushed the default view below a legible scale.
-  "elk.layered.spacing.nodeNodeBetweenLayers": "20",
+  // the layers themselves sit close (#166): wide gaps pushed the default view below a legible scale,
+  // and at 1366×768 the widest lessons fit whole only this close.
+  "elk.layered.spacing.nodeNodeBetweenLayers": "12",
   "elk.spacing.edgeNode": "30",
   "elk.layered.spacing.edgeNodeBetweenLayers": "30",
   "elk.spacing.edgeEdge": "18",

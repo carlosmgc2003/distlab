@@ -346,7 +346,7 @@ cross as little as ELK can manage.
 - **Options.** `elk.algorithm: layered`, `elk.direction: RIGHT`,
   `elk.edgeRouting: ORTHOGONAL`, `elk.layered.nodePlacement.strategy:
   NETWORK_SIMPLEX`, a fixed `elk.randomSeed`, and generous spacing (node to
-  node, edge to node, edge to edge). Between layers the spacing is 20: edge
+  node, edge to node, edge to edge). Between layers the spacing is 12: edge
   labels already get layers of their own, and wider gaps pushed the default
   view below a legible scale (#166). Every option name was checked against
   `knownLayoutOptions()` of the pinned `elkjs` version.
@@ -385,9 +385,11 @@ cross as little as ELK can manage.
   controls' column, the pan buttons' row, and the legend's header row, or its
   column when open. The legend starts collapsed. **Fit View** returns to this
   view; the zoom-out button still reaches the whole graph at any size. At
-  1534×897 every packaged lesson loads whole; at 1366×768 the four cascade and
-  notifications lessons start at their clients and pan. The viewport is
-  presentation only and never enters projections, commands, or history.
+  1534×897 every packaged lesson loads whole, with 15–20 % of zoom to spare.
+  At 1366×768 the widest lessons fit within about 2 % of the legible floor, so
+  font metrics decide whether they are whole; either way the names are legible
+  and the view starts at the clients. The viewport is presentation only and
+  never enters projections, commands, or history.
 - **Routes.** `ElkEdge` draws `startPoint → bendPoints → endPoint` with
   slightly rounded corners and puts the label where ELK placed it. ELK
   reports a section's points relative to the edge's container; `elkLayout`
