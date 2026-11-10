@@ -84,6 +84,20 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Students never see a bare PASS or FAIL. `apps/web/src/lesson-checks.ts` maps
   stored verdicts only; it never re-evaluates a predicate.
 
+## Assessment
+
+- An **assessment** runs one student design against a fixed suite of fault
+  scenarios. See [Assessment](docs/spec/assessment.md). Its **definition** is
+  data: a **base lesson** (a packaged lesson with no packaged fault), **rows**
+  (each one's added faults), and the base lesson's **business invariants** as
+  columns.
+- Each row is one ordinary `load` of the base document with an overlay of the
+  row's faults and the student's design choices, then `run`. No command is added,
+  and the matrix shows stored verdicts only: HOLDS, VIOLATED, or INCOMPLETE per
+  cell, and PASS when every invariant of a row holds.
+- The worker holds only the last row's session. Opening another row's evidence
+  loads that row again; equal inputs give the same `runId`.
+
 ## Architecture editor
 
 - Students compose catalog models; they never author handlers. See

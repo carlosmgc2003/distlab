@@ -62,8 +62,10 @@ factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command. The
 only contract value the main thread imports is the `ScenarioDocumentLimits`
 constant.
-The host accepts the two packaged checkout documents and seventeen packaged
-commerce lessons, each optionally with a session overlay that the lesson's
+The host accepts the two packaged checkout documents, seventeen packaged
+commerce lessons, and the Reliable Checkout assessment's base lesson
+(`packages/catalogs/src/commerce/reliable-checkout.ts`, a data-only module the
+main thread may import), each optionally with a session overlay that the lesson's
 data-only overlay policy allows (`docs/spec/adr/004-session-overlays.md`), and
 imported scenario documents against a hosted catalog, each optionally with an
 overlay that the document's own policy allows. The

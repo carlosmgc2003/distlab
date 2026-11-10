@@ -216,8 +216,12 @@ boundaries, and the kernel yields every 16 events so pause messages can arrive.
 Projections are copied and recursively frozen on both sides of structured clone.
 Component state labeled `host` stays on the projection for assessment comparison and is not rendered. The shell renders a separate `student` projection: committed Orders and Payments rows, service lifecycle, bus delivery state, the client-observed checkout outcome, and Payment Processor authorization facts. Provider counters and runtime handles are omitted from that projection.
 
-The host accepts the two packaged checkout documents and seventeen packaged commerce
-lessons. Choose them in the Lesson chooser, a dialog that shows each failing lesson
+The host accepts the two packaged checkout documents, seventeen packaged commerce
+lessons, and the base lesson of the **Reliable Checkout** assessment. In the
+Lesson chooser's Assessment group, the assessment runs one design against six
+fault scenarios, one ordinary load and run each, and shows a verdict per scenario
+and business invariant, with evidence links and a canonical JSON export
+([Assessment](docs/spec/assessment.md)). Choose lessons in the Lesson chooser, a dialog that shows each failing lesson
 beside its fix and loads a lesson in one click; commerce lessons show assertion
 verdicts in the Lesson panel, service-owned state in the **Service state** dialog,
 business events in Story, and a Compare button for paired experiments. Compare loads a fresh session rather than
