@@ -160,6 +160,9 @@ test("keyboard users can add, inspect, and remove a fault, and the open panel ha
   expect((await new AxeBuilder({ page }).include(".experiment-drawer").analyze()).violations).toEqual([]);
   await region.getByRole("button", { name: "Edit student-fault-1" }).focus();
   await page.keyboard.press("Enter");
+  // Edit moves focus to the Fault field one animation frame later. Wait for it, so a Remove pressed
+  // below cannot lose its Enter to that deferred focus move (#180).
+  await expect(kind).toBeFocused();
   await expect(region.getByLabel("At virtual time")).toHaveValue("15");
   await expect(region.getByRole("heading", { name: "Edit student-fault-1" })).toBeVisible();
   await region.getByRole("button", { name: "Remove student-fault-1" }).focus();
