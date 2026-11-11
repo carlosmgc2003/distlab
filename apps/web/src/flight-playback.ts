@@ -6,12 +6,12 @@ import {
   flightPosition,
   flightSteps,
   flightTransport,
+  transportStep,
 } from "./flight.ts";
 import type { FlightPace, FlightPosition, FlightStep, FlightTransport, PlaybackPhase } from "./flight.ts";
 import { activityAt, activityChanges } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
-import { selectionStep } from "./timeline.ts";
 import type { Observation } from "@distlab/contracts";
 
 /** How often the host timer rechecks while the cursor waits for the run to record more movements. */
@@ -20,6 +20,8 @@ const TAIL_POLL_MS = 200;
 interface Cursor {
   readonly index: number;
   readonly phase: PlaybackPhase;
+  /** Counts restarts, so Restart paints the same movement again when there is only one (#192). */
+  readonly paint: number;
 }
 
 export interface FlightPlayback {
@@ -28,6 +30,8 @@ export interface FlightPlayback {
   readonly step: FlightStep | undefined;
   readonly phase: PlaybackPhase;
   readonly pace: FlightPace;
+  /** Changes on every Restart, so a token painted again starts from the start of its leg. */
+  readonly paint: number;
   readonly position: FlightPosition;
   readonly transport: FlightTransport;
   /** Component activity read from records at or before the cursor; empty with no cursor. */
@@ -59,17 +63,17 @@ export function useFlightPlayback(
   const steps = useMemo(() => flightSteps(observations, edges), [observations, edges]);
   // One record holds the cursor and the phase, so a single transition can never
   // paint a cursor the phase does not belong to.
-  const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle" });
+  const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle", paint: 0 });
   const [pace, setPace] = useState<FlightPace>(DEFAULT_FLIGHT_PACE);
 
   // A shorter recorded list, a new session, or a new history selection releases the cursor.
   useEffect(() => {
     setCursor(current => (current.index < 0
       ? current
-      : { index: Math.min(current.index, steps.length - 1), phase: current.phase }));
+      : { ...current, index: Math.min(current.index, steps.length - 1) }));
     setCursor(current => (current.phase === "playing" && steps.length === 0 ? { ...current, phase: "idle" } : current));
   }, [steps.length]);
-  useEffect(() => { setCursor({ index: -1, phase: "idle" }); }, [release]);
+  useEffect(() => { setCursor(current => ({ index: -1, phase: "idle", paint: current.paint })); }, [release]);
 
   const step = cursor.index >= 0 ? steps[cursor.index] : undefined;
   const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
@@ -81,21 +85,22 @@ export function useFlightPlayback(
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current
       : steps.length === 0 ? current
-      : { index: current.index >= 0 ? current.index : 0, phase: "playing" });
+      : { ...current, index: current.index >= 0 ? current.index : 0, phase: "playing" });
   }, [steps.length]);
   const pause = useCallback(() => {
     setCursor(current => current.phase === "idle" ? current : { ...current, phase: "paused" });
   }, []);
   const restart = useCallback(() => {
-    setCursor(steps.length === 0 ? { index: -1, phase: "idle" } : { index: 0, phase: "playing" });
+    setCursor(current => steps.length === 0 ? { index: -1, phase: "idle", paint: current.paint }
+      : { index: 0, phase: "playing", paint: current.paint + 1 });
   }, [steps.length]);
   // Both directions follow the same stated contract as the transport's availability:
-  // with nothing selected, Previous reaches the last movement and Next the first.
+  // with nothing selected, Next selects the first movement and Previous is unavailable (#191).
   const moveTo = useCallback((delta: -1 | 1) => {
     setCursor(current => {
-      const target = selectionStep(current.index, steps.length, delta);
+      const target = transportStep(current.index, steps.length, delta);
       if (target === null) return current;
-      return { index: target, phase: current.phase === "playing" ? "paused" : current.phase };
+      return { ...current, index: target, phase: current.phase === "playing" ? "paused" : current.phase };
     });
   }, [steps.length]);
   const previous = useCallback(() => moveTo(-1), [moveTo]);
@@ -106,7 +111,7 @@ export function useFlightPlayback(
     if (!playing) return;
     const advanced = flightAdvance(cursor.index, steps.length, "playing", recording);
     // At the recorded end the cursor waits for the run to publish more movements.
-    const timer = window.setTimeout(() => setCursor({ index: advanced.cursor, phase: advanced.phase }),
+    const timer = window.setTimeout(() => setCursor({ ...cursor, index: advanced.cursor, phase: advanced.phase }),
       advanced.waiting ? TAIL_POLL_MS : flightDelayMs(pace));
     return () => window.clearTimeout(timer);
   }, [cursor, pace, playing, recording, steps.length]);
@@ -117,6 +122,7 @@ export function useFlightPlayback(
     step,
     phase: cursor.phase,
     pace,
+    paint: cursor.paint,
     position: flightPosition(steps, cursor.index),
     transport: flightTransport(cursor.index, steps.length, cursor.phase, recording),
     activity,

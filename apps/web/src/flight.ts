@@ -393,7 +393,7 @@ export function playbackControl(index: number, count: number, playing: boolean):
     };
   }
   if (count <= 0) return { action: "unavailable", label: "Play replay", reason: "No visible observations to play." };
-  if (count === 1) return { action: "unavailable", label: "Play replay", reason: "Only one visible observation. Playback cannot advance." };
+  // One recorded movement is still worth painting (#192): Play paints it, and Restart paints it again.
   if (index >= 0 && index >= count - 1) {
     return {
       action: "restart",
@@ -462,8 +462,18 @@ export function flightTransport(cursor: number, count: number, phase: PlaybackPh
   };
 }
 
+/**
+ * The movement a Replay step selects, or null when that direction is unavailable. With nothing
+ * selected, Next selects the first movement and Previous is unavailable (#191): a replay starts at
+ * the start of the story. Row navigation in Recorded history keeps `selectionStep`, which wraps.
+ */
+export function transportStep(index: number, count: number, delta: -1 | 1): number | null {
+  if (index < 0 && delta < 0) return null;
+  return selectionStep(index, count, delta);
+}
+
 function selectionAvailability(index: number, count: number): { readonly previous: boolean; readonly next: boolean } {
-  return { previous: selectionStep(index, count, -1) !== null, next: selectionStep(index, count, 1) !== null };
+  return { previous: transportStep(index, count, -1) !== null, next: transportStep(index, count, 1) !== null };
 }
 
 export interface FlightLegendEntry {

@@ -300,7 +300,7 @@ const ElkEdge = memo(function ElkEdge(props: EdgeProps<ArchitectureEdge | Owners
       {...(style !== undefined ? { style } : {})}
       {...(markerEnd !== undefined ? { markerEnd } : {})} {...(markerStart !== undefined ? { markerStart } : {})} />
     {/* Keyed by observation: each recorded movement mounts its own token, so its CSS animation always starts from the leg's start. */}
-    {flight ? <FlightToken key={flight.observationId} flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
+    {flight ? <FlightToken key={`${flight.observationId}:${movement?.paint ?? 0}`} flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
   </>;
 });
 const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
@@ -679,8 +679,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     } : edge;
     const styled = emphasize(marked, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
-    return { ...styled, data: { ...styled.data!, flight, pace: playback.pace } };
-  }), [graph.edges, painted, flight, playback.pace, faultMarks, laidOut]);
+    return { ...styled, data: { ...styled.data!, flight, pace: playback.pace, paint: playback.paint } };
+  }), [graph.edges, painted, flight, playback.pace, playback.paint, faultMarks, laidOut]);
   const ownershipEdges = useMemo<OwnershipEdge[]>(() => graph.resourceEdges.map(edge => {
     const route = laidOut?.routes.get(edge.id);
     return route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
