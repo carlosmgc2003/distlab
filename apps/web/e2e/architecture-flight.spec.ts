@@ -487,3 +487,45 @@ test("reduced motion shows the same direction and activity without animation", a
   await headingAgreesWith(page, { x: app.x - orders.x, y: 0 });
   await expect(page.locator(`${nodeSelector("customer-app")} .activity-badge`)).toContainText("Waiting · deadline t=1000");
 });
+
+/** Nothing on the graph states a movement: the default after a fresh load. */
+async function expectNoHighlight(page: Page, label: string) {
+  await expect(page.locator(".react-flow__node.is-involved"), `${label}: no component is involved`).toHaveCount(0);
+  await expect(page.locator(".react-flow__edge.is-movement, .react-flow__edge.is-involved-edge"), `${label}: no link is highlighted`).toHaveCount(0);
+  await expect(page.locator("#movement-cue"), `${label}: the movement region is at its default`).toHaveText("No request or message movement is highlighted.");
+}
+
+/** A live cue is on the graph: at least one involved component and a movement region that names it. */
+async function expectHighlight(page: Page, label: string) {
+  await expect(page.locator(".react-flow__node.is-involved").first(), `${label}: a component is involved`).toBeVisible();
+  await expect(page.locator("#movement-cue"), `${label}: the movement region names the movement`).not.toHaveText("No request or message movement is highlighted.");
+}
+
+test("Reset leaves no movement highlighted after a completed run or a Step (#189)", async ({ page }) => {
+  test.setTimeout(180_000);
+  const status = page.getByRole("status", { name: "Simulation status" });
+  await runCheckout(page);
+  await expectHighlight(page, "completed run");
+
+  // Given a completed run whose last movement is highlighted, Reset clears it.
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(status).toHaveText("READY");
+  await expectNoHighlight(page, "after Reset from COMPLETED");
+
+  // Given a run paused after Step recorded a movement, Reset clears it.
+  const step = page.getByRole("button", { name: "Step", exact: true });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (await page.locator(".react-flow__node.is-involved").count() > 0) break;
+    await step.click();
+    await expect(status).toHaveText(/^(READY|PAUSED)$/);
+  }
+  await expectHighlight(page, "after Step");
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(status).toHaveText("READY");
+  await expectNoHighlight(page, "after Reset from a Step");
+
+  // A reset session highlights movements again, as on a first run.
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("COMPLETED");
+  await expectHighlight(page, "run after Reset");
+});

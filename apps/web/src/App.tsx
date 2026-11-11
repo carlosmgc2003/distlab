@@ -156,6 +156,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const sessionKey = `${sessionName}:${snapshot.attempt}:${projection?.simulation.runId ?? ""}`;
 
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
+  // Reset keeps a projection but remounts Recorded history, whose new instance starts with no
+  // emphasis and so never reports the change (#189). The highlight belongs to the history it was
+  // raised from, so it is cleared during render, before the new instance's effects can raise one.
+  const timelineKey = `${sessionName}:${snapshot.attempt}`;
+  const [emphasisKey, setEmphasisKey] = useState(timelineKey);
+  if (emphasisKey !== timelineKey) {
+    setEmphasisKey(timelineKey);
+    setEmphasis(undefined);
+  }
   useEffect(() => {
     if (chooserOpen || busy || !focusTriggerWhenIdle.current) return;
     focusTriggerWhenIdle.current = false;
@@ -538,7 +547,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
-          <TimelineView key={`${sessionName}:${snapshot.attempt}`} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} checkLabels={checkLabels} onEmphasis={onEmphasis}
+          <TimelineView key={timelineKey} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} checkLabels={checkLabels} onEmphasis={onEmphasis}
             {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
         </div>
         </> : <section className="panel-loading" role="tabpanel" aria-labelledby={`tab-${tab}`} hidden={tab === "assessment"}>
