@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { CanonicalValue, LessonOverlayPolicy } from "@distlab/contracts";
 import { canonicalEncode } from "@distlab/kernel";
 import {
-  checkoutAssessment, checkoutCatalog, checkoutCatalogReference, checkoutOverlayPolicy, checkoutScenario,
+  checkoutAssessment, checkoutAssessmentV11, checkoutCatalog, checkoutCatalogReference, checkoutCatalogV11, checkoutOverlayPolicy, checkoutScenario,
   commerceAssessment, commerceCatalog, commerceCatalogReference, commerceLessonNames, commerceOverlayPolicy, commerceScenario, hostedCatalogs,
   reliableCheckoutOverlayPolicy, reliableCheckoutScenario,
 } from "@distlab/catalogs";
@@ -63,7 +63,11 @@ function starter(lesson: Packaged): Doc {
 }
 
 test("the hosted registry pairs each catalog with its assessment and reserves every packaged name", () => {
-  assert.deepEqual(hostedCatalogs.catalogs.map(item => [item.catalog, item.assessment]), [[checkoutCatalog, checkoutAssessment], [commerceCatalog, commerceAssessment]]);
+  assert.deepEqual(hostedCatalogs.catalogs.map(item => [item.catalog, item.assessment]),
+    [[checkoutCatalog, checkoutAssessment], [checkoutCatalogV11, checkoutAssessmentV11], [commerceCatalog, commerceAssessment]]);
+  // #148: both checkout versions are hosted, each with its own assessment version.
+  assert.deepEqual(hostedCatalogs.catalogs.map(item => `${item.catalog.id}@${item.catalog.version}/${item.assessment.version}`),
+    ["mvp.checkout@1.0.0/1.0.0", "mvp.checkout@1.1.0/1.1.0", "commerce.lessons@1.0.0/1.0.0"]);
   // The data-only references name exactly the hosted runtime catalogs.
   assert.deepEqual({ id: checkoutCatalog.id, version: checkoutCatalog.version }, checkoutCatalogReference);
   assert.deepEqual({ id: commerceCatalog.id, version: commerceCatalog.version }, commerceCatalogReference);

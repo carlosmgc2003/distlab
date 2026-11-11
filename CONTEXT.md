@@ -130,8 +130,9 @@ reader needs before changing code, and the vocabulary used when discussing them.
   `runId` identifies the run.
 - Student projections are chosen by the session's catalog reference and derived
   from the normalized architecture, so a checkout document with other component
-  IDs shows the same facts. The checkout catalog's predicates still read fixed
-  IDs, so its checks only judge the packaged IDs (#148).
+  IDs shows the same facts. The `mvp.checkout@1.0.0` predicates read the
+  packaged IDs; a document that renames its components uses `mvp.checkout@1.1.0`,
+  whose checks name the components they judge (#148).
 - An imported session's checks are the document's assertions. Format version 1
   carries no business invariant/scenario expectation classification, so they are
   not lesson checks: `importedChecks` shows each stored verdict (PASS, FAIL)
