@@ -53,9 +53,10 @@ function assertDescriptorTruth(lesson: Lesson, document: Doc, observations: read
       const target = byId.get(observation.target!);
       assert.ok(target, `${lesson.name}: request to unknown target ${observation.target}`);
       const viaPeer = descriptor.peers.some(peer => bound(source, peer) === target.id && peer.calls.includes(endpoint as string) && (peer.kinds as readonly string[]).includes(target.kind));
-      // A workload-addressed client sends exactly the target and endpoint its workload action names.
-      const viaWorkload = descriptor.kind === "client" && descriptor.peers.length === 0 && (document.actions as Doc[]).some(action =>
-        action.kind === "client" && action.target === source.id && object(action.data).target === target.id && object(action.data).endpoint === endpoint);
+      // A workload-addressed call (#121): a client action the descriptor declares in `workloadCalls`, whose data names this target and endpoint.
+      const viaWorkload = (descriptor.workloadCalls ?? []).some(call => (document.actions as Doc[]).some(action =>
+        action.kind === "client" && action.target === source.id && action.action === call.action
+        && object(action.data)[call.target] === target.id && object(action.data)[call.endpoint] === endpoint));
       assert.ok(viaPeer || viaWorkload, `${lesson.name}: ${source.id} -> ${target.id} ${String(endpoint)} is not a declared call`);
       counts.requests++;
     } else if (observation.type === "message.published") {
@@ -108,6 +109,37 @@ test("ARCH-AC-5 every packaged lesson records only declared calls, publications,
     for (const key of Object.keys(totals) as (keyof typeof totals)[]) totals[key] += counts[key];
   }
   for (const [kind, count] of Object.entries(totals)) assert.ok(count > 0, `no ${kind} observed`);
+});
+
+test("#121 commerce.client declares its request action as a workload-addressed call", () => {
+  const client = commerceDescriptors.find(item => item.model === "commerce.client");
+  assert.deepEqual(client?.workloadCalls, [{ action: "request", target: "target", endpoint: "endpoint" }]);
+  assert.deepEqual(client?.peers, []);
+  // Each declared call names an action the model offers.
+  for (const descriptor of [...checkoutDescriptors, ...commerceDescriptors]) for (const call of descriptor.workloadCalls ?? []) {
+    assert.equal(descriptor.kind, "client", descriptor.model);
+    assert.ok(descriptor.actions.includes(call.action), `${descriptor.model}: ${call.action}`);
+  }
+});
+
+test("#121 every packaged workload call is required to reach an endpoint its target offers", () => {
+  let checked = 0;
+  for (const lesson of lessons) {
+    const engine = new DeterministicScenarioEngine({ catalog: lesson.catalog, assessment: lesson.assessment });
+    const actions = lesson.document.actions as Doc[];
+    actions.forEach((action, index) => {
+      if (action.kind !== "client") return;
+      const client = components(lesson.document).find(component => component.id === action.target)!;
+      for (const call of descriptorOf(lesson, client).workloadCalls ?? []) {
+        if (call.action !== action.action) continue;
+        const misspelled = actions.map((item, at) => at !== index ? item : { ...item, data: { ...object(item.data), [call.endpoint]: `${String(object(item.data)[call.endpoint])}-typo` } });
+        assert.deepEqual(engine.validate({ ...lesson.document, actions: misspelled as unknown as CanonicalValue }).map(item => `${item.path} ${item.code}`),
+          [`/actions/${index}/data/${call.endpoint} INTERFACE`], `${lesson.name}: ${String(action.id)}`);
+        checked += 1;
+      }
+    });
+  }
+  assert.ok(checked > 0);
 });
 
 /**

@@ -19,6 +19,7 @@ import type {
   LessonArchitectureAllowance,
   LessonOverlayPolicy,
   ModelDescriptor,
+  ModelWorkloadCall,
   NetworkRequest,
   ResourceEdit,
   Observation,
@@ -58,6 +59,7 @@ type Vocabulary = {
   ScenarioDocument: ScenarioDocument;
   SessionOrigin: SessionOrigin;
   ModelDescriptor: ModelDescriptor;
+  ModelWorkloadCall: ModelWorkloadCall;
   SlotEdit: SlotEdit;
   BindingEdit: BindingEdit;
   ResourceEdit: ResourceEdit;

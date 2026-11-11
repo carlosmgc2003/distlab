@@ -25,6 +25,7 @@ export function model(partial: Partial<ScenarioModel> & Pick<ScenarioModel, "mod
     storage: partial.storage ?? {},
     options: partial.options ?? [],
     ...(partial.placeholder ? { placeholder: true as const } : {}),
+    ...(partial.workloadCalls ? { workloadCalls: partial.workloadCalls } : {}),
     checks: partial.checks ?? {},
     instantiate: partial.instantiate ?? (instance => instantiate(partial.kind, instance)),
   };

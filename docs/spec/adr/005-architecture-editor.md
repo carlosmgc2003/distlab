@@ -3,9 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Status | Accepted |
-| Date | 2026-11-01 |
+| Date | 2026-11-01; amended 2026-11-11 (workload-addressed calls, #121) |
 | Scope | Catalog model interfaces, scenario validation, session overlay, browser editor; contracts and implementation follow in #108, #109, #110, #111, #112 |
-| Related issues | #93, #94, #98, #99, #100, #104, #108, #109, #110, #111, #112 |
+| Related issues | #93, #94, #98, #99, #100, #104, #108, #109, #110, #111, #112, #121 |
 | Amends | [ADR-004](004-session-overlays.md): an overlay may now carry architecture edits |
 
 ## Context
@@ -81,6 +81,9 @@ can validate a design before it runs:
 - **storage**: the database tables it needs, and whether it needs a
   key-value store
 - **options**: its behavior options, each with a typed domain and default
+- **workloadCalls** (amendment, #121): the client actions that call another
+  component addressed by fields of the action's own data, described in
+  "Workload-addressed calls"
 
 A **peer** is a named outbound dependency of a model. It declares:
 
@@ -107,6 +110,33 @@ The descriptors live in data-only catalog modules beside the packaged
 documents. The main thread may import them; the worker builds each
 `ScenarioModel` from its descriptor plus `checks` and `instantiate`. A catalog
 test proves that the two agree.
+
+### Workload-addressed calls (amendment, #121)
+
+A peer is fixed by configuration, so it suits a component whose calls do not
+change during the run. A client's calls come from its workload instead. A
+client model such as `commerce.client` takes the target and endpoint of each
+request from the data of its workload action (`data.target`,
+`data.endpoint`), so it declares no peers. Before this amendment the
+composition rules did not cover those calls: a workload that named a missing
+endpoint loaded and then ended the run with `INVALID_NETWORK_REQUEST`. Since
+[ADR-006](006-scenario-documents.md), instructors write workloads in imported
+scenario documents, so such a typo reached students as a failed run.
+
+A descriptor therefore declares each **workload-addressed call** in
+`workloadCalls`: the client `action`, the data field that holds the called
+component's ID (`target`), and the data field that holds the endpoint or
+operation (`endpoint`). The field is optional and data-only; a model without
+workload-addressed calls omits it. `commerce.client` declares
+`[{ action: "request", target: "target", endpoint: "endpoint" }]`.
+
+A workload-addressed call is checked the way a peer is, but per action: the
+action's data plays the part of the configuration field, and there is no
+default. Validation stays generic: `ScenarioEngine.validate` reads the field
+names from the descriptor and knows nothing about any one model. Peers and
+workload calls are separate declarations, so a model may declare both. Editing
+client workloads stays out of scope (see "Sandbox increment"). No packaged
+document, `runId`, or golden export changes.
 
 ### Slots and placeholder models: "fill the gap" exercises
 
@@ -169,15 +199,35 @@ through `ScenarioCatalog`. Every packaged lesson must pass them.
 | Each peer of each component resolves (configuration or default) to an existing component of an allowed kind | `PEER` (new) |
 | The bound component exposes every endpoint or operation the peer declares. A placeholder exposes its configured `interface` | `INTERFACE` (new) |
 | A link exists from the component to each bound peer | `LINK` (existing code, new rule) |
+| Each workload-addressed call (amendment, #121) names a reachable target that offers the endpoint: see the table below | `REQUIRED`, `TYPE`, `UNKNOWN_COMPONENT`, `LINK`, `INTERFACE` (existing) |
 | Every destination a model publishes to exists | `PUBLISH` (new) |
 | A service whose model needs storage owns a database with each required table, or a key-value store | `STORAGE` (new) |
 | Only services own resources | `OWNERSHIP` (existing) |
 | One database and one store per owner. A database has exactly one owner by construction | `DUPLICATE` (existing) |
 | Every declared consumer is subscribed, and only declared consumers are | `SUBSCRIPTION` (existing) |
 
-Together these rules mean **every endpoint a component calls is reachable**:
-the peer exists, a link carries the call, and the target registers the
-endpoint. The run can no longer fail with `INVALID_NETWORK_REQUEST` or
+For each `kind: "client"` action whose component's model declares a
+`workloadCalls` entry for that action, the rules below apply at
+`/actions/<i>/data/<field>`, where `<field>` is the entry's `target` or
+`endpoint` field name. They reuse existing codes and add none.
+
+| Check | Code | Path |
+| --- | --- | --- |
+| The target field is absent | `REQUIRED` | `…/data/<target>` |
+| The target field is not a string | `TYPE` | `…/data/<target>` |
+| The target is not an existing service or external component | `UNKNOWN_COMPONENT` | `…/data/<target>` |
+| No link exists from the client component to the target | `LINK` | `…/data/<target>` |
+| The endpoint field is absent | `REQUIRED` | `…/data/<endpoint>` |
+| The endpoint field is not a string | `TYPE` | `…/data/<endpoint>` |
+| The target does not offer the endpoint: the endpoints of a service, the operations of an external, or the configured `interface` of a placeholder, as for peers | `INTERFACE` | `…/data/<endpoint>` |
+
+Like the other composition rules, these run only over an architecture that
+read without diagnostics.
+
+Together these rules mean **every endpoint a component calls is reachable**,
+whether the call is addressed by a peer or by a workload action: the target
+exists, a link carries the call, and the target registers the endpoint. The
+run can no longer fail with `INVALID_NETWORK_REQUEST` or
 `INVALID_REGISTRATION` because of wiring. Reachability of a component *from a
 client* is not required. An unreached component is legal and simply idle.
 
@@ -378,6 +428,16 @@ interface ModelStorage {
   readonly store?: true;
 }
 
+/** An action that calls another component, addressed by fields of the action's own data (amendment, #121). */
+interface ModelWorkloadCall {
+  /** The client action, e.g. "request". */
+  readonly action: string;
+  /** The data field holding the called component's ID, e.g. "target". */
+  readonly target: string;
+  /** The data field holding the endpoint or operation, e.g. "endpoint". */
+  readonly endpoint: string;
+}
+
 interface ModelDescriptor {
   readonly model: string;
   readonly version: string;
@@ -392,6 +452,8 @@ interface ModelDescriptor {
   readonly options: readonly ModelOption[];
   /** Placeholder models read their endpoints or operations from `configuration.interface`. */
   readonly placeholder?: true;
+  /** Absent when the model makes no workload-addressed calls (amendment, #121). */
+  readonly workloadCalls?: readonly ModelWorkloadCall[];
 }
 
 interface SlotEdit {
@@ -462,7 +524,8 @@ by lesson and model. It is not part of the contract.
 ## Required tests
 
 - **ARCH-AC-1 Unchanged lessons.** Every packaged document passes the
-  composition rules. Every packaged lesson gives the same applied document,
+  composition rules, including the workload-addressed call rules (amendment,
+  #121). Every packaged lesson gives the same applied document,
   `runId`, and export with no overlay, with an overlay without `architecture`,
   and with an empty `architecture`. Golden digests do not change. OVL-AC-1
   still passes.
@@ -481,9 +544,10 @@ by lesson and model. It is not part of the contract.
   edit. A rejected load creates no session and draws no randomness.
 - **ARCH-AC-5 Descriptor truth.** Each `ScenarioModel` equals its data-only
   descriptor. Across every packaged lesson and fixture design, each recorded
-  `network.request.sent` goes to a bound peer with a declared call, each
-  publication goes to a declared destination, and each committed table is a
-  declared table.
+  `network.request.sent` goes to a bound peer with a declared call, or is a
+  declared workload-addressed call whose action data names that target and
+  endpoint (amendment, #121), each publication goes to a declared
+  destination, and each committed table is a declared table.
 - **ARCH-AC-6 Allowance integrity.** For each slot, every allowed model
   substituted alone gives a document that passes `ScenarioEngine.validate`.
   Every binding candidate exists. No ADR-004 parameter targets a slot

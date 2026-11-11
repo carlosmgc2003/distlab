@@ -1586,8 +1586,9 @@ overlays, and dependency direction is unchanged. See
 Students design by composing prefabricated catalog models, never by authoring
 handlers. Each catalog model declares a data-only **model descriptor**: its
 endpoints, consumers, operations, published destinations, **peers** (the
-components it calls, held in configuration with a default), storage needs, and
-behavior options. Scenario validation uses the descriptors to prove that every
+components it calls, held in configuration with a default), the
+**workload-addressed calls** of a client whose actions name their own target
+and endpoint, storage needs, and behavior options. Scenario validation uses the descriptors to prove that every
 called endpoint is reachable, that every publication has a destination, and that
 each service owns the storage it needs. Wiring mistakes are therefore caught
 before a run instead of ending it. A student's design travels as **architecture

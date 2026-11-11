@@ -11,8 +11,14 @@ const none = { actions: [], endpoints: [], consumers: [], operations: [], publis
 const tables = (...names: string[]) => ({ database: { tables: names.map(name => ({ name, unique: [], checks: [] })) } });
 const flag = (key: string) => ({ key, domain: { type: "boolean", default: false } }) as const;
 
-/** Workload-addressed: each `request` action names its own target and endpoint, so the client declares no peers. */
-export const clientDescriptor: ModelDescriptor = { ...none, model: "commerce.client", version: VERSION, kind: "client", actions: ["request"] };
+/**
+ * Workload-addressed: each `request` action names its own target and endpoint,
+ * so the client declares no peers. `workloadCalls` lets composition check them.
+ */
+export const clientDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.client", version: VERSION, kind: "client", actions: ["request"],
+  workloadCalls: [{ action: "request", target: "target", endpoint: "endpoint" }],
+};
 
 export const retryDescriptor: ModelDescriptor = {
   ...none, model: "commerce.payment", version: VERSION, kind: "service", endpoints: ["POST /pay"],

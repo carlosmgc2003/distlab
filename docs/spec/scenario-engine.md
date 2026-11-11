@@ -153,7 +153,8 @@ scenario/run input, not mutate the current run outside its recorded action list.
 input. The engine receives the applied document and is unaware of overlays.
 [ADR-005](adr/005-architecture-editor.md) adds architecture composition rules
 to validation, checked against the catalog model descriptors, so that every
-endpoint or operation a component calls is reachable before the run starts.
+endpoint or operation a component calls, through a peer or a workload action,
+is reachable before the run starts.
 They apply to every scenario document, packaged or not:
 
 | Rule | Code | Path |
@@ -162,6 +163,12 @@ They apply to every scenario document, packaged or not:
 | A configured peer value is a nonempty component ID string | `TYPE` | same |
 | The bound component exposes every endpoint (service) or operation (external) the peer declares; a placeholder exposes its configured `interface` | `INTERFACE` | same |
 | A link exists from the component to each bound peer | `LINK` | same |
+| A workload-addressed call (a client action its model declares in `workloadCalls`, amendment #121) has its target field | `REQUIRED` | `/actions/i/data/<target>` |
+| The workload target is a string | `TYPE` | same |
+| The workload target is an existing service or external component | `UNKNOWN_COMPONENT` | same |
+| A link exists from the client to the workload target | `LINK` | same |
+| The workload call has its endpoint field, and it is a string | `REQUIRED`, `TYPE` | `/actions/i/data/<endpoint>` |
+| The workload target offers the endpoint (endpoints of a service, operations of an external, `interface` of a placeholder) | `INTERFACE` | same |
 | Every destination a model publishes to exists | `PUBLISH` | `/architecture/components/i` |
 | A service whose model needs a database owns one with each required table name | `STORAGE` | `/architecture/databases/j/tables`, or the component when it owns no database |
 | A service whose model needs a key-value store owns one | `STORAGE` | `/architecture/components/i` |

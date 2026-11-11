@@ -60,7 +60,8 @@ exports and are not exposed through the package entry point. Import shared
   `@distlab/contracts` ([ADR-005](../spec/adr/005-architecture-editor.md)): it
   identifies an exact `model`, `version`, and component `kind`, and its
   `actions`, `endpoints`, `consumers`, `operations`, `publishes`, `peers`,
-  `storage`, and `options` declare the model's interface. It adds `checks`,
+  `storage`, `options`, and the optional `workloadCalls` declare the model's
+  interface. It adds `checks`,
   which supplies trusted database row constraints. `instantiate`
   receives a shared `ComponentInstance` and returns a `ClientDefinition`,
   `ServiceDefinition`, or `ExternalDefinition` appropriate to the kind.
@@ -130,7 +131,13 @@ The readers enforce the following relationships and constraints:
   `TYPE` for a configured value that is not a nonempty string), which exposes
   every declared call (`INTERFACE`; a placeholder exposes its configured
   `interface`) and is reached by a link from the caller (`LINK`). These three
-  point at `/architecture/components/i/configuration/<peer>`. Every published
+  point at `/architecture/components/i/configuration/<peer>`. A client action
+  that its model declares in `workloadCalls` (#121) is checked the same way at
+  `/actions/i/data/<field>`: the target field is present (`REQUIRED`), a string
+  (`TYPE`), an existing service or external component (`UNKNOWN_COMPONENT`),
+  and reached by a link from the client (`LINK`); the endpoint field is
+  present (`REQUIRED`), a string (`TYPE`), and offered by the target
+  (`INTERFACE`; a placeholder offers its configured `interface`). Every published
   destination exists (`PUBLISH`, at the component). A model that needs storage
   has its owner's database with each required table name (`STORAGE`, at the
   database's `tables`, or at the component when it owns no database) and a KV

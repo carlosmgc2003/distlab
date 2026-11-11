@@ -107,7 +107,10 @@ documents omit the fields, so no packaged document or export changed.
 | `commerce.notifications` | — | `idempotent` |
 
 `commerce.client` declares no peers: each `request` action names its own target
-and endpoint in the workload. `commerce.saga-resource` reads `forward` and
+and endpoint in the workload. Its descriptor declares that call in
+`workloadCalls: [{ action: "request", target: "target", endpoint: "endpoint" }]`
+(#121), so validation checks that each request's target is linked from the
+client and offers the endpoint, as it does for peers. `commerce.saga-resource` reads `forward` and
 `compensated` rows from configuration; they are lesson data, not behavior
 options, because no `LessonParameterDomain` describes a row. The individual commerce model constants and helpers are not
 re-exported by the package root.
@@ -195,7 +198,7 @@ instances share a model definition but receive fresh factory-created handlers.
 
 | Source | Model | Interface and behavior |
 | --- | --- | --- |
-| `common.ts` | `commerce.client` | Client action `request`; one attempt by default, two when input `retry` is true. Records reply bodies by `label`; on timeout records `UNKNOWN`, and waits 1 virtual ms before a retry. |
+| `common.ts` | `commerce.client` | Client action `request`, a workload-addressed call to `data.target` `data.endpoint` (`workloadCalls`, #121); one attempt by default, two when input `retry` is true. Records reply bodies by `label`; on timeout records `UNKNOWN`, and waits 1 virtual ms before a retry. |
 | `retry.ts` | `commerce.payment` | Service `POST /pay`; commits a payment, optionally with a previous result keyed by `idempotencyKey` when configuration `idempotent` is true. A repeated key then returns the original result. |
 | `saga.ts` | `commerce.saga` | Service `POST /checkout`; creates an order, applies Inventory and Payments operations, then requests shipment. A shipment timeout records `NEEDS_COMPENSATION`; configuration `compensate` enables delayed refund, release, and cancellation. |
 | `saga.ts` | `commerce.saga-resource` | Service `POST /apply` and `POST /compensate`; saves configuration `forward` or `compensated` into its own `state` table at `order-1`. Used separately by Inventory and Payments. |
@@ -439,7 +442,8 @@ and the gap lesson's empty, reference, and rejected designs.
    service startup actions; document the expected failure as well as recovery.
 2. For new behavior, add a data-only `ModelDescriptor` with accurate kind,
    actions, endpoints, consumers, operations, publications, peers, storage, and
-   options to a `descriptors.ts` module. Build the `ScenarioModel` from it plus
+   options to a `descriptors.ts` module, and `workloadCalls` for a client whose
+   actions name their own target and endpoint. Build the `ScenarioModel` from it plus
    `checks` and `instantiate`, and register it in the appropriate catalog. Read
    every called component through `peer()`, never as a literal ID. Keep per-process mutable state inside `instantiate`
    so restarts/reset construct fresh handlers. Use the service-owned DB or KV

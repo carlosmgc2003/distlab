@@ -287,6 +287,34 @@ test("DOC-AC-4 validation instantiates no model, evaluates no predicate, and dra
   assert.equal(evaluated, 0);
 });
 
+test("#121 an imported workload call to a misspelled endpoint fails validation at its /scenario path", () => {
+  const workloadRegistry: HostedCatalogRegistry = {
+    catalogs: [{
+      catalog: catalogOf([
+        model({ model: "demo.orders", kind: "service", endpoints: ["POST /checkout"] }),
+        model({ model: "demo.shopper", kind: "client", actions: ["request"], workloadCalls: [{ action: "request", target: "target", endpoint: "endpoint" }] }),
+      ], "1.0.0", "demo.catalog"),
+      assessment: assessmentOf([truePredicate]),
+    }],
+    reservedNames: [],
+  };
+  const withEndpoint = (endpoint: string) => JSON.stringify(documentOf({ scenario: scenario({
+    architecture: {
+      components: [
+        { id: "shopper", kind: "client", model: "demo.shopper", version: "1", configuration: {} },
+        { id: "orders", kind: "service", model: "demo.orders", version: "1", configuration: {} },
+      ],
+      links: [{ source: "shopper", target: "orders" }],
+    },
+    actions: [{ id: "checkout", at: 0, kind: "client", target: "shopper", action: "request", data: { target: "orders", endpoint } }],
+  }) }));
+  assert.ok(validateScenarioDocument(withEndpoint("POST /checkout"), workloadRegistry).ok);
+  const result = validateScenarioDocument(withEndpoint("POST /chekout"), workloadRegistry);
+  assert.ok(!result.ok);
+  assert.equal(result.stage, "scenario");
+  assert.deepEqual(result.diagnostics.map(item => `${item.path} ${item.code}`), ["/scenario/actions/0/data/endpoint INTERFACE"]);
+});
+
 test("diagnostic codes come from the contract constants and the existing scenario codes", () => {
   const known = new Set<string>([...Object.values(ScenarioDocumentDiagnosticCodes), ...Object.values(DiagnosticCodes)]);
   const samples = [codes("{"), codes({ ...documentOf(), formatVersion: 3 }), codes({ ...documentOf(), presentation: { title: "x", assertions: { ghost: "y" } } })];

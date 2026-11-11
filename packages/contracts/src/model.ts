@@ -27,6 +27,19 @@ export interface ModelOption {
   readonly domain: LessonParameterDomain;
 }
 
+/**
+ * An action that calls another component, addressed by fields of the action's
+ * own data rather than by a peer (ADR-005 amendment, #121).
+ */
+export interface ModelWorkloadCall {
+  /** The client action, e.g. "request". */
+  readonly action: string;
+  /** The data field holding the called component's ID, e.g. "target". */
+  readonly target: string;
+  /** The data field holding the endpoint or operation, e.g. "endpoint". */
+  readonly endpoint: string;
+}
+
 export interface ModelStorage {
   readonly database?: { readonly tables: DatabaseDefinition["tables"] };
   readonly store?: true;
@@ -46,6 +59,8 @@ export interface ModelDescriptor {
   readonly options: readonly ModelOption[];
   /** Placeholder models read their endpoints or operations from `configuration.interface`. */
   readonly placeholder?: true;
+  /** Absent when the model makes no workload-addressed calls. */
+  readonly workloadCalls?: readonly ModelWorkloadCall[];
 }
 
 /**
