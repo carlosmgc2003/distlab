@@ -6,7 +6,7 @@
 | Date | 2026-11-11 |
 | Evidence | [Student evaluation, ITBA 73.40](../evaluations/2026-11-itba-73-40/README.md), F5 and F6; measurements in [Problem](#problem) |
 | Refines | [RFC 0001](0001-course-ready-design-module.md), P2 "One timeline". It answers that RFC's decision 3. |
-| Related issues | #136, #103 |
+| Related issues | #136, #103, #189, #190, #191, #192, #193 |
 | Decides | How a student runs and watches a lesson. It changes no contract and no worker command. |
 
 ## Summary
@@ -239,28 +239,30 @@ review navigation, are rewritten against the new behavior.
 
 ## Defects found on the way
 
-These are independent of the proposal and can be fixed first. Each needs an
-issue.
+These are independent of the proposal and can be fixed first. Items 1, 2, and 5
+are errors. Items 3 and 4 are the behavior `docs/spec/application-boundary.md`
+specifies today, so their issues ask for a change to that specification.
 
-1. **A highlight survives `Reset`.** At virtual time 0 with no history, the
-   graph still highlights the last link of the previous run. `App.tsx` clears
-   the emphasis only when the projection is null, and `Reset` keeps the
+1. **A highlight survives `Reset`** (#189). At virtual time 0 with no history,
+   the graph still highlights the last link of the previous run. `App.tsx`
+   clears the emphasis only when the projection is null, and `Reset` keeps the
    projection.
-2. **The destination is off the canvas.** At 1440×900, with the narration
-   column open, Payment Processor is fully outside the canvas while a request
-   to it is painted.
-3. **`Previous movement` wraps.** With nothing selected it jumps to the last
-   movement.
-4. **`Play replay` is unavailable with exactly one movement**, while `Previous
-   movement` and `Next movement` are available.
-5. **The status contradicts itself** for a moment: "COMPLETED · Run in
+2. **The destination is off the canvas** (#190). At 1440×900, with the
+   narration column open, Payment Processor is fully outside the canvas while a
+   request to it is painted.
+3. **`Previous movement` wraps** (#191). With nothing selected it jumps to the
+   last movement.
+4. **`Play replay` is unavailable with exactly one movement** (#192), while
+   `Previous movement` and `Next movement` are available.
+5. **The status contradicts itself** for a moment (#193): "COMPLETED · Run in
    progress…".
 
-P1 to P5 remove 3, 4, and the live cue behind 1. Defects 2 and 5 remain.
+P1 to P5 remove 3, 4, and the live cue behind 1. If this RFC is accepted, #191
+and #192 are closed as superseded. Items 2 and 5 remain either way.
 
 ## Order of work
 
-1. Defects 1, 2, and 5.
+1. Defects 1, 2, and 5 (#189, #190, #193).
 2. P1 to P4 together: one position, one control group, the Animation toggle,
    milestone steps. This is the smallest change that removes the two
    timelines, and it cannot be split without leaving a mixed interface.
