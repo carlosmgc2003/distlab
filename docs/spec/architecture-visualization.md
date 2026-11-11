@@ -390,6 +390,19 @@ cross as little as ELK can manage.
   font metrics decide whether they are whole; either way the names are legible
   and the view starts at the clients. The viewport is presentation only and
   never enters projections, commands, or history.
+- **Painted movement in view (#190).** When Replay paints a movement whose
+  sending or receiving component is not wholly inside the canvas,
+  `revealViewport` in `layout/legible-fit.ts` pans the view, at the current
+  zoom, by the least distance that puts both inside the space the overlays
+  leave, or within 8 px of the canvas edge on an axis where that space is too
+  small. Only when both cannot fit at the current zoom does it zoom out, just
+  enough, and never below the legible floor above: when the two components
+  cannot both fit at a legible size, the pair is centered and the reader pans.
+  A refit of the default view after a canvas resize reveals the painted
+  movement again. While both components are already inside the canvas, the
+  reader's own pan and zoom are kept. The pan animates for 250 ms, and changes
+  at once under `prefers-reduced-motion: reduce`. The playback readout keeps one
+  height from movement to movement, so stepping does not resize the canvas.
 - **Routes.** `ElkEdge` draws `startPoint → bendPoints → endPoint` with
   slightly rounded corners and puts the label where ELK placed it. ELK
   reports a section's points relative to the edge's container; `elkLayout`

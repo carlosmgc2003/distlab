@@ -91,6 +91,13 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .flight-readout { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 .flight-position { margin: 0; color: var(--text-secondary); font-size: .78rem; }
 .flight-boundaries { margin: 0; color: var(--text-secondary); font-size: .75rem; }
+/* The readout keeps one height from movement to movement: a taller or shorter readout would resize
+   the canvas and refit the graph under the reader (#190). It reserves its two lines even when a short
+   detail fits beside the position. The jump pill is an inline box, so its border does not grow the
+   line, and its glyph, from a fallback font, sits in a box no taller than the text. */
+.flight-readout { min-height: calc(.78rem * 1.35 + .75rem * 1.35 + 2px); align-content: flex-start; }
+.flight-position, .flight-boundaries { line-height: 1.35; }
+.flight-jump > [aria-hidden="true"] { display: inline-block; line-height: 1; }
 .control-group-note { flex: 1 1 100%; margin: 0; max-width: 70ch; color: var(--text-secondary); font-size: .78rem; }
 /* Desktop-only investigation tabs: Architecture holds the graph and inspector;
    Recorded history holds history navigation/filtering and Observation detail. */
@@ -186,7 +193,7 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .flight-activity { margin: 8px 0 0; font-size: .8rem; }
 .flight-activity ul { margin: 2px 0 0; padding: 0; list-style: none; }
 .flight-activity li, .flight-activity p { margin: 2px 0 0; overflow-wrap: anywhere; }
-.flight-jump { display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px dashed #92400e; border-radius: 4px; background: #fffbeb; color: #172033; font-weight: 600; }
+.flight-jump { display: inline; margin-left: 4px; padding: 0 6px; border: 1px dashed #92400e; border-radius: 4px; background: #fffbeb; color: #172033; font-weight: 600; }
 .flight-route { margin: 0 0 6px; color: var(--text-secondary); font-size: .8rem; overflow-wrap: anywhere; }
 .flight-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 12px; margin: 0 0 8px; font-size: .8rem; }
 .flight-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-bottom: 3px; border-bottom: 1px solid #e2e8f0; }

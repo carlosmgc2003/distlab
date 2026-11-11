@@ -46,7 +46,7 @@ test("#166 names stay legible at 1366×768 with a movement selected and the Expe
     await openExperiment(page);
     await expect(experimentDrawer(page)).toBeVisible();
     await expect(page.locator(".architecture-side")).toBeVisible();
-    await expectLegibleView(page, `${lesson.id} with a movement and the drawer`);
+    await expectLegibleView(page, `${lesson.id} with a movement and the drawer`, { painted: true });
     // The movement detail goes under the graph, so the canvas keeps the panel's width.
     const widths = await page.evaluate(() => ({
       canvas: document.querySelector(".graph-canvas")!.getBoundingClientRect().width,

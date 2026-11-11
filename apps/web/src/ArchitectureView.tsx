@@ -5,8 +5,8 @@ import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } 
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import { EMPTY_SLOT_LABEL } from "./design-step.ts";
-import { legibleViewport, legibleZoom } from "./layout/legible-fit.ts";
-import type { Insets } from "./layout/legible-fit.ts";
+import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
+import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
@@ -361,6 +361,67 @@ function fitLegibly(flow: ReactFlowInstance<ArchitectureNode | ResourceNode, Arc
     { minZoom: Math.min(maxZoom, Math.max(minZoom, legibleZoom(smallestNamePx(canvas)))), maxZoom: FIT_MAX_ZOOM });
   return flow.setViewport(viewport);
 }
+/** How long the view takes to bring a painted movement into the canvas, unless motion is reduced. */
+const REVEAL_MS = 250;
+
+/**
+ * The bounds of the named nodes in graph coordinates, read from the rendered nodes, so a role badge
+ * that has just grown a node is counted before React Flow reports the new size.
+ */
+function renderedBounds(canvas: HTMLElement, ids: readonly string[], viewport: Viewport): Rect | undefined {
+  const area = canvas.getBoundingClientRect();
+  const boxes = ids.flatMap(id => {
+    const element = canvas.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
+    return element ? [element.getBoundingClientRect()] : [];
+  });
+  if (!boxes.length) return undefined;
+  const left = Math.min(...boxes.map(box => box.left)), top = Math.min(...boxes.map(box => box.top));
+  const right = Math.max(...boxes.map(box => box.right)), bottom = Math.max(...boxes.map(box => box.bottom));
+  return {
+    x: (left - area.left - viewport.x) / viewport.zoom, y: (top - area.top - viewport.y) / viewport.zoom,
+    width: (right - left) / viewport.zoom, height: (bottom - top) / viewport.zoom,
+  };
+}
+
+/**
+ * Brings both components of the painted movement into the canvas (#190) when either is not wholly
+ * inside it. The reader's own view is kept while both are visible. It zooms out no further than the
+ * legible floor (#166): when both cannot fit at that size, the pair is centered and the reader pans.
+ * Viewport state is presentation only.
+ */
+function revealMovement(flow: ReactFlowInstance<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>, canvas: HTMLElement, ids: readonly string[], animate: boolean): Promise<boolean> {
+  const area = canvas.getBoundingClientRect();
+  if (!ids.length || area.width < 1 || area.height < 1) return Promise.resolve(false);
+  const current = flow.getViewport();
+  const target = renderedBounds(canvas, ids, current);
+  if (!target) return Promise.resolve(false);
+  // Never below the legible floor of #166, unless the reader has already zoomed out past it.
+  const floor = Math.min(current.zoom, Math.max(minZoom, legibleZoom(smallestNamePx(canvas))));
+  const next = revealViewport(target, area, insetsFor(canvas), current, floor);
+  if (next === current) return Promise.resolve(false);
+  const still = !animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return flow.setViewport(next, still ? undefined : { duration: REVEAL_MS });
+}
+
+/** Reveals each newly painted movement once the graph is laid out and fitted. */
+function RevealMovement({ container, movement, nodeIds }: {
+  readonly container: RefObject<HTMLDivElement | null>;
+  /** The painted movement's observation, or undefined while none is painted or the graph is not ready. */
+  readonly movement: string | undefined;
+  readonly nodeIds: readonly string[];
+}) {
+  const flow = useReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>();
+  const ids = nodeIds.join("\u0000");
+  useEffect(() => {
+    const element = container.current;
+    if (!element || movement === undefined) return;
+    // After the frame's layout, so a narration column that just opened has narrowed the canvas.
+    const frame = requestAnimationFrame(() => { void revealMovement(flow, element, ids.split("\u0000"), true); });
+    return () => cancelAnimationFrame(frame);
+  }, [container, flow, movement, ids]);
+  return null;
+}
+
 /** Small enough that a reader can still zoom out to the whole checkout graph on a narrow canvas. */
 const minZoom = 0.15;
 const maxZoom = 1.8;
@@ -423,8 +484,10 @@ function ElkLayoutRunner({ layoutKey, nodes, edges, container, onLayout }: {
 }
 
 /** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
-function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }: {
+function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted, movementNodes }: {
   readonly container: RefObject<HTMLDivElement | null>;
+  /** The painted movement's components. A refit returns to the default view, then reveals them again (#190). */
+  readonly movementNodes: RefObject<readonly string[]>;
   readonly sessionKey: string;
   /** Changes when a new ELK layout is applied, so the fitted view follows the laid-out graph. */
   readonly layoutKey: string;
@@ -446,7 +509,7 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }:
       if (current === measured || width < 1 || height < 1) return;
       measured = current;
       reserveControls(element);
-      void fitLegibly(flow, element);
+      void fitLegibly(flow, element).then(() => revealMovement(flow, element, movementNodes.current, false));
     };
     // A ResizeObserver sees every layout-driven canvas change: window resizes, panel switches, and the two-column inspector.
     const observer = new ResizeObserver(() => {
@@ -456,17 +519,18 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }:
     observer.observe(element);
     apply();
     return () => { if (queued) cancelAnimationFrame(queued); observer.disconnect(); };
-  }, [container, flow]);
+  }, [container, flow, movementNodes]);
   // Loading a scenario, resetting the simulation, or toggling the legend returns the view to the fitted default.
   useEffect(() => {
     const element = container.current;
     // Measure after the legend has painted at its new size.
     let cancelled = false;
     const frame = requestAnimationFrame(() => {
-      void (element ? fitLegibly(flow, element) : Promise.resolve(false)).then(() => { if (!cancelled) onFitted(layoutKey); });
+      void (element ? fitLegibly(flow, element).then(() => revealMovement(flow, element, movementNodes.current, false)) : Promise.resolve(false))
+        .then(() => { if (!cancelled) onFitted(layoutKey); });
     });
     return () => { cancelled = true; cancelAnimationFrame(frame); };
-  }, [container, flow, sessionKey, layoutKey, legendOpen, onFitted]);
+  }, [container, flow, sessionKey, layoutKey, legendOpen, onFitted, movementNodes]);
   return null;
 }
 
@@ -554,6 +618,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   const [measuredSizes, setMeasuredSizes] = useState<{ readonly key: string; readonly sizes: ReadonlyMap<string, Size> }>({ key: layoutKey, sizes: new Map() });
   const sizes = measuredSizes.key === layoutKey ? measuredSizes.sizes : undefined;
   const flight = playback.step;
+  const movementNodes = useRef<readonly string[]>([]);
+  movementNodes.current = flight?.nodeIds ?? [];
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
     : emphasis;
@@ -676,7 +742,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           ariaLabelConfig={ariaLabelConfig}>
           <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
-            onFitted={setFittedKey} />
+            onFitted={setFittedKey} movementNodes={movementNodes} />
+          <RevealMovement container={canvas} movement={ready ? flight?.observationId : undefined} nodeIds={flight?.nodeIds ?? []} />
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />
