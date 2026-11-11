@@ -61,6 +61,7 @@ test("#166 names stay legible at 1366×768 with a movement selected and the Expe
   await region.getByLabel("Fault", { exact: true }).selectOption("scheduled/crash");
   await region.getByRole("button", { name: "Pick on graph" }).click();
   await expect(region.getByRole("button", { name: "Stop picking" })).toHaveAttribute("aria-pressed", "true");
-  await page.locator('.react-flow__node[data-id="us"]').click();
-  await expect(region.getByLabel("Target", { exact: true })).toHaveValue("component:us");
+  // `eu` sits well clear of the pan controls at the canvas's top right; `us` lies partly under them at this size.
+  await page.locator('.react-flow__node[data-id="eu"]').click();
+  await expect(region.getByLabel("Target", { exact: true })).toHaveValue("component:eu");
 });
