@@ -172,21 +172,30 @@ export const reliableNotificationsDescriptor: ModelDescriptor = {
 };
 
 /**
- * Leases and fencing tokens. The lock service grants one lease at a time for
- * `ttl` virtual milliseconds, each with a larger token. A worker writes its
- * report under the lease. Storage with `fencing` rejects a token smaller than
- * the largest it has accepted. Not a commerce domain: a shared report file.
+ * A key-value node shared over the network. Each endpoint is one
+ * `KeyValueStore` operation on the node's own store; it has no behavior options
+ * and no domain logic, so a lesson builds its coordination protocol in the callers.
  */
-export const lockServiceDescriptor: ModelDescriptor = {
-  ...none, model: "commerce.lock-service", version: VERSION, kind: "service", endpoints: ["POST /acquire"],
-  storage: tables("leases"), options: [{ key: "ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 } }],
+export const kvServerDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.kv-server", version: VERSION, kind: "service",
+  endpoints: ["POST /get", "POST /set", "POST /delete", "POST /increment", "POST /compare-and-set"],
+  storage: { store: true },
 };
+
+/**
+ * Leases and fencing tokens. A worker takes a lease in the shared key-value
+ * node with a set-if-absent that expires after `ttl` virtual milliseconds,
+ * draws a fencing token with an increment, and writes its report under it.
+ * Storage with `fencing` rejects a token smaller than the largest it has
+ * accepted. Not a commerce domain: a shared report file.
+ */
 export const leaseWorkerDescriptor: ModelDescriptor = {
   ...none, model: "commerce.lease-worker", version: VERSION, kind: "service", endpoints: ["POST /job"],
   peers: [
-    { name: "lock", kinds: ["service"], calls: ["POST /acquire"], default: "lock" },
+    { name: "kv", kinds: ["service"], calls: ["POST /set", "POST /increment"], default: "kv" },
     { name: "storage", kinds: ["service"], calls: ["PUT /file"], default: "storage" },
   ],
+  options: [{ key: "ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 } }],
 };
 export const leaseStorageDescriptor: ModelDescriptor = {
   ...none, model: "commerce.lease-storage", version: VERSION, kind: "service", endpoints: ["PUT /file"],
@@ -219,6 +228,6 @@ export const commerceDescriptors: readonly ModelDescriptor[] = [
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
   cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor, inventoryDescriptor,
   reliableOrdersDescriptor, reliableInventoryDescriptor, reliablePaymentsDescriptor, reliableProcessorDescriptor, reliableNotificationsDescriptor,
-  lockServiceDescriptor, leaseWorkerDescriptor, leaseStorageDescriptor, titleReplicaDescriptor,
+  kvServerDescriptor, leaseWorkerDescriptor, leaseStorageDescriptor, titleReplicaDescriptor,
   placeholderServiceDescriptor, placeholderExternalDescriptor,
 ];

@@ -25,7 +25,7 @@ const copy: Readonly<Record<string, ChoiceCopy>> = {
   "max-attempts": { label: "Notification delivery attempts", hint: "How many times the bus delivers OrderPlaced before it moves the message to the dead-letter queue." },
   "optimistic-concurrency": { label: "Optimistic concurrency", hint: "Inventory checks the stock and writes the reservation in one transaction, so the database rejects a commit whose stock version changed since it was read." },
   fencing: { label: "Fencing tokens", hint: "Storage remembers the largest lease token it has accepted for a file and rejects a write that carries a smaller one." },
-  "lease-ttl": { label: "Lease duration", hint: "Virtual time a lease stays valid before the lock service may grant it to another worker." },
+  "lease-ttl": { label: "Lease duration", hint: "The TTL each worker sets on the lease key. The key-value store removes the key when it ends, and another worker can then take the lease." },
   "logical-clock": { label: "Lamport clocks", hint: "Both regions stamp edits with a Lamport counter instead of their wall clocks." },
   "clock-skew": { label: "Clock skew in eu", hint: "How far region eu's wall clock runs ahead of virtual time (negative: behind)." },
   "cache-invalidation": { label: "Invalidate cache on price change", hint: "Catalog deletes the cached price when the back office changes it, instead of letting it live until its TTL ends." },

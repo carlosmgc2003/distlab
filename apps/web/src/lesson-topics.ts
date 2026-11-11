@@ -50,7 +50,7 @@ const classification = {
   "cache-invalidated": { topic: "consistency", concepts: ["cache", "invalidation"] },
   "inventory-oversell": { topic: "concurrency", concepts: ["race condition", "check-then-act"] },
   "inventory-optimistic": { topic: "concurrency", concepts: ["optimistic concurrency", "version check"] },
-  "lease-unfenced": { topic: "time-coordination", concepts: ["lease", "process pause", "stale writer"] },
+  "lease-unfenced": { topic: "time-coordination", concepts: ["lease", "set-if-absent with TTL", "process pause", "stale writer"] },
   "lease-fenced": { topic: "time-coordination", concepts: ["lease", "fencing token"] },
   "clock-last-write-wins": { topic: "time-coordination", concepts: ["clock skew", "last-writer-wins", "multi-leader replication"] },
   "clock-lamport": { topic: "time-coordination", concepts: ["Lamport clock", "causality", "happens-before"] },

@@ -618,33 +618,50 @@ the empty-slot marks stay, because they describe the architecture.
 
 ## 10. Leases and fencing tokens
 
-**Pattern:** fencing tokens: every lease carries a number larger than any
-earlier lease's, and the resource rejects a write whose number is smaller than
-one it has already accepted.
+**Pattern:** a lease built from key-value operations, plus fencing tokens: the
+resource rejects a write whose token is smaller than one it has already accepted.
 
 **Problem:** a lease lets one worker at a time write a shared file, but a lease
 is only a promise about time. A worker can check that its lease is valid, then
 stall (a long pause, a slow network) and write after the lease expired and
-another worker took it. The lock service cannot stop that write; only the
+another worker took it. The key-value store cannot stop that write; only the
 resource can.
 
 **Topology:** a `scheduler` client starts jobs on two report workers,
-`worker-1` and `worker-2` (`commerce.lease-worker`). Each takes the lease from
-`lock` (`commerce.lock-service`, table `leases`, 10 ms leases) and writes
+`worker-1` and `worker-2` (`commerce.lease-worker`). Both reach `kv`
+(`commerce.kv-server`), a key-value node whose endpoints are the
+`KeyValueStore` operations and nothing else. Each worker writes
 `reports/daily.csv` to `storage` (`commerce.lease-storage`, tables `files` and
 `writes`). The worker → storage links time out after 60 ms, so a worker waits
 out a long delay instead of giving up.
+
+**The lock is the workers' protocol, not a service:**
+
+1. `POST /set` with `key: "lock:report"`, the worker's ID as value,
+   `ifAbsent: true`, and `ttl: 10`. It succeeds only when no live entry exists,
+   and the store removes the entry by itself when the TTL ends.
+2. `POST /increment` on `lock:report:token` draws the fencing token.
+3. The worker checks the lease against its clock, counting the 10 ms from
+   before it sent step 1, so its estimate ends before the entry does.
+4. It writes the file with the token.
+
+A worker that passes step 3 drew its token while its lease was live, so tokens
+follow lease order without the two operations being atomic. A call to the store
+that times out leaves the worker not knowing whether it holds the lease; it
+answers `LOCK_UNAVAILABLE` and does not write.
 
 **Injected fault:** worker-1's `PUT /file` request is delayed by 30 ms.
 
 **Expected timeline:**
 
-- t=2: the lock service grants worker-1 token 1, valid until t=12.
-- t=3: worker-1 checks its lease (`lease.checked`, `valid: true`) and sends its
-  write, which the fault holds up until t=34.
-- t=17: worker-2 asks for the lease; the old one has expired, so it gets
-  token 2, valid until t=27. At t=19 storage writes worker-2's report.
-- `lease-unfenced`: at t=34 worker-1's late write arrives and overwrites the
+- t=2: worker-1's set creates `lock:report`, expiring at t=12
+  (`kv.changed`). At t=4 its increment returns token 1.
+- t=5: worker-1 checks its lease (`lease.checked`, `validUntil: 11`,
+  `valid: true`) and sends its write, which the fault holds up until t=36.
+- t=12: the store removes the entry (`kv.expired`).
+- t=17: worker-2's set succeeds, expiring at t=27. At t=19 it draws token 2,
+  and at t=21 storage writes its report.
+- `lease-unfenced`: at t=36 worker-1's late write arrives and overwrites the
   file (`storage.written`, `overwrote: "worker-2"`). Both workers were told
   `WRITTEN`.
 - `lease-fenced`: storage has accepted token 2 for the file, so it rejects
@@ -658,17 +675,23 @@ out a long delay instead of giving up.
 | `npm run lesson -- lease-fenced` | worker-2 (token 2) | HOLDS | HOLDS |
 
 Both invariants are safety invariants, checked after every event, and both are
-VIOLATED at t=34. The scenario expectation confirms that worker-2 held the
-lease with token 2 at t=20.
+VIOLATED at t=36. The scenario expectation confirms that at t=20 the lease key
+held `worker-2` and the token counter held 2.
+
+In the browser, the key-value node's state shows the live lease entry with its
+expiry and the token counter. Recorded history shows each `kv.changed` and the
+two `kv.expired` records.
 
 **Design choices:** *Fencing tokens* switches storage's check. *Lease
-duration* (1–60 ms) changes the lease: at 40 ms worker-1's lease has not
-expired when worker-2 asks, so worker-2 gets `LOCK_BUSY` and no stale write can
-happen in this run, though a longer delay would bring it back.
+duration* (1–60 ms) is the TTL both workers set: at 40 ms the entry is still
+live when worker-2 asks, so its set-if-absent fails (`kv.condition.failed`)
+and it answers `LOCK_BUSY`. No stale write can happen in that run, though a
+longer delay would bring it back.
 
 **Concept:** a lease does not give mutual exclusion on its own, because the
-holder cannot know that it has been paused. The lock service's increasing token
-turns "who holds the lease" into an order the resource can check.
+holder cannot know that it has been paused. An increasing token turns "who
+holds the lease" into an order the resource can check. The store needs no lock
+logic for this: set-if-absent with a TTL and an increment are enough.
 
 ## 11. Clock skew, last-writer-wins, and Lamport clocks
 

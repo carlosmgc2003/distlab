@@ -407,6 +407,30 @@ test("#163 no business invariant reads HOLDS while the final state violates it, 
   }
 });
 
+test("the fenced lease stays safe when a student delays the lock's own calls, and a longer lease refuses the second worker", async () => {
+  const lesson = lessons.find(item => item.id === "lease-fenced")!;
+  const outcomes = (result: HarnessExport) => Object.fromEntries(result.history.observations
+    .filter(item => item.type === "runtime.log" && (item.data as { message: string }).message === "client.result")
+    .map(item => (item.data as unknown as { data: { label: string; result: { status: string } } }).data).map(data => [data.label, data.result.status]));
+  const file = (result: HarnessExport) => (result.state as { databases: { storage: { tables: { files: Record<string, { writer: string; token: number }> } } } }).databases.storage.tables.files["reports/daily.csv"];
+  // Worker-1 draws its token after its lease expired (and after worker-2 drew token 1), so it gets the larger token 2.
+  // Its own clock check stops it: a worker that passes the check drew its token while its lease was live.
+  const slowToken = await run(lesson, { version: 1, faults: [{ id: "student-slow-token", point: "network.request", source: "worker-1", target: "kv", from: 0, probability: 1, maxApplications: 1, occurrence: 2, effect: { kind: "delay", duration: 16 } }] });
+  assert.equal(slowToken.status, "COMPLETED");
+  assert.deepEqual(outcomes(slowToken), { "job-worker-1": "LEASE_EXPIRED", "job-worker-2": "WRITTEN" });
+  assert.deepEqual(JSON.parse(JSON.stringify(file(slowToken))), { content: "report by worker-2", writer: "worker-2", token: 1 });
+  assert.deepEqual(slowToken.results.map(item => item.status), ["FAIL", "PASS", "PASS"], "the packaged setup expectation names token 2; both invariants hold");
+  // A call to the store that times out leaves the worker not knowing whether it holds the lease, so it does not write.
+  const lostAnswer = await run(lesson, { version: 1, faults: [{ id: "student-lost-answer", point: "network.response", source: "kv", target: "worker-1", from: 0, probability: 1, maxApplications: 1, effect: { kind: "drop" } }] });
+  // The entry it could not confirm still expires at t=12, so worker-2 takes the lease at t=17 and writes.
+  assert.deepEqual(outcomes(lostAnswer), { "job-worker-1": "LOCK_UNAVAILABLE", "job-worker-2": "WRITTEN" });
+  assert.equal(file(lostAnswer)!.writer, "worker-2");
+  // A 40 ms lease is still live at t=17: the store's set-if-absent fails, and worker-2 never writes.
+  const longLease = await run(lesson, { version: 1, parameters: [{ key: "lease-ttl", value: 40 }] });
+  assert.deepEqual(outcomes(longLease), { "job-worker-1": "WRITTEN", "job-worker-2": "LOCK_BUSY" });
+  assert.deepEqual(longLease.history.observations.filter(item => item.type === "kv.condition.failed").map(item => item.time), [17]);
+});
+
 test("#163 fresh, reset, and stepped runs agree on the verdicts of a changed experiment", async () => {
   const lesson = lessons.find(item => item.id === "retry-unsafe")!;
   for (const overlay of [{ version: 1, parameters: [{ key: "timeout", value: 40 }] }, delayedRetry]) {

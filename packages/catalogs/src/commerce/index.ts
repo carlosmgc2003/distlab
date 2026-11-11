@@ -9,7 +9,7 @@ import { dependencyModel, riskModel } from "./circuit.js";
 import { messagingModel, notifyOrdersModel, notifySenderModel } from "./notify.js";
 import { cacheCartModel, cacheCatalogModel, cacheOrdersModel } from "./cache.js";
 import { inventoryModel } from "./inventory.js";
-import { leaseStorageModel, leaseWorkerModel, lockServiceModel } from "./lease.js";
+import { kvServerModel, leaseStorageModel, leaseWorkerModel } from "./lease.js";
 import { titleReplicaModel } from "./clock.js";
 import { placeholderExternalModel, placeholderServiceModel } from "./placeholder.js";
 import { reliableInventoryModel, reliableNotificationsModel, reliableOrdersModel, reliablePaymentsModel, reliableProcessorModel } from "./reliable.js";
@@ -24,7 +24,7 @@ export {
 const models = [clientModel, retryModel, carrierModel, sagaModel, sagaResourceModel, notificationModel, outboxModel, orderReadModel, orderWriteModel, dependencyModel, riskModel,
   notifyOrdersModel, notifySenderModel, messagingModel, cacheCatalogModel, cacheCartModel, cacheOrdersModel, inventoryModel,
   reliableOrdersModel, reliableInventoryModel, reliablePaymentsModel, reliableProcessorModel, reliableNotificationsModel,
-  lockServiceModel, leaseWorkerModel, leaseStorageModel, titleReplicaModel,
+  kvServerModel, leaseWorkerModel, leaseStorageModel, titleReplicaModel,
   placeholderServiceModel, placeholderExternalModel];
 export const commerceCatalog: ScenarioCatalog = {
   id: "commerce.lessons", version: "1.0.0",
@@ -63,7 +63,7 @@ export const commerceAssessment: ScenarioAssessment = {
   version: "1.0.0",
   find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters", "commerce.pricing", "commerce.live-carts",
     "commerce.stock", "commerce.reservations", "commerce.charges", "commerce.unconfirmed-charges", "commerce.notifications", "commerce.final-orders",
-    "commerce.fencing", "commerce.converged"].includes(id) ? undefined : {
+    "commerce.fencing", "commerce.converged", "commerce.kv-entries"].includes(id) ? undefined : {
     id, version: "1.0.0", evaluate({ parameters, projection }) {
       const p = record(parameters);
       if (id === "commerce.charges") {
@@ -108,6 +108,13 @@ export const commerceAssessment: ScenarioAssessment = {
         // Accepted writes, in the order storage committed them, never go back to a smaller lease token.
         const evidence = accepted.map(row => ({ seq: row.seq!, writer: row.writer!, token: row.token! }));
         return { pass: evidence.every((item, index) => index === 0 || (item.token as number) >= (evidence[index - 1]!.token as number)), evidence };
+      }
+      if (id === "commerce.kv-entries") {
+        // Every key of `expected` is live in the owner's key-value store with that value.
+        const entries = record(projection.stores)[text(p.owner)];
+        const evidence = list(Array.isArray(entries) ? entries : []).map(entry => ({ key: text(entry.key), value: entry.value ?? null, expiresAt: entry.expiresAt ?? null }));
+        const live = new Map(evidence.map(entry => [entry.key, entry.value]));
+        return { pass: Object.entries(record(p.expected!)).every(([key, value]) => live.get(key) === value), evidence };
       }
       if (id === "commerce.converged") {
         // Every owner holds the same `field` value for `key`, equal to `expected` when one is given.

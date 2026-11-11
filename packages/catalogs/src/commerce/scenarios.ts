@@ -257,30 +257,32 @@ function inventoryScenario(name: CommerceLessonName): CanonicalValue {
 
 /**
  * Leases and fencing tokens, outside commerce: two report workers share one
- * report file and a lock service that grants 10 ms leases. Worker-1 takes the
- * lease at t=2 and checks it, but its write is held up 30 ms on the way to
- * storage, as a long pause would hold it. The lease expires at t=12, worker-2
- * takes it at t=17 with token 2 and writes, and worker-1's write arrives at
- * t=34. The pair differs only in whether storage fences writes by token.
+ * report file and a key-value node. A worker takes the lease with a
+ * set-if-absent that expires after 10 ms, then draws a fencing token with an
+ * increment. Worker-1 takes the lease at t=2 (token 1) and checks it at t=5,
+ * but its write is held up 30 ms on the way to storage, as a long pause would
+ * hold it. The lease expires at t=12, worker-2 takes it at t=17 with token 2
+ * and writes at t=21, and worker-1's write arrives at t=36. The pair differs
+ * only in whether storage fences writes by token.
  */
 function leaseScenario(name: CommerceLessonName): CanonicalValue {
   const fencing = name === "lease-fenced";
   const path = "reports/daily.csv";
   const job = (worker: string, at: number) => ({ ...request(`job-${worker}`, at, worker, "POST /job", { path, content: `report by ${worker}` }), target: "scheduler" });
+  const worker = (id: string) => component(id, "lease-worker", "service", { kv: "kv", storage: "storage", ttl: 10 });
   return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
     architecture: {
-      components: [component("scheduler", "client", "client"), component("worker-1", "lease-worker", "service", { lock: "lock", storage: "storage" }),
-        component("worker-2", "lease-worker", "service", { lock: "lock", storage: "storage" }),
-        component("lock", "lock-service", "service", { ttl: 10 }), component("storage", "lease-storage", "service", { fencing })],
-      links: [link("scheduler", "worker-1", 100), link("scheduler", "worker-2", 100), link("worker-1", "lock"), link("worker-2", "lock"),
+      components: [component("scheduler", "client", "client"), worker("worker-1"), worker("worker-2"),
+        component("kv", "kv-server"), component("storage", "lease-storage", "service", { fencing })],
+      links: [link("scheduler", "worker-1", 100), link("scheduler", "worker-2", 100), link("worker-1", "kv"), link("worker-2", "kv"),
         link("worker-1", "storage", 60), link("worker-2", "storage", 60)],
-      databases: [database("lock", ["leases"]), database("storage", ["files", "writes"])], stores: [], destinations: [], subscriptions: [],
+      databases: [database("storage", ["files", "writes"])], stores: [{ owner: "kv", initial: [] }], destinations: [], subscriptions: [],
     }, external: [], faults: [fault("delayed-stale-write", "network.request", "worker-1", "storage", "PUT /file", { kind: "delay", duration: 30 })],
     actions: [
-      ...["lock", "storage", "worker-1", "worker-2"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
+      ...["kv", "storage", "worker-1", "worker-2"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
       job("worker-1", 0), job("worker-2", 15),
     ], assertions: [
-      assertion("lease-passed-on", 20, "lock", "leases", 1, "report-lock", { holder: "worker-2", token: 2 }),
+      { id: "lease-passed-on", predicate: "commerce.kv-entries", mode: "at", at: 20, parameters: { owner: "kv", expected: { "lock:report": "worker-2", "lock:report:token": 2 } } },
       always("writes-in-token-order", "commerce.fencing", { owner: "storage", table: "writes" }),
       always("file-from-latest-lease", "commerce.fencing", { owner: "storage", table: "writes", files: "files" }),
     ],
@@ -391,7 +393,7 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
       ];
     case "lease":
       return [
-        expectation("lease-passed-on", "Worker-1's lease expired, so worker-2 holds the lease with token 2 (t=20)"),
+        expectation("lease-passed-on", "Worker-1's lease entry expired, so worker-2 holds the lease and drew token 2 (t=20)"),
         invariant("writes-in-token-order", "Storage never accepts a write with a smaller lease token after a larger one"),
         invariant("file-from-latest-lease", "The report file holds the write with the largest lease token storage accepted"),
       ];
@@ -513,7 +515,8 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
     case "lease-fenced":
       return [
         flag("fencing", name === "lease-fenced", "storage", "fencing"),
-        { key: "lease-ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 }, targets: [{ kind: "component", component: "lock", field: "ttl" }] },
+        { key: "lease-ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 },
+          targets: [{ kind: "component", component: "worker-1", field: "ttl" }, { kind: "component", component: "worker-2", field: "ttl" }] },
       ];
     case "clock-last-write-wins":
     case "clock-lamport":

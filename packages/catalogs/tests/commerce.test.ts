@@ -181,6 +181,82 @@ test("a cached price outlives a price change unless the change invalidates it; a
   assert.equal(result(late, "no-expired-cart-checkout").status, "FAIL");
 });
 
+test("the lease pair builds its lock from KeyValueStore operations: set-if-absent with a TTL, then an increment", async () => {
+  const unsafe = await execute("lease-unfenced"), safe = await execute("lease-fenced");
+  const kv = (result: HarnessExport, type: string) => result.history.observations.filter(o => o.type === type && o.source === "kv")
+    .map(o => JSON.parse(JSON.stringify([o.time, object(o.data!).key, object(o.data!).operation ?? null, object(o.data!).expiresAt ?? null])));
+  const outcome = (result: HarnessExport) => logs(result, "client.result").map(entry => [entry.label, object(entry.result!).status, object(entry.result!).token]);
+  const result = (r: HarnessExport, id: string) => JSON.parse(JSON.stringify(r.results.find(item => item.id === id)!.evidence));
+  for (const r of [unsafe, safe]) {
+    assert.equal(r.status, "COMPLETED");
+    // The lock is a key with an expiry, and the fencing token is a counter: no lock table, no grant logic in the node.
+    assert.deepEqual(kv(r, "kv.changed"), [
+      [2, "lock:report", "set", 12], [4, "lock:report:token", "increment", null],
+      [17, "lock:report", "set", 27], [19, "lock:report:token", "increment", null],
+    ]);
+    // The store expires the lease by itself, while worker-1's write is still in flight.
+    assert.deepEqual(kv(r, "kv.expired"), [[12, "lock:report", null, 12], [27, "lock:report", null, 27]]);
+    assert.equal(kv(r, "kv.condition.failed").length, 0);
+    assert.deepEqual(Object.keys(object(object(r.state).databases!)), ["storage"]);
+    // Each worker counts its lease from before it asked, so its estimate ends before the entry does.
+    assert.deepEqual(JSON.parse(JSON.stringify(logs(r, "lease.checked"))), [
+      { holder: "worker-1", token: 1, validUntil: 11, now: 5, valid: true },
+      { holder: "worker-2", token: 2, validUntil: 26, now: 20, valid: true },
+    ]);
+    assert.deepEqual(result(r, "lease-passed-on"), [{ key: "lock:report", value: "worker-2", expiresAt: 27 }, { key: "lock:report:token", value: 2, expiresAt: null }]);
+  }
+  // Unfenced: worker-1's write, delayed to t=36, overwrites worker-2's report.
+  assert.deepEqual(outcome(unsafe), [["job-worker-2", "WRITTEN", 2], ["job-worker-1", "WRITTEN", 1]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(logs(unsafe, "storage.written"))).at(-1), { path: "reports/daily.csv", writer: "worker-1", token: 1, overwrote: "worker-2" });
+  assert.deepEqual(result(unsafe, "writes-in-token-order"), [{ seq: 1, writer: "worker-2", token: 2 }, { seq: 2, writer: "worker-1", token: 1 }]);
+  assert.deepEqual(result(unsafe, "file-from-latest-lease"), [{ path: "reports/daily.csv", writer: "worker-1", token: 1, largestAccepted: 2 }]);
+  assert.deepEqual(unsafe.results.filter(item => item.status === "FAIL").map(item => item.time), [36, 36]);
+  // Fenced: storage has accepted token 2, so it rejects token 1.
+  assert.deepEqual(outcome(safe), [["job-worker-2", "WRITTEN", 2], ["job-worker-1", "REJECTED", 1]]);
+  assert.deepEqual(JSON.parse(JSON.stringify(logs(safe, "storage.fenced"))), [{ path: "reports/daily.csv", writer: "worker-1", token: 1, highestToken: 2 }]);
+});
+
+test("the key-value node answers each endpoint with one KeyValueStore operation and rejects malformed requests", async () => {
+  const base = object(commerceScenario("lease-fenced"));
+  const architecture = object(base.architecture!);
+  const call = (id: string, at: number, endpoint: string, body: CanonicalValue) =>
+    ({ id, at, kind: "client", target: "scheduler", action: "request", data: { target: "kv", endpoint, body, retry: false, label: id } });
+  const policy = { requestLatency: 1, responseLatency: 1, jitter: 0, timeout: 20, failureRate: 0 };
+  const document = { ...base, name: "kv-node-probe@1", faults: [], assertions: [],
+    architecture: { ...architecture, links: [...architecture.links as CanonicalValue[], { source: "scheduler", target: "kv", policy }] },
+    actions: [
+      { id: "start-kv", at: 0, kind: "service", target: "kv", state: "RUNNING" },
+      call("set-if-absent", 0, "POST /set", { key: "lock", value: "a", ttl: 10, ifAbsent: true }),
+      call("set-held", 3, "POST /set", { key: "lock", value: "b", ttl: 10, ifAbsent: true }),
+      call("get-live", 4, "POST /get", { key: "lock" }),
+      call("renew", 5, "POST /compare-and-set", { key: "lock", expected: { present: true, value: "a" }, next: "a", ttl: 10 }),
+      call("renew-by-other", 6, "POST /compare-and-set", { key: "lock", expected: { present: true, value: "b" }, next: "b", ttl: 10 }),
+      call("count-1", 7, "POST /increment", { key: "token" }),
+      call("count-2", 8, "POST /increment", { key: "token" }),
+      call("count-text", 9, "POST /increment", { key: "lock" }),
+      call("get-expired", 20, "POST /get", { key: "lock" }),
+      call("delete", 21, "POST /delete", { key: "token" }),
+      call("delete-absent", 22, "POST /delete", { key: "token" }),
+      call("no-key", 23, "POST /get", {}),
+      call("zero-ttl", 24, "POST /set", { key: "lock", value: "a", ttl: 0 }),
+    ] } as CanonicalValue;
+  assert.deepEqual(engine.validate(document), []);
+  const session = openHarness(engine.create(document));
+  await session.run();
+  const exported = session.inspect();
+  assert.equal(exported.status, "COMPLETED");
+  const results = Object.fromEntries(logs(exported, "client.result").map(entry => [entry.label, JSON.parse(JSON.stringify(entry.result))]));
+  assert.deepEqual(results, {
+    "set-if-absent": { ok: true }, "set-held": { ok: false }, "get-live": { present: true, value: "a" },
+    renew: { ok: true }, "renew-by-other": { ok: false }, "count-1": { value: 1 }, "count-2": { value: 2 },
+    "count-text": { code: "INVALID_KV_OPERATION" },
+    // The renewal at t=6 moved the expiry to t=16.
+    "get-expired": { present: false, value: null }, delete: { deleted: true }, "delete-absent": { deleted: false },
+    "no-key": { code: "INVALID_KV_OPERATION" }, "zero-ttl": { code: "INVALID_KV_OPERATION" },
+  });
+  assert.deepEqual(exported.history.observations.filter(o => o.type === "kv.expired").map(o => o.time), [16]);
+});
+
 test("two clients reserving the last unit: check-then-act oversells, optimistic concurrency rejects the second commit", async () => {
   const unsafe = await execute("inventory-oversell"), safe = await execute("inventory-optimistic");
   const of = (result: HarnessExport, type: string) => result.history.observations.filter(o => o.type === type);
