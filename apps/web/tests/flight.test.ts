@@ -19,7 +19,9 @@ import {
   playbackControl,
   playbackStatus,
   FLIGHT_LEGEND,
+  transportStep,
 } from "../src/flight.ts";
+import { selectionStep } from "../src/timeline.ts";
 import { flightTokenStyle } from "../src/architecture-view.ts";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
@@ -234,8 +236,8 @@ test("the transport states one position, one reason, and the two step directions
   const idle = flightTransport(-1, steps.length, "idle", false);
   assert.equal(idle.control.action, "play");
   assert.equal(idle.control.label, "Play replay");
-  // With nothing selected, Previous states the last movement and Next the first.
-  assert.equal(idle.previous, true);
+  // With nothing selected, Next selects the first movement and Previous is unavailable (#191).
+  assert.equal(idle.previous, false);
   assert.equal(idle.next, true);
   const playing = flightTransport(0, steps.length, "playing", true);
   assert.equal(playing.control.action, "unavailable");
@@ -249,7 +251,6 @@ test("the transport states one position, one reason, and the two step directions
   assert.match(empty.status, /No visible observations/);
   // The shared control copy states the action and the phase wording.
   assert.equal(playbackControl(-1, 0, false).action, "unavailable");
-  assert.equal(playbackControl(0, 1, false).action, "unavailable");
   assert.equal(playbackControl(-1, 4, false).label, "Play replay");
   assert.equal(playbackControl(1, 4, false).action, "play");
   assert.equal(playbackControl(3, 4, false).label, "Restart replay");
@@ -398,4 +399,44 @@ test("a virtual-time jump names the two recorded times and nothing else", async 
   const same = steps.findIndex((step, index) => index > 0 && step.time === steps[index - 1]!.time);
   assert.equal(flightJump(steps, same), undefined);
   assert.equal(flightPosition(steps, same).jump, undefined);
+});
+
+test("#191 with nothing selected, Next selects the first movement and Previous is unavailable", () => {
+  assert.equal(transportStep(-1, 13, 1), 0);
+  assert.equal(transportStep(-1, 13, -1), null);
+  assert.equal(transportStep(-1, 1, -1), null);
+  assert.equal(transportStep(-1, 0, 1), null);
+  // On the first movement Previous is unavailable; on a later one it selects the one before.
+  assert.equal(transportStep(0, 13, -1), null);
+  assert.equal(transportStep(5, 13, -1), 4);
+  assert.equal(transportStep(12, 13, 1), null);
+  const first = flightTransport(0, 13, "paused", false);
+  assert.equal(first.previous, false);
+  assert.equal(first.next, true);
+  const later = flightTransport(5, 13, "paused", false);
+  assert.equal(later.previous, true);
+  assert.equal(later.next, true);
+  // Row navigation in Recorded history is unchanged: with nothing selected, Previous selects the last row.
+  assert.equal(selectionStep(-1, 13, -1), 12);
+  assert.equal(selectionStep(-1, 13, 1), 0);
+});
+
+test("#192 one recorded movement can be played, and restarted once painted", () => {
+  const idle = flightTransport(-1, 1, "idle", false);
+  assert.equal(idle.control.action, "play");
+  assert.equal(idle.control.label, "Play replay");
+  assert.equal(idle.next, true);
+  assert.equal(idle.previous, false);
+  // Play paints the one movement, then the cursor ends there, or waits while the run records.
+  assert.deepEqual(flightAdvance(0, 1, "playing", false), { cursor: 0, phase: "ended", waiting: false });
+  assert.deepEqual(flightAdvance(0, 1, "playing", true), { cursor: 0, phase: "playing", waiting: true });
+  const ended = flightTransport(0, 1, "ended", false);
+  assert.equal(ended.control.action, "restart");
+  assert.equal(ended.control.label, "Restart replay");
+  assert.equal(ended.previous, false);
+  assert.equal(ended.next, false);
+  assert.equal(playbackControl(0, 1, false).action, "restart");
+  assert.equal(playbackControl(-1, 1, false).action, "play");
+  // Zero movements still leave Play unavailable.
+  assert.equal(flightTransport(-1, 0, "idle", false).control.action, "unavailable");
 });

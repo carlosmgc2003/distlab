@@ -589,3 +589,57 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768
     expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load", "run"]);
   });
 }
+
+test("Replay starts at the start: Previous movement is unavailable until a movement is selected (#191)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await observeWorker(page);
+  await runCheckout(page);
+  const previous = page.getByRole("button", { name: "Previous movement" });
+  const next = page.getByRole("button", { name: "Next movement" });
+  await expect(position(page)).toHaveText("0 of 13 recorded movements. Nothing selected.");
+  await expect(previous).toBeDisabled();
+  await expect(next).toBeEnabled();
+  // Next selects the first movement, where Previous is still unavailable.
+  await next.click();
+  await expect(position(page)).toContainText("Movement 1 of 13 ");
+  await expect(previous).toBeDisabled();
+  await next.click();
+  await expect(position(page)).toContainText("Movement 2 of 13 ");
+  await expect(previous).toBeEnabled();
+  await previous.click();
+  await expect(position(page)).toContainText("Movement 1 of 13 ");
+  await expect(page.getByRole("button", { name: "Play replay" })).toBeEnabled();
+  expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load", "run"]);
+});
+
+test("one recorded movement can be played and restarted (#192)", async ({ page }) => {
+  test.setTimeout(180_000);
+  await observeWorker(page);
+  await loadScenario(page);
+  const status = page.getByRole("status", { name: "Simulation status" });
+  const step = page.getByRole("button", { name: "Step", exact: true });
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if ((await position(page).innerText()).startsWith("0 of 1 recorded movements")) break;
+    await step.click();
+    await expect(status).toHaveText(/^(READY|PAUSED)$/);
+  }
+  await expect(position(page)).toHaveText("0 of 1 recorded movements. Nothing selected.");
+  const play = page.getByRole("button", { name: "Play replay" });
+  await expect(play).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Previous movement" })).toBeDisabled();
+  await play.click();
+  // The movement is painted with its narration, and playback ends there: the run is not recording.
+  await expect(position(page)).toContainText("Movement 1 of 1 ");
+  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
+  await expect(narration(page)).toBeVisible();
+  const restart = page.getByRole("button", { name: "Restart replay" });
+  await expect(restart).toBeEnabled();
+  // Restart paints the same movement again: its token is a new one.
+  await page.locator("[data-flight-token]").evaluate(token => token.setAttribute("data-e2e-old", "true"));
+  await restart.click();
+  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
+  await expect(page.locator("[data-flight-token][data-e2e-old]")).toHaveCount(0);
+  await expect(position(page)).toContainText("Movement 1 of 1 ");
+  await expect(page.getByRole("button", { name: "Restart replay" })).toBeEnabled();
+  expect(new Set(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type)))).toEqual(new Set(["load", "step"]));
+});

@@ -310,18 +310,27 @@ and it takes effect at an event boundary.
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
 | Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
 | Evidence, causation, and trace | Not shown | Select the recorded observation, show its row and detail, and move focus to that row. A filter cleared to reveal it is announced | Same read-only navigation | Same read-only navigation | Same read-only navigation | Not shown when history is withheld |
-| Play / Restart | Not shown | Play moves the cursor through visible rows. Zero or one visible row leaves Play unavailable. On the last visible row the control is Restart replay | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
+| Play / Restart | Not shown | Play moves the cursor through recorded movements. Zero movements leave Play unavailable. One movement is painted by Play, and Restart paints it again. On the last movement the control is Restart replay | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
 | Pause replay | Not shown | Unavailable until playback is running | Stop the cursor | Stop the cursor | Stop the cursor | Not shown when history is withheld |
-| Previous / Next | Not shown | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Not shown when history is withheld |
+| Previous / Next | Not shown | Available only when that direction selects a different visible row or movement | Available only when that direction selects a different visible row or movement | Available only when that direction selects a different visible row or movement | Available only when that direction selects a different visible row or movement | Not shown when history is withheld |
 
 Empty means no session is loaded. Error means a host error is showing. A terminal
 `SIMULATION_FAILED` withholds incomplete history, keeps the failure visible, and
 still accepts Reset for the loaded scenario. Ready, paused, and completed
-projections keep the timeline. Before any row is selected, Next selects the
-first visible observation and Previous selects the last, including when the
-filter matches one row. After that only row is selected, both controls are
-unavailable. Previous is unavailable on the first visible row, and Next is
-unavailable on the last.
+projections keep the timeline. In Recorded history, before any row is
+selected, Next selects the first visible observation and Previous selects the
+last, including when the filter matches one row. After that only row is
+selected, both controls are unavailable. Previous is unavailable on the first
+visible row, and Next is unavailable on the last.
+
+The Replay transport in the Architecture tab starts at the start of the story
+(#191). Before any movement is selected, `Next movement` selects the first
+recorded movement and `Previous movement` is unavailable. `Previous movement`
+is also unavailable on the first movement, and `Next movement` on the last.
+With exactly one recorded movement (#192), `Play replay` paints it and playback
+ends there, or waits for the next movement while the run is still recording;
+once it is painted and the run is not recording, the control is
+`Restart replay`, which paints it again.
 
 ## Deferred capabilities
 

@@ -55,6 +55,8 @@ export type ArchitectureEdge = Edge<{
   flight?: FlightStep;
   /** The chosen playback pace, so the token paints over the same interval the cursor waits. */
   pace?: FlightPace;
+  /** Changes on every Restart, so the token of a movement painted again starts its leg anew. */
+  paint?: number;
 }>;
 
 export type ResourceKind = "database" | "kvstore";
