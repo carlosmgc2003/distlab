@@ -259,7 +259,11 @@ field that holds the bound component ID; when the field is absent the peer is
 bound to `default`. A peer lists the component kinds it may bind to and the
 endpoints (service) or operations (external) the model calls on it. An option's
 `key` is also its configuration field, and its domain reuses
-`LessonParameterDomain`. Peer names and option keys of one model are disjoint.
+`LessonParameterDomain`. `lessonData` (ADR-005 amendment, #122) names
+configuration fields that are lesson data, neither peers nor options, such as
+rows a model writes; it is absent when there are none, and no allowed slot
+model may declare any. Peer names, option keys, and lesson-data fields of one
+model are disjoint.
 Peers are not kernel ports. Descriptors contain no code. A descriptor marked
 `placeholder` declares no endpoints or operations of its own: the component
 exposes the ones listed in its configuration field `interface`, and answers

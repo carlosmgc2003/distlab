@@ -35,10 +35,13 @@ export const sagaDescriptor: ModelDescriptor = {
   storage: tables("orders"), options: [flag("compensate")],
 };
 
-/** `forward` and `compensated` are lesson data (the rows it writes), not behavior options. */
+/**
+ * `forward` and `compensated` are lesson data (the rows it writes), not behavior
+ * options, so the model can never fill a slot (#122).
+ */
 export const sagaResourceDescriptor: ModelDescriptor = {
   ...none, model: "commerce.saga-resource", version: VERSION, kind: "service", endpoints: ["POST /apply", "POST /compensate"],
-  storage: tables("state"),
+  storage: tables("state"), lessonData: ["compensated", "forward"],
 };
 
 export const carrierDescriptor: ModelDescriptor = { ...none, model: "commerce.carrier", version: VERSION, kind: "external", operations: ["POST /ship"] };
@@ -92,12 +95,13 @@ export const messagingDescriptor: ModelDescriptor = { ...none, model: "commerce.
  */
 export const cacheCatalogDescriptor: ModelDescriptor = {
   ...none, model: "commerce.cache-catalog", version: VERSION, kind: "service", endpoints: ["GET /price", "POST /price"],
-  storage: { ...tables("prices", "price-history"), store: true }, options: [flag("invalidate")],
+  storage: { ...tables("prices", "price-history"), store: true }, options: [flag("invalidate")], lessonData: ["ttl"],
 };
 
 /** Carts live in the store with a TTL. Configuration `ttl` (cart lifetime) is lesson data. */
 export const cacheCartDescriptor: ModelDescriptor = {
   ...none, model: "commerce.cache-cart", version: VERSION, kind: "service", endpoints: ["POST /cart", "GET /cart"], storage: { store: true },
+  lessonData: ["ttl"],
 };
 
 /** Checks the cart, prices the order through Catalog, and records the price it used. */

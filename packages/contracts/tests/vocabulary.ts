@@ -147,3 +147,13 @@ const bare: AssessmentVerdict = "PASS";
 // @ts-expect-error A row adds faults only; the configuration carries the parameters.
 const parameterRow: AssessmentRow = { ...row, parameters: [] };
 void [assessment, result, bare, parameterRow];
+
+/** ADR-005 amendment (#122): `lessonData` is optional, so every existing descriptor keeps its shape. */
+const plainDescriptor: ModelDescriptor = {
+  model: "commerce.cache-orders", version: "1.0.0", kind: "service", actions: [], endpoints: ["POST /checkout"], consumers: [],
+  operations: [], publishes: [], peers: [], storage: {}, options: [],
+};
+const withLessonData: ModelDescriptor = { ...plainDescriptor, model: "commerce.saga-resource", lessonData: ["compensated", "forward"] };
+// @ts-expect-error Lesson data names configuration fields; it does not carry their values.
+const lessonValues: ModelDescriptor = { ...plainDescriptor, lessonData: { forward: { reserved: true } } };
+void [plainDescriptor, withLessonData, lessonValues];

@@ -115,10 +115,13 @@ documents omit the fields, so no packaged document or export changed.
 and endpoint in the workload. Its descriptor declares that call in
 `workloadCalls: [{ action: "request", target: "target", endpoint: "endpoint" }]`
 (#121), so validation checks that each request's target is linked from the
-client and offers the endpoint, as it does for peers. `commerce.saga-resource` reads `forward` and
-`compensated` rows from configuration; they are lesson data, not behavior
-options, because no `LessonParameterDomain` describes a row. The individual commerce model constants and helpers are not
-re-exported by the package root.
+client and offers the endpoint, as it does for peers. `commerce.saga-resource`
+reads `forward` and `compensated` rows from configuration; they are lesson data,
+not behavior options, because no `LessonParameterDomain` describes a row. The
+cache models' `ttl` is lesson data too. Their descriptors declare these fields
+in `lessonData` (#122), so a lesson cannot offer them as slot models, whose
+configuration a slot edit replaces with options. The individual commerce model
+constants and helpers are not re-exported by the package root.
 
 ## Checkout models
 

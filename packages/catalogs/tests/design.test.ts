@@ -132,7 +132,7 @@ test("ARCH-AC-6 every allowed slot model, with the slot's allowed resource and s
   }
 });
 
-test("ARCH-AC-6 every binding candidate, resource owner, and subscription exists, and no parameter targets a slot", () => {
+test("ARCH-AC-6 every binding candidate, resource owner, and subscription exists, no parameter targets a slot, and no slot model declares lesson data", () => {
   for (const name of designed) {
     const policy = commerceOverlayPolicy(name);
     const allowance = policy.architecture!;
@@ -141,7 +141,11 @@ test("ARCH-AC-6 every binding candidate, resource owner, and subscription exists
     const slots = new Set(allowance.slots.map(slot => slot.component));
     for (const slot of allowance.slots) {
       assert.ok(byId.get(slot.component), `${name}: slot ${slot.component} exists`);
-      for (const { model, version } of slot.models) assert.equal(commerceCatalog.find(model, version)?.kind, byId.get(slot.component)!.kind, `${name}: ${model} fits ${slot.component}`);
+      for (const { model, version } of slot.models) {
+        assert.equal(commerceCatalog.find(model, version)?.kind, byId.get(slot.component)!.kind, `${name}: ${model} fits ${slot.component}`);
+        // A slot edit replaces the configuration with options, so it would drop lesson data (#122).
+        assert.deepEqual(commerceCatalog.find(model, version)?.lessonData ?? [], [], `${name}: ${model} declares lesson data`);
+      }
     }
     for (const binding of allowance.bindings) {
       assert.ok(byId.has(binding.component), `${name}: ${binding.component}`);

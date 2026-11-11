@@ -94,11 +94,39 @@ test("ARCH-AC-5 each catalog ScenarioModel equals its data-only descriptor", () 
   }
 });
 
-test("ARCH-AC-6 peer names and option keys of each model are distinct and disjoint", () => {
+test("ARCH-AC-6 peer names, option keys, and lesson-data fields of each model are distinct and disjoint", () => {
   for (const descriptor of [...checkoutDescriptors, ...commerceDescriptors]) {
-    const fields = [...descriptor.peers.map(peer => peer.name), ...descriptor.options.map(option => option.key)];
+    const fields = [...descriptor.peers.map(peer => peer.name), ...descriptor.options.map(option => option.key), ...(descriptor.lessonData ?? [])];
     assert.equal(new Set(fields).size, fields.length, `${descriptor.model}: ${fields.join(", ")}`);
   }
+});
+
+/** Configuration keys of packaged components that their model's descriptor does not declare (#122). */
+function undeclaredConfiguration(lesson: Lesson, descriptors: readonly ModelDescriptor[]): readonly string[] {
+  return components(lesson.document).flatMap(component => {
+    const descriptor = descriptors.find(item => item.model === component.model && item.version === component.version);
+    assert.ok(descriptor, `${lesson.name}: no descriptor for ${component.model}@${component.version}`);
+    const declared = new Set([
+      ...descriptor.peers.map(peer => peer.name), ...descriptor.options.map(option => option.key), ...(descriptor.lessonData ?? []),
+      // A placeholder's interface is read by composition (ADR-005), not lesson data.
+      ...(descriptor.placeholder ? ["interface"] : []),
+    ]);
+    return Object.keys(object(component.configuration)).filter(key => !declared.has(key)).map(key => `${lesson.name}: ${component.id}.${key}`);
+  });
+}
+
+test("ARCH-AC-5 every packaged configuration key is a declared peer, option, or lesson-data field (#122)", () => {
+  assert.deepEqual(lessons.flatMap(lesson => undeclaredConfiguration(lesson, lesson.descriptors)), []);
+  assert.deepEqual(commerceDescriptors.filter(item => item.lessonData).map(item => [item.model, item.lessonData]), [
+    ["commerce.saga-resource", ["compensated", "forward"]],
+    ["commerce.cache-catalog", ["ttl"]],
+    ["commerce.cache-cart", ["ttl"]],
+  ]);
+  assert.ok(checkoutDescriptors.every(item => item.lessonData === undefined));
+  // The check reads the declaration: without "ttl", the cart lesson's configuration is undeclared.
+  const withoutTtl = commerceDescriptors.map(item => item.model === "commerce.cache-cart" ? { ...item, lessonData: [] } : item);
+  const undeclared = lessons.filter(lesson => lesson.descriptors === commerceDescriptors).flatMap(lesson => undeclaredConfiguration(lesson, withoutTtl));
+  assert.ok(undeclared.length > 0 && undeclared.every(item => item.endsWith(".ttl")), undeclared.join("; "));
 });
 
 test("ARCH-AC-5 every packaged lesson records only declared calls, publications, and tables", async () => {
