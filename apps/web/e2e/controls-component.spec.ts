@@ -88,6 +88,28 @@ test("outstanding Run/Pause stays busy until both terminal replies and uses no o
   expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run", "pause"]);
 });
 
+for (const terminal of ["COMPLETED", "FAILED"] as const) {
+  test(`a ${terminal} projection before run.finished states the status alone and keeps controls busy (#193)`, async ({ page }) => {
+    await mount(page);
+    await emitProjection(page, "READY", "loaded");
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+    const status = page.getByRole("status", { name: "Simulation status" });
+    await expect(status).toHaveText("READY · Run in progress…");
+    await emitProjection(page, "RUNNING");
+    await expect(status).toHaveText("RUNNING · Run in progress…");
+    await emitProjection(page, terminal);
+    await expect(status).toHaveText(terminal);
+    // The command has not settled: Run, Step, and Reset stay unavailable until run.finished.
+    await enabled(page, []);
+    await page.evaluate(terminal => {
+      const run = window.controlFixture.commands.find(command => command.type === "run")!;
+      window.controlFixture.emit({ version: 1, requestId: run.requestId, type: "run.finished", status: terminal });
+    }, terminal);
+    await expect(status).toHaveText(terminal);
+    await enabled(page, ["Reset"]);
+  });
+}
+
 test("lesson selection cannot replace a pending or running session", async ({ page }) => {
   await mount(page);
   await emitProjection(page, "READY", "loaded");

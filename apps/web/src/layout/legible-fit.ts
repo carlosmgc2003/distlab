@@ -48,3 +48,47 @@ export function showsWholeGraph(bounds: Rect, canvas: Size, insets: Insets, view
     && left + bounds.width * viewport.zoom <= canvas.width - insets.right + epsilon
     && top + bounds.height * viewport.zoom <= canvas.height - insets.bottom + epsilon;
 }
+
+/** Whether `target` (graph coordinates) lies wholly inside the canvas at `viewport`. */
+export function showsWhole(target: Rect, canvas: Size, viewport: Viewport): boolean {
+  return showsWholeGraph(target, canvas, { top: 0, right: 0, bottom: 0, left: 0 }, viewport);
+}
+
+/** The least clearance a revealed movement keeps from the canvas edge when the insets leave too little room. */
+export const REVEAL_MARGIN = 8;
+
+/**
+ * The viewport that brings a painted movement's components (`target`, graph coordinates) into the
+ * canvas (#190), changing `current` as little as it can. Presentation only, like the default view.
+ *
+ * - Already wholly inside the canvas: `current` itself, so the reader's own pan and zoom are kept.
+ * - Fits at the current zoom: the smallest pan that puts it inside the space the insets leave, or, on
+ *   an axis where the insets leave too little room, inside the canvas less `REVEAL_MARGIN`.
+ * - Does not fit even then: zoomed out just enough, never below `minZoom`, and centered. The caller passes
+ *   the legible floor as `minZoom`, so a pair that cannot fit at a legible size is centered and cut.
+ */
+export function revealViewport(target: Rect, canvas: Size, insets: Insets, current: Viewport, minZoom: number): Viewport {
+  if (showsWhole(target, canvas, current)) return current;
+  const tight = (inset: number) => Math.min(inset, REVEAL_MARGIN);
+  const room = (size: number, near: number, far: number) => Math.max(1, size - near - far);
+  const fit = Math.min(
+    room(canvas.width, tight(insets.left), tight(insets.right)) / Math.max(1, target.width),
+    room(canvas.height, tight(insets.top), tight(insets.bottom)) / Math.max(1, target.height));
+  const zoom = fit < current.zoom ? Math.max(minZoom, fit) : current.zoom;
+  const axis = (offset: number, start: number, extent: number, size: number, insetNear: number, insetFar: number) => {
+    const drawn = extent * zoom;
+    const roomy = drawn <= room(size, insetNear, insetFar);
+    const near = roomy ? insetNear : tight(insetNear), far = roomy ? insetFar : tight(insetFar);
+    // A changed zoom, or a target larger than the canvas at the minimum zoom, is centered.
+    if (zoom !== current.zoom || drawn > room(size, near, far)) return near + (room(size, near, far) - drawn) / 2 - start * zoom;
+    const from = start * zoom + offset, to = from + drawn;
+    if (from < near) return offset + near - from;
+    if (to > size - far) return offset - (to - (size - far));
+    return offset;
+  };
+  return {
+    x: axis(current.x, target.x, target.width, canvas.width, insets.left, insets.right),
+    y: axis(current.y, target.y, target.height, canvas.height, insets.top, insets.bottom),
+    zoom,
+  };
+}
