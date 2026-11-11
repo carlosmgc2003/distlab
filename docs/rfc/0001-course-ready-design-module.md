@@ -70,6 +70,8 @@ digests change, intentionally. No new assertion mode is needed, so no ADR. If a
 Problem: evaluation F5 and F6. Run completes at once and nothing moves; Replay
 is a second control group; Step advances a scheduler event.
 
+[RFC 0002](0002-one-timeline.md) refines this proposal and answers decision 3.
+
 Proposal:
 
 - After Run completes, replay starts from the first movement by default. The
