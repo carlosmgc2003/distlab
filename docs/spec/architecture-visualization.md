@@ -64,6 +64,17 @@ readable without color (color is retained as a secondary cue).
 | Message bus — queue | The same channel with a lane of waiting message cells along its floor | Queued cells, one arrow out | `--category-infrastructure` (purple) |
 | Database (owned) | Cylinder | Database disc | neutral slate |
 | KV store (owned) | Layered box / key | Key | neutral slate |
+| Key-value store (shared) | Rounded card with two layer lines along its floor | Key | neutral slate |
+
+A **shared key-value store** is a component whose declared model is the
+catalog's key-value node (`commerce.kv-server`): a service that owns a
+KeyValueStore and exposes only that store's operations. The symbol derives
+from the model and version in the catalog's data-only descriptor, never from
+a component ID. The node stands for the store its callers share, so it takes
+the stores' slate instead of the service green, its caption reads `Shared
+key-value store`, and its own store gets no satellite or ownership link. It
+stays a component in every other respect: request links end on it, it can be
+inspected and picked as a fault target, and it shows component activity.
 
 Edge semantics are already partially encoded and become part of the same
 legend: request = solid slate with arrowhead, subscription = long dash with
@@ -374,7 +385,9 @@ cross as little as ELK can manage.
   (`east`, `west`, `south`); resource nodes keep one declarative
   `north` handle.
 - **Satellites.** A database or key-value store whose only link is its
-  owner's data link hangs in a row under the owner (gap 30 px). ELK sees the
+  owner's data link hangs in a row under the owner (gap 30 px). A shared
+  key-value store has no satellite for its own store and lays out in the
+  service tier. ELK sees the
   owner and its row as one block, so every route avoids the row. A first
   FIXED_SIDE pass lets ELK order the block's ports; a second pass pins them,
   in that order, to the owner's part of each side (`FIXED_POS`). Data links

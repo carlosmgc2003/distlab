@@ -12,6 +12,7 @@ import { ExperimentDrawer } from "./ExperimentDrawer.tsx";
 import { ServiceStateDialog } from "./ServiceStateDialog.tsx";
 import { FaultsHelp, FaultsSection } from "./FaultsSection.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
+import { lessonTopics, type TopicFilter } from "./lesson-topics.ts";
 import { LessonPanel } from "./LessonPanel.tsx";
 import { currentStep } from "./lesson-steps.ts";
 import { endsRun, outcomeSummary, runOutcome } from "./lesson-outcome.ts";
@@ -61,6 +62,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
   // The Lesson chooser is the one way to choose a packaged lesson (#139). Choosing one loads it.
   const [chooserOpen, setChooserOpen] = useState(false);
+  /** Each opening remounts the chooser, so its filters start from the opener's topic (or all topics). */
+  const [chooserOpening, setChooserOpening] = useState<{ readonly count: number; readonly topic: TopicFilter }>({ count: 0, topic: "all" });
   // The Lesson panel's collapsed rail is UI state: it survives tab switches and lesson loads (#140).
   const [lessonCollapsed, setLessonCollapsed] = useState(false);
   const lessonTrigger = useRef<HTMLButtonElement>(null);
@@ -298,9 +301,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
     link.click();
     URL.revokeObjectURL(url);
   };
-  const openChooser = (opener: HTMLElement) => {
+  const openChooser = (opener: HTMLElement, topic: TopicFilter = "all") => {
     if (busy) return;
     chooserOpener.current = opener;
+    setChooserOpening(previous => ({ count: previous.count + 1, topic }));
     setChooserOpen(true);
   };
   /** Escape and Cancel change nothing; focus returns to the control that opened the chooser. */
@@ -509,7 +513,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>Open scenario file…</button>
         <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Scenario file" hidden disabled={busy}
           onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
-        <p id="scenario-help" className="sr-only">Choose a checkout or commerce failure/resilience lesson, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
+        <p id="scenario-help" className="sr-only">Choose a distributed-systems lesson by topic, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       </div>
       <SimulationControls host={host} snapshot={snapshot} locked={suiteActive} />
     </header>
@@ -562,15 +566,24 @@ export function App({ host }: { readonly host: SimulationHost }) {
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />
     </div> : <div className="investigation-workspace">
       <section className="workspace-empty" tabIndex={-1}>
-        <p className="eyebrow">A small system. A big question.</p>
-        <h2>What happens between checkout and payment?</h2>
-        <p>Follow requests between services, discover what each component knows, and compare a successful checkout with a lost response.</p>
-        <ol><li><button type="button" className="empty-choose-lesson" disabled={busy} aria-haspopup="dialog" onClick={event => openChooser(event.currentTarget)}>Choose a lesson</button>, or open an instructor’s scenario file.</li><li>Explore the system and run the simulation.</li><li>Read the story, then investigate only what interests you.</li></ol>
+        <p className="eyebrow">A deterministic laboratory for distributed systems</p>
+        <h2>What can one component know about the others?</h2>
+        <p>Distributed systems fail partially: a response is lost, a copy falls behind, two writers race, a slow dependency drags its callers down. Each lesson runs a small system of services on a virtual clock with a fixed seed, so every run replays exactly. Most lessons pair a flawed design with its correction under the same faults.</p>
+        <h3 className="empty-topics-title">Topics</h3>
+        <ul className="empty-topics">
+          {lessonTopics.map(topic => <li key={topic.id}>
+            <button type="button" disabled={busy} aria-haspopup="dialog" aria-describedby={`empty-topic-${topic.id}`}
+              onClick={event => openChooser(event.currentTarget, topic.id)}>{topic.title}</button>
+            <span id={`empty-topic-${topic.id}`}>{topic.summary}</span>
+          </li>)}
+        </ul>
+        <h3 className="empty-topics-title">How to work through a lesson</h3>
+        <ol><li><button type="button" className="empty-choose-lesson" disabled={busy} aria-haspopup="dialog" onClick={event => openChooser(event.currentTarget)}>Choose a lesson</button>, or open an instructor’s scenario file.</li><li>Predict the outcome, then run the simulation and follow each message between components.</li><li>Explain the result from the recorded history, then compare it with the paired design.</li></ol>
       </section>
     </div>}
     <p className="sr-only" role="status" aria-live="polite" aria-label="Lesson outcome">{announcement}</p>
     <ServiceStateDialog open={serviceStateOpen && serviceState !== null} time={projection?.simulation.time} onClose={closeServiceState}>{serviceState}</ServiceStateDialog>
-    <LessonChooser open={chooserOpen} lessons={scenarios} assessments={assessments}
+    <LessonChooser key={chooserOpening.count} initialTopic={chooserOpening.topic} open={chooserOpen} lessons={scenarios} assessments={assessments}
       current={assessment ? `assessment:${assessment.id}` : imported ? null : loadedChoice?.id ?? null} busy={busy}
       discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onChooseAssessment={chooseAssessment} onClose={closeChooser} />
   </main>;

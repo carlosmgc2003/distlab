@@ -172,6 +172,48 @@ export const reliableNotificationsDescriptor: ModelDescriptor = {
 };
 
 /**
+ * A key-value node shared over the network. Each endpoint is one
+ * `KeyValueStore` operation on the node's own store; it has no behavior options
+ * and no domain logic, so a lesson builds its coordination protocol in the callers.
+ */
+export const kvServerDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.kv-server", version: VERSION, kind: "service",
+  endpoints: ["POST /get", "POST /set", "POST /delete", "POST /increment", "POST /compare-and-set"],
+  storage: { store: true },
+};
+
+/**
+ * Leases and fencing tokens. A worker takes a lease in the shared key-value
+ * node with a set-if-absent that expires after `ttl` virtual milliseconds,
+ * draws a fencing token with an increment, and writes its report under it.
+ * Storage with `fencing` rejects a token smaller than the largest it has
+ * accepted. Not a commerce domain: a shared report file.
+ */
+export const leaseWorkerDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.lease-worker", version: VERSION, kind: "service", endpoints: ["POST /job"],
+  peers: [
+    { name: "kv", kinds: ["service"], calls: ["POST /set", "POST /increment"], default: "kv" },
+    { name: "storage", kinds: ["service"], calls: ["PUT /file"], default: "storage" },
+  ],
+  options: [{ key: "ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 } }],
+};
+export const leaseStorageDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.lease-storage", version: VERSION, kind: "service", endpoints: ["PUT /file"],
+  storage: tables("files", "writes"), options: [flag("fencing")],
+};
+
+/**
+ * A regional replica of a document title (multi-leader, last-writer-wins). It
+ * stamps edits with its wall clock (virtual time plus `skew`), or with a
+ * Lamport clock when `logical` is set. Not a commerce domain: a shared document.
+ */
+export const titleReplicaDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.title-replica", version: VERSION, kind: "service", endpoints: ["PUT /title", "GET /title"],
+  consumers: ["TitleChanged"], publishes: ["TitleChanged"], storage: tables("documents", "clock"),
+  options: [flag("logical"), { key: "skew", domain: { type: "integer", default: 0, minimum: -50, maximum: 50 } }],
+};
+
+/**
  * Placeholder models (ADR-005) fill an empty slot. Each exposes the endpoints or
  * operations listed in its configuration field `interface` and answers every
  * request with a `NOT_IMPLEMENTED` error. They consume and publish nothing,
@@ -186,5 +228,6 @@ export const commerceDescriptors: readonly ModelDescriptor[] = [
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
   cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor, inventoryDescriptor,
   reliableOrdersDescriptor, reliableInventoryDescriptor, reliablePaymentsDescriptor, reliableProcessorDescriptor, reliableNotificationsDescriptor,
+  kvServerDescriptor, leaseWorkerDescriptor, leaseStorageDescriptor, titleReplicaDescriptor,
   placeholderServiceDescriptor, placeholderExternalDescriptor,
 ];

@@ -107,7 +107,7 @@ test("each packaged lesson appears once, in the same card as the lesson it compa
   const cards = await lessonChooser(page).locator(".lesson-card").evaluateAll(elements =>
     elements.map(card => [...card.querySelectorAll("[data-lesson-id]")].map(button => button.getAttribute("data-lesson-id")!)));
   const listed = cards.flat();
-  expect(listed).toHaveLength(19);
+  expect(listed).toHaveLength(23);
   expect(new Set(listed)).toEqual(new Set(scenarios.map(lesson => lesson.id)));
   const cardOf = new Map(cards.flatMap((card, index) => card.map(id => [id, index] as const)));
   for (const lesson of scenarios) {
@@ -157,4 +157,57 @@ test("the open Lesson chooser passes accessibility checks before and after a loa
   await lessonTrigger(page).click();
   await expect(lessonChooser(page)).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("lessons are sorted into topics, and the topic filter and search narrow them", async ({ page }) => {
+  await page.goto("/");
+  await lessonTrigger(page).click();
+  const chooser = lessonChooser(page);
+  const topics = chooser.getByRole("group", { name: "Topic" });
+  await expect(topics.getByRole("button", { name: "All topics" })).toHaveAttribute("aria-pressed", "true");
+  await expect(chooser.locator(".lesson-topic h3")).toHaveText([
+    "Partial failure and idempotency", "Fault tolerance and overload", "Distributed transactions and messaging",
+    "Replication and consistency", "Concurrency control", "Time, ordering, and coordination",
+  ]);
+  await expect(chooser.getByRole("status")).toHaveText("23 lessons");
+
+  await topics.getByRole("button", { name: "Concurrency control" }).click();
+  await expect(chooser.locator(".lesson-topic h3")).toHaveText(["Concurrency control"]);
+  await expect(chooser.locator("[data-lesson-id]")).toHaveCount(2);
+  await expect(chooser.locator("[data-assessment-id]")).toHaveCount(0);
+  await expect(chooser.getByRole("status")).toHaveText("2 of 23 lessons");
+
+  await topics.getByRole("button", { name: "All topics" }).click();
+  await chooser.getByRole("searchbox", { name: "Search" }).fill("circuit breaker");
+  await expect(chooser.locator("[data-lesson-id]")).toHaveCount(2);
+  await expect(lessonChoice(page, "cascade-unprotected")).toBeVisible();
+  await chooser.getByRole("searchbox", { name: "Search" }).fill("no such concept");
+  await expect(chooser.getByText("No lesson matches.", { exact: false })).toBeVisible();
+
+  // In a non-empty search box, Escape clears the search first; the next Escape closes the dialog.
+  await page.keyboard.press("Escape");
+  await expect(chooser.getByRole("searchbox", { name: "Search" })).toHaveValue("");
+  await expect(chooser).toBeVisible();
+  // Filters are UI state for one opening: the next opening shows every topic again.
+  await topics.getByRole("button", { name: "Concurrency control" }).click();
+  await page.keyboard.press("Escape");
+  await expect(chooser).toBeHidden();
+  await lessonTrigger(page).click();
+  await expect(chooser.locator("[data-lesson-id]")).toHaveCount(23);
+  await expect(chooser.getByRole("searchbox", { name: "Search" })).toHaveValue("");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("a topic on the empty workspace opens the chooser on that topic", async ({ page }) => {
+  await page.goto("/");
+  const empty = page.locator(".workspace-empty");
+  await expect(empty).not.toContainText("checkout and payment");
+  await empty.getByRole("button", { name: "Replication and consistency" }).click();
+  const chooser = lessonChooser(page);
+  await expect(chooser).toBeVisible();
+  await expect(chooser.getByRole("group", { name: "Topic" }).getByRole("button", { name: "Replication and consistency" })).toHaveAttribute("aria-pressed", "true");
+  await expect(chooser.locator("[data-lesson-id]")).toHaveCount(3);
+  await expect(chooser.locator(":focus")).toHaveAttribute("data-lesson-id", "cqrs-delayed");
+  await page.keyboard.press("Escape");
+  await expect(empty.getByRole("button", { name: "Replication and consistency" })).toBeFocused();
 });

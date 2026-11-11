@@ -4,6 +4,7 @@ import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
 import { EMPTY_SLOT_LABEL, isEmptySlot } from "./design-step.ts";
+import { kvServerDescriptor } from "../../../packages/catalogs/src/commerce/descriptors.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { FlightPace, FlightStep } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
@@ -17,7 +18,7 @@ export const categoryLabels = {
 } as const satisfies Record<ComponentNodeProjection["kind"], string>;
 
 /** Derived presentation symbol: one shape plus glyph per value. */
-export type NodeSymbol = "client" | "service" | "external" | "topic" | "queue";
+export type NodeSymbol = "client" | "service" | "external" | "topic" | "queue" | "kvstore";
 
 export const symbolLabels: Record<NodeSymbol, string> = {
   client: "Client",
@@ -25,7 +26,18 @@ export const symbolLabels: Record<NodeSymbol, string> = {
   external: "External service",
   topic: "Message bus topic",
   queue: "Message bus queue",
+  kvstore: "Shared key-value store",
 };
+
+/**
+ * Whether a component is a key-value node: its model is the catalog's data-only descriptor of a
+ * service that owns a KeyValueStore and exposes only that store's operations. The graph draws it
+ * as the store its callers share, not as a service with a store beside it. Read from the declared
+ * model, never from a component ID.
+ */
+export function isSharedStore(model: string | undefined, version: string | undefined): boolean {
+  return model === kvServerDescriptor.model && version === kvServerDescriptor.version;
+}
 
 export type ArchitectureNode = Node<{
   component: ComponentNodeProjection;
@@ -130,8 +142,9 @@ export const handleFor = {
 /** Bus link label: the relationship alone, since the destination already names itself on the graph. */
 const busLabels = { subscription: "Subscription", publication: "Publication" } as const;
 
-/** Derive the presentation symbol from the component kind and, for infrastructure, the destination kind. */
+/** Derive the presentation symbol from the component kind, its model for a key-value node, and, for infrastructure, the destination kind. */
 export function deriveSymbol(component: ComponentNodeProjection, destination?: unknown): NodeSymbol {
+  if (component.kind === "service" && isSharedStore(component.model, component.version)) return "kvstore";
   if (component.kind !== "infrastructure") return component.kind;
   const kind = typeof destination === "object" && destination !== null ? (destination as { readonly kind?: unknown }).kind : undefined;
   return kind === "queue" ? "queue" : "topic";
@@ -223,6 +236,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       const owner = projectedById.get(definition.owner);
       const instance = instances.get(definition.owner);
       if (!owner || instance?.kind !== owner.kind || instance.model !== owner.model || instance.version !== owner.version) continue;
+      // A key-value node is drawn as its store, so the store gets no satellite of its own.
+      if (kind === "kvstore" && isSharedStore(instance.model, instance.version)) continue;
       resourceDefinitions.set(`${kind}:${definition.owner}`, { kind, definition });
     }
   }

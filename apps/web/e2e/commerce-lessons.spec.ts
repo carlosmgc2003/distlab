@@ -238,3 +238,39 @@ test("the inventory pair shows stock with its version and each client's outcome,
   await page.locator("#timeline-rows").getByRole("button", { name: /database.transaction.rejected inventory/ }).click();
   await expect(page.locator("#inspection-panel")).toContainText("TRANSACTION_CONFLICT");
 });
+
+test("the lease pair draws the key-value node as a shared store and shows the lease entry, the token, and the expiry in history", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto("/");
+  const status = page.getByRole("status", { name: "Simulation status" });
+  const invariants = lessonChecks(page).getByRole("list", { name: "Business invariants", exact: true });
+  for (const [name, writer, verdict] of [["lease-unfenced", "worker-1", "VIOLATED"], ["lease-fenced", "worker-2", "HOLDS"]] as const) {
+    await loadLesson(page, name);
+    await expect(status).toHaveText("READY");
+    // Both workers point at one store node: no service box and no separate store beside it.
+    const kv = page.locator('.react-flow__node[data-id="kv"]');
+    await expect(kv).toHaveAccessibleName("kv, Shared key-value store");
+    await expect(kv).toHaveClass(/symbol-kvstore/);
+    await expect(kv).toContainText("Shared key-value store");
+    await expect(page.locator('.react-flow__node[data-id="resource:kv:kv"]')).toHaveCount(0);
+    await expect(page.locator('.react-flow__node[data-id="resource:db:storage"]')).toHaveCount(1);
+    await page.getByRole("button", { name: "Run", exact: true }).click();
+    await expect(status).toHaveText("COMPLETED");
+    await inServiceState(page, async dialog => {
+      // Both leases have expired by the end of the run; the token counter stays.
+      const store = dialog.getByRole("region", { name: "kv state", exact: true });
+      await expect(store).toContainText("lock:report:token");
+      await expect(store).not.toContainText("expires at");
+      await expect(dialog.getByRole("region", { name: "storage state", exact: true })).toContainText(`writer: ${writer}`);
+    });
+    for (const label of ["Storage never accepts a write with a smaller lease token after a larger one", "The report file holds the write with the largest lease token storage accepted"]) {
+      await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText(verdict);
+    }
+  }
+  // The store removes each lease by itself: two expiries in Recorded history.
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await filterByType(page, "kv.expired");
+  await expect(page.locator(".timeline-count")).toHaveText(/^2 of \d+ observations/);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

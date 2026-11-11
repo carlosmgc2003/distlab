@@ -10,7 +10,7 @@ history, deterministic scheduling, virtual time, seeded randomness, and a
 headless simulation runner and deterministic virtual request/response network.
 `apps/web` provides the React lesson backed by a Web Worker.
 `@distlab/catalogs` provides versioned checkout
-models, two checkout scenarios, and seventeen commerce lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
+models, two checkout scenarios, and twenty-one commerce-catalog lessons available in both the browser and CLI, with assessment predicates. `@distlab/scenario`
 validates a scenario document, composes the kernel runtimes, and evaluates assertions at
 deterministic event boundaries. It also validates an assessment definition against its packaged
 base lesson (`validateAssessmentDefinition`, [Assessment](docs/spec/assessment.md)). In the browser, the **Experiment drawer** (**Change the
@@ -216,7 +216,7 @@ boundaries, and the kernel yields every 16 events so pause messages can arrive.
 Projections are copied and recursively frozen on both sides of structured clone.
 Component state labeled `host` stays on the projection for assessment comparison and is not rendered. The shell renders a separate `student` projection: committed Orders and Payments rows, service lifecycle, bus delivery state, the client-observed checkout outcome, and Payment Processor authorization facts. Provider counters and runtime handles are omitted from that projection.
 
-The host accepts the two packaged checkout documents, seventeen packaged commerce
+The host accepts the two packaged checkout documents, twenty-one packaged commerce-catalog
 lessons, and the base lesson of the **Reliable Checkout** assessment. In the
 Lesson chooser's Assessment group, the assessment runs one design against six
 fault scenarios, one ordinary load and run each, and shows a verdict per scenario

@@ -38,6 +38,12 @@ function SymbolShape({ symbol }: { readonly symbol: NodeSymbol }) {
     case "topic":
     case "queue":
       return <ChannelShape queue={symbol === "queue"} />;
+    case "kvstore":
+      // A stack of entries: the same layered cue as an owned KV store, at component size.
+      return <>
+        <rect x="1" y="1" width="213" height="88" rx="12" ry="12" className="shape-fill shape-stroke" />
+        <path d="M1 68H214M1 78H214" className="store-layer" />
+      </>;
   }
 }
 
@@ -87,6 +93,11 @@ function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
         <circle cx="16.5" cy="10" r="1.8" fill="currentColor" />
         <circle cx="16.5" cy="16.5" r="1.8" fill="currentColor" />
       </svg>;
+    case "kvstore":
+      return <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="5.6" cy="10" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9.2 10H18M14.6 10v3.4M17.6 10v2.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>;
     case "queue":
       // Messages wait in line; each leaves to one consumer.
       return <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -98,7 +109,7 @@ function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
   }
 }
 
-const legendSymbols: readonly NodeSymbol[] = ["client", "service", "external", "topic", "queue"];
+const legendSymbols: readonly NodeSymbol[] = ["client", "service", "external", "topic", "queue", "kvstore"];
 
 function ResourceSample({ kind, label }: { readonly kind: "database" | "kvstore"; readonly label: string }) {
   return <svg className={`resource-sample resource-sample-${kind}`} viewBox="0 0 40 24" role="img" aria-label={label}>

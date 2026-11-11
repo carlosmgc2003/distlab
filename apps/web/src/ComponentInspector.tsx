@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ArchitectureNode, ResourceNode } from "./architecture-view.ts";
-import { categoryLabels, resourceLabels } from "./architecture-view.ts";
+import { categoryLabels, resourceLabels, symbolLabels } from "./architecture-view.ts";
 import { EMPTY_SLOT_DESCRIPTION, EMPTY_SLOT_LABEL } from "./design-step.ts";
 
 export function ComponentInspector({ node, children }: {
@@ -16,7 +16,7 @@ export function ComponentInspector({ node, children }: {
         <summary>Static architecture metadata</summary>
       <dl>
         <dt>Component ID</dt><dd>{node.id}</dd>
-        <dt>Category</dt><dd>{categoryLabels[node.data.component.kind]}</dd>
+        <dt>Category</dt><dd>{node.data.symbol === "kvstore" ? symbolLabels.kvstore : categoryLabels[node.data.component.kind]}</dd>
         <dt>Model</dt><dd>{node.data.component.model ?? "Not declared"}</dd>
         <dt>Version</dt><dd>{node.data.component.version ?? "Not declared"}</dd>
       </dl>

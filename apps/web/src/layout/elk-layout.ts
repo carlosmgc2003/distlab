@@ -128,7 +128,7 @@ const ROUTE_AFTER_OPTIONS: Readonly<LayoutOptions> = {
 
 const symbolTiers: Readonly<Record<string, number>> = {
   client: TIERS.ingress, gateway: TIERS.gateway, service: TIERS.service,
-  topic: TIERS.bus, queue: TIERS.bus, external: TIERS.external,
+  topic: TIERS.bus, queue: TIERS.bus, kvstore: TIERS.service, external: TIERS.external,
 };
 
 /** `data.tier` wins; otherwise resources are persistence and components follow their symbol. */

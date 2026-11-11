@@ -181,8 +181,9 @@ test("ARCH-AC-5 models read every peer from configuration, never from a literal 
       }
     }
   }
-  // 22 in the packaged lessons, plus Reliable Checkout's four: orders.inventory, orders.payments, payments.processor, notifications.provider.
-  assert.equal(rebindings, 26);
+  // 30 in the packaged lessons (eight are the lease workers' lock and storage), plus Reliable Checkout's four:
+  // orders.inventory, orders.payments, payments.processor, notifications.provider.
+  assert.equal(rebindings, 34);
 });
 
 test("ARCH-AC-1 every packaged document passes the composition rules, and each peer link is required", () => {
