@@ -84,6 +84,8 @@ can validate a design before it runs:
 - **workloadCalls** (amendment, #121): the client actions that call another
   component addressed by fields of the action's own data, described in
   "Workload-addressed calls"
+- **lessonData** (amendment, #122): the configuration fields that are lesson
+  data, described below
 
 A **peer** is a named outbound dependency of a model. It declares:
 
@@ -101,7 +103,19 @@ omitted, **no packaged document changes and no golden digest changes**.
 
 A behavior option is also a configuration field with a typed domain. It
 reuses `LessonParameterDomain` from ADR-004 (`boolean`, `integer`, `choice`).
-Peer names and option keys of one model are disjoint.
+
+**Lesson data** (amendment, #122) is a configuration field that is neither a
+peer nor a behavior option: a value the lesson supplies, such as the rows
+`commerce.saga-resource` writes (`forward`, `compensated`) or the cache
+lifetime `ttl` of `commerce.cache-catalog` and `commerce.cache-cart`. No
+`LessonParameterDomain` describes a row, so these are not options. A
+descriptor names such fields in the optional, data-only `lessonData`. A model
+without lesson data omits it. A placeholder's `interface` is not lesson data:
+composition reads it (see "Slots and placeholder models").
+
+Peer names, option keys, and lesson-data fields of one model are pairwise
+disjoint. Every configuration key of a packaged component is one of them, or a
+placeholder's `interface`.
 
 The term is *peer*, not *port*: the kernel already uses "port" for injected
 capabilities such as the fault decision port and mutation ports.
@@ -344,7 +358,9 @@ normalized overlay. It runs in the worker in this fixed order:
 
 1. **Slots.** Replace the slot component's `model` and `version` in place,
    keeping its array position. Replace its configuration with the non-default
-   options.
+   options. This drops every other field, so no allowed slot model declares
+   lesson data (amendment, #122; ARCH-AC-6), and nothing a slot model reads
+   is lost.
 2. **Resources.** Remove detached resources in place. Append attached ones in
    normalized order. An attached database has the descriptor's tables and empty
    initial rows; an attached store is empty.
@@ -454,6 +470,8 @@ interface ModelDescriptor {
   readonly placeholder?: true;
   /** Absent when the model makes no workload-addressed calls (amendment, #121). */
   readonly workloadCalls?: readonly ModelWorkloadCall[];
+  /** Configuration fields that are lesson data; absent when there are none (amendment, #122). */
+  readonly lessonData?: readonly string[];
 }
 
 interface SlotEdit {
@@ -547,7 +565,10 @@ by lesson and model. It is not part of the contract.
   `network.request.sent` goes to a bound peer with a declared call, or is a
   declared workload-addressed call whose action data names that target and
   endpoint (amendment, #121), each publication goes to a declared
-  destination, and each committed table is a declared table.
+  destination, and each committed table is a declared table. Every
+  configuration key of a packaged component is a peer name, an option key, or
+  a lesson-data field of its descriptor, or a placeholder's `interface`
+  (amendment, #122).
 - **ARCH-AC-6 Allowance integrity** (clarified, #134, as decided on #111).
   The *completion* of an allowed model `m` in slot `c` holds the allowance's
   edits that `m` needs and `c` lacks. That is one `attach` resource edit for
@@ -559,9 +580,10 @@ by lesson and model. It is not part of the contract.
   policy and within its `maxEdits`. For packaged lessons,
   `m` substituted alone fails only with `STORAGE` and `SUBSCRIPTION`
   diagnostics, and only when its completion holds resource or subscription
-  edits respectively. With an empty completion it passes. Every binding candidate exists. No
-  ADR-004 parameter targets a slot component. Peer names and option keys of
-  each model are disjoint.
+  edits respectively. With an empty completion it passes. Every binding
+  candidate exists. No ADR-004 parameter targets a slot component. No allowed
+  slot model declares lesson data (amendment, #122). Peer names, option keys,
+  and lesson-data fields of each model are disjoint.
 - **ARCH-AC-7 Boundary.** The main thread imports descriptors and policies only
   from data-only modules, never imports composition or overlay application
   code, and never sends an applied document or preview. Node positions never

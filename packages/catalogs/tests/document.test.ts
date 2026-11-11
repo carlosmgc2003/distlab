@@ -236,6 +236,11 @@ test("DOC-AC-6 POLICY_ALLOWANCE: ARCH-AC-6 allowance checks run at import", () =
   // Without the database the allowance offers, or within too few edits, the allowed model cannot give a valid scenario.
   assert.deepEqual(architecture({ resources: [] }), ["/overlayPolicy/architecture/slots/0/models/0 POLICY_ALLOWANCE"]);
   assert.deepEqual(architecture({ maxEdits: 1 }), ["/overlayPolicy/architecture/slots/0/models/0 POLICY_ALLOWANCE"]);
+  // A model that declares lesson data cannot fill a slot, whose edit would drop it (#122).
+  assert.deepEqual(architecture({ slots: [{ ...slot, models: [...slot.models, { model: "commerce.saga-resource", version: "1.0.0" }, { model: "commerce.cache-cart", version: "1.0.0" }] }] }), [
+    "/overlayPolicy/architecture/slots/0/models/1 POLICY_ALLOWANCE",
+    "/overlayPolicy/architecture/slots/0/models/2 POLICY_ALLOWANCE",
+  ]);
   // No parameter targets a slot component.
   assert.deepEqual(architecture({}, [...gap.policy.parameters, { key: "slot-flag", domain: { type: "boolean", default: false }, targets: [{ kind: "component", component: "notifications", field: "idempotent" }] }])
     .filter(item => item.includes("parameters/1")), ["/overlayPolicy/parameters/1/targets/0 POLICY_ALLOWANCE", "/overlayPolicy/parameters/1/targets/0 POLICY_TARGET"]);

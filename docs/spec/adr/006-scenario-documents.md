@@ -234,8 +234,9 @@ first stage that fails. Each stage reports all of its diagnostics.
    on packaged policies, applied at import. If the policy has an `architecture`
    allowance, ADR-005's ARCH-AC-6 allowance checks also run: each allowed slot
    model, with its completion (ADR-005, ARCH-AC-6), composes under the policy
-   into a valid scenario, every binding candidate exists, no parameter targets
-   a slot component, and each model's peer names and option keys are disjoint.
+   into a valid scenario, no allowed slot model declares lesson data (ADR-005
+   amendment, #122), every binding candidate exists, no parameter targets a
+   slot component, and each model's peer names and option keys are disjoint.
 
 Failures in stages 2 to 5 return `INVALID_DOCUMENT` with context
 `{ diagnostics: ScenarioDiagnostic[] }`. Paths are JSON pointers into the

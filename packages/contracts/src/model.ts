@@ -61,6 +61,13 @@ export interface ModelDescriptor {
   readonly placeholder?: true;
   /** Absent when the model makes no workload-addressed calls. */
   readonly workloadCalls?: readonly ModelWorkloadCall[];
+  /**
+   * Configuration fields that are lesson data: values a lesson supplies that
+   * are neither peers nor behavior options, such as rows a model writes. A
+   * slot edit replaces the configuration with options, so no allowed slot model
+   * may declare any (ADR-005 amendment, #122). Absent when there are none.
+   */
+  readonly lessonData?: readonly string[];
 }
 
 /**

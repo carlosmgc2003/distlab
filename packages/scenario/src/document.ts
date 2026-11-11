@@ -639,6 +639,8 @@ function checkAllowance(policy: LessonOverlayPolicy, allowance: LessonArchitectu
       if (!descriptor || descriptor.kind !== component.kind) { push(modelPath, Codes.POLICY_ALLOWANCE); return; }
       const fields = [...descriptor.peers.map(peer => peer.name), ...descriptor.options.map(option => option.key)];
       if (new Set(fields).size !== fields.length) { push(modelPath, Codes.POLICY_ALLOWANCE); return; }
+      // A slot edit replaces the configuration with options, so a model with lesson data cannot fill a slot (#122).
+      if (descriptor.lessonData?.length) { push(modelPath, Codes.POLICY_ALLOWANCE); return; }
       // The model substituted alone, completed with the resource and subscription edits its descriptor needs and the allowance offers.
       const resources = allowance.resources.filter(item => item.owner === slot.component
         && ((item.resource === "database" && descriptor.storage.database && !databases.has(item.owner))
