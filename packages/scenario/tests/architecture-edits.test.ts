@@ -441,11 +441,35 @@ test("ARCH-AC-4: each composition code is reachable through an edit and attribut
   assert.deepEqual(codes(mixed.diagnostics), ["/architecture/bindings/0/target INTERFACE", "/architecture/slots/0/model INTERFACE", "/architecture/slots/0/model PUBLISH"]);
 });
 
-test("a diagnostic that names nothing an edit changed is attributed to /architecture", () => {
-  // The mailer consumes OrderCreated, but nothing subscribes it: the location is the subscription list itself.
+test("#131 a slot fill with an unsubscribed consumer model is attributed to that slot edit", () => {
+  // The mailer consumes OrderCreated, but nothing subscribes it: the location is the consumer component, which the slot replaced.
   const result = rejected(overlay({ slots: [mailer] }));
   assert.equal(result.code, "INVALID_OVERLAY");
-  assert.deepEqual(codes(result.diagnostics), ["/architecture SUBSCRIPTION"]);
+  assert.deepEqual(codes(result.diagnostics), ["/architecture/slots/0/model SUBSCRIPTION"]);
+});
+
+test("#131 an unsubscribe edit that removes a declared consumer's subscription is attributed to that edit", () => {
+  // A variant whose packaged notify is already the subscribed mailer.
+  const architecture = packaged.architecture;
+  const subscribed = {
+    ...packaged,
+    architecture: {
+      ...architecture,
+      components: architecture.components.map(item => item.id === "notify" ? { ...item, model: "demo.mailer", configuration: {} } : item),
+      subscriptions: [{ destination: "OrderCreated", consumer: "notify" }],
+    },
+  } as unknown as CanonicalValue;
+  assert.deepEqual(validate(subscribed), []);
+  const composeSubscribed = (input: CanonicalValue) => composeOverlay(subscribed, policy, input, validate, catalog);
+  const unsubscribe = { ...subscribeNotify, change: "unsubscribe" };
+  const result = composeSubscribed(overlay({ subscriptions: [unsubscribe] }));
+  assert.ok(!result.ok);
+  assert.equal(result.code, "INVALID_OVERLAY");
+  assert.deepEqual(codes(result.diagnostics), ["/architecture/subscriptions/0 SUBSCRIPTION"]);
+  // The existing rule, accepted in triage: an earlier edit on the same component, in normalized order, wins.
+  const stored = composeSubscribed(overlay({ resources: [{ owner: "notify", resource: "store", change: "attach" }], subscriptions: [unsubscribe] }));
+  assert.ok(!stored.ok);
+  assert.deepEqual(codes(stored.diagnostics), ["/architecture/resources/0 SUBSCRIPTION"]);
 });
 
 test("#183 a slot edit that removes the endpoint a workload calls is attributed to that slot edit", () => {
