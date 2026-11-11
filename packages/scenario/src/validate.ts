@@ -18,7 +18,7 @@ import type { CanonicalValue, SimulationTime } from "@distlab/contracts/kernel";
 import { duration, simulationTime } from "@distlab/contracts/kernel";
 import { canonicalCopy, canonicalEncode } from "@distlab/kernel";
 import { DiagnosticCodes, type DiagnosticCode, type ScenarioAssessment, type ScenarioCatalog, type ScenarioModel } from "./types.js";
-import { checkComposition } from "./composition.js";
+import { checkComposition, workloadCallCheck, type WorkloadCallCheck } from "./composition.js";
 
 const componentKinds = new Set<string>(["client", "service", "external"]);
 const serviceStates = new Set<string>(["STARTING", "RUNNING", "PAUSED", "CRASHED", "STOPPED"]);
@@ -98,7 +98,9 @@ function walk(input: CanonicalValue, catalog: ScenarioCatalog, assessment: Scena
   const architecture = readArchitecture(root.architecture, catalog, push);
   const external = readExternal(root.external, architecture?.components, catalog, push);
   const faults = readFaults(root.faults, architecture, startTime, push);
-  const actions = readActions(root.actions, architecture?.components, catalog, startTime, new Set(faults?.rules.map(rule => rule.id)), push);
+  // Workload-addressed calls are composition rules too: only over a clean architecture.
+  const workloadCalls = architecture?.composable ? workloadCallCheck(architecture.definition, catalog) : undefined;
+  const actions = readActions(root.actions, architecture?.components, catalog, startTime, new Set(faults?.rules.map(rule => rule.id)), workloadCalls, push);
   const assertions = readAssertions(root.assertions, assessment, startTime, push);
   if (!name || !seed || !architecture || !external || !faults || !actions || !assertions || !configuration) return undefined;
   const resolvedConfiguration = {
@@ -198,6 +200,8 @@ interface ArchitectureDraft {
   readonly byId: ReadonlyMap<string, ComponentInstance>;
   readonly serviceIds: ReadonlySet<string>;
   readonly databaseOwners: ReadonlySet<string>;
+  /** Read without diagnostics, so the composition rules ran over it. */
+  readonly composable: boolean;
 }
 
 function readArchitecture(value: unknown, catalog: ScenarioCatalog, report: (path: string, code: DiagnosticCode) => void): ArchitectureDraft | undefined {
@@ -218,10 +222,11 @@ function readArchitecture(value: unknown, catalog: ScenarioCatalog, report: (pat
   if (!links || !databases || !stores || !destinations || !subscriptions) return undefined;
   const definition = { components, links, databases: databases.definitions, stores, destinations, subscriptions };
   // Composition (ADR-005) needs a clean architecture: no cascades, and document indexes.
-  if (reported === 0) checkComposition(definition, catalog, push);
+  const composable = reported === 0;
+  if (composable) checkComposition(definition, catalog, push);
   return {
     definition,
-    components, byId, serviceIds, databaseOwners: databases.owners,
+    components, byId, serviceIds, databaseOwners: databases.owners, composable,
   };
 }
 
@@ -679,7 +684,7 @@ function freezeRule(draft: RuleDraft): FaultRule {
   });
 }
 
-function readActions(value: unknown, components: readonly ComponentInstance[] | undefined, catalog: ScenarioCatalog, startTime: SimulationTime, faultIds: Set<string>, push: (path: string, code: DiagnosticCode) => void): ScenarioAction[] | undefined {
+function readActions(value: unknown, components: readonly ComponentInstance[] | undefined, catalog: ScenarioCatalog, startTime: SimulationTime, faultIds: Set<string>, workloadCalls: WorkloadCallCheck | undefined, push: (path: string, code: DiagnosticCode) => void): ScenarioAction[] | undefined {
   const items = array(value, "/actions", push);
   if (!items) return undefined;
   const byId = new Map((components ?? []).map(component => [component.id, component]));
@@ -704,6 +709,7 @@ function readActions(value: unknown, components: readonly ComponentInstance[] | 
         if (faultIds.has(action.fault.id)) push(`${path}/fault/id`, DiagnosticCodes.DUPLICATE);
         faultIds.add(action.fault.id);
       }
+      if (action.kind === "client") workloadCalls?.(action, path, push);
       actions.push(action);
     }
   }

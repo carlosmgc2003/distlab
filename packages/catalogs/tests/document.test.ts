@@ -109,6 +109,17 @@ test("DOC-AC-2 every packaged lesson, renamed and wrapped with its catalog refer
   }
 });
 
+test("#121 an imported workload that sends POST /chekout to orders is rejected at its /scenario path", () => {
+  const lesson = packaged.find(item => item.name === "reliable-checkout")!;
+  const document = starter(lesson);
+  const scenario = document.scenario as Doc;
+  const actions = scenario.actions as Doc[];
+  const index = actions.findIndex(action => action.kind === "client" && (action.data as Doc).target === "orders" && (action.data as Doc).endpoint === "POST /checkout");
+  assert.ok(index >= 0);
+  const typo = actions.map((action, at) => at !== index ? action : { ...action, data: { ...(action.data as Doc), endpoint: "POST /chekout" } });
+  assert.deepEqual(codes({ ...document, scenario: { ...scenario, actions: typo } }), [`/scenario/actions/${index}/data/endpoint INTERFACE`]);
+});
+
 test("DOC-AC-2 a packaged lesson keeping its packaged name is RESERVED_NAME", () => {
   for (const lesson of packaged) {
     assert.deepEqual(codes({ ...starter(lesson), scenario: lesson.scenario, overlayPolicy: lesson.policy }), ["/scenario/name RESERVED_NAME"], lesson.name);

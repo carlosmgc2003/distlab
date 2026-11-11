@@ -19,6 +19,8 @@ const models = [
   model({ model: "demo.processor", kind: "external", operations: ["authorize"] }),
   model({ model: "demo.other-processor", kind: "external", operations: ["refund"] }),
   model({ model: "demo.gap", kind: "external", placeholder: true }),
+  // Workload-addressed (#121): `send` names its callee in `data.to` and its endpoint in `data.call`.
+  model({ model: "demo.shopper", kind: "client", actions: ["send", "wait"], workloadCalls: [{ action: "send", target: "to", endpoint: "call" }] }),
 ];
 const catalog = catalogOf(models);
 const assessment = assessmentOf([truePredicate]);
@@ -29,6 +31,7 @@ interface Edits {
   databases?: Record<string, unknown>[];
   stores?: Record<string, unknown>[];
   destinations?: Record<string, unknown>[];
+  actions?: Record<string, unknown>[];
 }
 
 /** A valid composition: app → orders → processor, orders owns `orders` and publishes OrderCreated, cache owns a store. */
@@ -49,6 +52,7 @@ function document(edits: Edits = {}) {
       stores: edits.stores ?? [{ owner: "cache", initial: [] }],
       destinations: edits.destinations ?? [{ id: "OrderCreated", kind: "topic" }],
     },
+    ...(edits.actions ? { actions: edits.actions } : {}),
   };
 }
 const configure = (id: string, configuration: Record<string, unknown>) =>
@@ -164,4 +168,89 @@ test("composition validation is pure: no model, predicate, or session is created
   assert.throws(() => engine.create(invalid as never), (error: unknown) => (error as { code?: string }).code === "INVALID_SCENARIO");
   assert.equal(instantiated, 0);
   assert.equal(evaluated, 0);
+});
+
+// --- Workload-addressed calls (#121) --------------------------------------------------
+
+/** The base composition plus a `shopper` client linked to `orders` that sends one workload call. */
+function workload(data: Record<string, unknown>, edits: Edits = {}) {
+  return document({
+    components: components => [...(edits.components ? edits.components(components) : components), { id: "shopper", kind: "client", model: "demo.shopper", version: "1" }],
+    links: links => [...(edits.links ? edits.links(links) : links), { source: "shopper", target: "orders" }],
+    actions: [{ id: "a1", at: 0, kind: "client", target: "shopper", action: "send", data }],
+  });
+}
+const call = { to: "orders", call: "POST /orders" };
+
+test("a workload call to a linked component that offers its endpoint validates", () => {
+  assert.deepEqual(codes(workload(call)), []);
+  // An external target offers its operations.
+  assert.deepEqual(codes(workload({ to: "processor", call: "authorize" }, { links: links => [...links, { source: "shopper", target: "processor" }] })), []);
+});
+
+test("REQUIRED: a workload call without its target field is rejected at that data field", () => {
+  assert.deepEqual(codes(workload({ call: "POST /orders" })), ["/actions/0/data/to REQUIRED"]);
+});
+
+test("TYPE: a workload target that is not a string is rejected at that data field", () => {
+  assert.deepEqual(codes(workload({ to: 7, call: "POST /orders" })), ["/actions/0/data/to TYPE"]);
+});
+
+test("UNKNOWN_COMPONENT: a workload target must be an existing service or external component", () => {
+  assert.deepEqual(codes(workload({ to: "nowhere", call: "POST /orders" })), ["/actions/0/data/to UNKNOWN_COMPONENT"]);
+  const toClient = workload({ to: "app", call: "POST /orders" }, { links: links => [...links, { source: "shopper", target: "app" }] });
+  assert.deepEqual(codes(toClient), ["/actions/0/data/to UNKNOWN_COMPONENT"]);
+});
+
+test("LINK: a workload target without a link from the client is rejected at the target field", () => {
+  const unlinked = { ...workload(call) };
+  unlinked.architecture = { ...unlinked.architecture, links: unlinked.architecture.links.filter(link => link.source !== "shopper") };
+  assert.deepEqual(codes(unlinked), ["/actions/0/data/to LINK"]);
+  // A link toward the client does not carry its call.
+  unlinked.architecture = { ...unlinked.architecture, links: [...unlinked.architecture.links, { source: "orders", target: "shopper" }] };
+  assert.deepEqual(codes(unlinked), ["/actions/0/data/to LINK"]);
+  // A missing link does not hide a missing endpoint.
+  const both = { ...workload({ to: "orders", call: "POST /chekout" }) };
+  both.architecture = { ...both.architecture, links: both.architecture.links.filter(link => link.source !== "shopper") };
+  assert.deepEqual(codes(both), ["/actions/0/data/call INTERFACE", "/actions/0/data/to LINK"]);
+});
+
+test("REQUIRED: a workload call without its endpoint field is rejected at that data field", () => {
+  assert.deepEqual(codes(workload({ to: "orders" })), ["/actions/0/data/call REQUIRED"]);
+});
+
+test("TYPE: a workload endpoint that is not a string is rejected at that data field", () => {
+  assert.deepEqual(codes(workload({ to: "orders", call: ["POST /orders"] })), ["/actions/0/data/call TYPE"]);
+});
+
+test("INTERFACE: the workload target must offer the endpoint", () => {
+  assert.deepEqual(codes(workload({ to: "orders", call: "POST /chekout" })), ["/actions/0/data/call INTERFACE"]);
+  // A service offers endpoints, not another model's operations.
+  assert.deepEqual(codes(workload({ to: "orders", call: "authorize" })), ["/actions/0/data/call INTERFACE"]);
+});
+
+test("INTERFACE: a placeholder workload target offers exactly its configured interface", () => {
+  const withGap = (configuration: Record<string, unknown> | undefined) => workload({ to: "gap", call: "authorize" }, {
+    components: components => [...components, { id: "gap", kind: "external", model: "demo.gap", version: "1", ...(configuration ? { configuration } : {}) }],
+    links: links => [...links, { source: "shopper", target: "gap" }],
+  });
+  assert.deepEqual(codes(withGap({ interface: ["authorize"] })), []);
+  assert.deepEqual(codes(withGap({ interface: ["refund"] })), ["/actions/0/data/call INTERFACE"]);
+  assert.deepEqual(codes(withGap(undefined)), ["/actions/0/data/call INTERFACE"]);
+});
+
+test("only the actions a descriptor declares as workload calls are checked, at the fields it names", () => {
+  const waiting = workload({});
+  waiting.actions = [{ id: "a1", at: 0, kind: "client", target: "shopper", action: "wait", data: {} }];
+  assert.deepEqual(codes(waiting), []);
+  // `target`/`endpoint` are not the field names demo.shopper declares.
+  assert.deepEqual(codes(workload({ target: "orders", endpoint: "POST /orders" })), ["/actions/0/data/call REQUIRED", "/actions/0/data/to REQUIRED"]);
+  // A client model without workloadCalls is not checked.
+  const plain = document({ actions: [{ id: "a1", at: 0, kind: "client", target: "app", action: "checkout", data: { target: "nowhere" } }] });
+  assert.deepEqual(codes(plain), []);
+});
+
+test("workload calls are not checked over an architecture that already has diagnostics", () => {
+  const input = workload({ to: "nowhere", call: "POST /chekout" }, { links: links => [...links, links[0]!] });
+  assert.deepEqual(codes(input), ["/architecture/links/2 LINK"]);
 });

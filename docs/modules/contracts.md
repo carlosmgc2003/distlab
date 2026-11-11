@@ -248,10 +248,11 @@ Service handlers and scenario architecture depend on these broker contracts.
 [Specification](../spec/adr/005-architecture-editor.md#contract-types).
 
 **Exported API:** `ModelDescriptor`, `ModelPeer`, `ModelOption`,
-`ModelStorage`, and the placeholder error code `NOT_IMPLEMENTED`. A descriptor
-is the data-only interface of one catalog model version: its kind, actions,
-endpoints, consumers, operations, published destinations, peers, storage needs,
-and behavior options.
+`ModelStorage`, `ModelWorkloadCall`, and the placeholder error code
+`NOT_IMPLEMENTED`. A descriptor is the data-only interface of one catalog model
+version: its kind, actions, endpoints, consumers, operations, published
+destinations, peers, storage needs, behavior options, and optional
+workload-addressed calls.
 
 **Invariants:** A peer's `name` is also the `ComponentInstance.configuration`
 field that holds the bound component ID; when the field is absent the peer is
@@ -262,7 +263,11 @@ endpoints (service) or operations (external) the model calls on it. An option's
 Peers are not kernel ports. Descriptors contain no code. A descriptor marked
 `placeholder` declares no endpoints or operations of its own: the component
 exposes the ones listed in its configuration field `interface`, and answers
-each with an error reply whose body is `{ code: NOT_IMPLEMENTED }`.
+each with an error reply whose body is `{ code: NOT_IMPLEMENTED }`. A
+`ModelWorkloadCall` (ADR-005 amendment, #121) names a client `action` and the
+fields of that action's data that hold the called component's ID (`target`)
+and the endpoint or operation (`endpoint`); `workloadCalls` is absent when the
+model makes no such calls.
 
 **Dependency direction:** Kernel component IDs, database table definitions,
 component kinds, and overlay parameter domains. `ScenarioModel` in

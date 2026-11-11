@@ -56,12 +56,12 @@ test("a placeholder service exposes its configured interface and answers every r
   // No state, no storage, no publication.
   assert.ok(!result.history.observations.some(item => item.source === "payments" && /^(database|message)\./.test(item.type)));
 
-  // Without the endpoint in its interface the placeholder registers nothing, so the reply is the runtime's, not NOT_IMPLEMENTED.
+  // Without the endpoint in its interface the placeholder offers nothing, so the
+  // client's workload call is rejected before the run (#121), not answered at run time.
   components[1] = { ...components[1]!, configuration: {} };
-  const unregistered = await runDocument(document);
-  const replies = unregistered.history.observations.filter(item => item.type === "network.response.sent" && item.source === "payments")
-    .map(item => encode((item.data as Doc).body));
-  assert.deepEqual(replies, [encode({ code: "ENDPOINT_NOT_FOUND" })]);
+  const actions = document.actions as unknown as Doc[];
+  const pay = actions.findIndex(item => item.kind === "client" && (item.data as Doc).target === "payments");
+  assert.deepEqual(codes(engine.validate(document)), [`/actions/${pay}/data/endpoint INTERFACE`]);
 });
 
 test("a placeholder external satisfies a peer only through its interface and answers NOT_IMPLEMENTED without a visible change", async () => {
