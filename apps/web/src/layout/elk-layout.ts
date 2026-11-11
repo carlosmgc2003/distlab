@@ -11,13 +11,21 @@ import type { ElkEdgeSection, ElkExtendedEdge, ElkLabel, ElkNode, ElkPort, Layou
 /** How two drawn elements are related, which decides the side a link leaves and enters by. */
 export type LinkKind = "sync" | "async" | "data";
 
-/** Fixed left-to-right layers. A node's tier comes from its type unless `data.tier` overrides it. */
-export const TIERS = { ingress: 0, gateway: 1, service: 2, bus: 3, persistence: 4, external: 5 } as const;
+/**
+ * Fixed left-to-right layers. A node's tier comes from its type unless `data.tier` overrides it.
+ * MessageBus destinations share the service band, so ELK layers each destination between the
+ * services that publish to it and the services subscribed to it: an event reads left to right
+ * through its channel, the way a request does.
+ */
+export const TIERS = { ingress: 0, gateway: 1, service: 2, bus: 2, persistence: 4, external: 5 } as const;
 
-/** Ports per link kind: requests run west to east, events use the north side, data leaves by the south. */
+/**
+ * Ports per link kind: requests and bus links both run west to east (a destination is entered on
+ * its west inlet and left from its east outlet); data leaves by the south.
+ */
 export const LINK_SIDES = {
   sync: { source: "EAST", target: "WEST" },
-  async: { source: "NORTH", target: "NORTH" },
+  async: { source: "EAST", target: "WEST" },
   data: { source: "SOUTH", target: "NORTH" },
 } as const satisfies Record<LinkKind, { readonly source: PortSide; readonly target: PortSide }>;
 export type PortSide = "NORTH" | "EAST" | "SOUTH" | "WEST";

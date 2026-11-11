@@ -36,23 +36,25 @@ function SymbolShape({ symbol }: { readonly symbol: NodeSymbol }) {
     case "external":
       return <polygon points="22,1 193,1 214,45 193,89 22,89 1,45" className="shape-fill shape-stroke" />;
     case "topic":
-      return <>
-        <rect x="1" y="26" width="213" height="38" rx="8" ry="8" className="shape-fill shape-stroke" />
-        <line x1="45" y1="26" x2="45" y2="10" className="shape-stroke" />
-        <line x1="107" y1="26" x2="107" y2="10" className="shape-stroke" />
-        <line x1="170" y1="26" x2="170" y2="10" className="shape-stroke" />
-        <line x1="45" y1="64" x2="45" y2="80" className="shape-stroke" />
-        <line x1="107" y1="64" x2="107" y2="80" className="shape-stroke" />
-        <line x1="170" y1="64" x2="170" y2="80" className="shape-stroke" />
-      </>;
     case "queue":
-      return <>
-        <rect x="8" y="8" width="30" height="74" rx="6" ry="6" className="shape-fill shape-stroke" />
-        <line x1="38" y1="25" x2="52" y2="25" className="shape-stroke" />
-        <line x1="38" y1="45" x2="52" y2="45" className="shape-stroke" />
-        <line x1="38" y1="65" x2="52" y2="65" className="shape-stroke" />
-      </>;
+      return <ChannelShape queue={symbol === "queue"} />;
   }
+}
+
+/**
+ * A MessageBus destination is a message channel: a pipe lying along the flow. Publishers reach its
+ * west inlet and deliveries leave its east outlet (the shaded face), so the pipe points the way
+ * messages travel. The glyph tells the two kinds apart (fan-out for a topic, one way out for a
+ * queue), and a queue also shows its waiting messages as a lane of cells along the floor of the pipe.
+ */
+function ChannelShape({ queue }: { readonly queue: boolean }) {
+  return <>
+    <path d="M13 10H201A11 35 0 0 1 201 80H13A11 35 0 0 1 13 10Z" className="shape-fill shape-stroke" />
+    <path d="M16 17H196" className="channel-sheen" />
+    {queue ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(cell =>
+      <rect key={cell} x={22 + cell * 16.5} y="69" width="12" height="6" rx="1.5" className={`channel-cell${cell >= 7 ? " is-next" : ""}`} />) : null}
+    <ellipse cx="201" cy="45" rx="11" ry="35" className="channel-face shape-stroke" />
+  </>;
 }
 
 function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
@@ -77,18 +79,21 @@ function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
         <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.6" />
       </svg>;
     case "topic":
+      // One message in, a copy out to every subscriber.
       return <svg viewBox="0 0 20 20" aria-hidden="true">
-        <circle cx="10" cy="16" r="1.8" fill="currentColor" />
-        <path d="M6 12 Q10 8 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M4 9 Q10 4 16 9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M2 6 Q10 0 18 6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="3.5" cy="10" r="2.2" fill="currentColor" />
+        <path d="M5.5 10 15 3.5M5.5 10H15M5.5 10 15 16.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="16.5" cy="3.5" r="1.8" fill="currentColor" />
+        <circle cx="16.5" cy="10" r="1.8" fill="currentColor" />
+        <circle cx="16.5" cy="16.5" r="1.8" fill="currentColor" />
       </svg>;
     case "queue":
+      // Messages wait in line; each leaves to one consumer.
       return <svg viewBox="0 0 20 20" aria-hidden="true">
-        <line x1="2" y1="6" x2="13" y2="6" stroke="currentColor" strokeWidth="1.6" />
-        <line x1="2" y1="10" x2="13" y2="10" stroke="currentColor" strokeWidth="1.6" />
-        <line x1="2" y1="14" x2="13" y2="14" stroke="currentColor" strokeWidth="1.6" />
-        <polyline points="14,4 18,10 14,16" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="1.5" y="3" width="5" height="4" rx="1" fill="currentColor" />
+        <rect x="1.5" y="8" width="5" height="4" rx="1" fill="currentColor" />
+        <rect x="1.5" y="13" width="5" height="4" rx="1" fill="currentColor" />
+        <path d="M9 10H17.5M14.5 6.5 18 10 14.5 13.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>;
   }
 }
@@ -128,7 +133,13 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
     <section aria-labelledby="legend-nodes-heading">
       <h4 id="legend-nodes-heading">Nodes</h4>
       <ul>{legendSymbols.map(symbol => <li key={symbol}>
-        <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>
+        {symbol === "topic" || symbol === "queue"
+          // At legend size the two channels share one outline; their glyph tells them apart.
+          ? <span className={`legend-channel symbol-${symbol}`} aria-hidden="true">
+            <svg className="legend-node" viewBox="0 0 215 90"><SymbolShape symbol={symbol} /></svg>
+            <span className="legend-channel-glyph"><SymbolGlyph symbol={symbol} /></span>
+          </span>
+          : <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>}
         <span>{symbolLabels[symbol]}</span>
       </li>)}
         <li><ResourceSample kind="database" label="Cylinder" /><span>Database (owned)</span></li>
@@ -139,8 +150,8 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
       <h4 id="legend-edges-heading">Relationships</h4>
       <ul>
         <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
-        <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
-        <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
+        <li><EdgeSample relationship="subscription" label="Purple dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
+        <li><EdgeSample relationship="publication" label="Purple dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
         <li><EdgeSample relationship="ownership" label="Short thin amber line without arrowhead" /><span>Ownership (data)</span></li>
       </ul>
     </section>
@@ -165,9 +176,8 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
 
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
   return <>
-    {/* One handle per ELK port side: requests enter west, bus links use the north side. */}
+    {/* One handle per ELK port side: requests and bus links enter west and leave east, data leaves south. */}
     <Handle id={handleFor.request.target} type="target" position={Position.Left} />
-    <Handle id={handleFor.subscription.target} type="target" position={Position.Top} />
     <div className="node-body">
       <div className="node-shape" aria-hidden="true">
         <svg viewBox="0 0 215 90" preserveAspectRatio="none" className="shape-svg">
@@ -189,7 +199,6 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
       </div>
     </div>
     <Handle id={handleFor.request.source} type="source" position={Position.Right} />
-    <Handle id={handleFor.subscription.source} type="source" position={Position.Top} />
     <Handle id={handleFor.ownership.source} type="source" position={Position.Bottom} />
   </>;
 });

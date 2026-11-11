@@ -92,34 +92,57 @@ const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly 
   "payment-processor": { x: 800, y: 420 },
 };
 
-/** Data links (owner to its database or store) get their own color, apart from the slate request and bus links. */
+/** Data links (owner to its database or store) get their own color, apart from the slate request links. */
 export const DATA_STROKE = "#b45309";
+/** MessageBus links share the destinations' purple (`--category-infrastructure`), apart from slate requests. */
+export const BUS_STROKE = "#6b21a8";
 
 /** Horizontal distance between layout columns: long enough that a token visibly travels a short link. */
 const COLUMN_GAP = 380;
 
 const relationshipMarkers = {
   request: { type: MarkerType.ArrowClosed, color: "#334155", width: 20, height: 20 },
-  subscription: { type: MarkerType.Arrow, color: "#334155", width: 20, height: 20 },
-  publication: { type: MarkerType.ArrowClosed, color: "#334155", width: 12, height: 12 },
+  subscription: { type: MarkerType.Arrow, color: BUS_STROKE, width: 20, height: 20 },
+  publication: { type: MarkerType.ArrowClosed, color: BUS_STROKE, width: 14, height: 14 },
+} as const;
+
+/** Line pattern per relationship; the legend draws the same patterns. Pattern, not color, carries the meaning. */
+const relationshipStyles = {
+  request: { stroke: "#334155", strokeWidth: 2 },
+  subscription: { stroke: BUS_STROKE, strokeWidth: 2, strokeDasharray: "8 5" },
+  publication: { stroke: BUS_STROKE, strokeWidth: 2, strokeDasharray: "2 5", strokeLinecap: "round" },
 } as const;
 
 /**
- * Handle per side, matching the ELK port sides: requests leave east and enter
- * west, bus relationships use the north side, data links leave by the south.
+ * Handle per side, matching the ELK port sides: requests and bus links leave
+ * east and enter west (a destination is entered on its inlet and left from its
+ * outlet), data links leave by the south.
  */
 export const handleFor = {
   request: { source: "east", target: "west" },
-  subscription: { source: "north-out", target: "north-in" },
-  publication: { source: "north-out", target: "north-in" },
+  subscription: { source: "east", target: "west" },
+  publication: { source: "east", target: "west" },
   ownership: { source: "south", target: "north" },
 } as const;
+
+/** Bus link label: the relationship alone, since the destination already names itself on the graph. */
+const busLabels = { subscription: "Subscription", publication: "Publication" } as const;
 
 /** Derive the presentation symbol from the component kind and, for infrastructure, the destination kind. */
 export function deriveSymbol(component: ComponentNodeProjection, destination?: unknown): NodeSymbol {
   if (component.kind !== "infrastructure") return component.kind;
   const kind = typeof destination === "object" && destination !== null ? (destination as { readonly kind?: unknown }).kind : undefined;
   return kind === "queue" ? "queue" : "topic";
+}
+
+/** Label text and chip per relationship: bus labels take the bus purple on a pale lilac chip. */
+function labelLook(relationship: keyof typeof relationshipStyles) {
+  const bus = relationship !== "request";
+  return {
+    labelStyle: { fill: bus ? BUS_STROKE : "#172033", fontSize: 13, ...(bus ? { fontWeight: 600 } : {}) },
+    labelBgPadding: [7, 5] as [number, number], labelBgBorderRadius: bus ? 10 : 2,
+    labelBgStyle: bus ? { fill: "#faf5ff", stroke: "#d8b4fe", strokeWidth: 1 } : { fill: "#fff" },
+  };
 }
 
 /** Copies presentation data only; never accepts a simulation projection or a mutation port. */
@@ -150,7 +173,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const symbol = deriveSymbol(component, destination);
     const copy = matches ? checkoutDisplay(scenarioName, component) : undefined;
     const emptySlot = matches && isEmptySlot(instance.model, instance.version);
-    const title = destination ? `MessageBus · ${component.label}` : copy?.title ?? component.label;
+    // The channel symbol and its "MessageBus topic" caption say what a destination is; the name says which.
+    const title = destination ? component.label : copy?.title ?? component.label;
     const resources = matches ? [
       ...(copy?.resource ? [copy.resource] : []),
       ...(metadata?.databases.filter(database => database.owner === component.id).map(database =>
@@ -180,15 +204,14 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       || link.label === "subscription";
     const publication = link.label === "publication";
     const relationship = subscription ? "subscription" : publication ? "publication" : "request";
-    const label = subscription ? `Subscribe · ${link.source}` : publication ? `Publish · ${link.target}` : `Request${link.label ? ` · ${link.label}` : ""}`;
+    const label = subscription ? busLabels.subscription : publication ? busLabels.publication : `Request${link.label ? ` · ${link.label}` : ""}`;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
       type: "elk", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
       sourceHandle: handleFor[relationship].source, targetHandle: handleFor[relationship].target,
       markerEnd: relationshipMarkers[relationship],
-      style: { stroke: "#334155", strokeWidth: 2, ...(subscription ? { strokeDasharray: "7 5" } : publication ? { strokeDasharray: "2 5" } : {}) },
-      labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5],
-      labelBgStyle: { fill: "#fff" }, selectable: false, focusable: false, deletable: false,
+      style: { ...relationshipStyles[relationship] },
+      ...labelLook(relationship), selectable: false, focusable: false, deletable: false,
     };
   });
   const projectedById = new Map(projection.components.map(component => [component.id, component]));
@@ -232,11 +255,10 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     edges.push({
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
       sourceHandle: handleFor.publication.source, targetHandle: handleFor.publication.target, type: "elk",
-      label: "Publish · OrderCreated", ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication", link: "async" },
+      label: busLabels.publication, ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication", link: "async" },
       markerEnd: relationshipMarkers.publication,
-      style: { stroke: "#334155", strokeWidth: 2, strokeDasharray: "2 5" },
-      labelStyle: { fill: "#172033", fontSize: 13 }, labelBgPadding: [7, 5], labelBgStyle: { fill: "#fff" },
-      selectable: false, focusable: false, deletable: false,
+      style: { ...relationshipStyles.publication },
+      ...labelLook("publication"), selectable: false, focusable: false, deletable: false,
     });
   }
   return { nodes, edges, resourceNodes, resourceEdges, error: null };
