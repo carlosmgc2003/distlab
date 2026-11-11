@@ -678,8 +678,9 @@ Both invariants are safety invariants, checked after every event, and both are
 VIOLATED at t=36. The scenario expectation confirms that at t=20 the lease key
 held `worker-2` and the token counter held 2.
 
-In the browser, the key-value node's state shows the live lease entry with its
-expiry and the token counter. Recorded history shows each `kv.changed` and the
+In the browser, the graph draws `kv` as a shared key-value store that both
+workers point at, not as a service. Its state shows the live lease entry with
+its expiry and the token counter. Recorded history shows each `kv.changed` and the
 two `kv.expired` records.
 
 **Design choices:** *Fencing tokens* switches storage's check. *Lease

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ArchitectureDefinition, ArchitectureProjection, ComponentNodeProjection, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { duration } from "@distlab/contracts/kernel";
-import { DATA_STROKE, deriveSymbol, mapArchitecture, movementEdges, symbolLabels } from "../src/architecture-view.ts";
+import { DATA_STROKE, deriveSymbol, isSharedStore, mapArchitecture, movementEdges, symbolLabels } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { detached } from "../src/protocol.ts";
@@ -146,6 +146,28 @@ test("empty and invalid graphs have explicit presentation states", () => {
   assert.deepEqual([duplicate.nodes, duplicate.edges, duplicate.resourceNodes, duplicate.resourceEdges], [[], [], [], []]);
 });
 
+test("a key-value node is drawn as a shared store, by its declared model and not by its ID", async () => {
+  const index = scenarios.findIndex(choice => choice.id === "lease-unfenced");
+  const projection = await load(index);
+  const metadata = packagedMetadata(scenarios[index]!).architecture;
+  const graph = mapArchitecture(projection.architecture, metadata, "lease-unfenced");
+  const kv = graph.nodes.find(node => node.id === "kv")!;
+  assert.equal(kv.data.symbol, "kvstore");
+  assert.equal(kv.ariaLabel, "kv, Shared key-value store");
+  assert.ok(kv.className?.includes("symbol-kvstore"));
+  // The node is the store: no satellite and no ownership edge for it, and its callers' request links stay.
+  assert.equal(graph.resourceNodes.some(node => node.data.owner === "kv"), false);
+  assert.deepEqual(graph.edges.filter(edge => edge.target === "kv").map(edge => edge.source).sort(), ["worker-1", "worker-2"]);
+  assert.deepEqual(kv.data.resources, ["KeyValueStore owned by kv"]);
+  // Every other service keeps the service symbol, including ones that own a store.
+  assert.deepEqual(graph.nodes.filter(node => node.id !== "kv" && node.data.component.kind === "service").map(node => node.data.symbol), ["service", "service", "service"]);
+  assert.equal(isSharedStore("commerce.cache-cart", "1.0.0"), false);
+  // The same model under another ID is still a store; the ID "kv" with another model is not.
+  const component = (id: string, model: string) => ({ id, kind: "service", label: id, model, version: "1.0.0" }) as const;
+  assert.equal(deriveSymbol(component("locks", "commerce.kv-server")), "kvstore");
+  assert.equal(deriveSymbol(component("kv", "commerce.payment")), "service");
+});
+
 test("emits packaged owned resources as presentation-only satellite nodes and ownership edges", async () => {
   const expected: Record<string, [number, number]> = {
     normal: [2, 2], "response-lost": [2, 2], "retry-unsafe": [1, 1], "retry-idempotent": [1, 1],
@@ -153,7 +175,8 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
     "cqrs-delayed": [2, 2], "cascade-unprotected": [3, 3], "cascade-breaker": [3, 3],
     "notifications-unbounded": [2, 2], "notifications-dlq": [2, 2], "cache-stale-price": [4, 4], "cache-invalidated": [4, 4],
     "inventory-oversell": [1, 1], "inventory-optimistic": [1, 1],
-    "lease-unfenced": [2, 2], "lease-fenced": [2, 2], "clock-last-write-wins": [2, 2], "clock-lamport": [2, 2],
+    // The lease lessons' key-value node is drawn as its store, so only storage's database is a satellite.
+    "lease-unfenced": [1, 1], "lease-fenced": [1, 1], "clock-last-write-wins": [2, 2], "clock-lamport": [2, 2],
   };
   for (const [index, choice] of scenarios.entries()) {
     const projection = await load(index);
@@ -166,7 +189,9 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
     assert.ok(!metadata.components.some(component => component.id.startsWith("resource:")), choice.id);
     assert.deepEqual(graph.resourceNodes.map(node => node.id).sort(), [
       ...metadata.databases.map(database => `resource:db:${database.owner}`),
-      ...metadata.stores.map(store => `resource:kv:${store.owner}`),
+      // A key-value node is drawn as its store; the store gets no satellite of its own.
+      ...metadata.stores.filter(store => { const owner = metadata.components.find(component => component.id === store.owner); return !isSharedStore(owner?.model, owner?.version); })
+        .map(store => `resource:kv:${store.owner}`),
     ].sort(), choice.id);
     assert.equal(graph.resourceNodes.some(node => node.id.startsWith("resource:") && node.id.includes(":undefined")), false);
     for (const edge of graph.resourceEdges) {

@@ -264,6 +264,12 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .react-flow__node.component-node[aria-pressed="true"] { outline: 3px solid #1d4ed8; outline-offset: 4px; }
 .react-flow__node.component-node:focus-visible { outline: 4px solid #172033; outline-offset: 7px; }
 .component-node .react-flow__handle { opacity: 0; pointer-events: none; }
+/* A key-value node shares the owned stores' neutral slate: it is data infrastructure, not an application service. */
+.symbol-kvstore .shape-fill { fill: #f8fafc; }
+.symbol-kvstore .shape-stroke { stroke: #475569; }
+.store-layer { fill: none; stroke: #94a3b8; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.symbol-kvstore .node-glyph, .symbol-kvstore .category-label { color: #334155; }
+.symbol-kvstore .node-content { padding-bottom: 30px; }
 .resource-node { width: 115px; height: 56px; padding: 0; border: 0; background: transparent; color: #334155; cursor: pointer; }
 .resource-anchor { position: absolute; top: 0; left: 57.5px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .resource-body { position: relative; width: 115px; height: 56px; display: flex; align-items: center; justify-content: center; }
