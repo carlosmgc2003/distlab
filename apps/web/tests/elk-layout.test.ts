@@ -21,7 +21,7 @@ const options: ElkLayoutOptions = { engine, measureLabel };
 const COMPONENT = { width: 215, height: 90 };
 const RESOURCE = { width: 115, height: 56 };
 /** Crossings ELK leaves in the platform fixture with the default options. */
-const CROSSING_BUDGET = 8;
+const CROSSING_BUDGET = 1;
 
 type AnyNode = ArchitectureNode | ResourceNode;
 type AnyEdge = ArchitectureEdge | OwnershipEdge;
@@ -146,8 +146,9 @@ test("the platform fixture: before/after overlaps, crossings, and edges through 
   assert.equal(after.overlaps, 0);
   assert.equal(after.intrusions, 0);
   assert.equal(after.sharedRuns, 0);
-  // Every remaining crossing involves a MessageBus link (topic fan-in to notifications and shipping).
-  // The budget guards against regressions; the old layout hid most of its tangle as edges drawn over each other.
+  // Bus links run west to east through their destination, like requests, so ELK untangles them with
+  // the rest of the flow. The budget guards against regressions; the old layout hid most of its
+  // tangle as edges drawn over each other.
   assert.ok(after.crossings <= CROSSING_BUDGET, `crossings ${after.crossings} exceed the budget ${CROSSING_BUDGET}`);
   assert.ok(after.crossings + after.intrusions + after.sharedRuns < before.crossings + before.intrusions + before.sharedRuns);
 });
@@ -184,7 +185,7 @@ test("layout reads measured sizes and refuses an unmeasured node", async () => {
   await assert.rejects(elkLayout(unmeasured, edges, options), /orders has no measured size/);
 });
 
-test("tiers fix the columns: ingress, gateway, services, bus, external", async () => {
+test("tiers fix the columns: ingress, gateway, services with their bus destinations, external", async () => {
   const { nodes, edges } = platformGraph();
   const laid = await elkLayout(nodes, edges, options);
   const columns = new Map<number, { min: number; max: number }>();
@@ -194,7 +195,9 @@ test("tiers fix the columns: ingress, gateway, services, bus, external", async (
     const span = columns.get(tier) ?? { min: Infinity, max: -Infinity };
     columns.set(tier, { min: Math.min(span.min, node.position.x), max: Math.max(span.max, node.position.x + 215) });
   }
-  const order = [TIERS.ingress, TIERS.gateway, TIERS.service, TIERS.bus, TIERS.external];
+  // A destination shares the service band, so it can sit between its publishers and subscribers.
+  assert.equal(TIERS.bus, TIERS.service);
+  const order = [TIERS.ingress, TIERS.gateway, TIERS.service, TIERS.external];
   for (let i = 1; i < order.length; i++) {
     assert.ok(columns.get(order[i - 1]!)!.max <= columns.get(order[i]!)!.min, `tier ${order[i - 1]} ends before tier ${order[i]} starts`);
   }
@@ -215,12 +218,35 @@ test("ports sit on the fixed side per link kind and match the React Flow handles
       assert.ok(near(start.x, source.x + source.width) && near(end.x, target.x), `${edge.id} leaves east, enters west`);
       assert.equal(edge.sourceHandle, "east"); assert.equal(edge.targetHandle, "west");
     } else if (edge.data!.link === "async") {
-      assert.ok(near(start.y, source.y) && near(end.y, target.y), `${edge.id} leaves and enters by the north side`);
-      assert.equal(edge.sourceHandle, "north-out"); assert.equal(edge.targetHandle, "north-in");
+      assert.ok(near(start.x, source.x + source.width) && near(end.x, target.x), `${edge.id} leaves its source's east side, enters its target's west side`);
+      assert.equal(edge.sourceHandle, "east"); assert.equal(edge.targetHandle, "west");
     } else {
       assert.ok(near(start.y, source.y + source.height) && near(end.y, target.y), `${edge.id} leaves south, enters north`);
       assert.equal(edge.sourceHandle, handleFor.ownership.source); assert.equal(edge.targetHandle, handleFor.ownership.target);
     }
+  }
+});
+
+/** Bus links whose route does not run from the west to the east: the source must end left of the target. */
+function backwardBusLinks(edges: readonly LayoutEdge[], all: readonly Box[]): string[] {
+  const byId = new Map(all.map(box => [box.id, box]));
+  return edges.flatMap(edge => {
+    if (edge.data?.link !== "async") return [];
+    const source = byId.get(edge.source)!, target = byId.get(edge.target)!;
+    return source.x + source.width <= target.x ? [] : [edge.id];
+  });
+}
+
+test("a message reads left to right: publisher, then its destination, then the subscriber", async () => {
+  const platform = platformGraph();
+  const laid = await elkLayout(platform.nodes, platform.edges, options);
+  assert.deepEqual(backwardBusLinks(laid.edges, boxes(laid.nodes)), [], "platform fixture");
+  for (const [index, choice] of scenarios.entries()) {
+    const projection = await loadPackaged(index);
+    const metadata = packagedMetadata(choice);
+    const { nodes, edges } = graphOf(projection.architecture, metadata.architecture, metadata.name);
+    const lesson = await elkLayout(nodes, edges, options);
+    assert.deepEqual(backwardBusLinks(lesson.edges, boxes(lesson.nodes)), [], metadata.name);
   }
 });
 
