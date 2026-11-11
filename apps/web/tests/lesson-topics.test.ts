@@ -29,6 +29,7 @@ test("with no filter every group appears once, under its topic, in topic order",
     ["transactions", [["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent", "outbox-notifications-gap"]]],
     ["consistency", [["cqrs-delayed"], ["cache-stale-price", "cache-invalidated"]]],
     ["concurrency", [["inventory-oversell", "inventory-optimistic"]]],
+    ["time-coordination", [["lease-unfenced", "lease-fenced"], ["clock-last-write-wins", "clock-lamport"]]],
   ]);
 });
 

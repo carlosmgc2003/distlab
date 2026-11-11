@@ -27,6 +27,8 @@ export const commerceLessonNames = [
   "notifications-unbounded", "notifications-dlq",
   "cache-stale-price", "cache-invalidated",
   "inventory-oversell", "inventory-optimistic",
+  "lease-unfenced", "lease-fenced",
+  "clock-last-write-wins", "clock-lamport",
 ] as const;
 export type CommerceLessonName = typeof commerceLessonNames[number];
 
@@ -36,6 +38,8 @@ export function commerceScenario(name: CommerceLessonName): CanonicalValue {
   if (name.startsWith("notifications-")) return notificationScenario(name);
   if (name.startsWith("cache-")) return cacheScenario(name);
   if (name.startsWith("inventory-")) return inventoryScenario(name);
+  if (name.startsWith("lease-")) return leaseScenario(name);
+  if (name.startsWith("clock-")) return clockScenario(name);
   if (name === "cqrs-delayed") return cqrsScenario(name);
   if (name.startsWith("saga-")) return sagaScenario(name);
   if (name === "dual-write" || name.startsWith("outbox-")) return outboxScenario(name);
@@ -252,6 +256,73 @@ function inventoryScenario(name: CommerceLessonName): CanonicalValue {
 }
 
 /**
+ * Leases and fencing tokens, outside commerce: two report workers share one
+ * report file and a lock service that grants 10 ms leases. Worker-1 takes the
+ * lease at t=2 and checks it, but its write is held up 30 ms on the way to
+ * storage, as a long pause would hold it. The lease expires at t=12, worker-2
+ * takes it at t=17 with token 2 and writes, and worker-1's write arrives at
+ * t=34. The pair differs only in whether storage fences writes by token.
+ */
+function leaseScenario(name: CommerceLessonName): CanonicalValue {
+  const fencing = name === "lease-fenced";
+  const path = "reports/daily.csv";
+  const job = (worker: string, at: number) => ({ ...request(`job-${worker}`, at, worker, "POST /job", { path, content: `report by ${worker}` }), target: "scheduler" });
+  return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
+    architecture: {
+      components: [component("scheduler", "client", "client"), component("worker-1", "lease-worker", "service", { lock: "lock", storage: "storage" }),
+        component("worker-2", "lease-worker", "service", { lock: "lock", storage: "storage" }),
+        component("lock", "lock-service", "service", { ttl: 10 }), component("storage", "lease-storage", "service", { fencing })],
+      links: [link("scheduler", "worker-1", 100), link("scheduler", "worker-2", 100), link("worker-1", "lock"), link("worker-2", "lock"),
+        link("worker-1", "storage", 60), link("worker-2", "storage", 60)],
+      databases: [database("lock", ["leases"]), database("storage", ["files", "writes"])], stores: [], destinations: [], subscriptions: [],
+    }, external: [], faults: [fault("delayed-stale-write", "network.request", "worker-1", "storage", "PUT /file", { kind: "delay", duration: 30 })],
+    actions: [
+      ...["lock", "storage", "worker-1", "worker-2"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
+      job("worker-1", 0), job("worker-2", 15),
+    ], assertions: [
+      assertion("lease-passed-on", 20, "lock", "leases", 1, "report-lock", { holder: "worker-2", token: 2 }),
+      always("writes-in-token-order", "commerce.fencing", { owner: "storage", table: "writes" }),
+      always("file-from-latest-lease", "commerce.fencing", { owner: "storage", table: "writes", files: "files" }),
+    ],
+  } as CanonicalValue;
+}
+
+/**
+ * Clocks and ordering, outside commerce: a document title is replicated between
+ * two regions that both accept edits and resolve conflicts by last-writer-wins.
+ * Region eu's wall clock runs 25 ms ahead. An editor in eu sets the title to
+ * Draft at t=0; an editor in us reads Draft at t=10 and sets Final at t=12. The
+ * pair differs only in whether the replicas stamp edits with their wall clocks
+ * or with Lamport clocks.
+ */
+function clockScenario(name: CommerceLessonName): CanonicalValue {
+  const logical = name === "clock-lamport";
+  const initial = { documents: { "doc-1": { title: "Untitled", stamp: 0, origin: "eu" } }, clock: {} };
+  const edit = (editor: string, replica: string, at: number, endpoint: string, body = {}) =>
+    ({ ...request(`${editor}-${endpoint === "GET /title" ? "read" : "edit"}`, at, replica, endpoint, body), target: editor });
+  return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
+    architecture: {
+      components: [component("editor-eu", "client", "client"), component("editor-us", "client", "client"),
+        component("eu", "title-replica", "service", { logical, skew: 25 }), component("us", "title-replica", "service", { logical, skew: 0 })],
+      links: [link("editor-eu", "eu"), link("editor-us", "us")],
+      databases: [database("eu", ["documents", "clock"], initial), database("us", ["documents", "clock"], initial)], stores: [],
+      destinations: [{ id: "TitleChanged", kind: "topic", deliveryDelay: 1, ackTimeout: 10, retryDelay: 1, maxAttempts: 3, capacity: 100 }],
+      subscriptions: [{ destination: "TitleChanged", consumer: "eu" }, { destination: "TitleChanged", consumer: "us" }],
+    }, external: [], faults: [],
+    actions: [
+      ...["eu", "us"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
+      edit("editor-eu", "eu", 0, "PUT /title", { title: "Draft" }),
+      edit("editor-us", "us", 10, "GET /title"),
+      edit("editor-us", "us", 12, "PUT /title", { title: "Final" }),
+    ], assertions: [
+      assertion("first-edit-replicated", 11, "us", "documents", 1, "doc-1", { title: "Draft" }),
+      { id: "replicas-converge", predicate: "commerce.converged", mode: "at", at: 60, parameters: { owners: ["eu", "us"], table: "documents", key: "doc-1", field: "title" } },
+      { id: "later-edit-kept", predicate: "commerce.converged", mode: "at", at: 60, parameters: { owners: ["eu", "us"], table: "documents", key: "doc-1", field: "title", expected: "Final" } },
+    ],
+  } as CanonicalValue;
+}
+
+/**
  * A lesson check is one packaged assertion, classified for students (#96).
  * A business invariant states the property that must hold whatever the design,
  * so every lesson of a family carries the identical assertion and its verdict
@@ -318,6 +389,18 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
         invariant("order-priced-at-checkout", "An order is priced with the catalog price valid at checkout"),
         invariant("no-expired-cart-checkout", "An expired cart cannot be checked out"),
       ];
+    case "lease":
+      return [
+        expectation("lease-passed-on", "Worker-1's lease expired, so worker-2 holds the lease with token 2 (t=20)"),
+        invariant("writes-in-token-order", "Storage never accepts a write with a smaller lease token after a larger one"),
+        invariant("file-from-latest-lease", "The report file holds the write with the largest lease token storage accepted"),
+      ];
+    case "clock":
+      return [
+        expectation("first-edit-replicated", "Region us showed Draft before its editor changed the title (t=11)"),
+        invariant("replicas-converge", "Both regions end with the same title"),
+        invariant("later-edit-kept", "An edit made after reading the title is not lost: both regions keep Final"),
+      ];
     case "inventory":
       return [
         expectation("last-unit-contended", "sku-1 still had its last unit while both reservations were being validated (t=3)"),
@@ -351,12 +434,12 @@ const commit = { point: "database.commit" as const, effects: ["fail"] as FaultEf
 export function commerceOverlayPolicy(name: CommerceLessonName): LessonOverlayPolicy {
   const family = name.split("-")[0];
   const rules = family === "cascade" ? network
-    : family === "cqrs" || family === "outbox" || family === "dual" || family === "notifications" ? [...network, delivery, commit]
+    : family === "cqrs" || family === "outbox" || family === "dual" || family === "notifications" || family === "clock" ? [...network, delivery, commit]
     : [...network, commit];
   // Notifications senders NACK a provider's rejection as well as a timeout (#126), so a student can take Messaging down.
   const scheduled: ScheduledFault["kind"][] = family === "cascade" || family === "notifications" ? ["crash", "external-availability"]
     : family === "saga" ? ["external-availability"]
-    : family === "retry" || family === "cqrs" || family === "cache" || family === "inventory" ? ["crash"] : [];
+    : family === "retry" || family === "cqrs" || family === "cache" || family === "inventory" || family === "lease" || family === "clock" ? ["crash"] : [];
   const architecture = commerceArchitecture(name);
   return { version: 1, lesson: `${name}@1`, faults: { rules, scheduled, maxEntries: 4 }, parameters: commerceParameters(name), ...architecture ? { architecture } : {} };
 }
@@ -426,5 +509,18 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
     case "inventory-oversell":
     case "inventory-optimistic":
       return [flag("optimistic-concurrency", name === "inventory-optimistic", "inventory", "optimistic")];
+    case "lease-unfenced":
+    case "lease-fenced":
+      return [
+        flag("fencing", name === "lease-fenced", "storage", "fencing"),
+        { key: "lease-ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 }, targets: [{ kind: "component", component: "lock", field: "ttl" }] },
+      ];
+    case "clock-last-write-wins":
+    case "clock-lamport":
+      return [
+        { key: "logical-clock", domain: { type: "boolean", default: name === "clock-lamport" },
+          targets: [{ kind: "component", component: "eu", field: "logical" }, { kind: "component", component: "us", field: "logical" }] },
+        { key: "clock-skew", domain: { type: "integer", default: 25, minimum: -50, maximum: 50 }, targets: [{ kind: "component", component: "eu", field: "skew" }] },
+      ];
   }
 }

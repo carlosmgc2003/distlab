@@ -1,8 +1,10 @@
 # Commerce failure and resilience lessons
 
-These seventeen browser and headless scenarios build on the same commerce vocabulary: `order-1`,
+These twenty-one browser and headless scenarios run against the `commerce.lessons`
+hosted catalog. Seventeen build on the same commerce vocabulary: `order-1`,
 a 5000-unit payment, service-owned databases, and explicit network/message
-boundaries. Each lesson uses only the topology needed for its teaching point.
+boundaries. The lease and clock lessons (sections 10 and 11) leave commerce:
+a shared report file and a replicated document title. Each lesson uses only the topology needed for its teaching point.
 They are independent experiments, not successive mutations of one running system.
 
 ## Run and inspect
@@ -613,6 +615,110 @@ A component is an empty slot when its declared model is a placeholder
 (`placeholder: true` in its data-only descriptor). Setting
 `DESIGN_EDITOR_AVAILABLE` in `apps/web/src/design-step.ts` removes the notice;
 the empty-slot marks stay, because they describe the architecture.
+
+## 10. Leases and fencing tokens
+
+**Pattern:** fencing tokens: every lease carries a number larger than any
+earlier lease's, and the resource rejects a write whose number is smaller than
+one it has already accepted.
+
+**Problem:** a lease lets one worker at a time write a shared file, but a lease
+is only a promise about time. A worker can check that its lease is valid, then
+stall (a long pause, a slow network) and write after the lease expired and
+another worker took it. The lock service cannot stop that write; only the
+resource can.
+
+**Topology:** a `scheduler` client starts jobs on two report workers,
+`worker-1` and `worker-2` (`commerce.lease-worker`). Each takes the lease from
+`lock` (`commerce.lock-service`, table `leases`, 10 ms leases) and writes
+`reports/daily.csv` to `storage` (`commerce.lease-storage`, tables `files` and
+`writes`). The worker → storage links time out after 60 ms, so a worker waits
+out a long delay instead of giving up.
+
+**Injected fault:** worker-1's `PUT /file` request is delayed by 30 ms.
+
+**Expected timeline:**
+
+- t=2: the lock service grants worker-1 token 1, valid until t=12.
+- t=3: worker-1 checks its lease (`lease.checked`, `valid: true`) and sends its
+  write, which the fault holds up until t=34.
+- t=17: worker-2 asks for the lease; the old one has expired, so it gets
+  token 2, valid until t=27. At t=19 storage writes worker-2's report.
+- `lease-unfenced`: at t=34 worker-1's late write arrives and overwrites the
+  file (`storage.written`, `overwrote: "worker-2"`). Both workers were told
+  `WRITTEN`.
+- `lease-fenced`: storage has accepted token 2 for the file, so it rejects
+  token 1 (`storage.fenced`) and worker-1 gets `REJECTED`, `STALE_TOKEN`.
+
+**Expected checks:**
+
+| Run | File writer | Writes in token order | File from latest lease |
+| --- | --- | --- | --- |
+| `npm run lesson -- lease-unfenced` | worker-1 (token 1) | VIOLATED | VIOLATED |
+| `npm run lesson -- lease-fenced` | worker-2 (token 2) | HOLDS | HOLDS |
+
+Both invariants are safety invariants, checked after every event, and both are
+VIOLATED at t=34. The scenario expectation confirms that worker-2 held the
+lease with token 2 at t=20.
+
+**Design choices:** *Fencing tokens* switches storage's check. *Lease
+duration* (1–60 ms) changes the lease: at 40 ms worker-1's lease has not
+expired when worker-2 asks, so worker-2 gets `LOCK_BUSY` and no stale write can
+happen in this run, though a longer delay would bring it back.
+
+**Concept:** a lease does not give mutual exclusion on its own, because the
+holder cannot know that it has been paused. The lock service's increasing token
+turns "who holds the lease" into an order the resource can check.
+
+## 11. Clock skew, last-writer-wins, and Lamport clocks
+
+**Pattern:** logical clocks: order events by what each replica has seen, not by
+its wall clock.
+
+**Problem:** two regions both accept edits to a document title and resolve
+conflicts by last-writer-wins on a timestamp. With wall-clock timestamps, a
+region whose clock runs ahead makes its edits look newer than later edits made
+elsewhere, and last-writer-wins silently drops the later edit.
+
+**Topology:** two editors, `editor-eu` and `editor-us`, each call their own
+region's replica (`commerce.title-replica`, tables `documents` and `clock`).
+Both replicas publish and consume `TitleChanged`, ignoring their own edits.
+`doc-1` starts as `Untitled`, stamp 0. Region eu's wall clock runs 25 ms
+ahead of virtual time (configuration `skew`).
+
+**Injected fault:** none. The clock skew is configuration.
+
+**Expected timeline:**
+
+- t=1: eu writes `Draft`. With wall clocks its stamp is 26; with Lamport
+  clocks it is 1. At t=2 us applies it (`title.replicated`).
+- t=11: editor-us reads `Draft` from us.
+- t=13: editor-us saves `Final`.
+- `clock-last-write-wins`: us stamps `Final` with its wall clock, 13, which is
+  smaller than 26, so `Final` loses even on us (`title.discarded`). The editor
+  is still told `SAVED`. At t=14 eu discards it too.
+- `clock-lamport`: us applied stamp 1, so its counter is 1 and `Final` gets
+  stamp 2. Both regions keep `Final`.
+
+**Expected checks:**
+
+| Run | Final title | Replicas converge | Later edit kept |
+| --- | --- | --- | --- |
+| `npm run lesson -- clock-last-write-wins` | Draft | HOLDS | VIOLATED |
+| `npm run lesson -- clock-lamport` | Final | HOLDS | HOLDS |
+
+Both invariants are checked at t=60. Convergence holds in both runs: the
+replicas agree, but in the wall-clock run they agree on the wrong value. The
+scenario expectation confirms that us showed `Draft` at t=11.
+
+**Design choices:** *Lamport clocks* switches both replicas. *Clock skew in
+eu* (-50 to 50 ms): at 0 or below, wall-clock last-writer-wins happens to keep
+`Final` in this run.
+
+**Concept:** last-writer-wins needs timestamps that respect causality. A
+Lamport clock does: an edit made after seeing another always gets a larger
+stamp. It does not detect truly concurrent edits; it only orders them
+consistently.
 
 ## Extension points and boundaries
 

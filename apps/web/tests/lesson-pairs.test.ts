@@ -10,7 +10,7 @@ const ids = (groups: readonly (readonly { readonly id: string }[])[]) => groups.
 test("every packaged lesson appears in exactly one group", () => {
   const groups = lessonPairs(scenarios);
   const listed = groups.flat().map(lesson => lesson.id);
-  assert.equal(scenarios.length, 19);
+  assert.equal(scenarios.length, 23);
   assert.equal(listed.length, scenarios.length);
   assert.deepEqual(new Set(listed), new Set(scenarios.map(lesson => lesson.id)));
 });
@@ -46,6 +46,8 @@ test("the packaged catalog forms its failing/fixed pairs, one outbox group, and 
     ["notifications-unbounded", "notifications-dlq"],
     ["cache-stale-price", "cache-invalidated"],
     ["inventory-oversell", "inventory-optimistic"],
+    ["lease-unfenced", "lease-fenced"],
+    ["clock-last-write-wins", "clock-lamport"],
   ]);
 });
 

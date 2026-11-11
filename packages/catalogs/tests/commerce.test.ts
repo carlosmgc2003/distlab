@@ -27,7 +27,7 @@ function metrics(result: HarnessExport, owner: string) {
 }
 
 test("paired lessons use equivalent fault schedules, workloads, and seeds", () => {
-  for (const [left, right] of [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-idempotent"], ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"]] as const) {
+  for (const [left, right] of [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-idempotent"], ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"], ["lease-unfenced", "lease-fenced"], ["clock-last-write-wins", "clock-lamport"]] as const) {
     const a = object(commerceScenario(left)), b = object(commerceScenario(right));
     assert.equal(a.seed, b.seed);
     assert.deepEqual(a.faults, b.faults);
@@ -35,7 +35,7 @@ test("paired lessons use equivalent fault schedules, workloads, and seeds", () =
   }
 });
 
-const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent", "outbox-notifications-gap"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"]] as const;
+const families = [["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer", "outbox-idempotent", "outbox-notifications-gap"], ["cqrs-delayed"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"], ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"], ["lease-unfenced", "lease-fenced"], ["clock-last-write-wins", "clock-lamport"]] as const;
 /** The business invariants each packaged lesson is meant to violate; every other check passes. */
 const violated: Record<typeof commerceLessonNames[number], readonly string[]> = {
   "retry-unsafe": ["one-payment-per-order"],
@@ -55,10 +55,14 @@ const violated: Record<typeof commerceLessonNames[number], readonly string[]> = 
   "cache-invalidated": [],
   "inventory-oversell": ["stock-never-negative", "one-reservation-per-unit"],
   "inventory-optimistic": [],
+  "lease-unfenced": ["writes-in-token-order", "file-from-latest-lease"],
+  "lease-fenced": [],
+  "clock-last-write-wins": ["later-edit-kept"],
+  "clock-lamport": [],
 };
 const assertionsOf = (name: typeof commerceLessonNames[number]) => object(commerceScenario(name)).assertions as Record<string, CanonicalValue>[];
 
-test("every check in the 17 commerce lessons is classified as a business invariant or a scenario expectation", () => {
+test("every check in the 21 commerce-catalog lessons is classified as a business invariant or a scenario expectation", () => {
   assert.equal(families.flat().length, commerceLessonNames.length);
   for (const name of commerceLessonNames) {
     const checks = commerceChecks(name);
@@ -241,9 +245,9 @@ for (const name of commerceLessonNames) {
     assert.ok(result.results.length > 0);
     // Unsafe lessons violate their invariants; every lesson reproduces its setup.
     assert.deepEqual(result.results.filter(r => r.status !== "PASS").map(r => `${r.id} ${r.status}`), violated[name].map(id => `${id} FAIL`), JSON.stringify(result.results));
-    // The cache and inventory pairs need no injected fault: ordinary timing tells their story.
+    // The cache, inventory, and clock pairs need no injected fault: ordinary timing (and, for clocks, a configured skew) tells their story.
     const faulted = result.history.observations.some(o => o.type === "fault.effect.selected" || o.type === "fault.applied");
-    assert.equal(faulted, !name.startsWith("cache-") && !name.startsWith("inventory-"), name);
+    assert.equal(faulted, !name.startsWith("cache-") && !name.startsWith("inventory-") && !name.startsWith("clock-"), name);
     const fresh = openHarness(engine.create(document));
     await fresh.run();
     assert.ok(compareExports(result, fresh.inspect()));
@@ -307,7 +311,7 @@ for (const name of commerceLessonNames) {
 
 /** The business invariants that are safety properties: they must hold at every event boundary (#163). */
 const safety = ["one-payment-per-order", "bounded-waiting", "bounded-notification-retries", "order-priced-at-checkout", "no-expired-cart-checkout",
-  "stock-never-negative", "one-reservation-per-unit"];
+  "stock-never-negative", "one-reservation-per-unit", "writes-in-token-order", "file-from-latest-lease"];
 
 test("#163 safety invariants are checked at every boundary; deadline invariants and scenario expectations keep a stated time", () => {
   const seen = new Set<string>();

@@ -25,6 +25,10 @@ const commerceCopy = {
   "cache-stale-price": ["Cache: stale price after a price change", "The back office raises the price at t=10, but Catalog serves the price it cached at t=1 until t=101, so the order placed at t=25 is charged the old price. Cart cart-2 expires at t=31.", "cache-invalidated"],
   "cache-invalidated": ["Cache: invalidate on price change", "The price change deletes the cached price, so checkout reads the new price from the database. The expired cart is still rejected.", "cache-stale-price"],
   "inventory-oversell": ["Inventory: oversell the last unit", "The Customer App and the Partner API both reserve the last unit at t=0. Both checks read stock=1 before either write, and each write is a separate transaction, so both commit and stock ends at -1.", "inventory-optimistic"],
+  "lease-unfenced": ["Leases: a stale writer after expiry", "Two report workers share a file under a 10 ms lease. Worker-1's write is held up past its lease, worker-2 takes the lease with token 2 and writes, then worker-1's late write overwrites it.", "lease-fenced"],
+  "lease-fenced": ["Leases: fencing tokens", "The same delayed write, but storage remembers the largest lease token it has accepted and rejects worker-1's token 1 after worker-2's token 2.", "lease-unfenced"],
+  "clock-last-write-wins": ["Clocks: last write wins with a skewed clock", "Two regions replicate a document title by last-writer-wins. Region eu's clock runs 25 ms ahead, so the editor in us reads Draft, saves Final, sees SAVED, and Final is silently discarded.", "clock-lamport"],
+  "clock-lamport": ["Clocks: Lamport timestamps", "The same edits, stamped with Lamport clocks. The edit made after reading Draft gets the larger stamp, so both regions keep Final whatever the wall clocks say.", "clock-last-write-wins"],
   "inventory-optimistic": ["Inventory: optimistic concurrency", "The same race, but the check and the write share one transaction. The partner's commit fails the version check at t=7, Inventory re-reads stock=0, and the partner gets OUT_OF_STOCK.", "inventory-oversell"],
 } as const;
 

@@ -172,6 +172,39 @@ export const reliableNotificationsDescriptor: ModelDescriptor = {
 };
 
 /**
+ * Leases and fencing tokens. The lock service grants one lease at a time for
+ * `ttl` virtual milliseconds, each with a larger token. A worker writes its
+ * report under the lease. Storage with `fencing` rejects a token smaller than
+ * the largest it has accepted. Not a commerce domain: a shared report file.
+ */
+export const lockServiceDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.lock-service", version: VERSION, kind: "service", endpoints: ["POST /acquire"],
+  storage: tables("leases"), options: [{ key: "ttl", domain: { type: "integer", default: 10, minimum: 1, maximum: 60 } }],
+};
+export const leaseWorkerDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.lease-worker", version: VERSION, kind: "service", endpoints: ["POST /job"],
+  peers: [
+    { name: "lock", kinds: ["service"], calls: ["POST /acquire"], default: "lock" },
+    { name: "storage", kinds: ["service"], calls: ["PUT /file"], default: "storage" },
+  ],
+};
+export const leaseStorageDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.lease-storage", version: VERSION, kind: "service", endpoints: ["PUT /file"],
+  storage: tables("files", "writes"), options: [flag("fencing")],
+};
+
+/**
+ * A regional replica of a document title (multi-leader, last-writer-wins). It
+ * stamps edits with its wall clock (virtual time plus `skew`), or with a
+ * Lamport clock when `logical` is set. Not a commerce domain: a shared document.
+ */
+export const titleReplicaDescriptor: ModelDescriptor = {
+  ...none, model: "commerce.title-replica", version: VERSION, kind: "service", endpoints: ["PUT /title", "GET /title"],
+  consumers: ["TitleChanged"], publishes: ["TitleChanged"], storage: tables("documents", "clock"),
+  options: [flag("logical"), { key: "skew", domain: { type: "integer", default: 0, minimum: -50, maximum: 50 } }],
+};
+
+/**
  * Placeholder models (ADR-005) fill an empty slot. Each exposes the endpoints or
  * operations listed in its configuration field `interface` and answers every
  * request with a `NOT_IMPLEMENTED` error. They consume and publish nothing,
@@ -186,5 +219,6 @@ export const commerceDescriptors: readonly ModelDescriptor[] = [
   notifyOrdersDescriptor, notifySenderDescriptor, messagingDescriptor,
   cacheCatalogDescriptor, cacheCartDescriptor, cacheOrdersDescriptor, inventoryDescriptor,
   reliableOrdersDescriptor, reliableInventoryDescriptor, reliablePaymentsDescriptor, reliableProcessorDescriptor, reliableNotificationsDescriptor,
+  lockServiceDescriptor, leaseWorkerDescriptor, leaseStorageDescriptor, titleReplicaDescriptor,
   placeholderServiceDescriptor, placeholderExternalDescriptor,
 ];

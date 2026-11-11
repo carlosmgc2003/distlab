@@ -92,8 +92,8 @@ test("DOC-AC-1 the vision §19 document validates against mvp.checkout@1.0.0 and
 });
 
 test("DOC-AC-2 every packaged lesson, renamed and wrapped with its catalog reference and policy, validates and gives the packaged assertion results", async () => {
-  // Two checkout lessons, seventeen commerce lessons, and the Reliable Checkout assessment base (#97).
-  assert.equal(packaged.length, 20);
+  // Two checkout lessons, twenty-one commerce-catalog lessons, and the Reliable Checkout assessment base (#97).
+  assert.equal(packaged.length, 24);
   for (const lesson of packaged) {
     const document = starter(lesson);
     assert.ok(!hostedCatalogs.reservedNames.includes((document.scenario as Doc).name as string));

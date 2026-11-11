@@ -34,9 +34,11 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/notify.ts`](../../packages/catalogs/src/commerce/notify.ts) | Orders that confirms at checkout or after `NotificationSent`, a notification sender, and an external Messaging Provider. |
 | [`src/commerce/cache.ts`](../../packages/catalogs/src/commerce/cache.ts) | Catalog with a cache-aside price cache and optional invalidation, a TTL cart, and Orders that records the price it used. |
 | [`src/commerce/inventory.ts`](../../packages/catalogs/src/commerce/inventory.ts) | Inventory that reserves the last unit with check-then-act or with optimistic concurrency. |
+| [`src/commerce/lease.ts`](../../packages/catalogs/src/commerce/lease.ts) | Lock service with time-limited, numbered leases, a report worker, and storage with optional fencing by lease token. Not a commerce domain. |
+| [`src/commerce/clock.ts`](../../packages/catalogs/src/commerce/clock.ts) | Regional document-title replica with last-writer-wins on a skewed wall clock or a Lamport clock. Not a commerce domain. |
 | [`src/commerce/reliable.ts`](../../packages/catalogs/src/commerce/reliable.ts) | Reliable Checkout models: saga Orders with optional compensation and outbox, Inventory, Payments with optional retries and idempotency key, the Payment Processor, and Notifications with an optional inbox. |
 | [`src/commerce/placeholder.ts`](../../packages/catalogs/src/commerce/placeholder.ts) | Placeholder service and external models that fill an empty design slot and answer `NOT_IMPLEMENTED`. |
-| [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for seventeen commerce documents, their checks, and their overlay policies. |
+| [`src/commerce/scenarios.ts`](../../packages/catalogs/src/commerce/scenarios.ts) | Data-only builder and names/type for twenty-one commerce-catalog documents, their checks, and their overlay policies. |
 | [`src/commerce/reliable-checkout.ts`](../../packages/catalogs/src/commerce/reliable-checkout.ts) | Data-only Reliable Checkout base document, its overlay policy and check classification, and the packaged assessment definition (`assessmentDefinitions`). |
 | [`src/hosted.ts`](../../packages/catalogs/src/hosted.ts) | `hostedCatalogs`: the ADR-006 hosted catalog registry and the reserved packaged scenario names. Worker and headless tools only. |
 | [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the twenty-five commerce models. |
@@ -76,7 +78,7 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `commerceScenario(name)` | Returns a `CanonicalValue` document for a `CommerceLessonName`. |
 | `checkoutCatalogReference`, `commerceCatalogReference` | Data-only `CatalogReference` of each packaged lesson's hosted catalog, exported from the two `scenarios.ts` modules. |
 | `hostedCatalogs` | `HostedCatalogRegistry` pairing `checkoutCatalog` with `checkoutAssessment` and `commerceCatalog` with `commerceAssessment`; its `reservedNames` are every packaged scenario name. |
-| `commerceLessonNames` | Ordered tuple of the seventeen supported commerce names. |
+| `commerceLessonNames` | Ordered tuple of the twenty-one supported commerce-catalog names. |
 | `CommerceLessonName` | Type-only union derived from that tuple. |
 
 Both catalogs implement `find(name, version)` with an exact model-name/version
@@ -105,6 +107,9 @@ documents omit the fields, so no packaged document or export changed.
 | `commerce.payment` | — | `idempotent` |
 | `commerce.outbox-payment` | — | `outbox` |
 | `commerce.notifications` | — | `idempotent` |
+| `commerce.lease-worker` | `lock`: service, `POST /acquire`, `lock`; `storage`: service, `PUT /file`, `storage` | — |
+| `commerce.lease-storage` | — | `fencing` |
+| `commerce.title-replica` | — | `logical` |
 
 `commerce.client` declares no peers: each `request` action names its own target
 and endpoint in the workload. Its descriptor declares that call in
@@ -216,6 +221,10 @@ instances share a model definition but receive fresh factory-created handlers.
 | `cache.ts` | `commerce.cache-cart` | Service `POST /cart` and `GET /cart`; keeps `cart:<id>` in its KeyValueStore for configuration `ttl` (default 30) and records that deadline in the cart as `expiresAt`. A read of an expired cart returns `EXPIRED`. |
 | `cache.ts` | `commerce.cache-orders` | Service `POST /checkout`; reads the cart through peer `cart` and the price through peer `catalog`. It commits a `REJECTED` row for an expired cart, or a `PLACED` row with the price, its version and source, the cart's `expiresAt`, and `checkedOutAt`. A timed-out or failed call returns `UNAVAILABLE` without a row. |
 | `inventory.ts` | `commerce.inventory` | Service `POST /reserve`; owns tables `stock` and `reservations`. It reads the SKU's stock row and answers `OUT_OF_STOCK` when `stock` is below 1, waits 5 ms, then decrements `stock`, increments `version`, and inserts an `ACTIVE` reservation in one commit. Without configuration `optimistic`, the read is a closed snapshot and the write is a fresh transaction that decrements the stock it finds then. With `optimistic`, the read and the write share one transaction; on `TRANSACTION_CONFLICT` it re-reads once. |
+| `lease.ts` | `commerce.lock-service` | Service `POST /acquire`; owns table `leases`. Grants the lease when it is free or expired, with a token one larger than the last and `expiresAt` = now + configuration `ttl` (1–60); otherwise answers `BUSY`. |
+| `lease.ts` | `commerce.lease-worker` | Service `POST /job`; takes the lease from peer `lock`, logs `lease.checked`, and writes the file to peer `storage` with the lease's token. The lease workers' documents set both peers explicitly, because two workers share them. |
+| `lease.ts` | `commerce.lease-storage` | Service `PUT /file`; owns tables `files` and `writes`. Logs every attempt in `writes` with `seq`, token, and `accepted`. Configuration `fencing` rejects a token smaller than the file's (`STALE_TOKEN`). |
+| `clock.ts` | `commerce.title-replica` | Service `PUT /title` and `GET /title`, consumer and publisher of `TitleChanged`; owns tables `documents` and `clock`. Stamps an edit with virtual time plus configuration `skew`, or, with `logical`, with a Lamport counter. Applies its own and remote edits by last-writer-wins (stamp, then origin); a losing local edit is still answered `SAVED`. |
 | `reliable.ts` | `commerce.reliable-orders` | Service `POST /checkout` and `POST /relay`; owns tables `orders` and `outbox`; publishes `OrderConfirmed`. Commits the order `PENDING`, then calls peer `inventory` `POST /reserve` and peer `payments` `POST /authorize`. A step that times out or fails records `NEEDS_COMPENSATION`; configuration `compensate` instead undoes the attempted steps in reverse order (`POST /void`, then `POST /release`) and records `CANCELLED`. On success it commits `CONFIRMED`, waits 10 ms, and publishes; with configuration `outbox` the confirming commit records the event and only the relay publishes it. |
 | `reliable.ts` | `commerce.reliable-inventory` | Service `POST /reserve` and `POST /release`; owns table `reservations`. Release of an order with no `RESERVED` row answers `NONE`. |
 | `reliable.ts` | `commerce.reliable-payments` | Service `POST /authorize` and `POST /void`; owns table `payments`; calls peer `processor`. Configuration `idempotent` sends the order ID as `idempotencyKey`; configuration `retries` (0–3) repeats an authorization that timed out. After the last timeout it records `UNKNOWN` and rethrows `NETWORK_TIMEOUT`; a processor error reply is rethrown as its code. |
@@ -280,13 +289,18 @@ classified and that each family shares its invariants.
 | `cache-invalidated` | Same workload. The price change deletes the cached key, so checkout misses the cache and charges 1200. | The same two |
 | `inventory-oversell` | No injected fault. The Customer App and the Partner API (one more millisecond of request latency) reserve the last unit of sku-1 at t=0. Both checks read stock=1, and the separate writes commit at t=6 and t=7, leaving stock -1 and two ACTIVE reservations. | `stock-never-negative`, `one-reservation-per-unit` (both violated) |
 | `inventory-optimistic` | Same workload. The partner's commit at t=7 is rejected with `TRANSACTION_CONFLICT`; it re-reads stock=0 and answers `OUT_OF_STOCK`. | The same two |
+| `lease-unfenced` | Delay worker-1's write to storage by 30 ms. Its 10 ms lease expires at t=12, worker-2 gets token 2 at t=17 and writes at t=19, and worker-1's late write overwrites the file at t=34. | `writes-in-token-order`, `file-from-latest-lease` (both violated) |
+| `lease-fenced` | Same delay. Storage rejects worker-1's token 1 at t=34 with `STALE_TOKEN`. | The same two |
+| `clock-last-write-wins` | No injected fault; eu's clock runs 25 ms ahead. `Draft` (stamp 26) replicates to us; us reads it at t=11 and saves `Final` at t=13 with stamp 13, which both regions discard. | `replicas-converge`, `later-edit-kept` (violated) |
+| `clock-lamport` | Same edits with Lamport clocks: `Draft` gets stamp 1 and `Final` stamp 2, so both regions keep `Final`. | The same two |
 
 The remaining checks are scenario expectations: the saga state at t=30, the
 outbox documents' committed payment, absent notification, and outbox row at
 t=6, the CQRS reads at t=10, the cascade dependency and API metrics at
 t=120, the empty Notifications table at t=60, and the cache lessons' raised
-price at t=15 and rejected cart-2 checkout at t=60, and the inventory lessons'
-unchanged last unit at t=3.
+price at t=15 and rejected cart-2 checkout at t=60, the inventory lessons'
+unchanged last unit at t=3, the lease lessons' second lease at t=20, and the
+clock lessons' replicated `Draft` at t=11.
 
 Business invariants come in two kinds (#163):
 
@@ -297,7 +311,8 @@ Business invariants come in two kinds (#163):
   These are `one-payment-per-order` (at most one payment row),
   `bounded-waiting` (`peakActive` at most 3), `bounded-notification-retries`,
   `order-priced-at-checkout`, `no-expired-cart-checkout`,
-  `stock-never-negative`, and `one-reservation-per-unit`. Their predicates
+  `stock-never-negative`, `one-reservation-per-unit`, `writes-in-token-order`,
+  and `file-from-latest-lease`. Their predicates
   hold before the first write.
 - A **deadline invariant** requires a state to be reached, so it keeps
   `mode: "at"` with the time by which the lesson's design must have reached it:
@@ -346,6 +361,14 @@ final state.
 - `commerce.reservations` takes `owner`, `stock`, and `reservations`. Each
   stock row's SKU may have at most `units` reservations with status `ACTIVE`.
   Evidence lists each SKU's units and active reservation IDs.
+- `commerce.fencing` takes `owner` and `table` (the write log). The accepted
+  writes, in `seq` order, must never go back to a smaller `token`. With
+  `files` (a table name), each file row's `token` must instead equal the
+  largest token accepted for its path. Evidence lists the accepted writes, or
+  each file with its writer, token, and largest accepted token.
+- `commerce.converged` takes `owners`, `table`, `key`, `field`, and an
+  optional `expected`. Every owner's row must hold the same `field` value, and
+  that value must equal `expected` when given. Evidence lists each owner's value.
 - `commerce.charges` takes `processor` and `maximum`. No order may hold more
   than `maximum` `APPROVED` authorizations in the processor's visible state.
   Evidence counts approved authorizations per order.
@@ -425,7 +448,7 @@ hosted registry (DOC-AC-7), and the `check` command.
 The [checkout tests](../../packages/catalogs/tests/checkout.test.ts) cover model
 versions, both documents, authorization outcomes, commit/drop/timeout ordering,
 and fresh/reset/step equivalence. The [commerce
-tests](../../packages/catalogs/tests/commerce.test.ts) cover all seventeen documents,
+tests](../../packages/catalogs/tests/commerce.test.ts) cover all twenty-one documents,
 paired inputs, compensation order, duplicate handling, CQRS convergence,
 breaker load reduction, bounded and unbounded notification retries, stale and
 invalidated cached prices with cart TTL expiry, concurrent reservations that
@@ -462,7 +485,7 @@ and the gap lesson's empty, reference, and rejected designs.
    lessons, also verify equal seeds, workloads, and fault schedules.
 6. Browser support requires explicit host admission and student projection work;
    adding a catalog document alone does not authorize it. The host accepts only
-   the two packaged checkout documents and seventeen packaged commerce lessons.
+   the two packaged checkout documents and twenty-one packaged commerce-catalog lessons.
    Keep factory imports in the worker and data-only imports on the main thread.
    Student projections expose business rows, live KV entries with their expiry, client outcomes,
    declared external-visible facts, delivery records, and assertions; raw tasks

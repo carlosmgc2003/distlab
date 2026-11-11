@@ -240,6 +240,7 @@ const pairs = [
   ["retry-unsafe", "retry-idempotent"], ["saga-uncompensated", "saga-compensated"], ["dual-write", "outbox-unsafe-consumer"],
   ["outbox-unsafe-consumer", "outbox-idempotent"], ["cascade-unprotected", "cascade-breaker"], ["notifications-unbounded", "notifications-dlq"],
   ["cache-stale-price", "cache-invalidated"], ["inventory-oversell", "inventory-optimistic"],
+  ["lease-unfenced", "lease-fenced"], ["clock-last-write-wins", "clock-lamport"],
 ] as const;
 
 test("every paired lesson exposes the design choice that distinguishes the pair", () => {
@@ -307,7 +308,9 @@ test("a pair's distinguishing design choice gives the paired lesson's business i
     ["cascade-unprotected", "cascade-breaker", ["circuit-breaker"]],
     ["notifications-unbounded", "notifications-dlq", ["decoupled-confirmation", "max-attempts"]],
     ["cache-stale-price", "cache-invalidated", ["cache-invalidation"]],
-    ["inventory-oversell", "inventory-optimistic", ["optimistic-concurrency"]]] as const;
+    ["inventory-oversell", "inventory-optimistic", ["optimistic-concurrency"]],
+    ["lease-unfenced", "lease-fenced", ["fencing"]],
+    ["clock-last-write-wins", "clock-lamport", ["logical-clock"]]] as const;
   const invariants = (name: typeof pairs[number][0 | 1], result: HarnessExport) => {
     const ids = new Set(commerceChecks(name).filter(check => check.kind === "invariant").map(check => check.id));
     return result.results.filter(item => ids.has(item.id)).map(item => `${item.id} ${item.status}`);
