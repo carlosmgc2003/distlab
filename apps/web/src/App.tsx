@@ -410,13 +410,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} />
     : report ? <DistributedState report={report} onShowEvidence={id => { setServiceStateOpen(false); showEvidence(id); }} /> : null : null;
   const lessonInvestigate = <>
+    {/* An imported document's checks lead ③ Investigate, as a packaged lesson's do (#160); the Architecture tab holds only the graph. */}
+    {imported && importedScenario && projection ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
     {checkView ? <>
       <p className="lesson-outcome"><strong>{summary}</strong></p>
       {investigateHelp}
       <LessonChecks view={checkView} onShowEvidence={showEvidence} />
     </> : null}
     {runOverview}
-    {imported ? <p>Seed: {lesson?.seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, check its results below the architecture, then use Recorded history to follow what happened.</p>
+    {imported ? <p>Seed: {lesson?.seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, read its checks above, then use Recorded history to follow what happened.</p>
       : !checkoutGuide ? <p>Seed: {lesson?.seed}. Observe the service state, then use Recorded history to follow database commits, faults, messages, and runtime logs.</p> : <>
       <p>Objective: follow a checkout request and compare the customer-facing result with the processor’s recorded state. Changing the experiment after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       {loadedChoice ? <p>Scenario details: {report?.scenarioName}; seed {report?.seed}; version and fault rule are available in the recorded scenario definition.</p> : null}
@@ -533,7 +535,6 @@ export function App({ host }: { readonly host: SimulationHost }) {
             {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
             {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
             {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
-          {imported && importedScenario ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
