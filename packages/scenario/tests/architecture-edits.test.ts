@@ -448,6 +448,43 @@ test("a diagnostic that names nothing an edit changed is attributed to /architec
   assert.deepEqual(codes(result.diagnostics), ["/architecture SUBSCRIPTION"]);
 });
 
+test("#183 a slot edit that removes the endpoint a workload calls is attributed to that slot edit", () => {
+  // A workload-addressed client (#121) calls notify's POST /notify through its action data. Audit is
+  // left out so that its packaged peer, which also calls POST /notify, cannot name the slot instead.
+  const shopper = model({ model: "demo.shopper", kind: "client", actions: ["send"], workloadCalls: [{ action: "send", target: "to", endpoint: "call" }] });
+  const architecture = packaged.architecture;
+  const withWorkload = {
+    ...packaged,
+    architecture: {
+      ...architecture,
+      components: [...architecture.components.filter(item => item.id !== "audit"), { id: "shopper", kind: "client", model: "demo.shopper", version: "1", configuration: {} }],
+      links: [...architecture.links.filter(item => item.source !== "audit"), { source: "shopper", target: "notify", policy: policyLink }],
+      databases: architecture.databases.filter(item => item.owner !== "audit"),
+    },
+    actions: [
+      ...packaged.actions.filter(item => item.target !== "audit"),
+      { id: "send", at: 2, kind: "client", target: "shopper", action: "send", data: { to: "notify", call: "POST /notify" } },
+    ],
+  } as unknown as CanonicalValue;
+  const workloadEngine = engineFor([...models, shopper], [truePredicate]);
+  const workloadPolicy = { ...policy, architecture: { ...policy.architecture!, resources: policy.architecture!.resources.filter(item => item.owner !== "audit") } };
+  const composeWorkload = (input: CanonicalValue) => composeOverlay(withWorkload, workloadPolicy, input, value => workloadEngine.validate(value), catalogOf([...models, shopper]));
+  assert.deepEqual(workloadEngine.validate(withWorkload), []);
+  // The broadcaster offers no POST /notify, so the packaged workload call breaks: INTERFACE at /actions/3/data/call.
+  const result = composeWorkload(overlay({ slots: [{ component: "notify", model: "demo.broadcaster", version: "1", options: [] }] }));
+  assert.ok(!result.ok);
+  assert.equal(result.code, "INVALID_OVERLAY");
+  assert.deepEqual(codes(result.diagnostics), ["/architecture/slots/0/model INTERFACE", "/architecture/slots/0/model PUBLISH"]);
+  // Only the fields a workloadCalls entry declares name its target: another data field of the same action does not.
+  const injected = (path: string) => composeOverlay(withWorkload, workloadPolicy, overlay({ slots: [mailer] }),
+    value => value === withWorkload ? [] : [{ path, code: "INTERFACE" }], catalogOf([...models, shopper]));
+  for (const [path, expected] of [["/actions/3/data/to", "/architecture/slots/0/model"], ["/actions/3/data/call", "/architecture/slots/0/model"], ["/actions/3/data/note", "/architecture"]]) {
+    const result = injected(path!);
+    assert.ok(!result.ok);
+    assert.deepEqual(codes(result.diagnostics), [`${expected} INTERFACE`], path);
+  }
+});
+
 test("a diagnostic that also occurs for the packaged document alone is a catalog defect, even after indexes shift", () => {
   const defect = { path: "/architecture/databases/1/tables", code: "STORAGE" };
   // Detaching audit's database moves orders' database from index 1 to index 0.

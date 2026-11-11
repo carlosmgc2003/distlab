@@ -436,6 +436,9 @@ export function attributeDiagnostic(
   } else {
     const top = /^\/(actions|faults|external|assertions)\/(\d+)/.exec(diagnostic.path);
     if (top) entry = (document[top[1]!] as Doc[] | undefined)?.[Number(top[2])];
+    // A workload-addressed call (#121) names its target in a data field, as a peer location names its bound component.
+    const data = /^\/actions\/\d+\/data\/([^/]+)$/.exec(diagnostic.path)?.[1];
+    if (data !== undefined && entry) peerTarget = workloadTarget(entry, architecture, unescape(data), catalog);
   }
   if (packagedDiagnostics().has(`${packagedPath}\u0000${diagnostic.code}`)) return undefined;
   // Otherwise the first edit, in normalized order, that changed a component the location names.
@@ -458,6 +461,21 @@ function resolvedPeer(component: Doc, name: string, catalog: DescriptorSource | 
   const configured = field(component.configuration, name);
   if (typeof configured === "string") return configured;
   return catalog?.find(component.model as string, component.version as string)?.peers.find(peer => peer.name === name)?.default;
+}
+
+/**
+ * The component a workload-addressed call names: for a client action whose model
+ * declares a `workloadCalls` entry for that action with `name` as its target or
+ * endpoint field, the action data's target field, when it is a string.
+ */
+function workloadTarget(action: Doc, architecture: Doc, name: string, catalog: DescriptorSource | undefined): string | undefined {
+  if (action.kind !== "client") return undefined;
+  const client = ((architecture.components ?? []) as Doc[]).find(component => component.id === action.target);
+  if (!client) return undefined;
+  const call = catalog?.find(client.model as string, client.version as string)?.workloadCalls
+    ?.find(item => item.action === action.action && (item.target === name || item.endpoint === name));
+  const target = call === undefined ? undefined : field(action.data, call.target);
+  return typeof target === "string" ? target : undefined;
 }
 
 function field(configuration: CanonicalValue | undefined, name: string): CanonicalValue | undefined {
