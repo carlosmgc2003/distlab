@@ -172,11 +172,16 @@ They apply to every scenario document, packaged or not:
 | Every destination a model publishes to exists | `PUBLISH` | `/architecture/components/i` |
 | A service whose model needs a database owns one with each required table name | `STORAGE` | `/architecture/databases/j/tables`, or the component when it owns no database |
 | A service whose model needs a key-value store owns one | `STORAGE` | `/architecture/components/i` |
+| A service is subscribed to every destination its model consumes (#131; one diagnostic however many are missing) | `SUBSCRIPTION` | `/architecture/components/i` |
 
 The existing ownership (`OWNERSHIP`), single-resource (`DUPLICATE`), and
-subscription (`SUBSCRIPTION`) checks complete the ADR-005 rule set. Composition
-rules run only when the architecture otherwise read without diagnostics, so one
-mistake does not cascade. Reachability of a component from a client is not
+subscription (`SUBSCRIPTION`) checks complete the ADR-005 rule set. The
+missing-subscription row above is one of those subscription checks: it runs
+while subscriptions are read, before the composition rules. A subscription
+entry that names a non-service or an undeclared consumer keeps its indexed
+`/architecture/subscriptions/j` path. Composition rules run only when the
+architecture otherwise read without diagnostics, so one mistake does not
+cascade. Reachability of a component from a client is not
 required: an unreached component is legal and idle.
 
 An imported scenario document ([ADR-006](adr/006-scenario-documents.md)) reaches

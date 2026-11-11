@@ -126,7 +126,7 @@ test("ARCH-AC-6 every allowed slot model, with the slot's allowed resource and s
       assert.equal(diagnostics.length === 0, edits.resources.length + edits.subscriptions.length === 0, `${name}: ${slot.component} = ${model} alone`);
       for (const { path, code } of diagnostics) {
         assert.ok((code === "STORAGE" && edits.resources.length > 0 && path === `/architecture/components/${at}`)
-          || (code === "SUBSCRIPTION" && edits.subscriptions.length > 0 && path === "/architecture/subscriptions"), `${name}: ${slot.component} = ${model} alone: ${path} ${code}`);
+          || (code === "SUBSCRIPTION" && edits.subscriptions.length > 0 && path === `/architecture/components/${at}`), `${name}: ${slot.component} = ${model} alone: ${path} ${code}`);
       }
     }
   }
@@ -215,8 +215,8 @@ test("a design missing the subscription or the database is rejected at its overl
   const unsubscribed = compose(GAP, { version: 1, architecture: { slots: [slot()], resources: [database] } });
   assert.ok(!unsubscribed.ok);
   assert.equal(unsubscribed.code, "INVALID_OVERLAY");
-  // The missing subscription is a location no edit names, so ADR-005 attributes it to /architecture.
-  assert.deepEqual(codes(unsubscribed.diagnostics), ["/architecture SUBSCRIPTION"]);
+  // The missing subscription is reported at the consumer, which the slot replaced (#131).
+  assert.deepEqual(codes(unsubscribed.diagnostics), ["/architecture/slots/0/model SUBSCRIPTION"]);
 
   const homeless = compose(GAP, { version: 1, architecture: { slots: [slot()], subscriptions: [subscription] } });
   assert.ok(!homeless.ok);

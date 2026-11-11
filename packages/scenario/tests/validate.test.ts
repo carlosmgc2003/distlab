@@ -9,6 +9,7 @@ const catalog = catalogOf([
   model({ model: "demo.client", kind: "client", actions: ["checkout"] }),
   model({ model: "demo.external", kind: "external", operations: ["authorize"] }),
   model({ model: "demo.billing", kind: "service", consumers: ["OrderPlaced"] }),
+  model({ model: "demo.ledger", kind: "service", consumers: ["OrderPlaced", "OrderPaid"] }),
 ]);
 const assessment = assessmentOf([truePredicate]);
 const codes = (input: unknown) => normalizeScenario(input as never, catalog, assessment).diagnostics.map(item => `${item.path} ${item.code}`);
@@ -142,4 +143,26 @@ test("duplicate fault diagnostics retain source action indices", () => {
       { id: "second", at: 0, kind: "fault", fault: { id: "same", kind: "crash", target: "orders" } },
     ],
   }).includes("/actions/2/fault/id DUPLICATE"));
+});
+
+test("#131 a declared consumer without its subscription is reported once, at the consumer component", () => {
+  const ledger = { id: "ledger", kind: "service", model: "demo.ledger", version: "1", configuration: {} };
+  const architecture = (components: unknown[], subscriptions: unknown[] = []) => ({
+    ...baseScenario(), architecture: {
+      components, subscriptions,
+      destinations: [{ id: "OrderPlaced", kind: "topic" }, { id: "OrderPaid", kind: "topic" }],
+    },
+  });
+  const orders = { id: "orders", kind: "service", model: "demo.service", version: "1", configuration: {} };
+  // Both consumed destinations are missing: one diagnostic, at the consumer's index.
+  assert.deepEqual(codes(architecture([orders, ledger])), ["/architecture/components/1 SUBSCRIPTION"]);
+  // One of the two is missing: still the consumer.
+  assert.deepEqual(codes(architecture([orders, ledger], [{ destination: "OrderPaid", consumer: "ledger" }])), ["/architecture/components/1 SUBSCRIPTION"]);
+  // Both subscribed: valid.
+  assert.deepEqual(codes(architecture([orders, ledger], [{ destination: "OrderPaid", consumer: "ledger" }, { destination: "OrderPlaced", consumer: "ledger" }])), []);
+  // The path is the consumer's index in the document, even after an earlier component that could not be read.
+  assert.deepEqual(codes(architecture([{ ...orders, model: "demo.unknown" }, ledger])), ["/architecture/components/0/model UNKNOWN_MODEL", "/architecture/components/1 SUBSCRIPTION"]);
+  // Subscription entries keep their indexed paths.
+  assert.deepEqual(codes(architecture([orders, ledger], [{ destination: "OrderPaid", consumer: "ledger" }, { destination: "OrderPlaced", consumer: "ledger" }, { destination: "OrderPaid", consumer: "orders" }])),
+    ["/architecture/subscriptions/2 SUBSCRIPTION"]);
 });
