@@ -785,10 +785,18 @@ p.design-step-notice { margin: 8px 0 0; padding: 6px 10px; border-left: 3px soli
 .lesson-topic { margin-top: 16px; }
 .lesson-topic h3 { margin: 0; font-size: 1rem; }
 .lesson-topic-summary { margin: 2px 0 8px; color: var(--text-secondary); font-size: .85rem; }
+/* In a topic, each card is one comparison: a full-width row with its lessons side by side, so no
+   empty grid tracks are left when a topic has fewer pairs than columns. */
+.lesson-topic .lesson-cards { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.lesson-topic .lesson-card-lessons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* A lone or odd last lesson spans the row, so a card never ends with an empty cell. */
+.lesson-topic .lesson-card-lessons > li:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.lesson-topic .lesson-card-lessons > li { display: flex; }
+.lesson-topic .lesson-choice { align-content: start; }
 .lesson-card-concepts { margin: 0 0 6px; padding: 0 4px; color: var(--text-secondary); font-size: .72rem; font-weight: 650; letter-spacing: .02em; }
 .lesson-chooser-empty { color: var(--text-secondary); }
 .empty-topics-title { margin: 20px 0 4px; font-size: 1rem; }
 .empty-topics { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .empty-topics li { display: grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap: 12px; align-items: baseline; line-height: 1.45; font-size: .9rem; }
 .empty-topics button { text-align: left; font-weight: 650; }
-@media (max-width: 640px) { .empty-topics li { grid-template-columns: 1fr; gap: 2px; } .lesson-search input { min-width: 0; } }
+@media (max-width: 640px) { .lesson-topic .lesson-card-lessons { grid-template-columns: minmax(0, 1fr); } .empty-topics li { grid-template-columns: 1fr; gap: 2px; } .lesson-search input { min-width: 0; } }
