@@ -256,10 +256,15 @@ function readComponents(value: unknown, catalog: ScenarioCatalog, push: (path: s
     if (!resolved) push(catalog.versions(model).length ? `${path}/version` : `${path}/model`, catalog.versions(model).length ? DiagnosticCodes.VERSION : DiagnosticCodes.UNKNOWN_MODEL);
     else if (componentKinds.has(kind) && resolved.kind !== kind) push(`${path}/kind`, DiagnosticCodes.KIND);
     if (!componentKinds.has(kind) || !resolved || resolved.kind !== kind) continue;
-    components.push({ id, kind: kind as ComponentKind, model, version, configuration });
+    const component: ComponentInstance = { id, kind: kind as ComponentKind, model, version, configuration };
+    documentIndex.set(component, index);
+    components.push(component);
   }
   return components;
 }
+
+/** The index of each read component in the document's own list, which differs from its index among the read components after a skipped entry. */
+const documentIndex = new WeakMap<ComponentInstance, number>();
 
 function readLinks(value: unknown, byId: ReadonlyMap<string, ComponentInstance>, push: (path: string, code: DiagnosticCode) => void): ArchitectureDefinition["links"] | undefined {
   const items = array(value, "/architecture/links", push);
@@ -529,11 +534,13 @@ function readSubscriptions(value: unknown, destinations: readonly DestinationDef
     declared.set(consumer, owned);
     subscriptions.push({ destination, consumer });
   }
+  // A declared consumer without its subscription is reported at the consumer, so
+  // ADR-005's stage-4 attribution can name the edit that changed it (#131).
   for (const component of components) {
     if (component.kind !== "service") continue;
     const model = catalog.find(component.model, component.version);
     const owned = declared.get(component.id) ?? new Set<string>();
-    for (const consumer of model?.consumers ?? []) if (!owned.has(consumer)) push("/architecture/subscriptions", DiagnosticCodes.SUBSCRIPTION);
+    for (const consumer of model?.consumers ?? []) if (!owned.has(consumer)) push(`/architecture/components/${documentIndex.get(component)!}`, DiagnosticCodes.SUBSCRIPTION);
   }
   return subscriptions;
 }

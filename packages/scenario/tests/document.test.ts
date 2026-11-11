@@ -315,6 +315,34 @@ test("#121 an imported workload call to a misspelled endpoint fails validation a
   assert.deepEqual(result.diagnostics.map(item => `${item.path} ${item.code}`), ["/scenario/actions/0/data/endpoint INTERFACE"]);
 });
 
+test("#131 an imported document with an unsubscribed declared consumer fails validation at the consumer's /scenario path", () => {
+  const consumerRegistry: HostedCatalogRegistry = {
+    catalogs: [{
+      catalog: catalogOf([
+        model({ model: "demo.orders", kind: "service", publishes: ["OrderPlaced"] }),
+        model({ model: "demo.billing", kind: "service", consumers: ["OrderPlaced"] }),
+      ], "1.0.0", "demo.catalog"),
+      assessment: assessmentOf([truePredicate]),
+    }],
+    reservedNames: [],
+  };
+  const withSubscriptions = (subscriptions: unknown[]) => JSON.stringify(documentOf({ scenario: scenario({
+    architecture: {
+      components: [
+        { id: "orders", kind: "service", model: "demo.orders", version: "1", configuration: {} },
+        { id: "billing", kind: "service", model: "demo.billing", version: "1", configuration: {} },
+      ],
+      destinations: [{ id: "OrderPlaced", kind: "topic" }],
+      subscriptions,
+    },
+  }) }));
+  assert.ok(validateScenarioDocument(withSubscriptions([{ destination: "OrderPlaced", consumer: "billing" }]), consumerRegistry).ok);
+  const result = validateScenarioDocument(withSubscriptions([]), consumerRegistry);
+  assert.ok(!result.ok);
+  assert.equal(result.stage, "scenario");
+  assert.deepEqual(result.diagnostics.map(item => `${item.path} ${item.code}`), ["/scenario/architecture/components/1 SUBSCRIPTION"]);
+});
+
 test("diagnostic codes come from the contract constants and the existing scenario codes", () => {
   const known = new Set<string>([...Object.values(ScenarioDocumentDiagnosticCodes), ...Object.values(DiagnosticCodes)]);
   const samples = [codes("{"), codes({ ...documentOf(), formatVersion: 3 }), codes({ ...documentOf(), presentation: { title: "x", assertions: { ghost: "y" } } })];

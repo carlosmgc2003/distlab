@@ -599,8 +599,8 @@ Every scenario expectation of section 3 is reproduced by the packaged run, so
 the empty slot is a meaningful first run: the event is published and never
 delivered. A design that fills the slot without a database is rejected with
 `STORAGE` at `/architecture/slots/0/model`. A design without the subscription is
-rejected with `SUBSCRIPTION` at `/architecture`, because no edit names the
-missing subscription. Each design has its own `runId`, and Reset replays it.
+rejected with `SUBSCRIPTION` at the same slot path, because the missing
+subscription is reported at the consumer the slot replaced (#131). Each design has its own `runId`, and Reset replays it.
 The browser's Design editor (#112) will offer these edits; until then the
 worker accepts them in a `load` overlay, and catalog tests run the fixture
 designs above.

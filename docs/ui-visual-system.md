@@ -226,6 +226,13 @@ receiving components carry a text badge on the graph, and the legend names every
 token. The token is decorative: the narration, the playback position, and the
 `Request and message movement` region carry the same movement as text.
 
+Both ends of a painted movement stay on screen. When the sending or receiving
+component is outside the canvas, the graph pans just enough to show both, at the
+current zoom, and zooms out only when they cannot both fit (#190), never below the
+legible name size. A reader's own
+pan and zoom are kept while both components are already visible. Under
+`prefers-reduced-motion: reduce` the view changes without animation.
+
 Choosing a record in Recorded history takes the graph highlight back and the
 replay cursor stands down. A live cue, which flashes by itself as a run records,
 never takes the highlight back from playback. Both tab panels stay mounted, so

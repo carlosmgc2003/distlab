@@ -5,8 +5,8 @@ import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } 
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import { EMPTY_SLOT_LABEL } from "./design-step.ts";
-import { legibleViewport, legibleZoom } from "./layout/legible-fit.ts";
-import type { Insets } from "./layout/legible-fit.ts";
+import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
+import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
@@ -36,23 +36,25 @@ function SymbolShape({ symbol }: { readonly symbol: NodeSymbol }) {
     case "external":
       return <polygon points="22,1 193,1 214,45 193,89 22,89 1,45" className="shape-fill shape-stroke" />;
     case "topic":
-      return <>
-        <rect x="1" y="26" width="213" height="38" rx="8" ry="8" className="shape-fill shape-stroke" />
-        <line x1="45" y1="26" x2="45" y2="10" className="shape-stroke" />
-        <line x1="107" y1="26" x2="107" y2="10" className="shape-stroke" />
-        <line x1="170" y1="26" x2="170" y2="10" className="shape-stroke" />
-        <line x1="45" y1="64" x2="45" y2="80" className="shape-stroke" />
-        <line x1="107" y1="64" x2="107" y2="80" className="shape-stroke" />
-        <line x1="170" y1="64" x2="170" y2="80" className="shape-stroke" />
-      </>;
     case "queue":
-      return <>
-        <rect x="8" y="8" width="30" height="74" rx="6" ry="6" className="shape-fill shape-stroke" />
-        <line x1="38" y1="25" x2="52" y2="25" className="shape-stroke" />
-        <line x1="38" y1="45" x2="52" y2="45" className="shape-stroke" />
-        <line x1="38" y1="65" x2="52" y2="65" className="shape-stroke" />
-      </>;
+      return <ChannelShape queue={symbol === "queue"} />;
   }
+}
+
+/**
+ * A MessageBus destination is a message channel: a pipe lying along the flow. Publishers reach its
+ * west inlet and deliveries leave its east outlet (the shaded face), so the pipe points the way
+ * messages travel. The glyph tells the two kinds apart (fan-out for a topic, one way out for a
+ * queue), and a queue also shows its waiting messages as a lane of cells along the floor of the pipe.
+ */
+function ChannelShape({ queue }: { readonly queue: boolean }) {
+  return <>
+    <path d="M13 10H201A11 35 0 0 1 201 80H13A11 35 0 0 1 13 10Z" className="shape-fill shape-stroke" />
+    <path d="M16 17H196" className="channel-sheen" />
+    {queue ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(cell =>
+      <rect key={cell} x={22 + cell * 16.5} y="69" width="12" height="6" rx="1.5" className={`channel-cell${cell >= 7 ? " is-next" : ""}`} />) : null}
+    <ellipse cx="201" cy="45" rx="11" ry="35" className="channel-face shape-stroke" />
+  </>;
 }
 
 function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
@@ -77,18 +79,21 @@ function SymbolGlyph({ symbol }: { readonly symbol: NodeSymbol }) {
         <line x1="3" y1="10" x2="17" y2="10" stroke="currentColor" strokeWidth="1.6" />
       </svg>;
     case "topic":
+      // One message in, a copy out to every subscriber.
       return <svg viewBox="0 0 20 20" aria-hidden="true">
-        <circle cx="10" cy="16" r="1.8" fill="currentColor" />
-        <path d="M6 12 Q10 8 14 12" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M4 9 Q10 4 16 9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M2 6 Q10 0 18 6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="3.5" cy="10" r="2.2" fill="currentColor" />
+        <path d="M5.5 10 15 3.5M5.5 10H15M5.5 10 15 16.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="16.5" cy="3.5" r="1.8" fill="currentColor" />
+        <circle cx="16.5" cy="10" r="1.8" fill="currentColor" />
+        <circle cx="16.5" cy="16.5" r="1.8" fill="currentColor" />
       </svg>;
     case "queue":
+      // Messages wait in line; each leaves to one consumer.
       return <svg viewBox="0 0 20 20" aria-hidden="true">
-        <line x1="2" y1="6" x2="13" y2="6" stroke="currentColor" strokeWidth="1.6" />
-        <line x1="2" y1="10" x2="13" y2="10" stroke="currentColor" strokeWidth="1.6" />
-        <line x1="2" y1="14" x2="13" y2="14" stroke="currentColor" strokeWidth="1.6" />
-        <polyline points="14,4 18,10 14,16" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <rect x="1.5" y="3" width="5" height="4" rx="1" fill="currentColor" />
+        <rect x="1.5" y="8" width="5" height="4" rx="1" fill="currentColor" />
+        <rect x="1.5" y="13" width="5" height="4" rx="1" fill="currentColor" />
+        <path d="M9 10H17.5M14.5 6.5 18 10 14.5 13.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>;
   }
 }
@@ -128,7 +133,13 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
     <section aria-labelledby="legend-nodes-heading">
       <h4 id="legend-nodes-heading">Nodes</h4>
       <ul>{legendSymbols.map(symbol => <li key={symbol}>
-        <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>
+        {symbol === "topic" || symbol === "queue"
+          // At legend size the two channels share one outline; their glyph tells them apart.
+          ? <span className={`legend-channel symbol-${symbol}`} aria-hidden="true">
+            <svg className="legend-node" viewBox="0 0 215 90"><SymbolShape symbol={symbol} /></svg>
+            <span className="legend-channel-glyph"><SymbolGlyph symbol={symbol} /></span>
+          </span>
+          : <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>}
         <span>{symbolLabels[symbol]}</span>
       </li>)}
         <li><ResourceSample kind="database" label="Cylinder" /><span>Database (owned)</span></li>
@@ -139,8 +150,8 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
       <h4 id="legend-edges-heading">Relationships</h4>
       <ul>
         <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
-        <li><EdgeSample relationship="subscription" label="Dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
-        <li><EdgeSample relationship="publication" label="Dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
+        <li><EdgeSample relationship="subscription" label="Purple dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
+        <li><EdgeSample relationship="publication" label="Purple dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
         <li><EdgeSample relationship="ownership" label="Short thin amber line without arrowhead" /><span>Ownership (data)</span></li>
       </ul>
     </section>
@@ -165,9 +176,8 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
 
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
   return <>
-    {/* One handle per ELK port side: requests enter west, bus links use the north side. */}
+    {/* One handle per ELK port side: requests and bus links enter west and leave east, data leaves south. */}
     <Handle id={handleFor.request.target} type="target" position={Position.Left} />
-    <Handle id={handleFor.subscription.target} type="target" position={Position.Top} />
     <div className="node-body">
       <div className="node-shape" aria-hidden="true">
         <svg viewBox="0 0 215 90" preserveAspectRatio="none" className="shape-svg">
@@ -189,7 +199,6 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
       </div>
     </div>
     <Handle id={handleFor.request.source} type="source" position={Position.Right} />
-    <Handle id={handleFor.subscription.source} type="source" position={Position.Top} />
     <Handle id={handleFor.ownership.source} type="source" position={Position.Bottom} />
   </>;
 });
@@ -361,6 +370,67 @@ function fitLegibly(flow: ReactFlowInstance<ArchitectureNode | ResourceNode, Arc
     { minZoom: Math.min(maxZoom, Math.max(minZoom, legibleZoom(smallestNamePx(canvas)))), maxZoom: FIT_MAX_ZOOM });
   return flow.setViewport(viewport);
 }
+/** How long the view takes to bring a painted movement into the canvas, unless motion is reduced. */
+const REVEAL_MS = 250;
+
+/**
+ * The bounds of the named nodes in graph coordinates, read from the rendered nodes, so a role badge
+ * that has just grown a node is counted before React Flow reports the new size.
+ */
+function renderedBounds(canvas: HTMLElement, ids: readonly string[], viewport: Viewport): Rect | undefined {
+  const area = canvas.getBoundingClientRect();
+  const boxes = ids.flatMap(id => {
+    const element = canvas.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
+    return element ? [element.getBoundingClientRect()] : [];
+  });
+  if (!boxes.length) return undefined;
+  const left = Math.min(...boxes.map(box => box.left)), top = Math.min(...boxes.map(box => box.top));
+  const right = Math.max(...boxes.map(box => box.right)), bottom = Math.max(...boxes.map(box => box.bottom));
+  return {
+    x: (left - area.left - viewport.x) / viewport.zoom, y: (top - area.top - viewport.y) / viewport.zoom,
+    width: (right - left) / viewport.zoom, height: (bottom - top) / viewport.zoom,
+  };
+}
+
+/**
+ * Brings both components of the painted movement into the canvas (#190) when either is not wholly
+ * inside it. The reader's own view is kept while both are visible. It zooms out no further than the
+ * legible floor (#166): when both cannot fit at that size, the pair is centered and the reader pans.
+ * Viewport state is presentation only.
+ */
+function revealMovement(flow: ReactFlowInstance<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>, canvas: HTMLElement, ids: readonly string[], animate: boolean): Promise<boolean> {
+  const area = canvas.getBoundingClientRect();
+  if (!ids.length || area.width < 1 || area.height < 1) return Promise.resolve(false);
+  const current = flow.getViewport();
+  const target = renderedBounds(canvas, ids, current);
+  if (!target) return Promise.resolve(false);
+  // Never below the legible floor of #166, unless the reader has already zoomed out past it.
+  const floor = Math.min(current.zoom, Math.max(minZoom, legibleZoom(smallestNamePx(canvas))));
+  const next = revealViewport(target, area, insetsFor(canvas), current, floor);
+  if (next === current) return Promise.resolve(false);
+  const still = !animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  return flow.setViewport(next, still ? undefined : { duration: REVEAL_MS });
+}
+
+/** Reveals each newly painted movement once the graph is laid out and fitted. */
+function RevealMovement({ container, movement, nodeIds }: {
+  readonly container: RefObject<HTMLDivElement | null>;
+  /** The painted movement's observation, or undefined while none is painted or the graph is not ready. */
+  readonly movement: string | undefined;
+  readonly nodeIds: readonly string[];
+}) {
+  const flow = useReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>();
+  const ids = nodeIds.join("\u0000");
+  useEffect(() => {
+    const element = container.current;
+    if (!element || movement === undefined) return;
+    // After the frame's layout, so a narration column that just opened has narrowed the canvas.
+    const frame = requestAnimationFrame(() => { void revealMovement(flow, element, ids.split("\u0000"), true); });
+    return () => cancelAnimationFrame(frame);
+  }, [container, flow, movement, ids]);
+  return null;
+}
+
 /** Small enough that a reader can still zoom out to the whole checkout graph on a narrow canvas. */
 const minZoom = 0.15;
 const maxZoom = 1.8;
@@ -423,8 +493,10 @@ function ElkLayoutRunner({ layoutKey, nodes, edges, container, onLayout }: {
 }
 
 /** Fits the whole graph to the measured canvas whenever the canvas or the session changes. */
-function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }: {
+function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted, movementNodes }: {
   readonly container: RefObject<HTMLDivElement | null>;
+  /** The painted movement's components. A refit returns to the default view, then reveals them again (#190). */
+  readonly movementNodes: RefObject<readonly string[]>;
   readonly sessionKey: string;
   /** Changes when a new ELK layout is applied, so the fitted view follows the laid-out graph. */
   readonly layoutKey: string;
@@ -446,7 +518,7 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }:
       if (current === measured || width < 1 || height < 1) return;
       measured = current;
       reserveControls(element);
-      void fitLegibly(flow, element);
+      void fitLegibly(flow, element).then(() => revealMovement(flow, element, movementNodes.current, false));
     };
     // A ResizeObserver sees every layout-driven canvas change: window resizes, panel switches, and the two-column inspector.
     const observer = new ResizeObserver(() => {
@@ -456,17 +528,18 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted }:
     observer.observe(element);
     apply();
     return () => { if (queued) cancelAnimationFrame(queued); observer.disconnect(); };
-  }, [container, flow]);
+  }, [container, flow, movementNodes]);
   // Loading a scenario, resetting the simulation, or toggling the legend returns the view to the fitted default.
   useEffect(() => {
     const element = container.current;
     // Measure after the legend has painted at its new size.
     let cancelled = false;
     const frame = requestAnimationFrame(() => {
-      void (element ? fitLegibly(flow, element) : Promise.resolve(false)).then(() => { if (!cancelled) onFitted(layoutKey); });
+      void (element ? fitLegibly(flow, element).then(() => revealMovement(flow, element, movementNodes.current, false)) : Promise.resolve(false))
+        .then(() => { if (!cancelled) onFitted(layoutKey); });
     });
     return () => { cancelled = true; cancelAnimationFrame(frame); };
-  }, [container, flow, sessionKey, layoutKey, legendOpen, onFitted]);
+  }, [container, flow, sessionKey, layoutKey, legendOpen, onFitted, movementNodes]);
   return null;
 }
 
@@ -554,6 +627,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   const [measuredSizes, setMeasuredSizes] = useState<{ readonly key: string; readonly sizes: ReadonlyMap<string, Size> }>({ key: layoutKey, sizes: new Map() });
   const sizes = measuredSizes.key === layoutKey ? measuredSizes.sizes : undefined;
   const flight = playback.step;
+  const movementNodes = useRef<readonly string[]>([]);
+  movementNodes.current = flight?.nodeIds ?? [];
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
     : emphasis;
@@ -676,7 +751,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           ariaLabelConfig={ariaLabelConfig}>
           <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
-            onFitted={setFittedKey} />
+            onFitted={setFittedKey} movementNodes={movementNodes} />
+          <RevealMovement container={canvas} movement={ready ? flight?.observationId : undefined} nodeIds={flight?.nodeIds ?? []} />
           <Background gap={24} color="#cbd5e1" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />

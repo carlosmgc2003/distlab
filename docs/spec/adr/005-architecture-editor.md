@@ -548,10 +548,20 @@ by lesson and model. It is not part of the contract.
   declared workload-addressed call whose action data names that target and
   endpoint (amendment, #121), each publication goes to a declared
   destination, and each committed table is a declared table.
-- **ARCH-AC-6 Allowance integrity.** For each slot, every allowed model
-  substituted alone gives a document that passes `ScenarioEngine.validate`.
-  Every binding candidate exists. No ADR-004 parameter targets a slot
-  component. Peer names and option keys of each model are disjoint.
+- **ARCH-AC-6 Allowance integrity** (clarified, #134, as decided on #111).
+  The *completion* of an allowed model `m` in slot `c` holds the allowance's
+  edits that `m` needs and `c` lacks. That is one `attach` resource edit for
+  `c` for each storage kind `m`'s descriptor needs and `c` does not own. It is
+  also one `subscribe` edit for `c` for each destination `m` consumes that `c`
+  is not subscribed to. For each slot, every allowed model gives a document
+  that passes `ScenarioEngine.validate`: the slot edit `c ← m` with default
+  options, plus its completion, applied as one overlay under the lesson's
+  policy and within its `maxEdits`. For packaged lessons,
+  `m` substituted alone fails only with `STORAGE` and `SUBSCRIPTION`
+  diagnostics, and only when its completion holds resource or subscription
+  edits respectively. With an empty completion it passes. Every binding candidate exists. No
+  ADR-004 parameter targets a slot component. Peer names and option keys of
+  each model are disjoint.
 - **ARCH-AC-7 Boundary.** The main thread imports descriptors and policies only
   from data-only modules, never imports composition or overlay application
   code, and never sends an applied document or preview. Node positions never

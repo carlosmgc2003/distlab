@@ -60,15 +60,23 @@ readable without color (color is retained as a secondary cue).
 | Client | Pill (fully rounded card) | Monitor/person | `--category-client` (blue) |
 | Internal service | Rectangle, UML-component style | Component notch icon | `--category-service` (green) |
 | External service | Hexagon | Globe | `--category-external` (orange) |
-| Message bus — topic | Wide bar with pronged rail | Broadcast/envelope stack | `--category-infrastructure` (purple) |
-| Message bus — queue | Vertical rail/stack | FIFO arrow | `--category-infrastructure` (purple) |
+| Message bus — topic | Message channel: a pipe along the flow, shaded outlet face on the east | Fan-out (one in, one to each subscriber) | `--category-infrastructure` (purple) |
+| Message bus — queue | The same channel with a lane of waiting message cells along its floor | Queued cells, one arrow out | `--category-infrastructure` (purple) |
 | Database (owned) | Cylinder | Database disc | neutral slate |
 | KV store (owned) | Layered box / key | Key | neutral slate |
 
 Edge semantics are already partially encoded and become part of the same
-legend: request = solid with arrowhead, subscription = long dash with
-arrowhead, publication = dotted with arrowhead, ownership (new) = short thin
-amber line (the data link color), no arrowhead, non-focusable.
+legend: request = solid slate with arrowhead, subscription = long dash with
+open arrowhead, publication = dotted with small filled arrowhead, ownership
+(new) = short thin amber line (the data link color), no arrowhead,
+non-focusable. Bus links (subscription and publication) take the
+destinations' purple, and their labels name the relationship only
+(`Publication`, `Subscription`) on a lilac chip: the destination already names
+itself on the graph. The line pattern, not the color, carries the meaning. A
+destination's node title is its id; the channel symbol and its `Message bus
+topic` or `Message bus queue` caption say it belongs to the MessageBus, and
+the name wraps instead of being cut off. At legend size the two channels
+share one outline, so each legend sample carries its glyph.
 
 ## Plan
 
@@ -351,16 +359,19 @@ cross as little as ELK can manage.
   view below a legible scale (#166). Every option name was checked against
   `knownLayoutOptions()` of the pinned `elkjs` version.
 - **Tiers.** `elk.partitioning.activate` with one partition per tier:
-  0 ingress (client), 1 gateway, 2 services, 3 MessageBus destinations,
-  4 persistence, 5 external services. The tier derives from the node type
+  0 ingress (client), 1 gateway, 2 services and MessageBus destinations,
+  4 persistence, 5 external services. Destinations share the service band, so
+  ELK layers each destination between the services that publish to it and the
+  services subscribed to it, and a message reads left to right: publisher,
+  destination, subscriber. The tier derives from the node type
   and symbol; an optional presentation field `data.tier` overrides it.
   Packaged lessons have no gateway kind, so tier 1 is used only through the
   override.
 - **Ports.** One port per link end with `elk.portConstraints: FIXED_SIDE`:
-  requests leave east and enter west, bus links (publication and
-  subscription) leave and enter by the north side, data links leave by the
-  south. Component handles carry the same side names (`east`, `west`,
-  `north-out`, `north-in`, `south`); resource nodes keep one declarative
+  requests and bus links (publication and subscription) leave east and enter
+  west, so a destination is entered on its inlet and left from its outlet;
+  data links leave by the south. Component handles carry the same side names
+  (`east`, `west`, `south`); resource nodes keep one declarative
   `north` handle.
 - **Satellites.** A database or key-value store whose only link is its
   owner's data link hangs in a row under the owner (gap 30 px). ELK sees the
@@ -386,10 +397,24 @@ cross as little as ELK can manage.
   column when open. The legend starts collapsed. **Fit View** returns to this
   view; the zoom-out button still reaches the whole graph at any size. At
   1534×897 every packaged lesson loads whole, with 15–20 % of zoom to spare.
-  At 1366×768 the widest lessons fit within about 2 % of the legible floor, so
-  font metrics decide whether they are whole; either way the names are legible
-  and the view starts at the clients. The viewport is presentation only and
+  At 1366×768 the widest lessons reach the legible floor (the checkout pair,
+  whose topic sits between Orders and Payments, is five columns wide), so font
+  metrics decide whether they are whole; either way the names are legible and
+  the view starts at the clients. The viewport is presentation only and
   never enters projections, commands, or history.
+- **Painted movement in view (#190).** When Replay paints a movement whose
+  sending or receiving component is not wholly inside the canvas,
+  `revealViewport` in `layout/legible-fit.ts` pans the view, at the current
+  zoom, by the least distance that puts both inside the space the overlays
+  leave, or within 8 px of the canvas edge on an axis where that space is too
+  small. Only when both cannot fit at the current zoom does it zoom out, just
+  enough, and never below the legible floor above: when the two components
+  cannot both fit at a legible size, the pair is centered and the reader pans.
+  A refit of the default view after a canvas resize reveals the painted
+  movement again. While both components are already inside the canvas, the
+  reader's own pan and zoom are kept. The pan animates for 250 ms, and changes
+  at once under `prefers-reduced-motion: reduce`. The playback readout keeps one
+  height from movement to movement, so stepping does not resize the canvas.
 - **Routes.** `ElkEdge` draws `startPoint → bendPoints → endPoint` with
   slightly rounded corners and puts the label where ELK placed it. ELK
   reports a section's points relative to the edge's container; `elkLayout`
@@ -404,7 +429,7 @@ cross as little as ELK can manage.
   bus links in a second pass that keeps every node on its side and in its row
   order (one partition per first-pass column, interactive layering,
   semi-interactive crossing minimization). On the platform fixture the
-  default leaves fewer crossings (8 against 22).
+  default leaves fewer crossings (1 against 5).
 - **Not editable.** Nodes are not draggable, so there is no live re-routing
   and no "re-layout" control.
 
@@ -418,7 +443,9 @@ appear left to right; ports sit on their sides; each satellite sits under its
 owner; layout is deterministic and does not mutate its inputs. On the
 platform fixture the seed placement with smooth-step edges has 0 overlaps,
 4 crossings, 4 edges through nodes, and 24 pairs of edges drawn over each
-other; the ELK layout has 0, 8, 0, and 0.
+other; the ELK layout has 0, 1, 0, and 0. With the default strategy, every
+bus link in the platform fixture and in every packaged lesson runs from the
+west to the east: its source ends left of its target.
 
 ## Guardrails
 

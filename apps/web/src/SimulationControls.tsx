@@ -18,10 +18,13 @@ export function SimulationControls({ host, snapshot, locked = false }: {
   const canPause = !locked && (status === "RUNNING" || ((status === "READY" || status === "PAUSED") && pendingCommands.includes("run")))
     && !pendingCommands.some(type => type !== "run");
   const canReset = !busy && status !== "RUNNING" && (projection !== null || error?.code === "SIMULATION_FAILED");
+  // A terminal projection can arrive before `run.finished` releases the command (#193): the run is
+  // over, so it is not described as in progress while the command settles.
+  const runEnded = status === "COMPLETED" || status === "FAILED";
   const pendingMessage = pendingCommands.includes("pause") ? "Pause requested; waiting for an event boundary…"
     : pendingCommands.includes("reset") ? "Resetting scenario…"
     : pendingCommands.includes("step") ? "Stepping one event…"
-    : pendingCommands.includes("run") ? "Run in progress…"
+    : pendingCommands.includes("run") ? (runEnded ? "" : "Run in progress…")
     : loading ? "Loading…" : locked ? "Assessment running…" : "";
   // Between two assessment rows no session is loaded yet; that is not a request to choose one.
   const statusLabel = status ?? (error?.code === "SIMULATION_FAILED" ? "FAILED" : error ? "Simulation unavailable." : locked ? "Assessment running." : "Choose a scenario to begin.");

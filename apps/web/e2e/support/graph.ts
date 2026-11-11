@@ -40,8 +40,12 @@ export async function graphView(page: Page): Promise<GraphView> {
   });
 }
 
-/** Waits for one settled view and checks the legibility guarantee; `whole` additionally requires every node on screen. */
-export async function expectLegibleView(page: Page, context: string, options: { readonly whole?: boolean } = {}): Promise<GraphView> {
+/**
+ * Waits for one settled view and checks the legibility guarantee; `whole` additionally requires every node on screen.
+ * With `painted`, a movement is painted and the view may have moved off the graph's start toward it (#190), so the
+ * start is not required. On a canvas too small to hold both of its components at a legible size, legibility wins (#166).
+ */
+export async function expectLegibleView(page: Page, context: string, options: { readonly whole?: boolean; readonly painted?: boolean } = {}): Promise<GraphView> {
   let previous = "";
   let view = await graphView(page);
   await expect.poll(async () => {
@@ -52,7 +56,7 @@ export async function expectLegibleView(page: Page, context: string, options: { 
     return settled;
   }, { message: `graph view settles at ${context}`, intervals: [100, 200, 250] }).toBe(true);
   expect(view.smallestName, `${context}: smallest component name`).toBeGreaterThanOrEqual(MIN_NAME_PX);
-  expect(view.startsAtStart, `${context}: the view starts at the graph's start`).toBe(true);
+  if (!options.painted) expect(view.startsAtStart, `${context}: the view starts at the graph's start`).toBe(true);
   if (options.whole) expect(view.whole, `${context}: the whole graph is on screen`).toBe(true);
   return view;
 }

@@ -441,11 +441,72 @@ test("ARCH-AC-4: each composition code is reachable through an edit and attribut
   assert.deepEqual(codes(mixed.diagnostics), ["/architecture/bindings/0/target INTERFACE", "/architecture/slots/0/model INTERFACE", "/architecture/slots/0/model PUBLISH"]);
 });
 
-test("a diagnostic that names nothing an edit changed is attributed to /architecture", () => {
-  // The mailer consumes OrderCreated, but nothing subscribes it: the location is the subscription list itself.
+test("#131 a slot fill with an unsubscribed consumer model is attributed to that slot edit", () => {
+  // The mailer consumes OrderCreated, but nothing subscribes it: the location is the consumer component, which the slot replaced.
   const result = rejected(overlay({ slots: [mailer] }));
   assert.equal(result.code, "INVALID_OVERLAY");
-  assert.deepEqual(codes(result.diagnostics), ["/architecture SUBSCRIPTION"]);
+  assert.deepEqual(codes(result.diagnostics), ["/architecture/slots/0/model SUBSCRIPTION"]);
+});
+
+test("#131 an unsubscribe edit that removes a declared consumer's subscription is attributed to that edit", () => {
+  // A variant whose packaged notify is already the subscribed mailer.
+  const architecture = packaged.architecture;
+  const subscribed = {
+    ...packaged,
+    architecture: {
+      ...architecture,
+      components: architecture.components.map(item => item.id === "notify" ? { ...item, model: "demo.mailer", configuration: {} } : item),
+      subscriptions: [{ destination: "OrderCreated", consumer: "notify" }],
+    },
+  } as unknown as CanonicalValue;
+  assert.deepEqual(validate(subscribed), []);
+  const composeSubscribed = (input: CanonicalValue) => composeOverlay(subscribed, policy, input, validate, catalog);
+  const unsubscribe = { ...subscribeNotify, change: "unsubscribe" };
+  const result = composeSubscribed(overlay({ subscriptions: [unsubscribe] }));
+  assert.ok(!result.ok);
+  assert.equal(result.code, "INVALID_OVERLAY");
+  assert.deepEqual(codes(result.diagnostics), ["/architecture/subscriptions/0 SUBSCRIPTION"]);
+  // The existing rule, accepted in triage: an earlier edit on the same component, in normalized order, wins.
+  const stored = composeSubscribed(overlay({ resources: [{ owner: "notify", resource: "store", change: "attach" }], subscriptions: [unsubscribe] }));
+  assert.ok(!stored.ok);
+  assert.deepEqual(codes(stored.diagnostics), ["/architecture/resources/0 SUBSCRIPTION"]);
+});
+
+test("#183 a slot edit that removes the endpoint a workload calls is attributed to that slot edit", () => {
+  // A workload-addressed client (#121) calls notify's POST /notify through its action data. Audit is
+  // left out so that its packaged peer, which also calls POST /notify, cannot name the slot instead.
+  const shopper = model({ model: "demo.shopper", kind: "client", actions: ["send"], workloadCalls: [{ action: "send", target: "to", endpoint: "call" }] });
+  const architecture = packaged.architecture;
+  const withWorkload = {
+    ...packaged,
+    architecture: {
+      ...architecture,
+      components: [...architecture.components.filter(item => item.id !== "audit"), { id: "shopper", kind: "client", model: "demo.shopper", version: "1", configuration: {} }],
+      links: [...architecture.links.filter(item => item.source !== "audit"), { source: "shopper", target: "notify", policy: policyLink }],
+      databases: architecture.databases.filter(item => item.owner !== "audit"),
+    },
+    actions: [
+      ...packaged.actions.filter(item => item.target !== "audit"),
+      { id: "send", at: 2, kind: "client", target: "shopper", action: "send", data: { to: "notify", call: "POST /notify" } },
+    ],
+  } as unknown as CanonicalValue;
+  const workloadEngine = engineFor([...models, shopper], [truePredicate]);
+  const workloadPolicy = { ...policy, architecture: { ...policy.architecture!, resources: policy.architecture!.resources.filter(item => item.owner !== "audit") } };
+  const composeWorkload = (input: CanonicalValue) => composeOverlay(withWorkload, workloadPolicy, input, value => workloadEngine.validate(value), catalogOf([...models, shopper]));
+  assert.deepEqual(workloadEngine.validate(withWorkload), []);
+  // The broadcaster offers no POST /notify, so the packaged workload call breaks: INTERFACE at /actions/3/data/call.
+  const result = composeWorkload(overlay({ slots: [{ component: "notify", model: "demo.broadcaster", version: "1", options: [] }] }));
+  assert.ok(!result.ok);
+  assert.equal(result.code, "INVALID_OVERLAY");
+  assert.deepEqual(codes(result.diagnostics), ["/architecture/slots/0/model INTERFACE", "/architecture/slots/0/model PUBLISH"]);
+  // Only the fields a workloadCalls entry declares name its target: another data field of the same action does not.
+  const injected = (path: string) => composeOverlay(withWorkload, workloadPolicy, overlay({ slots: [mailer] }),
+    value => value === withWorkload ? [] : [{ path, code: "INTERFACE" }], catalogOf([...models, shopper]));
+  for (const [path, expected] of [["/actions/3/data/to", "/architecture/slots/0/model"], ["/actions/3/data/call", "/architecture/slots/0/model"], ["/actions/3/data/note", "/architecture"]]) {
+    const result = injected(path!);
+    assert.ok(!result.ok);
+    assert.deepEqual(codes(result.diagnostics), [`${expected} INTERFACE`], path);
+  }
 });
 
 test("a diagnostic that also occurs for the packaged document alone is a catalog defect, even after indexes shift", () => {
