@@ -147,3 +147,33 @@ test("presentation text renders as plain text, and a dropped file with an overla
   await expect(experimentTrigger(page)).toBeVisible();
   await expect(page.getByText("This scenario accepts no student changes", { exact: false })).toHaveCount(0);
 });
+
+test("#160: an imported document's checks lead ③ Investigate, and its Architecture tab ends with the graph and does not scroll at 1366x768", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await captureCommands(page);
+  await page.goto("/");
+  await openFile(page, "processor-response-lost.json", fixtureText);
+  await expect(status(page)).toHaveText("READY");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status(page)).toHaveText("COMPLETED");
+
+  // The Architecture tab holds only the replay controls and the graph, as for packaged lessons (#142).
+  const panel = page.locator("#architecture-panel");
+  await expect(page.locator(".react-flow__node").first()).toBeVisible();
+  expect(await panel.evaluate(element => element.lastElementChild?.matches("details.connections") ?? false)).toBe(true);
+  await expect(panel.getByRole("list", { name: "Scenario checks" })).toHaveCount(0);
+  const { scrollHeight, clientHeight } = await panel.evaluate(element => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }));
+  expect(scrollHeight).toBe(clientHeight);
+
+  // The checks are the first element of ③ Investigate, and they still link to their evidence.
+  const investigate = page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "③ Investigate" });
+  const first = await investigate.evaluate(section => section.querySelector(":scope > h3")?.nextElementSibling?.matches("section.imported-checks") ?? false);
+  expect(first).toBe(true);
+  const checks = investigate.getByRole("list", { name: "Scenario checks", exact: true });
+  await expect(checks.getByRole("listitem")).toContainText("PASS — The customer is charged at most once.");
+  await expect(investigate).not.toContainText("below the architecture");
+  await expect(investigate).toContainText("Run it, read its checks above, then use Recorded history to follow what happened.");
+  await checks.getByRole("button", { name: "Show evidence: The customer is charged at most once.", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Recorded history", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#history-panel")).toContainText("order-not-charged-twice");
+});
