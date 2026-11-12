@@ -57,6 +57,7 @@ import {
   storySummary,
 } from "./story-timeline.ts";
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Review navigation. One place decides where the reader is in Recorded history:
@@ -265,6 +266,8 @@ export function derive(state: ReviewNavigation, context: ReviewContext): ReviewV
   const selectedTrace = selected?.traceId;
   const selectedIndex = state.selectedId === null ? -1 : filtered.findIndex(item => item.id === state.selectedId);
   const componentLabels = new Map(componentTitles.map(item => [item.id, componentLabel(item.id, componentTitles)]));
+  // The graph's node titles are the session's display names (#103); a movement sentence uses them too.
+  const names: ComponentNames = new Map(componentTitles.flatMap(item => item.title !== item.id ? [[item.id, item.title] as const] : []));
   const learningItems = learningTimeline(filtered);
   const milestones = storyMilestones(filtered);
   const lanes = storyLanes(milestones);
@@ -289,9 +292,9 @@ export function derive(state: ReviewNavigation, context: ReviewContext): ReviewV
   let liveCue: Movement | null = null;
   if (!selected && state.liveCueId !== null) {
     const cue = observations.find(item => item.id === state.liveCueId);
-    if (cue) liveCue = movementOf(cue);
+    if (cue) liveCue = movementOf(cue, names);
   }
-  const emphasis = deriveEmphasis(selected, liveCue, edges);
+  const emphasis = deriveEmphasis(selected, liveCue, edges, names);
 
   const range = visibleRowRange(filtered.length, context.viewport.scrollTop, context.viewport.height, TIMELINE_ROW_HEIGHT);
   const rawRows = state.view === "raw" ? windowedRows(filtered, range, state.selectedId) : [];
@@ -489,8 +492,8 @@ function filteredLength(state: ReviewNavigation, context: ReviewContext): number
   return queryTimeline(quickViewObservations(context.observations, state.quickView), state.query).length;
 }
 
-function deriveEmphasis(selected: Observation | undefined, liveCue: Movement | null, edges: readonly MovementEdge[]): GraphEmphasis | undefined {
-  if (selected) return emphasisFor(selected, edges);
+function deriveEmphasis(selected: Observation | undefined, liveCue: Movement | null, edges: readonly MovementEdge[], names: ComponentNames): GraphEmphasis | undefined {
+  if (selected) return emphasisFor(selected, edges, names);
   if (!liveCue) return undefined;
   const edge = edgeFor(liveCue, edges);
   return {

@@ -33,7 +33,7 @@ test("#164 the design lesson's Goal states the missing step, and the inspector n
 
   const slot = page.locator('.react-flow__node[data-id="notifications"]');
   await expect(slot).toContainText("Empty slot");
-  await expect(slot).toHaveAttribute("aria-label", "notifications, Internal service, empty slot");
+  await expect(slot).toHaveAttribute("aria-label", "Notifications, Internal service, empty slot");
   await expect(page.locator('.react-flow__node[data-id="payments"]')).not.toContainText("Empty slot");
   await slot.click();
   const inspector = page.getByRole("complementary", { name: "Component inspector" });

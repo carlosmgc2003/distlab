@@ -3,6 +3,8 @@ import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
+import { componentNames, displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 import { EMPTY_SLOT_LABEL, isEmptySlot } from "./design-step.ts";
 import { kvServerDescriptor } from "../../../packages/catalogs/src/commerce/descriptors.ts";
 import type { ComponentActivity } from "./activity.ts";
@@ -82,6 +84,8 @@ export interface ResourceNodeData {
   readonly [key: string]: unknown;
   readonly kind: ResourceKind;
   readonly owner: ComponentId;
+  /** The owner's display name (#103); the owner's ID stays in `owner`. */
+  readonly ownerName: string;
   /** Verbatim packaged definition, copied by reference and never mutated. */
   readonly definition: DatabaseDefinition | KeyValueDefinition;
 }
@@ -160,13 +164,18 @@ function labelLook(relationship: keyof typeof relationshipStyles) {
   };
 }
 
-/** Copies presentation data only; never accepts a simulation projection or a mutation port. */
-export function mapArchitecture(projection: ArchitectureProjection, metadata?: ArchitectureDefinition, scenarioName?: string): {
-  nodes: ArchitectureNode[]; edges: ArchitectureEdge[]; resourceNodes: ResourceNode[]; resourceEdges: OwnershipEdge[]; error: string | null;
+/**
+ * Copies presentation data only; never accepts a simulation projection or a mutation port.
+ * `names` are the session's component display names (#103); without them, only the checkout
+ * lessons' names apply, as `scenarioName` selects them.
+ */
+export function mapArchitecture(projection: ArchitectureProjection, metadata?: ArchitectureDefinition, scenarioName?: string,
+  names: ComponentNames = componentNames({ source: "checkout", scenarioName }, projection.components)): {
+  nodes: ArchitectureNode[]; edges: ArchitectureEdge[]; resourceNodes: ResourceNode[]; resourceEdges: OwnershipEdge[]; names: ComponentNames; error: string | null;
 } {
   const ids = new Set(projection.components.map(component => component.id));
   if (ids.size !== projection.components.length || projection.links.some(link => !ids.has(link.source) || !ids.has(link.target))) {
-    return { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], error: "Architecture contains duplicate components or connections to missing components." };
+    return { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names, error: "Architecture contains duplicate components or connections to missing components." };
   }
   const instances = new Map(metadata?.components.map(component => [component.id, component]));
   const destinations = new Map(metadata?.destinations.map(destination => [destination.id, destination]));
@@ -189,12 +198,12 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const copy = matches ? checkoutDisplay(scenarioName, component) : undefined;
     const emptySlot = matches && isEmptySlot(instance.model, instance.version);
     // The channel symbol and its "MessageBus topic" caption say what a destination is; the name says which.
-    const title = destination ? component.label : copy?.title ?? component.label;
+    const title = destination ? component.label : names.get(component.id) ?? component.label;
     const resources = matches ? [
       ...(copy?.resource ? [copy.resource] : []),
       ...(metadata?.databases.filter(database => database.owner === component.id).map(database =>
-        `Database owned by ${database.owner}: ${database.tables.map(table => table.name).join(", ")}`) ?? []),
-      ...(metadata?.stores.filter(store => store.owner === component.id).map(store => `KeyValueStore owned by ${store.owner}`) ?? []),
+        `Database owned by ${displayName(names, database.owner)}: ${database.tables.map(table => table.name).join(", ")}`) ?? []),
+      ...(metadata?.stores.filter(store => store.owner === component.id).map(store => `KeyValueStore owned by ${displayName(names, store.owner)}`) ?? []),
     ].sort() : destination ? [`MessageBus ${destination.kind}: ${destination.id}`] : [];
     const column = depth.get(component.id) ?? 0;
     const row = rows.get(column) ?? 0;
@@ -222,7 +231,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const label = subscription ? busLabels.subscription : publication ? busLabels.publication : `Request${link.label ? ` · ${link.label}` : ""}`;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
-      type: "elk", label, ariaLabel: `${link.source} to ${link.target}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
+      type: "elk", label, ariaLabel: `${displayName(names, link.source)} to ${displayName(names, link.target)}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
       sourceHandle: handleFor[relationship].source, targetHandle: handleFor[relationship].target,
       markerEnd: relationshipMarkers[relationship],
       style: { ...relationshipStyles[relationship] },
@@ -248,9 +257,10 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const companion = resourceDefinitions.has(`${companionKind}:${owner}`);
     const offsetX = kind === "kvstore" && companion ? 173 : 50;
     const id = `resource:${kind === "database" ? "db" : "kv"}:${owner}`;
-    const title = `${resourceLabels[kind]} owned by ${owner}`;
+    const ownerName = displayName(names, owner);
+    const title = `${resourceLabels[kind]} owned by ${ownerName}`;
     return {
-      id, type: kind, data: { kind, owner, definition },
+      id, type: kind, data: { kind, owner, ownerName, definition },
       position: { x: ownerNode.position.x + offsetX, y: ownerNode.position.y + 120 },
       handles: [{ id: handleFor.ownership.target, type: "target", position: Position.Top, x: 57.5, y: 0 }],
       draggable: false, connectable: false, deletable: false, selectable: true, focusable: true,
@@ -278,7 +288,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       ...labelLook("publication"), selectable: false, focusable: false, deletable: false,
     });
   }
-  return { nodes, edges, resourceNodes, resourceEdges, error: null };
+  return { nodes, edges, resourceNodes, resourceEdges, names, error: null };
 }
 
 /** Read-only link identity for observation movement. Relationship comes from the presentation edge. */
