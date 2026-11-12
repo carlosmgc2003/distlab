@@ -15,7 +15,7 @@ import { en } from "./en/index.ts";
 import { es } from "./es/index.ts";
 import { localeInfo } from "./locales.ts";
 import type { Locale } from "./locales.ts";
-import { pseudoCatalog } from "./pseudo.ts";
+import { pseudoCatalog, pseudoText } from "./pseudo.ts";
 
 export type Catalog = typeof en;
 
@@ -27,8 +27,13 @@ type BoundValue<V> =
   : V;
 export type Bound<T> = { readonly [K in keyof T]: BoundValue<T[K]> };
 
-/** The bound catalog for one locale, plus its formatter for joins and numbers. */
-export type Messages = Bound<Catalog> & { readonly locale: Locale; readonly fmt: Fmt };
+/**
+ * The bound catalog for one locale, plus its formatter for joins and numbers, and `source`:
+ * how this locale shows English source text that has no translation key (catalog-authored
+ * lesson text, ADR-007 §5). It is the identity for real languages and pseudo text for `en-XA`,
+ * so the pseudo-locale also exposes package text that bypasses the content tables.
+ */
+export type Messages = Bound<Catalog> & { readonly locale: Locale; readonly fmt: Fmt; readonly source: (english: string) => string };
 
 const catalogs: Readonly<Record<Locale, () => Catalog>> = {
   en: () => en,
@@ -55,7 +60,8 @@ export function messages(locale: Locale): Messages {
     const fmt = createFmt(info.tag, info.quotes);
     // `locale` is typed, but it starts as text from the URL or storage: only an own entry may be called.
     const source = Object.hasOwn(catalogs, locale) ? catalogs[locale] : catalogs.en;
-    result = Object.freeze({ ...bind(source(), fmt), locale: Object.hasOwn(catalogs, locale) ? locale : "en", fmt }) as Messages;
+    const id: Locale = Object.hasOwn(catalogs, locale) ? locale : "en";
+    result = Object.freeze({ ...bind(source(), fmt), locale: id, fmt, source: id === "en-XA" ? pseudoText : (english: string) => english }) as Messages;
     bound.set(locale, result);
   }
   return result;

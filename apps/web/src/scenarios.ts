@@ -64,13 +64,13 @@ export function packagedMetadata(choice: PackagedScenario): ScenarioDefinition {
 
 /** A packaged lesson's title in the active language: the `lessons` area, or the checkout catalog's translation by lesson id. */
 export function lessonTitle(choice: PackagedScenario, m: Messages): string {
-  return choice.family === "commerce" ? m.lessons.commerce[choice.id].title : contentText(m.content.checkoutTitles, choice.id, checkoutLesson[choice.id].title);
+  return choice.family === "commerce" ? m.lessons.commerce[choice.id].title : contentText(m.content.checkoutTitles, choice.id, checkoutLesson[choice.id].title, m);
 }
 
 /** A packaged lesson's description in the active language. */
 export function lessonDescription(choice: PackagedScenario, m: Messages): string {
   return choice.family === "commerce" ? m.lessons.commerce[choice.id].description
-    : contentText(m.content.checkoutExplanations, choice.id, checkoutLesson[choice.id].explanation);
+    : contentText(m.content.checkoutExplanations, choice.id, checkoutLesson[choice.id].explanation, m);
 }
 
 /** Labels name the recorded fault input. They do not choose a hidden runtime branch. */
@@ -111,7 +111,7 @@ export type PackagedAssessment = (typeof assessments)[number];
 
 /** A packaged assessment's title in the active language, keyed by its definition id. */
 export function assessmentTitle(choice: PackagedAssessment, m: Messages): string {
-  return contentText(m.content.assessmentTitles, choice.definition.id, choice.definition.title);
+  return contentText(m.content.assessmentTitles, choice.definition.id, choice.definition.title, m);
 }
 
 /** A packaged assessment's chooser description, written in apps/web. */

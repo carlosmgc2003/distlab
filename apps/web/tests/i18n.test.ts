@@ -132,3 +132,9 @@ test("I18N-AC-13: an unknown or prototype-named locale falls back to English ins
     assert.equal(m.commerceLesson.outcome.pending, messages("en").commerceLesson.outcome.pending);
   }
 });
+
+test("I18N-AC-14: English source text without a key is shown as written, and as pseudo text in the pseudo-locale", () => {
+  assert.equal(messages("en").source("Charges the order once"), "Charges the order once");
+  assert.equal(messages("es").source("Charges the order once"), "Charges the order once");
+  assert.match(messages("en-XA").source("Charges the order once"), /^⟦Çhárgéš thé órdér óñçé·+⟧$/);
+});

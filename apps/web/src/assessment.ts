@@ -81,17 +81,17 @@ export function exportFile(result: AssessmentResult): { readonly fileName: strin
 
 /** A row's label in the active language: the catalog's English label, or its translation by `<assessment id>/<row id>`. */
 export function rowLabel(definition: Pick<AssessmentDefinition, "id">, row: Pick<AssessmentRow, "id" | "label">, m: Messages): string {
-  return contentText(m.content.assessmentRows, `${definition.id}/${row.id}`, row.label);
+  return contentText(m.content.assessmentRows, `${definition.id}/${row.id}`, row.label, m);
 }
 
 /** A business invariant's label in the active language, by `<assessment id>/<invariant id>`. */
 export function invariantLabel(definition: Pick<AssessmentDefinition, "id">, invariant: { readonly id: string; readonly label: string }, m: Messages): string {
-  return contentText(m.content.assessmentInvariants, `${definition.id}/${invariant.id}`, invariant.label);
+  return contentText(m.content.assessmentInvariants, `${definition.id}/${invariant.id}`, invariant.label, m);
 }
 
 /** A requirement line in the active language. Requirements have no ids, so they are keyed by their English text. */
 export function requirementText(line: string, m: Messages): string {
-  return contentText(m.content.assessmentRequirements, line, line);
+  return contentText(m.content.assessmentRequirements, line, line, m);
 }
 
 /** The live region's words for a row that starts: "Row 3 of 6: Processor response lost — running". */

@@ -75,13 +75,13 @@ export function checkKey(lesson: string, id: string): string {
  * Looks up catalog-authored text by its stable key. The English source stays in `packages/catalogs`, and
  * English renders from it; another language translates it in the `content` area (ADR-007 section 5).
  */
-export function contentText(table: Readonly<Record<string, string>>, key: string, english: string): string {
-  return byCode<string>(table, key) ?? english;
+export function contentText(table: Readonly<Record<string, string>>, key: string, english: string, m: Messages): string {
+  return byCode<string>(table, key) ?? m.source(english);
 }
 
 /** A packaged lesson check's label: the translation by stable id, or the catalog's English label. */
 export function checkLabel(lesson: string, id: string, english: string, m: Messages): string {
-  return contentText(m.content.checks, checkKey(lesson, id), english);
+  return contentText(m.content.checks, checkKey(lesson, id), english, m);
 }
 
 /** The latest `scenario.assertion.evaluated` record ID per assertion, from stored fields only. */
