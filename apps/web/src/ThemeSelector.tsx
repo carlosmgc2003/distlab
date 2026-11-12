@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   parseThemePreference, resolveTheme, SYSTEM_DARK_QUERY, THEME_PREFERENCES, THEME_STORAGE_KEY, themeOptionLabel,
   type ThemePreference,
@@ -29,17 +29,19 @@ function ThemeIcon({ preference }: { preference: ThemePreference }) {
   </svg>;
 }
 
+/** The reader's theme preference, kept once for the whole app, and the system preference it may follow. */
+export interface ThemeState {
+  readonly preference: ThemePreference;
+  readonly systemDark: boolean;
+  readonly choose: (preference: ThemePreference) => void;
+}
+
 /**
- * The Theme selector: a compact top-bar button that opens a popover with three labelled choices,
- * System, Light, and Dark. Clicking a choice applies it and closes the popover; arrow keys apply each
- * choice as they reach it, and Escape or a click outside closes it. It writes the resolved theme to `<html data-theme>`, remembers the
- * choice in this browser, and, on System, follows the operating system as it changes.
+ * Holds the preference, writes the resolved theme to `<html data-theme>`, remembers the choice in this
+ * browser, and, on System, follows the operating system as it changes. App calls it once, so the
+ * selector keeps one state wherever the workspace renders it.
  */
-export function ThemeSelector() {
-  const id = useId();
-  const popoverId = `${id}-theme`;
-  const button = useRef<HTMLButtonElement>(null);
-  const popover = useRef<HTMLDivElement>(null);
+export function useThemePreference(): ThemeState {
   const [preference, setPreference] = useState<ThemePreference>(readStoredPreference);
   const [systemDark, setSystemDark] = useState(() => systemQuery()?.matches ?? false);
 
@@ -53,6 +55,21 @@ export function ThemeSelector() {
 
   const theme = resolveTheme(preference, systemDark);
   useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+
+  const choose = useCallback((next: ThemePreference) => { setPreference(next); storePreference(next); }, []);
+  return { preference, systemDark, choose };
+}
+
+/**
+ * The Theme selector: a compact button at the right end of the workspace navigation row that opens a
+ * popover with three labelled choices, System, Light, and Dark. Clicking a choice applies it and closes
+ * the popover; arrow keys apply each choice as they reach it, and Escape or a click outside closes it.
+ */
+export function ThemeSelector({ state: { preference, systemDark, choose } }: { readonly state: ThemeState }) {
+  const id = useId();
+  const popoverId = `${id}-theme`;
+  const button = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
 
   // The popover sits in the top layer; it is placed under its button, right-aligned to it, and
   // focus moves to the checked choice so arrow keys change the theme at once.
@@ -87,7 +104,7 @@ export function ThemeSelector() {
         <legend>Theme</legend>
         {THEME_PREFERENCES.map(option => <label key={option} className="theme-choice">
           <input type="radio" name={`${id}-preference`} value={option} checked={preference === option}
-            onChange={() => { setPreference(option); storePreference(option); }}
+            onChange={() => choose(option)}
             // A pointer choice closes the popover; arrow keys (clicks with no detail) keep it open to compare.
             onClick={event => { if (event.detail > 0) popover.current?.hidePopover(); }} />
           <ThemeIcon preference={option} />

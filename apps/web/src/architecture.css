@@ -578,8 +578,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .execution-group .control-buttons button { min-width: 0; padding: 8px 11px; }
 /* Each metric stacks its label over its value, so the summary keeps its words in one compact row. */
 .top-bar .run-summary { flex: 0 0 auto; margin-left: auto; flex-wrap: nowrap; justify-content: flex-end; align-items: center; gap: 4px 14px; font-size: .85rem; white-space: nowrap; }
-/* The Theme selector closes the top bar: one compact button, and a popover naming the three choices. */
-.theme-selector { flex: none; display: flex; }
+/* The Theme selector ends the workspace navigation row (beside the tabs, or alone above the welcome and
+   file diagnostics): one compact button, and a popover naming the three choices. */
+.theme-selector { flex: none; display: flex; margin-left: auto; }
 .theme-trigger { display: inline-flex; align-items: center; justify-content: center; width: 40px; min-height: 40px; padding: 0; }
 .theme-icon { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .theme-icon-fill { fill: currentColor; stroke: none; }

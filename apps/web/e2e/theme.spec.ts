@@ -7,12 +7,12 @@ import { closeServiceState, openServiceState } from "./support/service-state.ts"
 import { openMoreFilters } from "./support/history.ts";
 
 /**
- * The Theme selector: a top-bar button whose popover offers System, Light, and Dark. `<html data-theme>`
+ * The Theme selector: a button at the right end of the workspace navigation row, whose popover offers System, Light, and Dark. `<html data-theme>`
  * holds the resolved theme, the choice survives a reload, and System follows the operating system.
  */
 
 const html = (page: Page) => page.locator("html");
-const trigger = (page: Page) => page.locator("header.top-bar").getByRole("button", { name: /^Theme: / });
+const trigger = (page: Page) => page.getByRole("button", { name: /^Theme: / });
 const choices = (page: Page) => page.getByRole("group", { name: "Theme", exact: true });
 const pageBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
 
@@ -34,6 +34,25 @@ test("by default the theme follows the system, live, and System names the theme 
   await expect(html(page)).toHaveAttribute("data-theme", "light");
   await expect(trigger(page)).toHaveAccessibleName("Theme: System (light)");
   expect(await pageBackground(page)).toBe("rgb(238, 242, 247)");
+});
+
+test("the selector ends the workspace navigation row, both on the welcome screen and beside the tabs, never in the top bar", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/");
+  await expect(trigger(page)).toHaveCount(1);
+  await expect(page.locator("header.top-bar").getByRole("button", { name: /^Theme: / })).toHaveCount(0);
+  expect((await page.locator("header.top-bar").boundingBox())!.height).toBeLessThanOrEqual(64);
+  await choose(page, "Dark");
+
+  await loadLesson(page, "response-lost");
+  await expect(trigger(page)).toHaveCount(1);
+  const tabs = (await page.getByRole("tablist", { name: "Investigation workspace" }).boundingBox())!;
+  const button = (await trigger(page).boundingBox())!;
+  expect(button.x).toBeGreaterThan(tabs.x);
+  expect(Math.abs((button.y + button.height / 2) - (tabs.y + tabs.height / 2))).toBeLessThanOrEqual(4);
+  // The choice is held once for the app, so loading a lesson keeps it.
+  await expect(trigger(page)).toHaveAccessibleName("Theme: Dark");
+  await expect(html(page)).toHaveAttribute("data-theme", "dark");
 });
 
 test("the popover offers System, Light, and Dark; a choice applies at once, survives a reload, and System clears it", async ({ page }) => {

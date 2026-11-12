@@ -101,9 +101,10 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
  * #166 adds `smallestName`: every component name on the graph renders at 10 px or more. Before it, the default
  * fit shrank the graph to the canvas, and names rendered at 5–8 px at 1366×768 for most lessons.
  *
- * The Theme selector (System, Light, Dark) closes the top bar as one compact button, whose choices live in a
- * popover. It is on screen in every measured state, so every `controlsOutsideGraph` bound rises by exactly one
- * (+1). The top bar stays one row at 62 px, and no other measure changes.
+ * The Theme selector (System, Light, Dark) is one compact button at the right end of the workspace tab row, whose
+ * choices live in a popover. It is on screen in every measured state, so every `controlsOutsideGraph` bound rises
+ * by exactly one (+1). It is not in the top bar: with no lesson loaded the bar has no room left under CI's fonts.
+ * No other measure changes.
  *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
  * stating the reason in its description.
