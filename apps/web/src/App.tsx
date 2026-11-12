@@ -27,6 +27,7 @@ import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
+import { ThemeSelector } from "./ThemeSelector.tsx";
 import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
 import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, AssessmentMatrix, AssessmentRun, useAssessmentSuite } from "./AssessmentView.tsx";
@@ -516,6 +517,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <p id="scenario-help" className="sr-only">Choose a distributed-systems lesson by topic, or open an instructor’s scenario file. Choosing a lesson after a session is loaded replaces the worker session and does not edit rules during a run.</p>
       </div>
       <SimulationControls host={host} snapshot={snapshot} locked={suiteActive} />
+      <ThemeSelector />
     </header>
     <SimulationAlert snapshot={snapshot} notices={mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null} />
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}

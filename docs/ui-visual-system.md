@@ -11,6 +11,24 @@ Components should use these tokens rather than adding isolated color values.
 | `--selection-*`, focus outline | Current panel, observation, graph path, and keyboard focus |
 | `--status-error*`, `--status-warning*`, `--status-uncertain*`, `--status-approved*` | Errors, faults/timeouts, unknown outcomes, and committed approval |
 | `--category-*` | Client, internal service, external service, and infrastructure labels |
+| `--shape-stroke`, `--edge-request`, `--data-stroke`, `--bus-*`, `--flight-*`, `--graph-grid` | Graph shapes, links, movement cues, and the canvas grid; graph code passes them as `var(--…)` |
+| `--shadow-*`, `--backdrop` | Elevation of popovers and dialogs, and the modal backdrop |
+
+### Light and dark themes
+
+Every color in `architecture.css` is a token. `:root` holds the light theme and
+`:root[data-theme="dark"]` redefines the same tokens for the dark theme, so a
+new rule picks up both themes by using tokens, and needs no dark-only rule.
+`<html data-theme>` always holds the resolved theme, `light` or `dark`.
+
+The reader chooses the theme with the **Theme** selector at the end of the top
+bar: a compact button whose popover lists **System (‹light or dark›)**,
+**Light**, and **Dark**. System is the default and follows the operating
+system's `prefers-color-scheme`, live. The choice is kept in this browser's
+`localStorage` (`distlab-theme`; System removes it), and a small script in
+`apps/web/index.html` applies it before the first paint. The theme is
+presentation only: it never enters projections, worker commands, or history.
+Both themes pass the browser accessibility checks (`apps/web/e2e/theme.spec.ts`).
 
 ## Workspace hierarchy
 
@@ -26,7 +44,7 @@ at a time, so until they land the shipped shell can still differ from it.
 
 | Region | Holds | Rules |
 | --- | --- | --- |
-| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, `Pause`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no replay controls, no tagline. |
+| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, `Pause`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending); the **Theme** selector | One row, at most 64 px, identical on both tabs. No drawer, no replay controls, no tagline. |
 | Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run and Step do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
 | Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds a one-row **Replay** toolbar above the architecture graph, and nothing below the graph. |
 | Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds Design choices and Faults with one footer: `Apply and restart`, `Discard changes`, `Close`. While it is open, the movement detail and the Component inspector go under the graph instead of beside it, so the canvas keeps the panel's width (#166). | No other overlay is added. |

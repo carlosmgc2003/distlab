@@ -101,36 +101,40 @@ export const viewports: Readonly<Record<BudgetViewport, { readonly width: number
  * #166 adds `smallestName`: every component name on the graph renders at 10 px or more. Before it, the default
  * fit shrank the graph to the canvas, and names rendered at 5–8 px at 1366×768 for most lessons.
  *
+ * The Theme selector (System, Light, Dark) closes the top bar as one compact button, whose choices live in a
+ * popover. It is on screen in every measured state, so every `controlsOutsideGraph` bound rises by exactly one
+ * (+1). The top bar stays one row at 62 px, and no other measure changes.
+ *
  * Issues in the workspace epic (#136) tighten these values. A pull request must not loosen one without
  * stating the reason in its description.
  */
 export const budgets: Readonly<Record<BudgetViewport, Readonly<Record<BudgetLesson, Readonly<Record<BudgetState, LayoutBudget>>>>>> = {
   "1366x768": {
     "response-lost": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 }, smallestName: { min: 10 } },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 25 }, proseBlocks: { max: 2 }, smallestName: { min: 10 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 21 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 440 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
   },
   "1534x897": {
     "response-lost": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 24 }, proseBlocks: { max: 2 }, smallestName: { min: 10 } },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 25 }, proseBlocks: { max: 2 }, smallestName: { min: 10 } },
     },
     "saga-uncompensated": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 17 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 21 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 18 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 22 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
     "retry-unsafe": {
-      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
-      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 19 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
+      READY: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 1 }, smallestName: { min: 10 } },
+      COMPLETED: { topBarHeight: { max: 64 }, canvasVisible: { min: 560 }, controlsOutsideGraph: { max: 20 }, proseBlocks: { max: 2 }, smallestName: { min: 10 }, firstVerdictVisible: true },
     },
   },
 };
