@@ -121,8 +121,8 @@ test("inspector metadata comes from matching static definitions and omits busine
   const graph = map(projection.architecture, metadata.architecture, metadata.name);
   const node = (id: string) => graph.nodes.find(item => item.id === id)!;
   assert.deepEqual(node("orders").data.configuration, {});
-  assert.deepEqual(node("orders").data.resources, ["Database owned by orders: orders, outbox"]);
-  assert.deepEqual(node("payments").data.resources, ["Database owned by payments: payments, inbox"]);
+  assert.deepEqual(node("orders").data.resources, ["Database owned by Orders: orders, outbox"]);
+  assert.deepEqual(node("payments").data.resources, ["Database owned by Payments: payments, inbox"]);
   assert.deepEqual(node("customer-app").data.resources, ["Model-owned checkout request and outcome"]);
   assert.deepEqual(node("payment-processor").data.resources, ["Model-owned provider authorization ledger"]);
   const destination = metadata.architecture.destinations.find(item => item.id === "OrderCreated");
@@ -145,7 +145,7 @@ test("inspector metadata comes from matching static definitions and omits busine
 });
 
 test("empty and invalid graphs have explicit presentation states", () => {
-  assert.deepEqual(map({ components: [], links: [] }), { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], error: null });
+  assert.deepEqual(map({ components: [], links: [] }), { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names: new Map(), error: null });
   const missing = map({ components: [], links: [{ source: "a", target: "b" }] });
   assert.match(missing.error!, /missing components/);
   assert.deepEqual([missing.nodes, missing.edges, missing.resourceNodes, missing.resourceEdges], [[], [], [], []]);
@@ -331,7 +331,7 @@ test("labels, link names, and resource lines come from the catalog in each langu
   const node = (graph: typeof english, id: string) => graph.nodes.find(item => item.id === id)!;
   assert.deepEqual(node(english, "OrderCreated").data.resources, ["MessageBus topic: OrderCreated"]);
   assert.deepEqual(node(spanish, "OrderCreated").data.resources, ["Tópico de MessageBus: OrderCreated"]);
-  assert.deepEqual(node(spanish, "orders").data.resources, ["Base de datos de orders: orders, outbox"]);
+  assert.deepEqual(node(spanish, "orders").data.resources, ["Base de datos de Pedidos: orders, outbox"]);
   assert.equal(node(spanish, "OrderCreated").ariaLabel, "OrderCreated, Tópico del bus de mensajes");
   assert.equal(spanish.edges.at(-1)!.ariaLabel, "Orders a MessageBus OrderCreated: publicación");
   assert.equal(symbolLabel("queue", m), "Message bus queue");

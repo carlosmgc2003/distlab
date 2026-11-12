@@ -18,6 +18,8 @@ import { byCode } from "./i18n/catalog.ts";
 import type { Messages } from "./i18n/catalog.ts";
 import type { QuickViewId } from "./timeline-quick-views.ts";
 import type { ClearedField } from "./timeline-query.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /** Fixed row geometry so the timeline window stays bounded at the history baseline. */
 export const TIMELINE_ROW_HEIGHT = 44;
@@ -172,20 +174,20 @@ export function changeEvidence(observation: Observation, m: Messages): readonly 
 }
 
 /** Selection highlight, or the movement cue when the observation travels a link. */
-export function emphasisFor(observation: Observation, edges: readonly MovementEdge[], m: Messages): GraphEmphasis {
+export function emphasisFor(observation: Observation, edges: readonly MovementEdge[], m: Messages, names?: ComponentNames): GraphEmphasis {
   const movement = movementOf(observation);
   // A selected movement carries its sentence: the reader is told what moved, where, and when.
-  if (movement) return { ...emphasisOf(movement, edges), text: movementText(movement, m), pulseId: movement.observationId, origin: "selection" };
+  if (movement) return { ...emphasisOf(movement, edges), text: movementText(movement, m, names), pulseId: movement.observationId, origin: "selection" };
   const involved = observation.target !== undefined && observation.target !== observation.source
     ? [observation.source, observation.target] : [observation.source];
   const link = observation.target !== undefined ? edgeBetween(edges, observation.source, observation.target) : undefined;
-  const target = observation.target !== undefined && observation.target !== observation.source ? observation.target : undefined;
+  const target = observation.target !== undefined && observation.target !== observation.source ? displayName(names, observation.target) : undefined;
   return {
     nodeIds: involved,
     ...(link !== undefined ? { edgeId: link.id } : {}),
     origin: "selection",
     text: m.timeline.selectedNoMovement({
-      type: observation.type, source: observation.source, time: observation.time, ...(target !== undefined ? { target } : {}),
+      type: observation.type, source: displayName(names, observation.source), time: observation.time, ...(target !== undefined ? { target } : {}),
     }),
   };
 }

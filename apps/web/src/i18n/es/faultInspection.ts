@@ -12,8 +12,8 @@ export const faultInspection: typeof source = {
   },
   names: {
     customerApp: "App del cliente",
-    orders: "Orders",
-    payments: "Payments",
+    orders: "Pedidos",
+    payments: "Pagos",
     processor: "Procesador de pagos",
   },
   resources: {

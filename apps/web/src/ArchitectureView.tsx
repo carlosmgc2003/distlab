@@ -4,6 +4,8 @@ import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position,
 import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, handleFor, mapArchitecture, resourceTitle, symbolLabel, type NodeSymbol } from "./architecture-view.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
 import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
@@ -211,7 +213,7 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
         {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>
           <span aria-hidden="true">{ACTIVITY_SYMBOLS[data.activity.state]} </span>{activityLabel(data.activity, m)}
           {data.activity.timedOut ? <span className="activity-timeout"> · <span aria-hidden="true">◷</span> {m.architecture.view.timedOut(data.activity.timedOut.time)}</span> : null}
-          <span className="sr-only">. {activityDescription(data.activity, m)}</span>
+          <span className="sr-only">. {data.activityText ?? activityDescription(data.activity, m)}</span>
         </span> : null}
       </div>
     </div>
@@ -231,7 +233,7 @@ const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<Reso
       <path d="M8 11l49-8 50 8-50 9z M8 11v34l49 8 50-8V11 M8 24l49 9 50-9 M8 36l49 9 50-9" />
     </svg>}
     <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
-    <span className="resource-title">{resourceTitle(data.kind, data.owner, m)}</span>
+    <span className="resource-title">{resourceTitle(data.kind, data.ownerName, m)}</span>
     {Array.isArray(data.faults) && data.faults.length ? <FaultBadge faults={data.faults as string[]} /> : null}
     </div>
   </>;
@@ -572,7 +574,7 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted, m
 
 function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined): ArchitectureEdge {
   if (!emphasis?.edgeId || edge.id !== emphasis.edgeId) return edge;
-  const stroke = emphasis.kind === "message" ? "#6d28d9" : emphasis.kind === "response" ? "#0f766e" : "#1d4ed8";
+  const stroke = emphasis.kind === "message" ? "var(--flight-message)" : emphasis.kind === "response" ? "var(--flight-response)" : "var(--flight-request)";
   const pulse = emphasis.pulseId ? ` ${movementPulseClass(emphasis.pulseId)}` : "";
   return {
     ...edge,
@@ -619,10 +621,12 @@ export interface GraphFaultMarks {
   readonly nodes: ReadonlyMap<string, readonly string[]>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick }: {
+export function ArchitectureView({ architecture, metadata, scenarioName, names, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
+  /** The session's component display names (#103). */
+  readonly names?: ComponentNames;
   readonly emphasis?: GraphEmphasis;
   readonly movementText?: string;
   readonly inspectorFacts?: (componentId: string) => ReactNode;
@@ -641,7 +645,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   pickRef.current = onPick;
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
-  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, m), [architectureKey, metadata, scenarioName, m]);
+  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, m, ...(names ? [names] : [])), [architectureKey, metadata, scenarioName, m, names]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Layout follows structure only: ids and labels, never playback state or badges.
   const layoutKey = useMemo(() => JSON.stringify([
@@ -680,7 +684,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
       data: {
         ...node.data,
         ...(role !== undefined && flight !== undefined ? { role, roleLabel: role === "sending" ? m.architecture.view.role.sending(flight.glyph) : m.architecture.view.role.receiving(flight.glyph) } : {}),
-        ...(activity ? { activity } : {}),
+        ...(activity ? { activity, activityText: activityDescription(activity, m, graph.names) } : {}),
         ...(faultMarks?.nodes.get(node.id)?.length ? { faults: faultMarks.nodes.get(node.id)! } : {}),
       },
       selected: node.id === selectedId,
@@ -690,7 +694,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
         ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
       },
     };
-  }), [graph.nodes, selectedId, painted, flight, playback.activity, faultMarks, laidOut, sizes, m]);
+  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, faultMarks, laidOut, sizes, m]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
     position: laidOut?.positions.get(node.id) ?? node.position,
@@ -707,7 +711,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     const marked: ArchitectureEdge = marks?.length ? {
       ...edge, className: "has-fault", label: `✕ ${String(edge.label)}`,
       ariaLabel: m.architecture.view.fault.link({ label: edge.ariaLabel ?? "", faults: marks }),
-      style: { ...edge.style, stroke: "#b91c1c", strokeDasharray: "10 4 2 4" },
+      style: { ...edge.style, stroke: "var(--status-error)", strokeDasharray: "10 4 2 4" },
     } : edge;
     const styled = emphasize(marked, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
@@ -785,7 +789,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
             onFitted={setFittedKey} movementNodes={movementNodes} />
           <RevealMovement container={canvas} movement={ready ? flight?.observationId : undefined} nodeIds={flight?.nodeIds ?? []} />
-          <Background gap={24} color="#cbd5e1" />
+          <Background gap={24} color="var(--graph-grid)" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />
           </Controls>
@@ -794,7 +798,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
         </ReactFlow>
       </div>
       {selectedId || flight ? <div className="architecture-side">
-        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges} /> : null}
+        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges} {...(graph.names ? { names: graph.names } : {})} /> : null}
         {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
           {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}
@@ -802,7 +806,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     </div>
     <details className="connections">
       <summary>{m.architecture.view.connections(graph.edges.length)}</summary>
-      <ul>{graph.edges.map(edge => <li key={edge.id}>{edge.source} → {edge.target}: {String(edge.label)}</li>)}</ul>
+      <ul>{graph.edges.map(edge => <li key={edge.id}>{displayName(graph.names, edge.source)} → {displayName(graph.names, edge.target)}: {String(edge.label)}</li>)}</ul>
     </details>
   </>;
 }

@@ -26,11 +26,13 @@ import { DesignChoicesHelp, DesignChoicesSection } from "./DesignChoicesSection.
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
 import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
+import { componentNames } from "./component-display.ts";
 import { FlightControls } from "./ArchitecturePlayback.tsx";
 import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
+import { ThemeSelector, useThemePreference } from "./ThemeSelector.tsx";
 import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
 import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, AssessmentMatrix, AssessmentRun, useAssessmentSuite } from "./AssessmentView.tsx";
@@ -59,6 +61,8 @@ function carryText(carried: { readonly faults: number; readonly choices: readonl
 export function App({ host }: { readonly host: SimulationHost }) {
   const m = useMessages();
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
+  // The color theme is presentation state, held once so the selector keeps it wherever it renders.
+  const theme = useThemePreference();
   const { projection, loading, pendingCommands } = snapshot;
   const commandBusy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
@@ -126,8 +130,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const studentRules = snapshot.session?.overlay.faults;
   const report = useMemo(() => projection && lesson && !commerce
     ? inspectFaults(projection, studentRules?.length ? { ...lesson, faults: [...lesson.faults, ...studentRules] } : lesson, m) : null, [projection, lesson, commerce, studentRules, m]);
+  // Component display names (#103): packaged sessions only; an imported document shows its own IDs.
+  // Keyed on the projected components, so a projection update that keeps them keeps the same names.
+  // The names are catalog text (ADR-007), so they follow the interface language.
+  const namingSource = imported ? "imported" : commerce ? "commerce" : "checkout";
+  const componentsKey = JSON.stringify(projection?.architecture.components ?? []);
+  const names = useMemo(() => componentNames(namingSource === "checkout" ? { source: "checkout", scenarioName: lesson?.name } : { source: namingSource },
+    projection?.architecture.components ?? [], m), [namingSource, lesson?.name, componentsKey, m]);
   const graph = useMemo(() => projection && lesson
-    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name, m) : null, [projection, lesson, m]);
+    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name, m, names) : null, [projection, lesson, m, names]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
   // The session's check labels by assertion ID: the packaged lesson's classification, or the imported document's own labels.
@@ -140,7 +151,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // identity; a live cue never takes the highlight back.
   const release = emphasis?.origin === "selection" ? emphasis.pulseId ?? emphasis.text : undefined;
   const playback = useFlightPlayback(projection?.history.observations ?? [], edges,
-    snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release);
+    snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release, names);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   const applied = snapshot.session?.overlay ?? null;
   const appliedEntries = useMemo(() => applied ? draftFromOverlay(applied) : [], [applied]);
@@ -383,7 +394,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     // Design choices exist only for lessons whose policy declares parameters.
     designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} draft={choiceDraft}
       onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices} onInvalidChange={setChoicesInvalid} resetToken={choicesReset} /> : null}
-    faults={<FaultsSection policy={policy} architecture={lesson.architecture} applied={applied} draft={draft} onDraftChange={setDraft}
+    faults={<FaultsSection policy={policy} architecture={lesson.architecture} names={names} applied={applied} draft={draft} onDraftChange={setDraft}
       pending={faultsPending} editable={editable} rejected={rejectedFaults} picking={picking} onPickingChange={changePicking} pick={pick} />}
     // The drawer's one hint holds both sections' reasoning (#147).
     help={<>{policy.parameters.length ? <DesignChoicesHelp /> : null}<FaultsHelp policy={policy} /></>} /> : null;
@@ -432,7 +443,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     setServiceStateOpen(false);
     serviceStateOpener.current?.focus();
   };
-  const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} />
+  const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} names={names} />
     : report ? <DistributedState report={report} onShowEvidence={id => { setServiceStateOpen(false); showEvidence(id); }} /> : null : null;
   const lessonInvestigate = <>
     {/* An imported document's checks lead ③ Investigate, as a packaged lesson's do (#160); the Architecture tab holds only the graph. */}
@@ -512,6 +523,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
     goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} revealInvestigate={revealToken} />;
   const workspaceTabs = assessment ? assessmentTabs : tabs;
 
+  // The Theme selector ends the workspace navigation row in every state; the top bar has no room for it.
+  const themeSelector = <ThemeSelector state={theme} />;
+
   // The top bar (#144) is one row and identical on both tabs: name, lesson trigger, Simulation
   // execution, and the run summary. Errors get their own row under it, only while one exists.
   return <main className="app-shell">
@@ -546,6 +560,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
             className={tab === id ? "is-active" : undefined}
             onClick={() => showTab(id)}>{m.app.tabs[id]}</button>)}
         </div>
+        {themeSelector}
         </div>
         {/* Docked beside both tab panels and non-modal, so Pick on graph keeps working. */}
         {experimentDrawer}
@@ -560,9 +575,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <FlightControls playback={playback} />
           <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
             {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
-            {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
+            {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})} names={names}
             {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
-            {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
+            {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} names={names} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
@@ -578,8 +593,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
       {lessonPanel}
       <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>{experimentDrawer}</div>
     </div> : documentError ? <div className="investigation-workspace">
+      <div className="workspace-navigation">{themeSelector}</div>
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />
     </div> : <div className="investigation-workspace">
+      <div className="workspace-navigation">{themeSelector}</div>
       <section className="workspace-empty" tabIndex={-1}>
         {/* The language is chosen here and in the Lesson chooser, not in the one-row top bar (#144, ADR-007). */}
         <LanguageSwitcher />

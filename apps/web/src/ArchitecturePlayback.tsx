@@ -2,6 +2,7 @@ import { ACTIVITY_SYMBOLS, activityDescription } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
 import { FLIGHT_PACES, flightPaceText } from "./flight.ts";
 import { useMessages } from "./i18n/react.tsx";
+import type { ComponentNames } from "./component-display.ts";
 import type { FlightPlayback } from "./flight-playback.ts";
 import type { FlightPace, FlightPosition, FlightStep } from "./flight.ts";
 
@@ -53,8 +54,10 @@ export function FlightReadout({ position }: { readonly position: FlightPosition 
  * The narration for the movement currently painted on the graph. Every line is a
  * presentation mapping over stored observation fields, plus one pattern question.
  */
-export function FlightNarration({ step, activity, changes }: {
+export function FlightNarration({ step, activity, changes, names }: {
   readonly step: FlightStep;
+  /** The session's component display names (#103), for the activity lines. */
+  readonly names?: ComponentNames;
   /** Activity at the cursor, read from records at or before it. */
   readonly activity: ReadonlyMap<string, ComponentActivity>;
   /** Activity that changed since the previous movement. */
@@ -80,7 +83,7 @@ export function FlightNarration({ step, activity, changes }: {
     <section className="flight-activity" aria-label={m.playback.narration.activityRegion}>
       <strong>{m.playback.narration.activityHeading}</strong>
       {busy.length > 0 ? <ul>{busy.map(item => <li key={item.componentId} className={`activity-${item.state}`}>
-        <span className="activity-symbol" aria-hidden="true">{ACTIVITY_SYMBOLS[item.state]}</span> {activityDescription(item, m)}
+        <span className="activity-symbol" aria-hidden="true">{ACTIVITY_SYMBOLS[item.state]}</span> {activityDescription(item, m, names)}
       </li>)}</ul> : <p>{m.playback.narration.allIdle}</p>}
     </section>
     {step.leg === "timeout"

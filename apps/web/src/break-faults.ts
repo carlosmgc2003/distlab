@@ -13,6 +13,8 @@ import type {
 } from "@distlab/contracts";
 import { byCode } from "./i18n/catalog.ts";
 import type { Messages } from "./i18n/catalog.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Faults section model (ADR-004; the Experiment drawer, #143). Pure: it maps section input to contract shapes and
@@ -73,26 +75,28 @@ export interface TargetOption {
  * source to its target and the response travels back, so a response fault names
  * the responder as source, as the packaged lessons do.
  */
-export function targetOptions(option: FaultKindOption | undefined, architecture: ArchitectureDefinition | undefined, m: Messages): readonly TargetOption[] {
+export function targetOptions(option: FaultKindOption | undefined, architecture: ArchitectureDefinition | undefined, m: Messages, names?: ComponentNames): readonly TargetOption[] {
   if (!option || !architecture) return [];
+  // Labels name components by display name (#103); values and graph identity keep the IDs.
+  const name = (id: string) => displayName(names, id);
   switch (option.target) {
     case "link":
       return architecture.links.map(link => {
         const response = option.point === "network.response";
         const source = response ? link.target : link.source;
         const target = response ? link.source : link.target;
-        return { value: `link:${link.source}:${link.target}`, label: `${source} → ${target}`, source, target, graph: { kind: "link", source: link.source, target: link.target } };
+        return { value: `link:${link.source}:${link.target}`, label: `${name(source)} → ${name(target)}`, source, target, graph: { kind: "link", source: link.source, target: link.target } };
       });
     case "destination":
       return architecture.subscriptions.map(item => ({
-        value: `destination:${item.destination}:${item.consumer}`, label: `${item.destination} → ${item.consumer}`, target: item.consumer, name: item.destination,
+        value: `destination:${item.destination}:${item.consumer}`, label: `${item.destination} → ${name(item.consumer)}`, target: item.consumer, name: item.destination,
         graph: { kind: "link", source: item.destination, target: item.consumer },
       }));
     case "database":
-      return architecture.databases.map(item => ({ value: `database:${item.owner}`, label: m.architecture.databaseOwnedBy(item.owner), name: item.owner, graph: { kind: "node", id: databaseNodeId(item.owner) } }));
+      return architecture.databases.map(item => ({ value: `database:${item.owner}`, label: m.architecture.databaseOwnedBy(name(item.owner)), name: item.owner, graph: { kind: "node", id: databaseNodeId(item.owner) } }));
     case "service":
     case "external":
-      return architecture.components.filter(item => item.kind === option.target).map(item => ({ value: `component:${item.id}`, label: item.id, target: item.id, graph: { kind: "node", id: item.id } }));
+      return architecture.components.filter(item => item.kind === option.target).map(item => ({ value: `component:${item.id}`, label: name(item.id), target: item.id, graph: { kind: "node", id: item.id } }));
   }
 }
 

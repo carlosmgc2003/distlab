@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { graphLaidOut, loadLesson } from "./support/lesson.ts";
 import { inServiceState } from "./support/service-state.ts";
+import { commerceComponentNames } from "../src/component-display.ts";
 
 declare global {
   interface Window {
@@ -31,9 +32,9 @@ async function observeWorker(page: Page) {
 
 const components = [
   { name: "Customer App", category: "Client", id: "customer-app", resource: "Model-owned checkout request and outcome" },
-  { name: "Orders", category: "Internal service", id: "orders", resource: "Database owned by orders: orders, outbox" },
+  { name: "Orders", category: "Internal service", id: "orders", resource: "Database owned by Orders: orders, outbox" },
   { name: "OrderCreated", category: "Message bus topic", id: "OrderCreated", resource: "MessageBus topic: OrderCreated" },
-  { name: "Payments", category: "Internal service", id: "payments", resource: "Database owned by payments: payments, inbox" },
+  { name: "Payments", category: "Internal service", id: "payments", resource: "Database owned by Payments: payments, inbox" },
   { name: "Payment Processor", category: "External service", id: "payment-processor", resource: "Model-owned provider authorization ledger" },
 ] as const;
 
@@ -137,7 +138,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "Distributed state" })).toContainText(other === "response-lost" ? "checkout-processor-response-lost@1" : "checkout-normal@1"));
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     await orders.click();
-    await expect(inspector).toContainText("Database owned by orders: orders, outbox");
+    await expect(inspector).toContainText("Database owned by Orders: orders, outbox");
     await expect(orders).toHaveAttribute("aria-controls", "component-inspector");
     const inspectorLink = page.getByRole("link", { name: "Skip to component inspector" });
     await inspectorLink.focus();
@@ -160,7 +161,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await page.getByRole("tab", { name: "Architecture", exact: true }).click();
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     await orders.focus(); await orders.press("Enter");
-    await expect(inspector).toContainText("Database owned by orders: orders, outbox");
+    await expect(inspector).toContainText("Database owned by Orders: orders, outbox");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   });
@@ -202,23 +203,23 @@ test("commerce owned resources are visible and keyboard-inspectable with static 
       const resource = page.locator(`.react-flow__node[data-id="${id}"]`);
       await expect(resource).toBeVisible();
       const [, kind, owner] = id.split(":");
-      const label = `${kind === "db" ? "Database" : "KeyValueStore"} owned by ${owner}`;
+      const label = `${kind === "db" ? "Database" : "KeyValueStore"} owned by ${commerceComponentNames[owner!]}`;
       await expect(resource).toHaveAttribute("aria-label", label);
       await expect(resource).toHaveAttribute("role", "button");
     }
   }
 
   const apiStore = page.locator('.react-flow__node[data-id="resource:kv:api"]');
-  await expect(apiStore).toHaveAttribute("aria-label", "KeyValueStore owned by api");
+  await expect(apiStore).toHaveAttribute("aria-label", "KeyValueStore owned by API");
   await expect(apiStore.locator(".react-flow__handle")).toHaveCount(0);
   await apiStore.focus();
   await apiStore.press("Enter");
   await expect(apiStore).toHaveAttribute("aria-pressed", "true");
 
   const inspector = page.getByRole("complementary", { name: "Component inspector" });
-  await expect(inspector.getByRole("heading", { name: "KeyValueStore owned by api", exact: true })).toBeVisible();
+  await expect(inspector.getByRole("heading", { name: "KeyValueStore owned by API", exact: true })).toBeVisible();
   await expect(inspector).toContainText("Owner");
-  await expect(inspector).toContainText("api");
+  await expect(inspector).toContainText("API");
   await expect(inspector).toContainText("Initial keys");
   await expect(inspector).toContainText("None declared");
   await expect(inspector).not.toContainText(/configuration|model|version|committed rows|KV metrics/i);
@@ -257,7 +258,7 @@ for (const mode of ["empty", "invalid", "error", "private"] as const) {
     }
     if (mode === "private") {
       await page.getByRole("button", { name: "Orders, Internal service" }).click();
-      await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("Database owned by orders");
+      await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("Database owned by Orders");
       await expect(page.locator("body")).not.toContainText("PRIVATE_STATE_SENTINEL");
     }
   });

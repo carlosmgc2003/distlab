@@ -35,7 +35,9 @@ test("I18N-AC-2: Spanish strings are translated, except names and notations that
   // Brand and product names, codes, and notation. Add an entry only for text that is the same in both languages.
   const same = new Set(["common.brand",
     // Component names that mirror component IDs, and kernel or protocol terms kept as written (glossary, "Spanish Terms").
-    "faultInspection.names.orders", "faultInspection.names.payments", "architecture.resourceKind.kvstore", "playback.fieldLabel.endpoint", "story.kinds.timeout", "app.checkoutName",
+    "architecture.resourceKind.kvstore", "playback.fieldLabel.endpoint", "story.kinds.timeout", "app.checkoutName",
+    // Component names that are product or role names in Spanish too.
+    ...["backoffice", "scheduler", "editor-eu", "editor-us", "api", "worker-1", "worker-2"].map(id => `components.names.${id}`),
     // Pattern names and acronyms that Spanish-speaking engineers use in English (glossary, "Spanish Terms").
     ...["timeout", "dead-letter-queue", "circuit-breaker", "saga", "inbox", "cqrs", "ttl", "lease", "fencing-token", "last-writer-wins", "happens-before"].map(id => `lessons.concepts.${id}`)]);
   const english = new Map(strings(en));

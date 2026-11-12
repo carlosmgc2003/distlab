@@ -89,6 +89,34 @@ topic` or `Message bus queue` caption say it belongs to the MessageBus, and
 the name wraps instead of being cut off. At legend size the two channels
 share one outline, so each legend sample carries its glyph.
 
+### Component display names
+
+A packaged lesson names its components by display name, not by component ID
+(#103): `client` reads **Customer App**, `kv` **Key-Value Store**, `carrier`
+**Shipping Carrier**. The names are presentation copy on the main thread:
+`apps/web/src/component-display.ts` holds the commerce catalog's data-only
+table, the two checkout lessons keep `checkout-display.ts`, and one pure
+resolver (`componentNames`, `displayName`) serves every place that names a
+component: node titles and accessible names, owned-resource captions and their
+accessible names (`Database owned by Orders`), connection accessible names and
+the Connections list, movement narration and activity lines, Recorded history
+(lanes, the Component filter, the observation detail, and the selected
+record's movement cue), the Component inspector heading, the Service state
+dialog's headings, and the Faults section's target options.
+
+- Names apply to packaged sessions only: the 21 commerce lessons, the two
+  checkout lessons, and the Reliable Checkout assessment's base lesson. An
+  imported scenario document, including a starter file saved from a packaged
+  lesson, shows the IDs its author wrote. An ID without an entry shows the ID.
+- Destinations (topics and queues) keep their IDs, which are event names.
+- The raw ID stays where it is the fact being shown: the Component inspector's
+  `Component ID` row, the Raw history view, observation payloads, filter
+  values, and text typed into advanced filters.
+- The worker keeps publishing `label: id`. Names never enter projections,
+  worker commands, history, or graph identity: node ids, edge ids, and
+  movement `from`/`to` stay component IDs, and narration maps a stored ID to a
+  name without adding a fact.
+
 ## Plan
 
 ### Phase 1 — Shape and glyph system for existing nodes
@@ -149,8 +177,10 @@ export type ResourceNode = Node<ResourceNodeData, ResourceKind>;
   edge ids; a unit test asserts no packaged component id starts with
   `resource:`.
 - Node title, rendered and announced alike: `` `${resourceLabels[kind]} owned
-  by ${owner}` `` — exactly the vocabulary of the existing inspector resource
-  strings (`Database owned by orders…`, `KeyValueStore owned by payments`).
+  by ${ownerName}` `` — exactly the vocabulary of the existing inspector resource
+  strings (`Database owned by Orders…`, `KeyValueStore owned by Payments`).
+  `ownerName` is the owner's component display name (see *Component display
+  names*); `owner` keeps the ID.
 - Emission in `mapArchitecture`: group `metadata.databases` and
   `metadata.stores` by `owner`. One node per owner and kind; when two
   definitions of the same kind share an owner, the last in array order wins
@@ -251,7 +281,7 @@ Selecting a resource node opens the same inspector region
 (`#component-inspector`) and renders the resource title plus static facts
 only, sourced from the same packaged `ArchitectureDefinition`:
 
-- Owner: the owner component id (for example, `orders`).
+- Owner: the owner component's display name (for example, `Orders`).
 - Database: table names in declared order (`DatabaseDefinition.tables`), and
   the initial key names of each declared table (`Object.keys` of
   `DatabaseDefinition.initial[table]`), or `None declared` when no table has

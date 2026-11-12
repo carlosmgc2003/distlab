@@ -16,6 +16,8 @@ import { movementText } from "./records.ts";
 import type { Movement, MovementEdge } from "./records.ts";
 import type { Messages } from "./i18n/catalog.ts";
 import { recordLabel, selectionStep } from "./timeline.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Presentation-only reading of recorded movements. Every value here is copied
@@ -198,10 +200,11 @@ function hopKey(observation: Observation, kind: Movement["kind"]): string | unde
   return requestId === undefined ? undefined : `${kind}:${requestId}`;
 }
 
-function transitText(leg: FlightLeg, movement: Movement, departure: FlightStep["departure"], m: Messages): string {
+function transitText(leg: FlightLeg, movement: Movement, departure: FlightStep["departure"], m: Messages, names: ComponentNames | undefined): string {
+  // Narration names components by display name (#103).
   const params = {
-    from: movement.from,
-    ...(movement.to !== undefined ? { to: movement.to } : {}),
+    from: displayName(names, movement.from),
+    ...(movement.to !== undefined ? { to: displayName(names, movement.to) } : {}),
     ...(departure !== undefined ? { departure: { time: departure.time, sequence: departure.sequence } } : {}),
   };
   return m.playback.transit[leg](params);
@@ -225,6 +228,7 @@ export function flightStep(
   edges: readonly MovementEdge[],
   departure: FlightStep["departure"] | undefined,
   m: Messages,
+  names?: ComponentNames,
 ): FlightStep {
   const edge = edgeFor(movement, edges);
   const leg = legOf(observation);
@@ -233,7 +237,8 @@ export function flightStep(
   const from = movement.from;
   const to = movement.to;
   const nodeIds = to !== undefined ? [from, to] : [from];
-  const route = m.playback.route({ from, ...(to !== undefined ? { to } : {}), relationship: m.playback.relationship[relationship] });
+  // Narration names components by display name (#103); `from`, `to`, and `nodeIds` keep the stored IDs.
+  const route = m.playback.route({ from: displayName(names, from), ...(to !== undefined ? { to: displayName(names, to) } : {}), relationship: m.playback.relationship[relationship] });
   return {
     observationId: movement.observationId,
     sequence: observation.sequence,
@@ -245,7 +250,7 @@ export function flightStep(
     from,
     ...(to !== undefined ? { to } : {}),
     headline: recordLabel(observation, m),
-    announcement: movementText(movement, m),
+    announcement: movementText(movement, m, names),
     route,
     ...(observation.traceId !== undefined ? { traceId: observation.traceId } : {}),
     facts: flightFacts(observation, m),
@@ -259,7 +264,7 @@ export function flightStep(
     heading: leg !== "timeout",
     ...(hopId !== undefined ? { hopId } : {}),
     ...(departure !== undefined && leg !== "departure" && leg !== "trip" ? { departure } : {}),
-    transit: transitText(leg, movement, leg !== "departure" && leg !== "trip" ? departure : undefined, m),
+    transit: transitText(leg, movement, leg !== "departure" && leg !== "trip" ? departure : undefined, m, names),
   };
 }
 
@@ -267,7 +272,7 @@ export function flightStep(
  * Every recorded movement in canonical order. A record that travels no link is
  * not a movement and stays in Recorded history; nothing is merged or reordered.
  */
-export function flightSteps(observations: readonly Observation[], edges: readonly MovementEdge[], m: Messages): readonly FlightStep[] {
+export function flightSteps(observations: readonly Observation[], edges: readonly MovementEdge[], m: Messages, names?: ComponentNames): readonly FlightStep[] {
   const steps: FlightStep[] = [];
   // Departures seen so far, by hop id. Only earlier records pair: nothing is read ahead of a step.
   const departures = new Map<string, NonNullable<FlightStep["departure"]>>();
@@ -277,7 +282,7 @@ export function flightSteps(observations: readonly Observation[], edges: readonl
     const hop = hopKey(observation, movement.kind);
     // An arrival, a drop, and a timeout share the stored request id of the departure they end.
     const departure = hop !== undefined ? departures.get(hop) : undefined;
-    const step = flightStep(observation, movement, edges, departure, m);
+    const step = flightStep(observation, movement, edges, departure, m, names);
     if (step.leg === "departure" && hop !== undefined) {
       departures.set(hop, { observationId: step.observationId, sequence: step.sequence, time: step.time });
     }

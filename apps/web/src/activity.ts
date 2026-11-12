@@ -1,6 +1,8 @@
 import type { Observation, SimulationTime } from "@distlab/contracts";
 import { orderObservations, storedScalar, storedText } from "./records.ts";
 import type { Messages } from "./i18n/catalog.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Component activity at the playback cursor, read only from stored records at
@@ -147,6 +149,8 @@ export function activityChanges(
   before: ReadonlyMap<string, ComponentActivity>,
   after: ReadonlyMap<string, ComponentActivity>,
   m: Messages,
+  /** Display names for the sentences (#103); IDs stay in `componentId` and `target`. */
+  names?: ComponentNames,
 ): readonly string[] {
   const ids = [...new Set([...before.keys(), ...after.keys()])].sort();
   const changes: string[] = [];
@@ -154,7 +158,7 @@ export function activityChanges(
     const previous = activityOf(before, id);
     const next = activityOf(after, id);
     // A timeout at the cursor is announced even when the state stays the same.
-    if (summaryKey(previous) !== summaryKey(next) || next.timedOut !== undefined) changes.push(activityDescription(next, m));
+    if (summaryKey(previous) !== summaryKey(next) || next.timedOut !== undefined) changes.push(activityDescription(next, m, names));
   }
   return changes;
 }
@@ -207,11 +211,12 @@ export function activityLabel(activity: ComponentActivity, m: Messages): string 
 }
 
 /** One sentence for assistive technology and the narration. */
-export function activityDescription(activity: ComponentActivity, m: Messages): string {
+export function activityDescription(activity: ComponentActivity, m: Messages, names?: ComponentNames): string {
   const summary = summarize(activity);
-  const id = activity.componentId;
+  // Sentences name components by display name (#103).
+  const id = displayName(names, activity.componentId);
   const copy = m.architecture.activity;
-  const targets = m.fmt.list(summary.targets);
+  const targets = m.fmt.list(summary.targets.map(target => displayName(names, target)));
   const work = workText(summary, m);
   const waiting = summary.targets.length > 0;
   const processing = work !== "";
@@ -219,7 +224,7 @@ export function activityDescription(activity: ComponentActivity, m: Messages): s
     : waiting ? copy.waiting({ id, targets, ...(summary.earliest !== undefined ? { deadline: summary.earliest } : {}) })
     : processing ? copy.processing({ id, work })
     : copy.idle(id);
-  return summary.timedOut !== undefined ? `${main} ${copy.timedOut({ target: summary.timedOut.target, time: summary.timedOut.time })}` : main;
+  return summary.timedOut !== undefined ? `${main} ${copy.timedOut({ target: displayName(names, summary.timedOut.target), time: summary.timedOut.time })}` : main;
 }
 
 /** The open work as a noun phrase: whole phrases per count, joined as a list. */

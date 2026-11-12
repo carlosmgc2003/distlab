@@ -188,7 +188,7 @@ test("the replay cursor walks recorded movements and paints a token on the graph
   // The token is painted on the link the record says the movement used.
   await expect(page.locator("[data-flight-token]")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(1);
-  await expect(narration(page)).toContainText("customer-app → orders · Request link");
+  await expect(narration(page)).toContainText("Customer App → Orders · Request link");
   await expect(narration(page)).toContainText("Endpoint");
   await expect(narration(page)).toContainText("POST /orders");
   await expect(narration(page)).toContainText("Deadline at virtual time");
@@ -200,7 +200,7 @@ test("the replay cursor walks recorded movements and paints a token on the graph
 
   // A message movement is a different glyph, a different link, and a different narration.
   await stepTo(page, "Message delivered (attempt 1)");
-  await expect(narration(page)).toContainText("OrderCreated → payments · MessageBus subscription");
+  await expect(narration(page)).toContainText("OrderCreated → Payments · MessageBus subscription");
   await expect(narration(page)).toContainText("Delivery attempt");
   await expect(page.locator(".flight-token.flight-message")).toHaveCount(1);
   await expect(page.locator("[data-flight-token]")).toHaveCount(1);
@@ -215,7 +215,7 @@ test("a dropped response and a timeout stop on the link and state only what is r
 
   await stepTo(page, "Response dropped");
   const dropped = narration(page);
-  await expect(dropped).toContainText("payment-processor → payments");
+  await expect(dropped).toContainText("Payment Processor → Payments");
   await expect(dropped).toContainText("Stored reason");
   await expect(dropped).toContainText("fault");
   // The token stops short of the destination: the record says the response never arrived.
@@ -230,7 +230,7 @@ test("a dropped response and a timeout stop on the link and state only what is r
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-response-dropped.png") });
 
   await stepTo(page, "Request timed out");
-  await expect(narration(page)).toContainText("payments → payment-processor");
+  await expect(narration(page)).toContainText("Payments → Payment Processor");
   await expect(narration(page)).toContainText("Deadline at virtual time");
   await expect(narration(page)).toContainText("What does the caller now know about the outcome?");
   // A timeout travels nowhere: the token rests at the caller and carries no heading mark.
@@ -317,7 +317,7 @@ test("reduced motion rests the token where the record stopped and keeps the narr
   expect(parseFloat(painted.distance)).toBeLessThan(100);
   await expect(narration(page)).toContainText("Response dropped");
   await expect(narration(page)).toContainText("The token stops on this link");
-  await expect(page.locator("#movement-cue")).toContainText("Response dropped from payment-processor to payments");
+  await expect(page.locator("#movement-cue")).toContainText("Response dropped from Payment Processor to Payments");
 });
 
 test("selecting a record in Recorded history takes the graph highlight back", async ({ page }) => {
@@ -338,7 +338,7 @@ test("selecting a record in Recorded history takes the graph highlight back", as
   await expect(narration(page)).toHaveCount(0);
   await expect(page.locator("[data-flight-token]")).toHaveCount(0);
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(1);
-  await expect(page.locator("#movement-cue")).toContainText("from customer-app to orders");
+  await expect(page.locator("#movement-cue")).toContainText("from Customer App to Orders");
   await expect(position(page)).toHaveText("0 of 13 recorded movements. Nothing selected.");
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-history-selection-wins.png") });
 });
@@ -411,7 +411,7 @@ test("responses and acknowledgements travel toward their destination, with the a
   expect(distance(trail.at(-1)!, topic), "an acknowledgement moves toward the MessageBus").toBeLessThan(distance(trail[0]!, topic) - 20);
   expect(distance(trail.at(-1)!, payments)).toBeGreaterThan(distance(trail[0]!, payments) + 20);
   await headingAgreesWith(page, { x: trail.at(-1)!.x - trail[0]!.x, y: trail.at(-1)!.y - trail[0]!.y });
-  await expect(narration(page)).toContainText("payments → OrderCreated · MessageBus subscription");
+  await expect(narration(page)).toContainText("Payments → OrderCreated · MessageBus subscription");
   await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-ack-toward-bus.png") });
 
   expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type)), "playback sends no worker command").toEqual(before);
@@ -444,7 +444,7 @@ test("components show idle, processing, or waiting from the records at the curso
   await expect(badge("orders")).toContainText("Processing");
   await expect(page.locator(nodeSelector("orders"))).toHaveClass(/activity-processing/);
   // The live region names what changed.
-  await expect(page.locator("#movement-cue")).toContainText("orders is processing a delivered request.");
+  await expect(page.locator("#movement-cue")).toContainText("Orders is processing a delivered request.");
 
   await stepTo(page, "Response received");
   await expect(badge("customer-app")).toContainText("Idle");
@@ -452,7 +452,7 @@ test("components show idle, processing, or waiting from the records at the curso
   // The processor's response is lost. Payments has recorded nothing, so it keeps waiting until its deadline.
   await stepTo(page, "Response dropped");
   await expect(badge("payments")).toContainText("Waiting · deadline t=1025");
-  await expect(narration(page)).toContainText("payments is waiting on payment-processor with a recorded deadline at virtual time 1025");
+  await expect(narration(page)).toContainText("Payments is waiting on Payment Processor with a recorded deadline at virtual time 1025");
   await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-payments-waiting.png") });
 
   // The deadline passes: the position names the virtual-time jump, and Payments leaves waiting with a timeout cue.
@@ -460,7 +460,7 @@ test("components show idle, processing, or waiting from the records at the curso
   await expect(position(page)).toContainText("Virtual time jumped t=55 → t=1025");
   await expect(badge("payments")).not.toContainText("Waiting");
   await expect(badge("payments")).toContainText("timed out t=1025");
-  await expect(page.locator("#movement-cue")).toContainText("Its request to payment-processor timed out at virtual time 1025.");
+  await expect(page.locator("#movement-cue")).toContainText("Its request to Payment Processor timed out at virtual time 1025.");
   await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-payments-timed-out.png") });
 
   // Playback changed nothing in the run.

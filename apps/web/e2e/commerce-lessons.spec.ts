@@ -6,6 +6,7 @@ import { measureLayout, viewports } from "./layout-budget.ts";
 import { loadLesson } from "./support/lesson.ts";
 import { filterByType, viewButton } from "./support/history.ts";
 import { inServiceState } from "./support/service-state.ts";
+import { commerceComponentNames } from "../src/component-display.ts";
 
 /** The lesson checks live in the Lesson panel's ③ Investigate (#141); service facts in the Service state dialog (#142). */
 const lessonChecks = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "Lesson checks", exact: true });
@@ -126,13 +127,13 @@ test("compare replaces the experiment; commerce state fits a narrow viewport", a
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
-  await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "payments state", exact: true })).toContainText("payment-2"));
+  await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "Payments state", exact: true })).toContainText("payment-2"));
   await page.getByRole("button", { name: "Compare: Retry with idempotency", exact: true }).click();
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   await inServiceState(page, async dialog => {
-    await expect(dialog.getByRole("region", { name: "payments state", exact: true })).not.toContainText("payment-2");
+    await expect(dialog.getByRole("region", { name: "Payments state", exact: true })).not.toContainText("payment-2");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     // The open dialog has no axe violations.
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -169,7 +170,7 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   test.setTimeout(90_000);
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
-  const region = (dialog: Locator, component: string) => dialog.getByRole("region", { name: `${component} state`, exact: true });
+  const region = (dialog: Locator, component: string) => dialog.getByRole("region", { name: `${commerceComponentNames[component]} state`, exact: true });
   const invariants = lessonChecks(page).getByRole("list", { name: "Business invariants", exact: true });
   for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
     await loadLesson(page, name);
@@ -220,11 +221,11 @@ test("the inventory pair shows stock with its version and each client's outcome,
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     await inServiceState(page, async dialog => {
-      const inventory = dialog.getByRole("region", { name: "inventory state", exact: true });
+      const inventory = dialog.getByRole("region", { name: "Inventory state", exact: true });
       await expect(inventory).toContainText(`stock: ${stock}`);
       await expect(inventory).toContainText(`version: ${version}`);
       await expect(inventory).toContainText("res-customer-app");
-      await expect(dialog.getByRole("region", { name: "partner-api state", exact: true })).toContainText(`status: ${outcome}`);
+      await expect(dialog.getByRole("region", { name: "Partner API state", exact: true })).toContainText(`status: ${outcome}`);
     });
     for (const label of ["Stock is never negative", "A unit has at most one active reservation"]) {
       await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText(verdict);
@@ -249,7 +250,7 @@ test("the lease pair draws the key-value node as a shared store and shows the le
     await expect(status).toHaveText("READY");
     // Both workers point at one store node: no service box and no separate store beside it.
     const kv = page.locator('.react-flow__node[data-id="kv"]');
-    await expect(kv).toHaveAccessibleName("kv, Shared key-value store");
+    await expect(kv).toHaveAccessibleName("Key-Value Store, Shared key-value store");
     await expect(kv).toHaveClass(/symbol-kvstore/);
     await expect(kv).toContainText("Shared key-value store");
     await expect(page.locator('.react-flow__node[data-id="resource:kv:kv"]')).toHaveCount(0);
@@ -258,10 +259,10 @@ test("the lease pair draws the key-value node as a shared store and shows the le
     await expect(status).toHaveText("COMPLETED");
     await inServiceState(page, async dialog => {
       // Both leases have expired by the end of the run; the token counter stays.
-      const store = dialog.getByRole("region", { name: "kv state", exact: true });
+      const store = dialog.getByRole("region", { name: "Key-Value Store state", exact: true });
       await expect(store).toContainText("lock:report:token");
       await expect(store).not.toContainText("expires at");
-      await expect(dialog.getByRole("region", { name: "storage state", exact: true })).toContainText(`writer: ${writer}`);
+      await expect(dialog.getByRole("region", { name: "Storage state", exact: true })).toContainText(`writer: ${writer}`);
     });
     for (const label of ["Storage never accepts a write with a smaller lease token after a larger one", "The report file holds the write with the largest lease token storage accepted"]) {
       await expect(invariants.getByRole("listitem").filter({ hasText: label })).toContainText(verdict);

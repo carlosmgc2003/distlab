@@ -79,7 +79,7 @@ for (const scenario of ["normal", "response-lost"]) {
     await expect(status).toHaveText("READY");
     expect(await latestProjection(page)).toEqual(initial);
     await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-    await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("Database owned by orders");
+    await expect(page.getByRole("complementary", { name: "Component inspector" })).toContainText("Database owned by Orders");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath("simulation-controls-zoom.png"), fullPage: true });
   });

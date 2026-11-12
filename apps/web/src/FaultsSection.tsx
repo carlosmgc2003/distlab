@@ -5,12 +5,15 @@ import {
   buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, fieldErrorText, formFromEntry, nextStudentId, pickTarget, placeDiagnostics, targetOptions,
 } from "./break-faults.ts";
 import type { DraftEntry, FaultForm, FieldError, FormField } from "./break-faults.ts";
+import type { ComponentNames } from "./component-display.ts";
 import { useMessages } from "./i18n/react.tsx";
 import { Rich } from "./i18n/rich.tsx";
 
 export interface FaultsSectionProps {
   readonly policy: LessonOverlayPolicy;
   readonly architecture: ArchitectureDefinition;
+  /** The session's component display names, for the target options (#103). */
+  readonly names?: ComponentNames;
   /** The normalized overlay the worker applied, or null when no session is loaded. */
   readonly applied: SessionOverlay | null;
   readonly draft: readonly DraftEntry[];
@@ -55,7 +58,7 @@ export function FaultsHelp({ policy }: { readonly policy: LessonOverlayPolicy })
  * the lesson allows. The drawer's one Apply sends one ordinary `load`; nothing
  * here edits a running simulation.
  */
-export function FaultsSection({ policy, architecture, applied, draft, onDraftChange, pending, editable, rejected, picking, onPickingChange, pick }: FaultsSectionProps) {
+export function FaultsSection({ policy, architecture, names, applied, draft, onDraftChange, pending, editable, rejected, picking, onPickingChange, pick }: FaultsSectionProps) {
   const ids = useId();
   const m = useMessages();
   const [form, setForm] = useState<FaultForm>(emptyForm);
@@ -64,7 +67,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
   const [notice, setNotice] = useState("");
   const options = useMemo(() => faultKindOptions(policy, m), [policy, m]);
   const option = options.find(item => item.id === form.kind);
-  const targets = useMemo(() => targetOptions(option, architecture, m), [option, architecture, m]);
+  const targets = useMemo(() => targetOptions(option, architecture, m, names), [option, architecture, m, names]);
   const placed = useMemo(() => rejected ? placeDiagnostics(rejected.diagnostics, rejected.overlay, m) : { entries: [], general: [] }, [rejected, m]);
   const appliedIds = new Set(applied ? [...applied.faults.map(rule => rule.id), ...applied.scheduledFaults.map(action => action.id)] : []);
   const remaining = policy.faults.maxEntries - draft.length;
@@ -102,7 +105,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
   const edit = (entry: DraftEntry) => {
     setEditing(entryId(entry));
     setErrors({});
-    setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture, m)));
+    setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture, m, names)));
     setNotice(m.faults.section.notice.editing(entryId(entry)));
     requestAnimationFrame(() => document.getElementById(`${ids}-kind`)?.focus());
   };

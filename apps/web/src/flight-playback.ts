@@ -14,6 +14,7 @@ import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
 import type { Observation } from "@distlab/contracts";
 import { useMessages } from "./i18n/react.tsx";
+import type { ComponentNames } from "./component-display.ts";
 
 /** How often the host timer rechecks while the cursor waits for the run to record more movements. */
 const TAIL_POLL_MS = 200;
@@ -60,10 +61,12 @@ export function useFlightPlayback(
   recording: boolean,
   /** Changes when Recorded history takes over the graph highlight. */
   release: string | undefined,
+  /** The session's component display names, for the narration and activity lines (#103). */
+  names?: ComponentNames,
 ): FlightPlayback {
   const m = useMessages();
   // Text is produced here at render time, so a language switch recomputes it and nothing stale survives.
-  const steps = useMemo(() => flightSteps(observations, edges, m), [observations, edges, m]);
+  const steps = useMemo(() => flightSteps(observations, edges, m, names), [observations, edges, m, names]);
   // One record holds the cursor and the phase, so a single transition can never
   // paint a cursor the phase does not belong to.
   const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle", paint: 0 });
@@ -82,8 +85,8 @@ export function useFlightPlayback(
   const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
   const activity = useMemo(() => activityAt(observations, step?.observationId), [observations, step?.observationId]);
   const changes = useMemo(
-    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity, m),
-    [observations, previousId, activity, step, m],
+    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity, m, names),
+    [observations, previousId, activity, step, m, names],
   );
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current

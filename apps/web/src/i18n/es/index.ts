@@ -21,6 +21,8 @@ import { story } from "./story.ts";
 import { lessons } from "./lessons.ts";
 import { content } from "./content.ts";
 import { errors } from "./errors.ts";
+import { components } from "./components.ts";
+import { theme } from "./theme.ts";
 
 /** Spanish (Rioplatense voseo, docs/glossary.md "Spanish terms"). */
 export const es: typeof en = {
@@ -46,4 +48,6 @@ export const es: typeof en = {
   lessons,
   content,
   errors,
+  components,
+  theme,
 };

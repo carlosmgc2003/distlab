@@ -1,5 +1,7 @@
 import type { CanonicalValue, Observation, SimulationTime } from "@distlab/contracts";
 import type { Messages } from "./i18n/catalog.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Record reading. One place decides what a stored record *is*, using only its
@@ -209,8 +211,9 @@ export interface Movement {
 }
 
 /** One sentence naming the stored type, route, and virtual time. An unknown type shows its raw code. */
-export function movementText(movement: Movement, m: Messages): string {
-  const params = { source: movement.from, ...(movement.to !== undefined ? { target: movement.to } : {}), time: movement.time };
+export function movementText(movement: Movement, m: Messages, names?: ComponentNames): string {
+  // The sentence names components by display name (#103); `from` and `to` keep the stored IDs.
+  const params = { source: displayName(names, movement.from), ...(movement.to !== undefined ? { target: displayName(names, movement.to) } : {}), time: movement.time };
   const message = Object.hasOwn(m.records.movement, movement.type) ? m.records.movement[movement.type as keyof typeof m.records.movement] : undefined;
   return message !== undefined ? message(params) : m.records.movementUnknown({ ...params, type: movement.type });
 }

@@ -27,7 +27,7 @@ export function ComponentInspector({ node, children }: {
       {node.data.resources.length ? <ul>{node.data.resources.map(resource => <li key={resource}>{resource}</li>)}</ul> : <p>{m.architecture.inspector.resourcesNone}</p>}
       </details>
     </> : <>
-      <h4>{resourceTitle(node.data.kind, node.data.owner, m)}</h4>
+      <h4>{resourceTitle(node.data.kind, node.data.ownerName, m)}</h4>
       <ResourceFacts node={node} />
     </> : <p>{m.architecture.inspector.select}</p>}
   </aside>;
@@ -36,11 +36,11 @@ export function ComponentInspector({ node, children }: {
 function ResourceFacts({ node }: { readonly node: ResourceNode }) {
   const m = useMessages();
   const copy = m.architecture.inspector;
-  const { owner, definition } = node.data;
+  const { ownerName, definition } = node.data;
   const database = "tables" in definition ? definition : undefined;
   const store = "tables" in definition ? undefined : definition;
   return <dl className="resource-facts">
-    <dt>{copy.owner}</dt><dd>{owner}</dd>
+    <dt>{copy.owner}</dt><dd>{ownerName}</dd>
     {database ? <>
       <dt>{copy.tables}</dt><dd>{database.tables.length ? <ul>{database.tables.map(table => <li key={table.name}>{table.name}</li>)}</ul> : copy.noneDeclared}</dd>
       <dt>{copy.initialKeys}</dt><dd>{database.tables.some(table => Object.keys(database.initial[table.name] ?? {}).length > 0)

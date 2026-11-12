@@ -5,6 +5,8 @@ import type { Messages } from "./i18n/catalog.ts";
 import { useMessages } from "./i18n/react.tsx";
 import type { CheckRow, LessonCheckView } from "./lesson-checks.ts";
 import { HelpHint } from "./ui-hint.tsx";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /** What the two lists of lesson checks mean (#96) is `m.commerceLesson.invariantsHelp` and `expectationsHelp`; ③ Investigate shows them behind its one hint (#147). */
 
@@ -17,7 +19,7 @@ function fields(value: CanonicalValue): string {
 }
 
 /** Only authorized student projections are rendered; host/task state stays private. */
-export function CommerceFacts({ projection, componentId }: { projection: RuntimeProjectionSet; componentId: string }) {
+export function CommerceFacts({ projection, componentId, names }: { projection: RuntimeProjectionSet; componentId: string; names?: ComponentNames }) {
   const c = useMessages().commerceLesson;
   const state = object(projection.components.find(entry => entry.componentId === componentId && entry.visibility === "student")?.state);
   const tables = object(object(state.committed).tables);
@@ -35,7 +37,7 @@ export function CommerceFacts({ projection, componentId }: { projection: Runtime
     {state.role === "external-visible" ? <p>{String(state.availability)} · {fields(state.visible ?? {})}</p> : null}
     {Array.isArray(state.records) ? <ul>{state.records.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : null}
     {Array.isArray(state.deadLetters) ? <div><strong>{c.deadLetterQueue}</strong>
-      {state.deadLetters.length ? <ul aria-label={c.deadLetterQueueOf(componentId)}>{state.deadLetters.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : <p>{c.noDeadLetters}</p>}
+      {state.deadLetters.length ? <ul aria-label={c.deadLetterQueueOf(displayName(names, componentId))}>{state.deadLetters.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : <p>{c.noDeadLetters}</p>}
     </div> : null}
   </div>;
 }
@@ -81,14 +83,14 @@ export function LessonChecks({ view, onShowEvidence }: { view: LessonCheckView; 
 }
 
 /** Every student-visible component's facts, shown in the Service state dialog (#142). Its one hint holds the reasoning (#147). */
-export function ServiceStateGrid({ projection }: { projection: RuntimeProjectionSet }) {
+export function ServiceStateGrid({ projection, names }: { projection: RuntimeProjectionSet; names?: ComponentNames }) {
   const c = useMessages().commerceLesson;
   const student = projection.components.filter(entry => entry.visibility === "student");
   return <section className="commerce-state" aria-labelledby="service-state-heading">
     <h3 id="service-state-heading">{c.serviceStateHeading}</h3>
     <HelpHint label={c.aboutServiceState} bodyId="service-state-help">{c.serviceStateHelp}</HelpHint>
-    <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={c.serviceStateOf(entry.componentId)}>
-      <h4>{entry.componentId}</h4><CommerceFacts projection={projection} componentId={entry.componentId} />
+    <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={c.serviceStateOf(displayName(names, entry.componentId))}>
+      <h4>{displayName(names, entry.componentId)}</h4><CommerceFacts projection={projection} componentId={entry.componentId} {...(names ? { names } : {})} />
     </section>)}</div>
   </section>;
 }

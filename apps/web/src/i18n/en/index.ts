@@ -20,6 +20,8 @@ import { story } from "./story.ts";
 import { lessons } from "./lessons.ts";
 import { content } from "./content.ts";
 import { errors } from "./errors.ts";
+import { components } from "./components.ts";
+import { theme } from "./theme.ts";
 
 /** The English source catalog: one area per screen or module family (ADR-007). */
 export const en = {
@@ -45,4 +47,6 @@ export const en = {
   lessons,
   content,
   errors,
+  components,
+  theme,
 };
