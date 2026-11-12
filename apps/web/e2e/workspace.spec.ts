@@ -131,8 +131,10 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       await expect(page.locator(".lesson-panel details.advanced-diagnostics")).not.toHaveAttribute("open", "");
       await expect(page.getByRole("region", { name: "Distributed state" })).toHaveCount(0);
       await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-      await page.getByRole("button", { name: "Raw", exact: true }).click();
-      await page.locator("#timeline-rows button").first().click();
+      await page.getByRole("button", { name: "Run", exact: true }).click();
+      await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+      await viewButton(page, "Story table").click();
+      await page.locator(".story-table button[data-observation-id]").first().click();
       const detail = page.locator("#inspection-panel");
       await expect(detail).not.toContainText("Select an observation to inspect");
       // Summary-first: event summary before effect, related evidence, and technical record.
@@ -143,8 +145,6 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       expect(effectAt).toBeGreaterThanOrEqual(0);
       expect(relatedAt).toBeGreaterThan(effectAt);
       expect(technicalAt).toBeGreaterThan(relatedAt);
-      await page.getByRole("button", { name: "Run", exact: true }).click();
-      await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
       const summary = page.locator(".run-summary");
       await expect(summary).toContainText("COMPLETED");
       await expect(summary).toContainText("Virtual time");
@@ -173,15 +173,12 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   const before = await latestProjection(page);
   const commands = () => page.evaluate(() => window.workspaceEvidence.commands.map(command => command.type));
   const beforeCommands = await commands();
-  // Start on the Recorded history tab; this test reads canonical rows.
+  // Start on the Recorded history tab.
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(page.locator("#history-panel")).toBeFocused();
-  await viewButton(page, "Raw").click();
+  await viewButton(page, "Story table").click();
   await filterByType(page, "simulation.created");
   const activeFilters = page.getByRole("list", { name: "Active filters", exact: true });
-  await page.locator("#timeline-rows button").first().click();
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("simulation.created");
-  const selected = await page.locator("#timeline-rows button[aria-pressed='true']").getAttribute("data-observation-id");
   // Desktop tabs keep both panels mounted; the inactive panel is hidden, not unmounted.
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#architecture-panel")).toBeFocused();
@@ -194,8 +191,7 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(page.locator("#history-panel")).toBeFocused();
   await expect(activeFilters).toContainText("simulation.created");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toHaveAttribute("data-observation-id", selected!);
-  await expect(page.locator("#inspection-panel")).toContainText("simulation.created");
+  await expect(viewButton(page, "Story table")).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(orders).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("complementary", { name: "Component inspector" })).toBeVisible();
@@ -223,8 +219,15 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   await page.getByRole("complementary", { name: "Lesson", exact: true }).locator(".execution-overview")
     .getByRole("button", { name: "Show processor authorization", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("external.effect.committed");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toBeFocused();
+  const pressed = page.locator("#timeline-rows .story-table button[aria-pressed='true']");
+  await expect(pressed).toContainText("External side effect committed");
+  await expect(pressed).toBeFocused();
+  await expect(page.locator("#inspection-panel")).toContainText("external.effect.committed");
+  // Desktop tabs keep both panels mounted, so the selection survives a round trip.
+  const selected = await pressed.getAttribute("data-observation-id");
+  await page.getByRole("tab", { name: "Architecture", exact: true }).click();
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  await expect(pressed).toHaveAttribute("data-observation-id", selected!);
   await expect(page.locator("#inspection-panel")).toContainText("external.effect.committed");
   expect(await commands()).toEqual(afterRunCommands);
 
@@ -232,14 +235,12 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   // Reset replaces the session, so the view returns to Story with cleared filters.
   await expect(activeFilters).toHaveCount(0);
-  await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
+  await expect(page.locator("#timeline-rows [data-observation-id][aria-pressed='true']")).toHaveCount(0);
   await filterByType(page, "simulation.created");
-  await viewButton(page, "Raw").click();
-  await page.locator("#timeline-rows button").first().click();
   await loadLesson(page, "response-lost");
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
   await expect(activeFilters).toHaveCount(0);
-  await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
+  await expect(page.locator("#timeline-rows [data-observation-id][aria-pressed='true']")).toHaveCount(0);
   expect(await commands()).toEqual([...afterRunCommands, "reset", "load"]);
 });
 
@@ -252,7 +253,7 @@ test("observation detail gives each teaching event a plain-language summary-firs
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   const beforeCommands = await page.evaluate(() => window.workspaceEvidence.commands.map(command => command.type));
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await viewButton(page, "Raw").click();
+  await viewButton(page, "Story table").click();
   const cases: { type: string; heading: string }[] = [
     { type: "network.request.sent", heading: "Request sent" },
     { type: "database.transaction.committed", heading: "Database transaction committed" },
@@ -263,7 +264,7 @@ test("observation detail gives each teaching event a plain-language summary-firs
   ];
   for (const item of cases) {
     await filterByType(page, item.type);
-    await page.locator("#timeline-rows button").first().click();
+    await page.locator(".story-table button[data-observation-id]").first().click();
     const relatedEvidence = page.locator("#inspection-panel details.detail-disclosure").nth(1);
     if ((await relatedEvidence.getAttribute("open")) === null) await relatedEvidence.locator("> summary").click();
     const detail = page.locator("#inspection-panel");
@@ -286,7 +287,7 @@ test("observation detail gives each teaching event a plain-language summary-firs
   }
   // Canonical IDs and JSON stay in the technical section; redaction is never reconstructed.
   await filterByType(page, "network.response.dropped");
-  await page.locator("#timeline-rows button").first().click();
+  await page.locator(".story-table button[data-observation-id]").first().click();
   const dropped = page.locator("#inspection-panel");
   await expect(dropped.getByRole("heading", { name: "Response dropped" })).toBeVisible();
   await expect(dropped).toContainText("Show this trace");

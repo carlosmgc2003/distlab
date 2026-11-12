@@ -5,6 +5,16 @@ type Move = { source: string; target?: string; time: number };
 /** English source messages for the `records` area (ADR-007): records.ts. */
 export const records = {
   attemptSuffix: (attempt: number | string, _f: Fmt) => ` (attempt ${attempt})`,
+  /** What a record label adds from stored fields (records.ts `storedQualifier`). The stored value is never translated. */
+  qualifier: {
+    detail: (text: string, _f: Fmt) => `: ${text}`,
+    code: (text: string, _f: Fmt) => ` (${text})`,
+    checkId: (id: string, _f: Fmt) => `: ${id}`,
+    checkPassed: (id: string, _f: Fmt) => `: ${id} passed`,
+    checkNotPassed: (id: string, _f: Fmt) => `: ${id} did not pass`,
+    verdictPassed: ": passed",
+    verdictNotPassed: ": did not pass",
+  },
   noStoredFields: "No stored fields.",
   none: "None.",
   /** One sentence per stored movement type, keyed by the observation type code. */

@@ -45,14 +45,14 @@ test("response-lost selection shows remote authorization and local timeout as di
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
   const selected = page.locator("#timeline-rows button[aria-pressed='true']");
-  await expect(selected).toContainText("network.request.timedout");
+  await expect(selected).toContainText("Request timed out");
   await expect(selected).toBeFocused();
   await openServiceState(page);
   await panel.getByRole("button", { name: "Show processor authorization", exact: true }).click();
-  await expect(selected).toContainText("external.effect.committed");
+  await expect(selected).toContainText("External side effect committed");
   await openServiceState(page);
   await panel.getByRole("button", { name: "Show fault selection", exact: true }).click();
-  await expect(selected).toContainText("fault.effect.selected");
+  await expect(selected).toContainText("Fault effect selected");
 
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await page.getByRole("button", { name: "Orders, Internal service", exact: true }).click();

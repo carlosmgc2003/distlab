@@ -44,7 +44,7 @@ export async function filterByType(page: Page, type: string): Promise<void> {
   await applyMoreFilters(page);
 }
 
-/** The view switch's buttons: Story diagram, Story table, Learning, Raw. */
-export function viewButton(page: Page, name: "Story diagram" | "Story table" | "Learning" | "Raw"): Locator {
+/** The view switch's buttons: Story diagram and Story table. */
+export function viewButton(page: Page, name: "Story diagram" | "Story table"): Locator {
   return page.getByRole("group", { name: "Timeline view", exact: true }).getByRole("button", { name, exact: true });
 }

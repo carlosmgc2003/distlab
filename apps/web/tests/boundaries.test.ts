@@ -77,6 +77,11 @@ test("main-thread import graph uses application contracts and data, never runtim
   assert.ok(visited.has(assessmentDataModule), "the assessment view reads its definition from the data-only module");
   // #116: the starter file builder is on the main thread, so the walk above holds it to contract types and data-only modules.
   assert.ok(visited.has(resolve(app, "starter-file.ts")));
+  // ARCH-AC-7 (#112): the Design editor's draft and section are on the main thread, held to the same rules,
+  // and they read the descriptors from the data-only modules only.
+  assert.ok(visited.has(resolve(app, "design-edits.ts")));
+  assert.ok(visited.has(resolve(app, "ArchitectureSection.tsx")));
+  for (const module of descriptorModules) assert.ok(visited.has(module), `${module} is read as data`);
   // Descriptor modules obey the same data-only rules whether or not the app imports them yet.
   for (const module of descriptorModules) walk(module);
 });

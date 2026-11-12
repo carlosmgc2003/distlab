@@ -7,7 +7,7 @@ export const app: typeof source = {
   lessonState: {
     loading: "Cargando la lección…",
     failed: "La ejecución falló. Revisá el error y después reiniciá para volver a intentar.",
-    notApplied: "No se aplicaron los cambios. Corregí las fallas o decisiones de diseño marcadas y volvé a aplicarlas.",
+    notApplied: "No se aplicaron los cambios. Corregí las ediciones de diseño, las decisiones de diseño o las fallas marcadas y volvé a aplicarlas.",
     fileNotLoaded: "No se cargó el archivo de escenario. Corregí los problemas de abajo y abrí el archivo de nuevo.",
     couldNotOpen: "No se pudo abrir la lección. Elegí una lección para volver a intentar.",
     none: "No hay ninguna lección cargada.",

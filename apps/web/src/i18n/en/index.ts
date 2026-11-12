@@ -8,6 +8,7 @@ import { serviceState } from "./serviceState.ts";
 import { experiment } from "./experiment.ts";
 import { faults } from "./faults.ts";
 import { designChoices } from "./designChoices.ts";
+import { designEditor } from "./designEditor.ts";
 import { faultInspection } from "./faultInspection.ts";
 import { commerceLesson } from "./commerceLesson.ts";
 import { assessment } from "./assessment.ts";
@@ -35,6 +36,7 @@ export const en = {
   experiment,
   faults,
   designChoices,
+  designEditor,
   faultInspection,
   commerceLesson,
   assessment,

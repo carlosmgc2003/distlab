@@ -4,7 +4,6 @@ import { lessonPairs } from "./lesson-pairs.ts";
 import { groupConcepts, lessonMatches, topicList, topicSections, type TopicFilter } from "./lesson-topics.ts";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
 import { assessmentDescription, assessmentTitle, experimentLabel, lessonDescription } from "./scenarios.ts";
-import { designStepUnavailable } from "./design-step.ts";
 import { useMessages } from "./i18n/react.tsx";
 
 /**
@@ -86,9 +85,7 @@ export function LessonChooser({ open, lessons, assessments = [], current, busy, 
                 aria-labelledby={`lesson-choice-${lesson.id}`} aria-describedby={`lesson-choice-${lesson.id}-description`}
                 onClick={() => onChoose(lesson.id)}>
                 <span id={`lesson-choice-${lesson.id}`} className="lesson-choice-title">{experimentLabel(lesson, m)}</span>
-                <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lessonDescription(lesson, m)}
-                  {/* Inside the description, so the notice is read wherever the instruction is (#164). */}
-                  {designStepUnavailable(lesson.policy) ? <span className="design-step-notice"> {m.designChoices.stepNotice}</span> : null}</span>
+                <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lessonDescription(lesson, m)}</span>
                 {/* aria-current carries this to assistive technology; the badge is its visible text. */}
                 {lesson.id === current ? <span className="lesson-choice-current" aria-hidden="true">{m.lessonChooser.loaded}</span> : null}
               </button>

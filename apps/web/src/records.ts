@@ -47,11 +47,16 @@ export type RecordKind =
   | "external"
   | "fault"
   | "drop"
-  | "timeout";
+  | "timeout"
+  | "failure"
+  | "kv"
+  | "log"
+  | "check";
 
 /** Every teaching category, in legend order. */
 export const recordKinds: readonly RecordKind[] = [
   "request", "response", "message", "retry", "commit", "rollback", "external", "fault", "drop", "timeout",
+  "failure", "kv", "log", "check",
 ];
 
 /**
@@ -60,12 +65,9 @@ export const recordKinds: readonly RecordKind[] = [
  * truth; `tests/records.test.ts` reads that document and fails when the two
  * disagree.
  *
- * Two documented deviations, both deliberate:
- *
- * - `runtime.log` is absent here. The document does not list it as a milestone,
- *   and the document wins. Those records stay in Learning and Raw.
- * - `network.request.timedout` is present here but not in the document. It is
- *   pending a ruling, and the same test fails while it is unresolved.
+ * One documented deviation, deliberate: `network.request.timedout` is present
+ * here but not in the document. It is pending a ruling, and the same test fails
+ * while it is unresolved.
  */
 export const milestoneKinds = {
   "network.request.sent": "request",
@@ -85,6 +87,15 @@ export const milestoneKinds = {
   "external.effect.committed": "external",
   "fault.rule.matched": "fault",
   "fault.effect.selected": "fault",
+  "database.transaction.rejected": "failure",
+  "service.handler.failed": "failure",
+  "message.nacked": "failure",
+  "message.dead": "failure",
+  "kv.condition.failed": "failure",
+  "kv.changed": "kv",
+  "kv.expired": "kv",
+  "runtime.log": "log",
+  "scenario.assertion.evaluated": "check",
 } as const satisfies Readonly<Record<string, RecordKind>>;
 
 /** A stored type the milestone table names. Presentation wording tables are typed by it. */
@@ -298,6 +309,53 @@ export function attemptOf(observation: Observation): number | string | undefined
 export function attemptLabel(observation: Observation, m: Messages): string {
   const attempt = attemptOf(observation);
   return attempt === undefined ? "" : m.records.attemptSuffix(attempt);
+}
+
+/**
+ * What a label adds from stored fields, so two records of one type can be told apart: the
+ * delivery attempt, a business log's message, a key-value key, a rejection code or reason, and
+ * a check's id and verdict. A redacted or omitted payload stores nothing to add.
+ */
+export function storedQualifier(observation: Observation, m: Messages): string {
+  const q = m.records.qualifier;
+  const detail = (key: string) => { const value = storedText(observation, key); return value === undefined ? "" : q.detail(value); };
+  const code = (key: string) => { const value = storedText(observation, key); return value === undefined ? "" : q.code(value); };
+  switch (observation.type) {
+    case "message.delivered": return attemptLabel(observation, m);
+    case "runtime.log": return detail("message");
+    case "kv.changed": case "kv.expired": case "kv.condition.failed": return detail("key");
+    case "database.transaction.rejected": case "service.handler.failed": return code("code");
+    case "message.nacked": case "message.dead": return code("reason");
+    case "scenario.assertion.evaluated": {
+      const id = storedText(observation, "assertionId");
+      const verdict = storedScalar(observation, "verdict");
+      const passed = verdict === "true" ? true : verdict === "false" ? false : undefined;
+      if (id === undefined) return passed === undefined ? "" : passed ? q.verdictPassed : q.verdictNotPassed;
+      return passed === undefined ? q.checkId(id) : passed ? q.checkPassed(id) : q.checkNotPassed(id);
+    }
+    default: return "";
+  }
+}
+
+/**
+ * True for a check evaluation that repeats the previous evaluation of the same check with the
+ * same stored verdict. Checks are evaluated at every boundary, so only the first result of each
+ * check and each change of its result are teaching milestones. A record whose check id or
+ * verdict is not stored is never treated as a repeat.
+ */
+export function repeatsCheckResult(observation: Observation, previous: ReadonlyMap<string, string>): boolean {
+  if (observation.type !== "scenario.assertion.evaluated") return false;
+  const id = storedText(observation, "assertionId");
+  const verdict = storedScalar(observation, "verdict");
+  return id !== undefined && verdict !== undefined && previous.get(id) === verdict;
+}
+
+/** Records the check result of an evaluation, for `repeatsCheckResult`. */
+export function noteCheckResult(observation: Observation, previous: Map<string, string>): void {
+  if (observation.type !== "scenario.assertion.evaluated") return;
+  const id = storedText(observation, "assertionId");
+  const verdict = storedScalar(observation, "verdict");
+  if (id !== undefined && verdict !== undefined) previous.set(id, verdict);
 }
 
 /** A stored scalar field, read only when the payload is visible. */

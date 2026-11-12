@@ -6,7 +6,7 @@ import type { Observation } from "@distlab/contracts";
 import { simulationTime } from "@distlab/contracts";
 import { createReviewNavigation, derive, feedbackText, filterErrorText, transition } from "../src/review-navigation.ts";
 import { messages } from "../src/i18n/catalog.ts";
-import type { ReviewContext, ReviewIntent, ReviewNavigation, ReviewViewMode } from "../src/review-navigation.ts";
+import type { ReviewContext, ReviewIntent, ReviewNavigation } from "../src/review-navigation.ts";
 import type { MovementEdge } from "../src/records.ts";
 import { emptyTimelineDraft, withExactValue } from "../src/timeline-query.ts";
 
@@ -28,7 +28,7 @@ const records: readonly Observation[] = [
   record("o2", 2, "network.response.sent", { source: "orders", target: "customer-app", traceId: "t1", causationId: "o1" }),
   record("o3", 3, "message.published", { source: "orders", target: "broker", traceId: "t1", causationId: "o2" }),
   record("o4", 4, "database.transaction.committed", { source: "orders", traceId: "t2" }),
-  record("o5", 5, "scenario.assertion.evaluated", { source: "simulation", traceId: "t2" }),
+  record("o5", 5, "simulation.completed", { source: "simulation", traceId: "t2" }),
 ];
 
 const edges: readonly MovementEdge[] = [
@@ -39,7 +39,7 @@ const edges: readonly MovementEdge[] = [
 const titles = [{ id: "customer-app", title: "Customer App" }, { id: "orders", title: "Orders" }, { id: "simulation", title: "Simulation" }];
 
 function context(over: Partial<ReviewContext> = {}): ReviewContext {
-  return { observations: records, edges, componentTitles: titles, viewport: { scrollTop: 0, height: 320 }, ...over };
+  return { observations: records, edges, componentTitles: titles, ...over };
 }
 
 function at(state: ReviewNavigation, ctx: ReviewContext, ...intents: ReviewIntent[]): ReviewNavigation {
@@ -59,7 +59,7 @@ test("reveal clears only the constraints that hide the record and names them", (
 
   const revealed = transition(filtered, { type: "reveal", observationId: "o2" }, ctx);
 
-  assert.equal(revealed.view, "raw", "reveal shows Raw");
+  assert.equal(revealed.view, "table", "reveal shows the Story table");
   assert.equal(revealed.selectedId, "o2");
   assert.equal(revealed.quickView, null, "a quick view that hides the record is removed");
   assert.match(feedbackText(revealed.feedback, m), /type filter was cleared|component filter was cleared|trace filter was cleared|quick view/i);
@@ -99,26 +99,7 @@ test("reveal requests focus once per request, even for the same record twice", (
   assert.equal(again.focus?.token, (first.focus?.token ?? 0) + 1, "the token moves so the DOM adapter acts again");
 });
 
-test("moving the review position stops at both boundaries and says so", () => {
-  const ctx = context();
-  const start = createReviewNavigation();
-  const backToLast = transition(start, { type: "move", delta: -1 }, ctx);
-  assert.equal(backToLast.selectedId, "o5", "Previous from nothing selects the last record");
-
-  const first = transition(start, { type: "select-index", index: 0 }, ctx);
-  assert.match(feedbackText(first.feedback, m), /Previous cannot move/);
-  assert.match(feedbackText(first.feedback, es), /Anterior no puede moverse/);
-  const forward = transition(first, { type: "move", delta: 1 }, ctx);
-  assert.equal(forward.selectedId, "o2");
-  assert.ok(derive(forward, ctx, m).filtered.some(item => item.id === "o2"));
-
-  const last = transition(forward, { type: "select-index", index: 4 }, ctx);
-  const pastEnd = transition(last, { type: "move", delta: 1 }, ctx);
-  assert.equal(pastEnd.selectedId, "o5", "the review position stays put");
-  assert.match(feedbackText(pastEnd.feedback, m), /Next cannot move/);
-});
-
-test("a review position a filter hides is reported by the boundary copy", () => {
+test("a review position a filter hides survives being hidden", () => {
   const ctx = context();
   // o5 is recorded by the simulation pseudo-component, so a component filter
   // for Orders hides it while the review position stays on it.
@@ -127,7 +108,7 @@ test("a review position a filter hides is reported by the boundary copy", () => 
     { type: "toggle-component", value: "orders" });
   const view = derive(selected, ctx, m);
   assert.equal(view.selectedIndex, -1, "the selected record is not among the visible records");
-  assert.equal(view.boundaryCopy, "4 visible observations. Next selects the first. Previous selects the last.");
+  assert.ok(!view.tableRows.some(row => row.observation.id === "o5"), "a hidden record gets no Story table row");
   assert.equal(view.selected?.id, "o5", "the review position survives being hidden");
 });
 
@@ -235,9 +216,9 @@ test("scroll is requested for the reason the reader acted", () => {
   assert.equal(narrowed.scroll.kind, "focus-row", "a focus already in flight outranks the scroll reset");
   assert.equal(narrowed.focus?.observationId, "o4");
 
-  const switched = transition(selected, { type: "switch-view", view: "raw" as ReviewViewMode }, ctx);
+  const switched = transition(selected, { type: "switch-view", view: "table" }, ctx);
   assert.equal(switched.scroll.kind, "top", "switching views starts the list again");
-  assert.equal(transition(selected, { type: "switch-view", view: "story" as ReviewViewMode }, ctx), selected, "asking for the view already shown changes nothing");
+  assert.equal(transition(selected, { type: "switch-view", view: "diagram" }, ctx), selected, "asking for the view already shown changes nothing");
 });
 
 test("focus is requested until the DOM reports it applied", () => {
@@ -247,18 +228,6 @@ test("focus is requested until the DOM reports it applied", () => {
   const applied = transition(revealed, { type: "focus-applied" }, ctx);
   assert.equal(applied.focus, null);
   assert.equal(transition(applied, { type: "focus-applied" }, ctx), applied, "applying twice is not a change");
-});
-
-test("the selected row stays in the Raw window even when it is virtualized out", () => {
-  const many: readonly Observation[] = Array.from({ length: 500 }, (_, index) =>
-    record(`r${index}`, index + 1, "network.request.sent", { source: "customer-app", target: "orders" }));
-  const ctx = context({ observations: many, viewport: { scrollTop: 0, height: 320 } });
-  const selected = at(createReviewNavigation(), ctx, { type: "switch-view", view: "raw" }, { type: "select-index", index: 400 });
-  const view = derive(selected, ctx, m);
-  assert.ok(view.range.end < 400, "the window is far from the selected row");
-  assert.ok(view.rawRows.some(row => row.observation.id === "r400"), "the selected row is rendered anyway");
-  const indices = view.rawRows.map(row => row.index);
-  assert.deepEqual(indices, [...indices].sort((left, right) => left - right), "DOM order still follows recorded sequence");
 });
 
 test("the view projection is computed once from the records and the navigation state", () => {
@@ -275,12 +244,46 @@ test("the view projection is computed once from the records and the navigation s
   assert.equal(view.suggestions.types.length > 0, true);
 });
 
+test("Recorded history offers only the two Story presentations, starting with the diagram", () => {
+  const start = createReviewNavigation();
+  assert.equal(start.view, "diagram");
+  assert.equal(derive(start, context(), m).milestones.length, 4, "the engine record o5 is not a teaching milestone");
+});
+
+test("a revealed record that is not a milestone gets its own Story table row at its recorded sequence", () => {
+  const ctx = context();
+  const revealed = transition(createReviewNavigation(), { type: "reveal", observationId: "o5" }, ctx);
+  assert.equal(revealed.view, "table", "evidence opens the table, where every revealed record has a row");
+  const view = derive(revealed, ctx, m);
+  assert.deepEqual(view.tableRows.map(row => row.observation.id), ["o1", "o2", "o3", "o4", "o5"]);
+  const extra = view.tableRows.at(-1)!;
+  assert.equal(extra.kind, "other");
+  assert.equal(extra.label, "simulation.completed", "a record that is not a milestone is named by its stored type");
+  assert.equal(view.milestones.length, 4, "the diagram and its legend still count milestones only");
+  assert.match(view.storyCount, /also lists the selected record/);
+  assert.equal(extra.categoryLabel, "Other record");
+  const spanish = derive(revealed, ctx, es);
+  assert.match(spanish.storyCount, /también lista el registro elegido/);
+  assert.equal(spanish.tableRows.at(-1)!.categoryLabel, "Otro registro");
+
+  // Selecting a milestone again drops the extra row.
+  const back = transition(revealed, { type: "select", observationId: "o1" }, ctx);
+  assert.deepEqual(derive(back, ctx, m).tableRows.map(row => row.observation.id), ["o1", "o2", "o3", "o4"]);
+});
+
+test("the milestone count compares the visible milestones with the whole history", () => {
+  const ctx = context();
+  const view = derive(at(createReviewNavigation(), ctx, { type: "toggle-quick-view", id: "messages" }), ctx, m);
+  assert.equal(view.milestones.length, 1);
+  assert.equal(view.totalMilestones, 4);
+});
+
 test("an empty result names the quick view and the canonical filters", () => {
   const ctx = context();
-  const empty = at(createReviewNavigation(), ctx, { type: "toggle-quick-view", id: "assertions" }, { type: "toggle-component", value: "orders" });
+  const empty = at(createReviewNavigation(), ctx, { type: "toggle-quick-view", id: "state-changes" }, { type: "toggle-component", value: "customer-app" });
   const view = derive(empty, ctx, m);
   assert.equal(view.filtered.length, 0);
-  assert.match(view.explanation, /Assertions quick view keeps/);
+  assert.match(view.explanation, /State changes quick view keeps/);
   assert.match(view.explanation, /No observations match every active filter/);
 });
 

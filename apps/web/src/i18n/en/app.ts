@@ -6,7 +6,7 @@ export const app = {
   lessonState: {
     loading: "Loading the lesson…",
     failed: "The run failed. Inspect the error, then Reset to try again.",
-    notApplied: "The changes were not applied. Fix the marked faults or design choices, then apply them again.",
+    notApplied: "The changes were not applied. Fix the marked design edits, design choices, or faults, then apply them again.",
     fileNotLoaded: "The scenario file was not loaded. Fix the problems listed below, then open the file again.",
     couldNotOpen: "The lesson could not be opened. Choose a lesson to try again.",
     none: "No lesson is loaded.",

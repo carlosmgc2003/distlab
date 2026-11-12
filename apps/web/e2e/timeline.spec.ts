@@ -48,7 +48,7 @@ async function stepUntil(page: Page, type: string) {
   throw new Error(`${type} did not appear`);
 }
 
-test("stepping checkout shows ordered timeline rows, trace detail, and movement cues without new commands", async ({ page }) => {
+test("stepping checkout shows ordered Story table rows, trace detail, and movement cues without new commands", async ({ page }) => {
   test.setTimeout(60_000);
   await observeWorker(page);
   await page.goto("/");
@@ -56,29 +56,29 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // This test reads canonical rows; the teaching Story view has its own spec.
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await expect(page.getByRole("heading", { name: "Recorded history", exact: true })).toBeVisible();
   await expect(page.locator("#timeline-order")).toContainText("it does not execute an event");
   const ready = await latestProjection(page);
   const activeFilters = page.getByRole("list", { name: "Active filters", exact: true });
-  await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
+  await expect(page.locator(".timeline-count")).toContainText(`from ${ready.history.observations.length} recorded observations`);
   await filterByType(page, "simulation.created");
-  await page.locator("#timeline-rows button").first().click();
+  await expect(activeFilters).toHaveCount(1);
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
-  // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  // Reset replaces the session, so the view returns to the Story diagram.
+  await viewButton(page, "Story table").click();
   await expect(activeFilters).toHaveCount(0);
-  await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
+  await expect(page.locator("#timeline-rows [data-observation-id][aria-pressed='true']")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
 
   await stepUntil(page, "network.request.sent");
   await filterByType(page, "network.request.sent");
-  const requestRows = page.locator("#timeline-rows button");
-  await expect(requestRows).toHaveCount(1);
-  const requestText = await requestRows.first().innerText();
-  await requestRows.first().click();
+  const tableRows = page.locator(".story-table tbody tr");
+  const rowButtons = page.locator(".story-table button[data-observation-id]");
+  await expect(tableRows).toHaveCount(1);
+  const requestText = await tableRows.first().innerText();
+  await rowButtons.first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from Customer App to Orders at virtual time");
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(1);
@@ -87,16 +87,16 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
 
   await stepUntil(page, "message.delivered");
   await filterByType(page, "message.delivered");
-  await expect(page.locator("#timeline-rows button").first()).toContainText("message.delivered");
-  await page.locator("#timeline-rows button").first().click();
+  await expect(rowButtons.first()).toContainText("Message delivered");
+  await rowButtons.first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Message delivered from OrderCreated to Payments at virtual time");
   await expect(page.locator(".react-flow__edge.movement-message")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(0);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 
-  await filterByType(page, "database.write.staged");
-  await page.locator("#timeline-rows button").first().click();
+  await filterByType(page, "database.transaction.committed");
+  await rowButtons.first().click();
   const detail = page.locator("#inspection-panel");
   await expect(detail).toContainText("Before");
   await expect(detail).toContainText("After");
@@ -105,15 +105,14 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await detail.getByText("Related evidence", { exact: true }).click();
   await expect(detail.getByRole("heading", { name: "Causation" })).toBeVisible();
   await page.getByRole("button", { name: "Show this trace" }).click();
-  await expect(page.locator(".timeline-count")).not.toContainText(/^0 of /);
+  await expect(page.locator(".timeline-count")).not.toContainText(/^0 teaching/);
   const dialog = await openMoreFilters(page);
   await dialog.getByLabel("Filter by", { exact: true }).selectOption("traceId");
   await expect(dialog.getByLabel("Trace", { exact: true })).not.toHaveValue("");
 
   await fillFilterField(page, "traceId", "");
-  await fillFilterField(page, "type", "scenario.assertion.evaluated");
   await applyMoreFilters(page);
-  const visible = await page.locator("#timeline-rows button").allInnerTexts();
+  const visible = await tableRows.allInnerTexts();
   const parsed = visible.map(text => {
     const time = /t=(\d+)/.exec(text);
     const sequence = /#(\d+)/.exec(text);
@@ -129,56 +128,18 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await page.getByRole("button", { name: "Pause replay" }).click();
   expect(await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type))).toEqual(commands);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  expect(requestText).toContain("network.request.sent");
+  expect(requestText).toContain("Request sent");
 
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(status).toHaveText("READY");
-  // Reset replaces the session, so the view returns to Story and this test re-selects Raw.
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
   await expect(activeFilters).toHaveCount(0);
-  await expect(page.locator(".timeline-count")).toContainText(`${ready.history.observations.length} of ${ready.history.observations.length}`);
-  await expect(page.locator("#timeline-rows button[data-observation-id][aria-pressed='true']")).toHaveCount(0);
+  await expect(page.locator(".timeline-count")).toContainText(`from ${ready.history.observations.length} recorded observations`);
+  await expect(page.locator("#timeline-rows [data-observation-id][aria-pressed='true']")).toHaveCount(0);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(0);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-});
-
-test("Learning summarizes repeated engine bookkeeping and opens each exact raw record", async ({ page }) => {
-  test.setTimeout(60_000);
-  await observeWorker(page);
-  await page.setViewportSize({ width: 1534, height: 897 });
-  await page.goto("/");
-  await loadLesson(page, "normal");
-  const status = page.getByRole("status", { name: "Simulation status" });
-  await expect(status).toHaveText("READY");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(status).toHaveText("COMPLETED");
-  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  const observations = (await latestProjection(page)).history.observations;
-  await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Learning", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Learning", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".learning-group").first()).toContainText("Initial engine queue setup");
-  expect(await page.locator(".learning-group summary").first().evaluate(node => node.getBoundingClientRect().width > 200)).toBe(true);
-  expect(await page.locator("#timeline-rows").evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
-  expect(await page.locator(".learning-rows > button").first().evaluate(node => getComputedStyle(node).gridTemplateColumns.split(" ").length)).toBe(3);
-  await expect(page.locator(".timeline-count")).toContainText("records summarized");
-  await page.screenshot({ path: "e2e/evidence/issue-49-learning-timeline.png", fullPage: true });
-  const group = page.locator(".learning-group").first();
-  await group.locator("summary").click();
-  const rawMembers = group.locator("li");
-  await expect(rawMembers).toHaveCount(9);
-  const exactId = observations.find(item => item.type === "scheduler.event.scheduled")!.id;
-  await rawMembers.filter({ hasText: exactId }).getByRole("button", { name: "Open raw observation" }).click();
-  await expect(page.locator("#inspection-panel")).toContainText(exactId);
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Raw", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator(".timeline-count")).toContainText(`${observations.length} of ${observations.length}`);
-  await expect(page.locator("#timeline-rows > div")).toHaveAttribute("style", new RegExp(`height: ${observations.length * 44}px`));
-  await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = node.scrollHeight; });
-  await expect(page.locator("#timeline-rows button").last()).toContainText(`#${observations.at(-1)!.sequence}`);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
@@ -191,9 +152,9 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await filterByType(page, "network.request.sent");
-  await page.locator("#timeline-rows button").first().click();
+  await page.locator(".story-table button[data-observation-id]").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   await expect(page.locator("#movement-cue")).toContainText("Request sent from Customer App to Orders");
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(1);
@@ -230,19 +191,19 @@ test("redacted and omitted payloads stay unmarked and incomplete history is labe
         },
         simulation: { runId: "fixture", status: "PAUSED", time: 5, pendingEvents: 0, processedEvents: 1, randomDrawCount: 0 },
         history: { observations: [
-          { schemaVersion: 1, id: "visible", time: 5, sequence: 1, type: "database.write.staged", source: "orders", target: "payments", traceId: "trace-1", spanId: "span-1", data: { before: { status: "EMPTY" }, after: { status: "CREATED" } } },
-          { schemaVersion: 1, id: "redacted", time: 5, sequence: 2, type: "database.row.read", source: "orders", traceId: "trace-1", spanId: "span-1", data: { redacted: true } },
-          { schemaVersion: 1, id: "omitted", time: 5, sequence: 3, type: "database.row.read", source: "payments", traceId: "trace-1", spanId: "span-1" },
+          { schemaVersion: 1, id: "visible", time: 5, sequence: 1, type: "database.transaction.committed", source: "orders", target: "payments", traceId: "trace-1", spanId: "span-1", data: { before: { status: "EMPTY" }, after: { status: "CREATED" } } },
+          { schemaVersion: 1, id: "redacted", time: 5, sequence: 2, type: "database.transaction.committed", source: "orders", traceId: "trace-1", spanId: "span-1", data: { redacted: true } },
+          { schemaVersion: 1, id: "omitted", time: 5, sequence: 3, type: "database.transaction.committed", source: "payments", traceId: "trace-1", spanId: "span-1" },
         ] },
         components: [],
       },
     });
   });
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.locator(".timeline-count")).toContainText("3 of 3");
-  const rows = page.locator("#timeline-rows button");
-  const labels = await rows.allInnerTexts();
+  await viewButton(page, "Story table").click();
+  await expect(page.locator(".timeline-count")).toContainText("3 teaching milestones from 3 recorded observations");
+  const rows = page.locator(".story-table button[data-observation-id]");
+  const labels = await page.locator(".story-table tbody tr").allInnerTexts();
   assertOrder(labels.map(text => ({ time: Number(/t=(\d+)/.exec(text)?.[1]), sequence: Number(/#(\d+)/.exec(text)?.[1]) })));
   await rows.nth(1).click();
   const detail = page.locator("#inspection-panel");

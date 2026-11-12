@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { mapArchitecture } from "../src/architecture-view.ts";
-import { DESIGN_EDITOR_AVAILABLE, designStepUnavailable, isEmptySlot } from "../src/design-step.ts";
+import { isEmptySlot } from "../src/design-step.ts";
 import { messages } from "../src/i18n/catalog.ts";
 import { lessonDescription, packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
@@ -15,27 +15,12 @@ async function load(index: number): Promise<RuntimeProjectionSet> {
   return loaded.projection;
 }
 
-/** Copy that tells the student to make a design edit: fill a slot, attach a database, subscribe a component. */
-const designInstruction = /\bfill the slot\b|\bgive it a database\b|\bsubscribe it\b/i;
-
-test("#164 no offered lesson asks for a design edit the browser cannot make without saying so", () => {
-  assert.equal(DESIGN_EDITOR_AVAILABLE, false, "the Design editor (#112) is not in the browser yet");
-  const flagged = scenarios.filter(choice => designStepUnavailable(choice.policy)).map(choice => choice.id);
-  // Exactly the lessons whose policy allows architecture edits are flagged.
-  assert.deepEqual(flagged, scenarios.filter(choice => choice.policy.architecture !== undefined).map(choice => choice.id));
-  assert.deepEqual(flagged, ["outbox-notifications-gap"]);
-  for (const choice of scenarios) {
-    if (designInstruction.test(lessonDescription(choice, messages("en")))) assert.ok(designStepUnavailable(choice.policy), `${choice.id} instructs a design edit and carries the notice`);
-  }
-  assert.match(messages("en").designChoices.stepNotice, /not available in the browser/);
-  assert.match(messages("es").designChoices.stepNotice, /no está disponible en el navegador/);
-});
-
-test("#164 the notice goes away once the Design editor is available", () => {
+test("#112 no lesson says the design step is unavailable: the Design editor serves every lesson with an allowance", () => {
+  for (const choice of scenarios) assert.doesNotMatch(lessonDescription(choice, messages("en")), /not available in the browser/, choice.id);
+  // The gap lesson still asks for the design edits, which the Architecture section now offers.
   const gap = scenarios.find(choice => choice.id === "outbox-notifications-gap")!;
-  assert.equal(designStepUnavailable(gap.policy, true), false);
-  assert.equal(designStepUnavailable(undefined), false);
-  assert.equal(designStepUnavailable({}), false);
+  assert.ok(gap.policy.architecture, "the gap lesson keeps its architecture allowance");
+  assert.match(lessonDescription(gap, messages("en")), /Fill the slot, give it a database, and subscribe it\./);
 });
 
 test("#164 only placeholder models mark an empty slot", () => {

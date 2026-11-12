@@ -47,7 +47,6 @@ export const designChoices = {
   },
   diagnosticUnknown: "This value is not valid.",
   withCode: (p: { text: string; code: string }, _f: Fmt) => `${p.text} (${p.code})`,
-  stepNotice: "The design step is not available in the browser yet. You can run the lesson with the empty slot and see what is missing.",
   emptySlot: {
     label: "Empty slot",
     description: "No model fills this component yet. It receives, publishes, and stores nothing, and answers any request with NOT_IMPLEMENTED.",

@@ -1,16 +1,15 @@
 import type { Observation } from "@distlab/contracts";
-import { orderObservations, recordKind, recordKinds } from "./records.ts";
+import { orderObservations, recordKind } from "./records.ts";
 import type { RecordKind } from "./records.ts";
 import type { ComponentTitle } from "./timeline-query.ts";
 import type { Messages } from "./i18n/catalog.ts";
 
 export type QuickViewId =
-  | "key-events"
   | "faults-and-timeouts"
   | "requests-and-responses"
   | "messages"
   | "state-changes"
-  | "assertions";
+  | "failures";
 
 /**
  * The predicate of one quick view. Its wording (`label`, and the sentence naming the stored
@@ -19,7 +18,6 @@ export type QuickViewId =
 export interface QuickView {
   readonly id: QuickViewId;
   readonly kinds: readonly RecordKind[];
-  readonly types: readonly string[];
 }
 
 /**
@@ -27,32 +25,29 @@ export interface QuickView {
  * which recorded observations the timeline displays; it is not an
  * ExecutionHistoryReader filter and never changes the run, virtual time, or history.
  * Categories are the teaching categories of the Story view, so a label means the
- * same thing in both places.
+ * same thing in both places. Recorded history shows only teaching milestones, so
+ * every quick view is a set of milestone categories.
  */
 export const QUICK_VIEWS: readonly QuickView[] = [
   {
-    id: "key-events",
-    kinds: recordKinds, types: [],
-  },
-  {
     id: "faults-and-timeouts",
-    kinds: ["fault", "drop", "timeout"], types: [],
+    kinds: ["fault", "drop", "timeout"],
   },
   {
     id: "requests-and-responses",
-    kinds: ["request", "response", "drop", "timeout"], types: [],
+    kinds: ["request", "response", "drop", "timeout"],
   },
   {
     id: "messages",
-    kinds: ["message", "retry"], types: [],
+    kinds: ["message", "retry"],
   },
   {
     id: "state-changes",
-    kinds: ["commit", "rollback", "external"], types: [],
+    kinds: ["commit", "rollback", "external", "kv"],
   },
   {
-    id: "assertions",
-    kinds: [], types: ["scenario.assertion.evaluated"],
+    id: "failures",
+    kinds: ["failure"],
   },
 ];
 
@@ -69,7 +64,6 @@ export function quickViewLabel(id: QuickViewId, m: Messages): string {
 export function matchesQuickView(id: QuickViewId | null, observation: Observation): boolean {
   if (id === null) return true;
   const view = quickViewById(id);
-  if (view.types.includes(observation.type)) return true;
   const kind = recordKind(observation);
   return kind !== undefined && view.kinds.includes(kind);
 }

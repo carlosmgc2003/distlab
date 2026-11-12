@@ -43,7 +43,6 @@ export const designChoices: typeof source = {
   },
   diagnosticUnknown: "Este valor no es válido.",
   withCode: (p: { text: string; code: string }, _f: Fmt) => `${p.text} (${p.code})`,
-  stepNotice: "El paso de diseño todavía no está disponible en el navegador. Podés ejecutar la lección con el slot vacío y ver qué falta.",
   emptySlot: {
     label: "Slot vacío",
     description: "Ningún modelo ocupa este componente todavía. No recibe, publica ni almacena nada, y responde cualquier solicitud con NOT_IMPLEMENTED.",

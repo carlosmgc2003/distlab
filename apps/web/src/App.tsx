@@ -24,6 +24,11 @@ import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay
 import type { DraftEntry } from "./break-faults.ts";
 import { DesignChoicesHelp, DesignChoicesSection } from "./DesignChoicesSection.tsx";
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
+import { ArchitectureSection, DesignEditsHelp } from "./ArchitectureSection.tsx";
+import { describeDesign, isDesignDiagnostic } from "./design-edits.ts";
+import type { DesignContext, DesignDraft } from "./design-edits.ts";
+import { checkoutDescriptors } from "../../../packages/catalogs/src/descriptors.ts";
+import { commerceDescriptors } from "../../../packages/catalogs/src/commerce/descriptors.ts";
 import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { componentNames } from "./component-display.ts";
@@ -39,7 +44,6 @@ import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, Assessment
 import type { SimulationHost } from "./host.ts";
 import { assessmentTitle, assessments, experimentLabel, experimentShorthand, lessonCheckLabels, lessonCopy, lessonDescription, packagedMetadata, scenarios, starterSource } from "./scenarios.ts";
 import { invariantLabel } from "./assessment.ts";
-import { designStepUnavailable } from "./design-step.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 
@@ -90,6 +94,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // The draft overlay is UI state (ADR-004). Only Apply, Load, and Compare send it, inside an ordinary load.
   const [draft, setDraft] = useState<readonly DraftEntry[]>([]);
   const [choiceDraft, setChoiceDraft] = useState<readonly ParameterOverride[]>([]);
+  const [designDraft, setDesignDraft] = useState<DesignDraft>(undefined);
   const [submitted, setSubmitted] = useState<SessionOverlay | null>(null);
   const [picking, setPicking] = useState(false);
   const [pick, setPick] = useState<{ pick: GraphPick; token: number } | null>(null);
@@ -103,6 +108,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const drawerTrigger = useRef<HTMLButtonElement>(null);
   // A design-choice field holding text that is not a value withholds Apply; Discard clears that text.
   const [choicesInvalid, setChoicesInvalid] = useState(false);
+  const [designInvalid, setDesignInvalid] = useState(false);
   const [choicesReset, setChoicesReset] = useState(0);
   // An imported scenario file stays in UI state until the student chooses another scenario (ADR-006).
   // Its text is sent unparsed; only the worker parses and validates it.
@@ -163,11 +169,17 @@ export function App({ host }: { readonly host: SimulationHost }) {
     return overlayError && submitted && diagnostics ? { overlay: submitted, diagnostics } : null;
   }, [overlayError, submitted]);
   // Each panel shows the diagnostics that point into its own part of the overlay.
-  const rejectedFaults = useMemo(() => rejected ? { ...rejected, diagnostics: rejected.diagnostics.filter(item => !isChoiceDiagnostic(item)) } : null, [rejected]);
+  const rejectedFaults = useMemo(() => rejected ? { ...rejected, diagnostics: rejected.diagnostics.filter(item => !isChoiceDiagnostic(item) && !isDesignDiagnostic(item)) } : null, [rejected]);
+  const rejectedDesign = useMemo(() => rejected ? { edits: rejected.overlay.architecture, diagnostics: rejected.diagnostics.filter(isDesignDiagnostic) } : null, [rejected]);
   const rejectedChoices = useMemo(() => rejected ? placeChoiceDiagnostics(rejected.diagnostics.filter(isChoiceDiagnostic), rejected.overlay.parameters, m) : new Map<string, string>(), [rejected, m]);
   const choicesPending = !sameChoices(choiceDraft, applied?.parameters ?? []);
+  const designPending = !sameOverlay(overlayFromDraft([], [], designDraft), overlayFromDraft([], [], applied?.architecture));
+  // The Architecture section reads the allowance, the packaged architecture, and the descriptors of the session's catalog: data only (ADR-005).
+  const designContext = useMemo((): DesignContext | undefined => policy?.architecture && lesson
+    ? { allowance: policy.architecture, architecture: lesson.architecture, descriptors: commerce ? commerceDescriptors : checkoutDescriptors } : undefined, [policy, lesson, commerce]);
   const faultsPending = useMemo(() => {
-    const faults = overlayFromDraft(draft, applied?.parameters ?? []);
+    // Only the faults differ here: the applied choices and design edits stand in for their own drafts.
+    const faults = overlayFromDraft(draft, applied?.parameters ?? [], applied?.architecture);
     return applied ? !sameOverlay(faults, applied) : !isEmptyOverlay(faults);
   }, [draft, applied]);
   // The lesson line names the loaded experiment. The run status itself is announced once, by the
@@ -248,6 +260,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     // Choosing a lesson starts from an empty draft; Apply and Compare keep the overlay they send.
     setDraft(sent ? draftFromOverlay(sent) : []);
     setChoiceDraft(sent?.parameters ?? []);
+    setDesignDraft(sent?.architecture);
     if (!overlay) setCarryNotice(null);
     return sent;
   };
@@ -369,7 +382,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
     : loadedChoice ? m.app.lessonLabel(experimentLabel(loadedChoice, m)) : m.lessonChooser.title;
 
   const editable = !busy && (projection !== null || overlayError !== null);
-  const experimentPending = choicesPending || faultsPending;
+  const experimentPending = choicesPending || faultsPending || designPending;
+  const experimentInvalid = choicesInvalid || designInvalid;
   // A rejected overlay opens the drawer, where each section shows the diagnostics that point into it.
   useEffect(() => { if (rejected) setDrawerOpen(true); }, [rejected]);
   const closeDrawer = () => {
@@ -380,6 +394,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const discardDraft = () => {
     setDraft(applied ? draftFromOverlay(applied) : []);
     setChoiceDraft(applied?.parameters ?? []);
+    setDesignDraft(applied?.architecture);
     setChoicesReset(token => token + 1);
   };
   // Picking happens on the graph, so starting it shows the Architecture tab.
@@ -389,15 +404,18 @@ export function App({ host }: { readonly host: SimulationHost }) {
   }, []);
   // An imported document accepts student changes only when it declares an overlay policy (ADR-006).
   const experimentDrawer = policy && lesson ? <ExperimentDrawer key={sessionName} open={drawerOpen} onClose={closeDrawer}
-    pending={experimentPending} invalid={choicesInvalid} editable={editable}
-    onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft))} onDiscard={discardDraft}
+    pending={experimentPending} invalid={experimentInvalid} editable={editable}
+    onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft, designDraft))} onDiscard={discardDraft}
+    // Design edits exist only for lessons whose policy has an architecture allowance (#112).
+    architecture={designContext ? <ArchitectureSection context={designContext} draft={designDraft} onDraftChange={setDesignDraft}
+      editable={editable} rejected={rejectedDesign} onInvalidChange={setDesignInvalid} resetToken={choicesReset} /> : null}
     // Design choices exist only for lessons whose policy declares parameters.
     designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} draft={choiceDraft}
       onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices} onInvalidChange={setChoicesInvalid} resetToken={choicesReset} /> : null}
     faults={<FaultsSection policy={policy} architecture={lesson.architecture} names={names} applied={applied} draft={draft} onDraftChange={setDraft}
       pending={faultsPending} editable={editable} rejected={rejectedFaults} picking={picking} onPickingChange={changePicking} pick={pick} />}
     // The drawer's one hint holds both sections' reasoning (#147).
-    help={<>{policy.parameters.length ? <DesignChoicesHelp /> : null}<FaultsHelp policy={policy} /></>} /> : null;
+    help={<>{designContext ? <DesignEditsHelp /> : null}{policy.parameters.length ? <DesignChoicesHelp /> : null}<FaultsHelp policy={policy} /></>} /> : null;
 
   // The Lesson panel (#140) holds what the learning prompt bar and the toolbar's lesson drawer held,
   // moved without rewording. Only Advanced diagnostics stays a disclosure.
@@ -429,7 +447,6 @@ export function App({ host }: { readonly host: SimulationHost }) {
       {loadedChoice?.family === "commerce" ? null
         : <p className="lesson-goal-question">{loadedChoice?.id === "response-lost" ? m.app.goalQuestionResponseLost : m.app.goalQuestionCheckout}</p>}
       <p>{loadedChoice?.family === "commerce" ? lessonDescription(loadedChoice, m) : m.app.goalCheckout}</p>
-      {loadedChoice && designStepUnavailable(loadedChoice.policy) ? <p className="design-step-notice" role="note">{m.designChoices.stepNotice}</p> : null}
     </>;
   const lessonRun = <>
     <p role="status" aria-label={m.app.lessonStateLabel} aria-live="polite">{lessonState}</p>
@@ -465,16 +482,19 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {serviceState ? <button ref={serviceStateOpener} type="button" className="show-service-state" aria-haspopup="dialog" aria-expanded={serviceStateOpen}
       disabled={!projection} onClick={() => setServiceStateOpen(true)}>{m.app.showServiceState}</button> : null}
   </>;
+  // Applied design edits (#112): the count and each filled slot, after the faults.
+  const appliedDesign = describeDesign(snapshot.session?.overlay.architecture, m);
   const runIdentity = snapshot.session && projection ? [m.app.seed(snapshot.session.seed),
     ...(snapshot.session.overlay.parameters.length ? [describeChoices(snapshot.session.overlay.parameters, m)] : []),
     appliedEntries.length ? m.app.studentFaults(appliedEntries.length) : m.app.packagedFaultsOnly,
+    ...(appliedDesign ? [appliedDesign] : []),
     m.app.runId(projection.simulation.runId.replace(/^run:/, "").slice(0, 8))].join(" · ") : "";
   const lessonExperiment = <>
     {imported ? <>
       {/* Without an overlay policy there is no Experiment drawer; say so where the scenario is described (ADR-006). */}
       {policy ? null : <p className="imported-locked">{m.app.importedLocked}</p>}
-      {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length) ? <p className="run-identity" aria-label={m.app.appliedChanges}>
-        {[...(snapshot.session.overlay.parameters.length ? [describeChoices(snapshot.session.overlay.parameters, m)] : []), m.app.studentFaults(appliedEntries.length)].join(" · ")}
+      {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length || appliedDesign) ? <p className="run-identity" aria-label={m.app.appliedChanges}>
+        {[...(snapshot.session.overlay.parameters.length ? [describeChoices(snapshot.session.overlay.parameters, m)] : []), m.app.studentFaults(appliedEntries.length), ...(appliedDesign ? [appliedDesign] : [])].join(" · ")}
       </p> : null}
     </> : <>
       {snapshot.session && projection ? <p className="run-identity" aria-label={m.app.runIdentityLabel}>
@@ -486,7 +506,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {/* The one way to change a session: the Experiment drawer (#143). */}
     {experimentDrawer ? <button ref={drawerTrigger} type="button" className="experiment-trigger" aria-expanded={drawerOpen} aria-controls="experiment-drawer"
       onClick={() => drawerOpen ? closeDrawer() : setDrawerOpen(true)}>
-      {m.app.changeExperiment}{experimentPending || choicesInvalid ? <span className="experiment-badge"> {m.app.unappliedChanges}</span> : null}
+      {m.app.changeExperiment}{experimentPending || experimentInvalid ? <span className="experiment-badge"> {m.app.unappliedChanges}</span> : null}
     </button> : null}
     {/* An instructor's authoring aid. It is offered only for a packaged lesson, never for an imported document. */}
     {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>{m.app.saveStarter}</button>}
@@ -623,6 +643,6 @@ export function App({ host }: { readonly host: SimulationHost }) {
     <ServiceStateDialog open={serviceStateOpen && serviceState !== null} time={projection?.simulation.time} onClose={closeServiceState}>{serviceState}</ServiceStateDialog>
     <LessonChooser key={chooserOpening.count} initialTopic={chooserOpening.topic} open={chooserOpen} lessons={scenarios} assessments={assessments}
       current={assessment ? `assessment:${assessment.id}` : imported ? null : loadedChoice?.id ?? null} busy={busy}
-      discardsDraft={choicesPending || faultsPending} onChoose={chooseLesson} onChooseAssessment={chooseAssessment} onClose={closeChooser} />
+      discardsDraft={experimentPending} onChoose={chooseLesson} onChooseAssessment={chooseAssessment} onClose={closeChooser} />
   </main>;
 }

@@ -93,8 +93,12 @@ test("story milestones keep only stored teaching records and never invent durati
     "database.transaction.committed", "database.transaction.rolledback",
     "external.effect.committed", "fault.rule.matched", "fault.effect.selected",
   ]) assert.ok(types.has(type), `expected a milestone for ${type}`);
+  // Checks are milestones only where a result first appears or changes.
+  const checks = milestones.filter(milestone => milestone.kind === "check");
+  assert.ok(checks.length > 0);
+  assert.ok(checks.length < observations.filter(observation => observation.type === "scenario.assertion.evaluated").length);
   for (const milestone of milestones) {
-    assert.ok(!/scheduler\.|clock\.|simulation\.|scenario\.assertion\.|database\.write\.|database\.row\.|service\.handler\.|client\./.test(milestone.observation.type));
+    assert.ok(!/scheduler\.|clock\.|simulation\.|database\.write\.|database\.row\.|service\.handler\.(?!failed)|client\./.test(milestone.observation.type));
     assert.ok(!/\b(ms|msec|seconds?|latency|took|elapsed)\b/i.test(milestone.label));
   }
   const stored = new Map(observations.map(observation => [observation.id, observation]));

@@ -24,28 +24,21 @@ export const timeline: typeof source = {
     "external.effect.committed": "Efecto externo confirmado",
     "fault.rule.matched": "Regla de falla aplicada",
     "fault.effect.selected": "Efecto de falla elegido",
+    "database.transaction.rejected": "Transacción de base de datos rechazada",
+    "service.handler.failed": "Falló el handler",
+    "message.nacked": "Mensaje rechazado (NACK)",
+    "message.dead": "Mensaje enviado a dead letter",
+    "kv.condition.failed": "Falló la condición clave-valor",
+    "kv.changed": "Entrada clave-valor modificada",
+    "kv.expired": "Entrada clave-valor vencida",
+    "runtime.log": "Registro",
+    "scenario.assertion.evaluated": "Verificación",
   },
   faultRecorded: "Falla registrada",
-  deliveredAttempt: (attempt: number | string, _f: Fmt) => `Mensaje entregado (intento ${attempt})`,
-  learningGroups: {
-    setup: "Configuración inicial de la cola del motor",
-    assertion: "Evaluaciones de aserciones sin cambios",
-  },
   recordedChange: "Cambio registrado",
   simulation: "Simulación",
   selectedNoMovement: (p: { type: string; source: string; target?: string; time: number | string }, _f: Fmt) =>
     `Elegiste ${p.type} en ${p.target === undefined ? p.source : `${p.source} hacia ${p.target}`} en el tiempo virtual ${p.time}. No hay movimiento de solicitud ni de mensaje.`,
-  boundary: {
-    none: "No hay observaciones visibles.",
-    unselected: (count: number, f: Fmt) => f.plural(count, {
-      one: "1 observación visible. Siguiente y Anterior la eligen.",
-      other: `${f.number(count)} observaciones visibles. Siguiente elige la primera. Anterior elige la última.`,
-    }),
-    position: (p: { index: number; count: number }, f: Fmt) => `Observación visible ${f.number(p.index)} de ${f.number(p.count)}.`,
-    cannotMoveBoth: "Anterior y Siguiente no pueden moverse.",
-    cannotMovePrevious: "Anterior no puede moverse.",
-    cannotMoveNext: "Siguiente no puede moverse.",
-  },
   selection: (p: { sequence: number; type: string; time: number | string }, _f: Fmt) =>
     `Elegiste la observación n.º ${p.sequence}: ${p.type} en el tiempo virtual ${p.time}.`,
   clearedName: {
@@ -158,12 +151,6 @@ export const timeline: typeof source = {
   quickView: {
     help: "Las vistas rápidas acotan el historial registrado; nunca cambian la ejecución.",
     views: {
-      "key-events": {
-        label: "Eventos clave",
-        inline: "eventos clave",
-        keeps: "Conserva los hitos didácticos de la vista Historia.",
-        empty: (total: number, f: Fmt) => `La vista rápida Eventos clave conserva los hitos didácticos de la vista Historia, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
-      },
       "faults-and-timeouts": {
         label: "Fallas y timeouts",
         inline: "fallas y timeouts",
@@ -185,14 +172,14 @@ export const timeline: typeof source = {
       "state-changes": {
         label: "Cambios de estado",
         inline: "cambios de estado",
-        keeps: "Conserva las transacciones confirmadas y revertidas y los efectos externos confirmados.",
-        empty: (total: number, f: Fmt) => `La vista rápida Cambios de estado conserva las transacciones confirmadas y revertidas y los efectos externos confirmados, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
+        keeps: "Conserva las transacciones confirmadas y revertidas, los efectos externos confirmados y los cambios y vencimientos clave-valor.",
+        empty: (total: number, f: Fmt) => `La vista rápida Cambios de estado conserva las transacciones confirmadas y revertidas, los efectos externos confirmados y los cambios y vencimientos clave-valor, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
       },
-      assertions: {
-        label: "Aserciones",
-        inline: "aserciones",
-        keeps: "Conserva las evaluaciones de aserciones del escenario y sus veredictos guardados.",
-        empty: (total: number, f: Fmt) => `La vista rápida Aserciones conserva las evaluaciones de aserciones del escenario y sus veredictos guardados, y esta ejecución registró ${clause(total, f)} sin ninguna de ellas.`,
+      failures: {
+        label: "Rechazos y fallos",
+        inline: "rechazos y fallos",
+        keeps: "Conserva las transacciones y condiciones clave-valor rechazadas, los handlers que fallaron y los mensajes rechazados o enviados a dead letter.",
+        empty: (total: number, f: Fmt) => `La vista rápida Rechazos y fallos conserva las transacciones y condiciones clave-valor rechazadas, los handlers que fallaron y los mensajes rechazados o enviados a dead letter, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
       },
     },
     emptyRemove: "Quitá el chip de la vista rápida para volver a ver el historial registrado.",
@@ -218,52 +205,29 @@ export const timeline: typeof source = {
     heading: "Historial registrado",
     viewSwitch: "Vista de la línea de tiempo",
     viewChoices: {
-      "story-diagram": "Diagrama de historia",
-      "story-table": "Tabla de historia",
-      learning: "Aprendizaje",
-      raw: "Sin procesar",
+      diagram: "Diagrama de historia",
+      table: "Tabla de historia",
     },
     orderHint: {
-      label: "Orden de las filas",
-      body: "Siguiente observación elige una observación registrada; no ejecuta un evento. Las filas siguen la secuencia de observación, incluidas las observaciones con el mismo tiempo virtual.",
+      label: "Orden de los hitos",
+      body: "Elegir un hito elige una observación registrada; no ejecuta un evento. Los hitos siguen la secuencia de observación, incluidas las observaciones con el mismo tiempo virtual.",
     },
     show: "Mostrar",
     allCategories: "Todo",
     component: "Componente",
     allComponents: "Todos",
     moreFilters: "Más filtros…",
-    shown: (p: { shown: number; total: number }, f: Fmt) => `${f.number(p.shown)} de ${f.number(p.total)} a la vista`,
+    shown: (p: { shown: number; total: number }, f: Fmt) => `${f.number(p.shown)} de ${f.number(p.total)} hitos a la vista`,
     chipGroup: "Filtros activos y restablecer",
     chipList: "Filtros activos",
     remove: "Quitar",
     clearAll: "Borrar todos los filtros",
-    count: (p: { shown: number; total: number }, f: Fmt) => f.plural(p.total, {
-      one: `${f.number(p.shown)} de 1 observación en orden de tiempo virtual.`,
-      other: `${f.number(p.shown)} de ${f.number(p.total)} observaciones en orden de tiempo virtual.`,
-    }),
-    countLearning: (p: { shown: number; total: number; items: number; hidden: number }, f: Fmt) =>
-      `${f.plural(p.total, {
-        one: `${f.number(p.shown)} de 1 observación en orden de tiempo virtual.`,
-        other: `${f.number(p.shown)} de ${f.number(p.total)} observaciones en orden de tiempo virtual.`,
-      })} La vista Aprendizaje muestra ${f.plural(p.items, { one: "1 elemento", other: `${f.number(p.items)} elementos` })}; ${f.plural(p.hidden, {
-        one: "1 registro resumido",
-        other: `${f.number(p.hidden)} registros resumidos`,
-      })} en grupos desplegables. Elegí una fila para inspeccionar su detalle.`,
-    learningHeadings: {
-      summary: "Resumen",
-      timeSequence: "Tiempo virtual · secuencia",
-      destination: "Componente / destino",
-    },
-    rowsLabel: {
-      story: "Tira de hitos y tabla de la historia",
-      learning: "Observaciones de la línea de tiempo en vista Aprendizaje",
-      raw: "Observaciones de la línea de tiempo sin procesar",
-    },
+    rowsLabel: "Tira de hitos y tabla de la historia",
     noObservations: "No se registró ninguna observación en esta ejecución.",
 
     readingStory: "Cómo leer la historia",
     storyHint: (summary: string, _f: Fmt) => `${summary} Las columnas siguen la secuencia registrada, no la duración transcurrida. Elegí un hito para ver el detalle.`,
-    storyNoMilestones: "Ninguno de los registros visibles es un hito didáctico. Usá Aprendizaje o Sin procesar para leerlos.",
+    storyNoMilestones: "Ninguno de los registros visibles es un hito didáctico. Quitá un filtro para volver a ver los hitos.",
     legendLabel: "Categorías de hitos, formas y cantidades",
     diagramLabel: "Diagrama de historia",
     corner: "Componente",
@@ -278,13 +242,6 @@ export const timeline: typeof source = {
       destination: "Componente / destino",
     },
     timeUnchanged: (time: number | string, _f: Fmt) => `t=${time} (sin cambios)`,
-
-    rowTitle: (p: { summary: string; type: string }, _f: Fmt) => `${p.summary} — ${p.type}`,
-    groupHide: (p: { count: number; summary: string; firstSequence: number; lastSequence: number; firstTime: number | string; lastTime: number | string }, f: Fmt) =>
-      `${f.plural(p.count, { one: "Ocultar 1 registro", other: `Ocultar ${f.number(p.count)} registros` })}: ${p.summary} (#${p.firstSequence}–#${p.lastSequence}, t=${p.firstTime}–${p.lastTime})`,
-    groupShow: (p: { count: number; summary: string; firstSequence: number; lastSequence: number; firstTime: number | string; lastTime: number | string }, f: Fmt) =>
-      `${f.plural(p.count, { one: "Mostrar 1 registro", other: `Mostrar ${f.number(p.count)} registros` })}: ${p.summary} (#${p.firstSequence}–#${p.lastSequence}, t=${p.firstTime}–${p.lastTime})`,
-    openRaw: "Abrir la observación sin procesar",
 
     moreTitle: "Más filtros",
     matchingHint: "Cómo funciona la coincidencia",

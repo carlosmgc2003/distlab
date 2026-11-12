@@ -12,6 +12,7 @@ export const story = {
   labelOverrides: {
     "database.transaction.committed": "Transaction committed",
     "database.transaction.rolledback": "Transaction rolled back",
+    "database.transaction.rejected": "Transaction rejected",
   },
   kinds: {
     request: "Request",
@@ -24,7 +25,13 @@ export const story = {
     fault: "Fault",
     drop: "Dropped message",
     timeout: "Timeout",
+    failure: "Rejection or failure",
+    kv: "Key-value change",
+    log: "Business log",
+    check: "Check result",
   },
+  /** The category of a selected record that is not a teaching milestone (a Story table row). */
+  otherRecord: "Other record",
   /** "22 teaching milestones from 266 recorded observations." */
   reduction: (p: { milestones: number; recorded: number }, f: Fmt) => `${milestones(p.milestones, f)} from ${observations(p.recorded, f)}.`,
   summaryEmpty: (reduction: string, _f: Fmt) => `No teaching milestones are in the current results. ${reduction}`,
@@ -44,14 +51,9 @@ export const story = {
     + `Stored milestone categories and their shapes: ${f.list(p.kinds)}. `
     + "The table repeats the same milestones in the same order and selects the same observations.",
   /** The Story view's line in the live region: the reduction, then what the filters hide. */
-  count: (p: { reduction: string; filtered: number; total: number; otherRecords: number }, f: Fmt) => {
-    const filters = p.filtered === p.total ? "" : `Filters show ${f.number(p.filtered)} of ${f.plural(p.total, { one: "1 observation", other: `${f.number(p.total)} observations` })}; `;
-    const rest = p.otherRecords === 0
-      ? p.filtered === 0 ? "No visible records to reduce." : "Every visible record is a milestone."
-      : f.plural(p.otherRecords, {
-        one: "1 visible record is not a teaching milestone; Learning and Raw keep it.",
-        other: `${f.number(p.otherRecords)} visible records are not teaching milestones; Learning and Raw keep all of them.`,
-      });
-    return `${p.reduction} ${filters}${rest}`;
+  count: (p: { reduction: string; filtered: number; total: number; tableExtra: boolean }, f: Fmt) => {
+    const filters = p.filtered === p.total ? "" : `Filters show ${f.number(p.filtered)} of ${f.plural(p.total, { one: "1 observation", other: `${f.number(p.total)} observations` })}. `;
+    const extra = p.tableExtra ? "The Story table also lists the selected record, which is not a teaching milestone." : "";
+    return `${p.reduction} ${filters}${extra}`;
   },
 };

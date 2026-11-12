@@ -6,6 +6,15 @@ type Move = { source: string; target?: string; time: number };
 /** Spanish messages for the `records` area. Typed by the English source, so keys and parameters must match. */
 export const records: typeof source = {
   attemptSuffix: (attempt: number | string, _f: Fmt) => ` (intento ${attempt})`,
+  qualifier: {
+    detail: (text: string, _f: Fmt) => `: ${text}`,
+    code: (text: string, _f: Fmt) => ` (${text})`,
+    checkId: (id: string, _f: Fmt) => `: ${id}`,
+    checkPassed: (id: string, _f: Fmt) => `: ${id} superada`,
+    checkNotPassed: (id: string, _f: Fmt) => `: ${id} no superada`,
+    verdictPassed: ": superada",
+    verdictNotPassed: ": no superada",
+  },
   noStoredFields: "Sin campos registrados.",
   none: "Ninguno.",
   movement: {

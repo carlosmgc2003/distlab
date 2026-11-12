@@ -47,10 +47,23 @@ const STORY_TYPES = new Set([
   "message.published", "message.delivered", "message.acknowledged", "message.ack.stale", "message.retry.scheduled",
   "database.transaction.committed", "database.transaction.rolledback", "external.effect.committed",
   "fault.effect.selected", "fault.rule.matched",
+  "database.transaction.rejected", "service.handler.failed", "message.nacked", "message.dead", "kv.condition.failed",
+  "kv.changed", "kv.expired", "runtime.log",
 ]);
 
+/** A check is a milestone for its first stored verdict and each change of it. */
 function expectedMilestones(observations: readonly Observation[]): readonly Observation[] {
-  return observations.filter(observation => STORY_TYPES.has(observation.type) || observation.type.startsWith("fault."));
+  const verdicts = new Map<string, unknown>();
+  return observations.filter(observation => {
+    if (observation.type === "scenario.assertion.evaluated") {
+      const data = observation.data as { assertionId?: string; verdict?: unknown } | undefined;
+      if (typeof data?.assertionId !== "string" || typeof data.verdict !== "boolean") return true;
+      const repeated = verdicts.get(data.assertionId) === data.verdict;
+      verdicts.set(data.assertionId, data.verdict);
+      return !repeated;
+    }
+    return STORY_TYPES.has(observation.type) || observation.type.startsWith("fault.");
+  });
 }
 
 function rowSelector(observation: Observation): string {
@@ -67,7 +80,7 @@ async function runScenario(page: Page, scenario: string) {
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 }
 
-test("Story reduces a completed checkout to labeled milestones and keeps Learning and Raw", async ({ page }) => {
+test("Story reduces a completed checkout to labeled milestones and offers only its two presentations", async ({ page }) => {
   test.setTimeout(90_000);
   await observeWorker(page);
   await page.setViewportSize({ width: 1534, height: 897 });
@@ -79,7 +92,7 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   await viewButton(page, "Story table").click();
   await expect(viewButton(page, "Story table")).toHaveAttribute("aria-pressed", "true");
   await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "false");
-  await expect(viewButton(page, "Learning")).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("group", { name: "Timeline view", exact: true }).getByRole("button")).toHaveText(["Story diagram", "Story table"]);
   await expect(page.locator(".timeline-count")).toHaveText(
     new RegExp(`^\\d+ teaching milestones from ${observations.length} recorded observations\\.`),
   );
@@ -139,13 +152,6 @@ test("Story reduces a completed checkout to labeled milestones and keeps Learnin
   expect(await commandTypes(page)).toEqual(before);
   await viewButton(page, "Story diagram").click();
 
-  // Learning and Raw keep every record.
-  await page.getByRole("button", { name: "Learning", exact: true }).click();
-  await expect(page.locator(".timeline-count")).toContainText("records summarized");
-  await expect(page.locator(".learning-rows, .learning-group").first()).toBeVisible();
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.locator(".timeline-count")).toContainText(`${observations.length} of ${observations.length}`);
-  await viewButton(page, "Story diagram").click();
   await expect(page.locator(".timeline-count")).toContainText("teaching milestones from");
 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

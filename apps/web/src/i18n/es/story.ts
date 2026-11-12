@@ -9,6 +9,7 @@ export const story: typeof source = {
   labelOverrides: {
     "database.transaction.committed": "Transacción confirmada",
     "database.transaction.rolledback": "Transacción revertida",
+    "database.transaction.rejected": "Transacción rechazada",
   },
   kinds: {
     request: "Solicitud",
@@ -21,7 +22,12 @@ export const story: typeof source = {
     fault: "Falla",
     drop: "Mensaje descartado",
     timeout: "Timeout",
+    failure: "Rechazo o fallo",
+    kv: "Cambio clave-valor",
+    log: "Registro de negocio",
+    check: "Resultado de verificación",
   },
+  otherRecord: "Otro registro",
   reduction: (p: { milestones: number; recorded: number }, f: Fmt) => `${milestones(p.milestones, f)} de ${observations(p.recorded, f)}.`,
   summaryEmpty: (reduction: string, _f: Fmt) => `No hay hitos didácticos en los resultados actuales. ${reduction}`,
   summary: (p: { reduction: string; lanes: readonly string[]; first: number | string; last: number | string }, f: Fmt) =>
@@ -39,14 +45,9 @@ export const story: typeof source = {
     + "Cada hito es una observación registrada; el orden es su secuencia registrada. "
     + `Categorías de hitos guardadas y sus formas: ${f.list(p.kinds)}. `
     + "La tabla repite los mismos hitos en el mismo orden y elige las mismas observaciones.",
-  count: (p: { reduction: string; filtered: number; total: number; otherRecords: number }, f: Fmt) => {
-    const filters = p.filtered === p.total ? "" : `Los filtros muestran ${f.number(p.filtered)} de ${f.plural(p.total, { one: "1 observación", other: `${f.number(p.total)} observaciones` })}; `;
-    const rest = p.otherRecords === 0
-      ? p.filtered === 0 ? "No hay registros visibles para reducir." : "Todos los registros visibles son hitos."
-      : f.plural(p.otherRecords, {
-        one: "1 registro visible no es un hito didáctico; Aprendizaje y Sin procesar lo conservan.",
-        other: `${f.number(p.otherRecords)} registros visibles no son hitos didácticos; Aprendizaje y Sin procesar los conservan.`,
-      });
-    return `${p.reduction} ${filters}${rest}`;
+  count: (p: { reduction: string; filtered: number; total: number; tableExtra: boolean }, f: Fmt) => {
+    const filters = p.filtered === p.total ? "" : `Los filtros muestran ${f.number(p.filtered)} de ${f.plural(p.total, { one: "1 observación", other: `${f.number(p.total)} observaciones` })}. `;
+    const extra = p.tableExtra ? "La tabla de historia también lista el registro elegido, que no es un hito didáctico." : "";
+    return `${p.reduction} ${filters}${extra}`;
   },
 };

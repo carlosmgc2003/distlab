@@ -423,5 +423,5 @@ endpoint, payload, span, checkout.
 | session overlay (the student's changes) / overlay policy (a scenario-file field) | cambios de la sesión / política de overlay |
 | scenario digest | huella (digest) |
 | passed / failed (imported scenario checks) | SUPERADA / NO SUPERADA |
-| Story / Story table / Learning / Raw (history views) | Diagrama de historia / Tabla de historia / Aprendizaje / Sin procesar |
+| Story / Story table (history views) | Diagrama de historia / Tabla de historia |
 | exact / prefix / contains (filter match) | Exacto / Prefijo / Contiene |

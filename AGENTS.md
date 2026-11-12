@@ -91,14 +91,19 @@ reconstructed. A token travels from the record's origin to its destination even
 when that runs against the drawn link. Component activity in
 `apps/web/src/activity.ts` is pure: it reads records at or before the cursor and
 nothing after it. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
-edits a draft overlay as UI state in two sections: Faults
-(`apps/web/src/FaultsSection.tsx`, `apps/web/src/break-faults.ts`) and Design
-choices (`apps/web/src/DesignChoicesSection.tsx`, `apps/web/src/design-choices.ts`).
+edits a draft overlay as UI state in up to three sections: Architecture
+(`apps/web/src/ArchitectureSection.tsx`, `apps/web/src/design-edits.ts`), Design
+choices (`apps/web/src/DesignChoicesSection.tsx`, `apps/web/src/design-choices.ts`),
+and Faults (`apps/web/src/FaultsSection.tsx`, `apps/web/src/break-faults.ts`).
 Only Apply and restart, Load, and Compare send it, inside an ordinary `load`. It
 never validates or applies an overlay itself, and its inputs and Apply are
 unavailable while a command is outstanding or the simulation runs. Design
 choices offer only the parameters a lesson's policy declares and never edit the
-seed or the lesson checks.
+seed or the lesson checks. The Architecture section offers only the edits a
+lesson's architecture allowance declares, reads model descriptors from the
+data-only descriptor modules, and builds `ArchitectureEdits` in the worker's
+normalized form; it never imports `@distlab/scenario` or decides that a design
+is valid.
 Graph layout in `apps/web/src/layout/` is presentation: `elk-layout.ts` is a
 pure, async ELK layered layout over measured node sizes, and ELK runs in its
 own presentation worker, never in the simulation worker. Positions and edge

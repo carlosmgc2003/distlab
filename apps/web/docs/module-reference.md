@@ -438,16 +438,14 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 
 [Source](../src/timeline.ts)
 
-- **Responsibility:** supply timeline wording, Learning reduction, graph emphasis,
-  selection navigation, row-window geometry, and terminal-failure copy.
+- **Responsibility:** supply timeline wording, graph emphasis, selection and
+  reveal copy, and terminal-failure copy.
 - **Imports and boundaries:** shared application types and `records.ts` readers
   and movement types; no host client or runtime package.
-- **State and protocol:** `recordLabel` names stored types and delivery attempts.
-  `learningTimeline` collapses only adjacent startup scheduler/clock bookkeeping
-  before the first event and adjacent assertion evaluations with unchanged stored
-  data and correlation context. Group members retain original observations.
-  `visibleRowRange` supports fixed-height Raw virtualization. `selectionStep`
-  handles bounds and initially unselected lists. `terminalMark` distinguishes
+- **State and protocol:** `recordLabel` names stored types plus the stored
+  fields `storedQualifier` reads (delivery attempt, log message, key-value key,
+  rejection code or reason, check id and verdict). `selectionStep` handles
+  bounds and initially unselected lists for Replay. `terminalMark` distinguishes
   complete, incomplete, and unreported execution-history completeness.
 - **Presentation/runtime separation:** `changeEvidence` reads stored changes;
   `emphasisFor` marks explicit selection and movement. Navigation and filter
@@ -482,9 +480,9 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   and recorded-component chips.
 - **Imports and boundaries:** `Observation`, record ordering/categories, and
   local component-title types from `timeline-query.ts`.
-- **State and protocol:** six presets cover key events, faults/timeouts,
-  requests/responses, messages, state changes, and assertions. Each keeps whole
-  observations by stored type or milestone category. Counts use the full
+- **State and protocol:** five presets cover faults/timeouts,
+  requests/responses, messages, state changes, and rejections/failures. Each
+  keeps whole observations by milestone category. Counts use the full
   supplied snapshot; summaries state shown versus recorded observations.
   `revealQuickView` clears a preset only when it hides the target observation.
   Component chips use recorded sources/targets and omit the `simulation` source
@@ -504,36 +502,41 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **State and protocol:** each milestone holds its exact original observation.
   Milestone columns follow sequence order, lanes are stored sources in
   first-milestone order, and time-boundary flags compare adjacent milestone
-  virtual times. Labels use a typed milestone-wording table; delivery labels
-  include only the stored attempt.
+  virtual times. Labels use a typed milestone-wording table plus only the stored
+  fields `storedQualifier` reads. A check evaluation that repeats the previous
+  stored verdict of the same check is not a milestone. `storyTableRows` adds the
+  selected observation as an "Other record" row when it is visible but not a
+  milestone.
 - **Presentation/runtime separation:** reduction affects the display only.
-  Non-milestone observations remain available in Learning and Raw. Summary and
+  Non-milestone observations stay in the published history and are read in
+  Observation detail through evidence, causation, or trace links. Summary and
   detail text explicitly avoid inferred duration or causality beyond stored fields.
 
 ## `TimelineView.tsx`
 
 [Source](../src/TimelineView.tsx)
 
-- **Responsibility:** render the one view switch (Story diagram, Story table,
-  Learning, Raw), the Show / Component / More filters… row and its modal
-  dialog, Learning groups, virtualized Raw rows, the docked Observation detail
+- **Responsibility:** render the one view switch (Story diagram, Story table),
+  the Show / Component / More filters… row and its modal dialog, the Story
+  strip and table, the docked Observation detail
   (the panel's right column in every view, #146), and stored correlation links.
   The detail header is the one visible statement of the selection; review
   feedback, including the selection, is announced through one `sr-only` polite
-  live region; an active filter shows one "‹n› of ‹m› shown" count beside the
-  filter row.
+  live region; an active filter shows one "‹n› of ‹m› milestones shown" count
+  beside the filter row.
 - **Imports and boundaries:** React and `Observation`, plus `timeline-query.ts`,
   `timeline-quick-views.ts`, `records.ts`, `timeline.ts`, `story-timeline.ts`, and
   `HelpHint`. Receives observation snapshots, drawn-link identities, titles, and
   UI callbacks; has no host client.
-- **State and protocol:** holds the Story presentation (diagram or table) and the
-  More filters dialog as presentation state; the dialog edits a copy of the draft
-  and applies it as one `set-draft`, or discards it. Review navigation owns filter draft and last valid query, quick view,
-  display mode, expanded groups, selected observation ID, feedback, live cue,
-  scroll window, and focus requests. Quick views apply before advanced filters.
-  Invalid drafts keep the last valid query. Evidence reveal switches to Raw,
-  removes only hiding constraints, selects the exact ID, and focuses its row.
-  Raw keeps the selected row in the DOM even outside the virtualized window.
+- **State and protocol:** holds the More filters dialog as presentation state;
+  the dialog edits a copy of the draft and applies it as one `set-draft`, or
+  discards it. Review navigation owns filter draft and last valid query, quick
+  view, the Story presentation (diagram or table), selected observation ID,
+  feedback, live cue, and scroll and focus requests. Quick views apply before
+  advanced filters. Invalid drafts keep the last valid query. Evidence reveal
+  switches to the Story table, removes only hiding constraints, selects the exact
+  ID, and focuses its row, which is an "Other record" row when the observation is
+  not a milestone.
   History replacement clears review/filter state; appended history may produce
   a newest-recorded-movement cue. Detail links resolve stored causes, spans,
   traces, events, entities, and before/after evidence.
@@ -836,10 +839,8 @@ not change their source or the existing design documents:
   [learning-timeline.md](../../../docs/learning-timeline.md) does not list it
   among Story milestones. The source explicitly records this pending discrepancy
   and states that its document-consistency test fails until resolved.
-- [learning-timeline.md](../../../docs/learning-timeline.md) still describes
-  playback in Raw. The current application and root context put playback on the
-  architecture graph only; Recorded history row selection is independent review
-  navigation.
+- Playback is on the architecture graph only; Recorded history selection is
+  independent review navigation.
 - The introductory ordering comment in `records.ts` mentions virtual time
   first, while its implementation orders by stored sequence. This
   reference describes that implementation and the root context's separation.

@@ -72,6 +72,9 @@ const sample: readonly Observation[] = [
   row({ id: "9", sequence: 9, type: "external.effect.committed", source: "payment-processor" }),
   row({ id: "10", sequence: 10, type: "scenario.assertion.evaluated", source: "simulation" }),
   row({ id: "11", sequence: 11, type: "scheduler.event.dispatched", source: "simulation" }),
+  row({ id: "12", sequence: 12, type: "kv.expired", source: "orders" }),
+  row({ id: "13", sequence: 13, type: "database.transaction.rejected", source: "payments" }),
+  row({ id: "14", sequence: 14, type: "runtime.log", source: "orders" }),
 ];
 
 function typesOf(observations: readonly Observation[]): readonly string[] {
@@ -80,13 +83,13 @@ function typesOf(observations: readonly Observation[]): readonly string[] {
 
 test("every quick view is a read-only predicate over the recorded snapshot", () => {
   assert.deepEqual(QUICK_VIEWS.map(view => view.id), [
-    "key-events", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "assertions",
+    "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "failures",
   ]);
   for (const view of QUICK_VIEWS) {
     assert.ok(m.timeline.quickView.views[view.id].label.length > 0);
     assert.ok(m.timeline.quickView.views[view.id].keeps.length > 0);
     assert.ok(es.timeline.quickView.views[view.id].keeps.length > 0);
-    assert.ok(view.kinds.length > 0 || view.types.length > 0, `${view.id} must name stored records`);
+    assert.ok(view.kinds.length > 0, `${view.id} must name milestone categories`);
   }
   // A null quick view is the identity projection in canonical order.
   assert.deepEqual(quickViewObservations(sample, null), orderObservations(sample));
@@ -100,16 +103,11 @@ test("every quick view is a read-only predicate over the recorded snapshot", () 
 
 test("each preset keeps exactly the stored records it names", () => {
   const expected: Readonly<Record<QuickViewId, readonly string[]>> = {
-    "key-events": [
-      "network.request.sent", "network.response.dropped", "network.request.timedout", "fault.rule.matched",
-      "message.published", "message.acknowledged", "database.transaction.committed",
-      "database.transaction.rolledback", "external.effect.committed",
-    ],
     "faults-and-timeouts": ["network.response.dropped", "network.request.timedout", "fault.rule.matched"],
     "requests-and-responses": ["network.request.sent", "network.response.dropped", "network.request.timedout"],
     messages: ["message.published", "message.acknowledged"],
-    "state-changes": ["database.transaction.committed", "database.transaction.rolledback", "external.effect.committed"],
-    assertions: ["scenario.assertion.evaluated"],
+    "state-changes": ["database.transaction.committed", "database.transaction.rolledback", "external.effect.committed", "kv.expired"],
+    failures: ["database.transaction.rejected"],
   };
   for (const view of QUICK_VIEWS) {
     const kept = quickViewObservations(sample, view.id);
@@ -120,19 +118,18 @@ test("each preset keeps exactly the stored records it names", () => {
       if (!expected[view.id].includes(observation.type)) assert.equal(matchesQuickView(view.id, observation), false, `${view.id} ${observation.type}`);
     }
   }
-  // Key events are exactly the Story milestones, so both views name the same records.
-  assert.deepEqual(quickViewObservations(sample, "key-events").map(item => item.id), ["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-  // One teaching category list, owned by the record readers. `business` existed only for runtime.log.
-  assert.equal(recordKinds.length, 10);
-  assert.ok(!recordKinds.includes("business" as never));
+  // Recorded history shows milestones only, so no quick view keeps a record that is not one.
+  for (const view of QUICK_VIEWS) assert.equal(matchesQuickView(view.id, sample.find(item => item.type === "scheduler.event.dispatched")!), false);
+  // One teaching category list, owned by the record readers.
+  assert.equal(recordKinds.length, 14);
 });
 
 test("quick view counts and summaries state shown out of recorded total", () => {
   const counts = quickViewCounts(sample);
   assert.deepEqual(counts, {
-    "key-events": 9, "faults-and-timeouts": 3, "requests-and-responses": 3, messages: 2, "state-changes": 3, assertions: 1,
+    "faults-and-timeouts": 3, "requests-and-responses": 3, messages: 2, "state-changes": 4, failures: 1,
   });
-  assert.equal(counts["faults-and-timeouts"]! + counts.messages! + counts.assertions!, 6);
+  assert.equal(counts["faults-and-timeouts"]! + counts.messages!, 5);
   for (const view of QUICK_VIEWS) {
     const shown = quickViewObservations(sample, view.id).length;
     const summary = quickViewSummary(view.id, shown, sample.length, m);
@@ -143,8 +140,8 @@ test("quick view counts and summaries state shown out of recorded total", () => 
   }
   const none = quickViewSummary(null, sample.length, sample.length, m);
   assert.ok(none.includes(`show ${sample.length} of ${sample.length} recorded observations`));
-  assert.ok(quickViewSummary("assertions", 0, sample.length, m).includes("recorded no assertions"));
-  assert.ok(quickViewFeedback("assertions", 1, sample.length, m).includes("changes nothing in the run"));
+  assert.ok(quickViewSummary("messages", 0, sample.length, m).includes("recorded no messages"));
+  assert.ok(quickViewFeedback("messages", 1, sample.length, m).includes("changes nothing in the run"));
   assert.ok(quickViewFeedback(null, 11, 11, m).includes("cleared"));
   assert.equal(quickViewChip("messages", m).removeLabel, "Remove the Messages quick view");
   assert.equal(quickViewChip("messages", m).label, "Quick view Messages");
@@ -152,6 +149,7 @@ test("quick view counts and summaries state shown out of recorded total", () => 
   assert.ok(quickViewSummary(null, 1, 1, m).includes("of 1 recorded observation."));
   assert.ok(quickViewSummary(null, 1, 1, es).includes("de 1 observación registrada."));
   assert.equal(quickViewChip("messages", es).label, "Vista rápida Mensajes");
+  assert.equal(quickViewChip("failures", es).label, "Vista rápida Rechazos y fallos");
   assert.ok(quickViewFeedback(null, 1, 1, m).includes("The 1 recorded observation is available again."));
   assert.ok(quickViewFeedback("messages", 2, 5, es).includes("Muestra 2 de 5 observaciones registradas"));
 });
@@ -171,10 +169,10 @@ test("quick views compose with canonical filters by intersection", () => {
 });
 
 test("an empty quick view explains the constraint and offers a reset", () => {
-  const empty = quickViewObservations(sample.filter(observation => observation.type.startsWith("scheduler.")), "assertions");
+  const empty = quickViewObservations(sample.filter(observation => observation.type.startsWith("scheduler.")), "state-changes");
   assert.deepEqual(empty, []);
-  const explanation = emptyQuickViewExplanation("assertions", 1, m);
-  assert.ok(explanation.includes("keeps scenario assertion evaluations"));
+  const explanation = emptyQuickViewExplanation("state-changes", 1, m);
+  assert.ok(explanation.includes("keeps committed and rolled back transactions"));
   assert.ok(explanation.includes("Remove the quick view chip"));
   const hidden = sample.find(observation => observation.type === "message.published")!;
   const reveal = revealQuickView("faults-and-timeouts", hidden);

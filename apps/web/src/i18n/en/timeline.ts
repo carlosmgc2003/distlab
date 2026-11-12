@@ -9,7 +9,7 @@ const recorded = (n: number, f: Fmt) => f.plural(n, { one: "1 recorded observati
 const clause = (n: number, f: Fmt) => f.plural(n, { one: "1 observation", other: `${f.number(n)} observations` });
 
 export const timeline = {
-  /** Wording for one stored record, shared by the detail heading, the Learning row, the Story view, and playback. */
+  /** Wording for one stored record, shared by the detail heading, the Story view, and playback. */
   recordLabels: {
     "network.request.sent": "Request sent",
     "network.request.delivered": "Request delivered",
@@ -28,31 +28,23 @@ export const timeline = {
     "external.effect.committed": "External side effect committed",
     "fault.rule.matched": "Fault rule matched",
     "fault.effect.selected": "Fault effect selected",
+    "database.transaction.rejected": "Database transaction rejected",
+    "service.handler.failed": "Handler failed",
+    "message.nacked": "Message rejected (NACK)",
+    "message.dead": "Message dead-lettered",
+    "kv.condition.failed": "Key-value condition failed",
+    "kv.changed": "Key-value entry changed",
+    "kv.expired": "Key-value entry expired",
+    "runtime.log": "Log",
+    "scenario.assertion.evaluated": "Check",
   },
   faultRecorded: "Fault recorded",
-  deliveredAttempt: (attempt: number | string, _f: Fmt) => `Message delivered (attempt ${attempt})`,
-  learningGroups: {
-    setup: "Initial engine queue setup",
-    assertion: "Unchanged assertion evaluations",
-  },
   recordedChange: "Recorded change",
   /** The pseudo-component that records engine and clock events. */
   simulation: "Simulation",
   /** Graph highlight text for a selected record that is not a request or message movement. */
   selectedNoMovement: (p: { type: string; source: string; target?: string; time: number | string }, _f: Fmt) =>
     `Selected ${p.type} at ${p.target === undefined ? p.source : `${p.source} to ${p.target}`} at virtual time ${p.time}. No request or message movement.`,
-  boundary: {
-    none: "No visible observations.",
-    /** Nothing selected yet. */
-    unselected: (count: number, f: Fmt) => f.plural(count, {
-      one: "1 visible observation. Next and Previous select it.",
-      other: `${f.number(count)} visible observations. Next selects the first. Previous selects the last.`,
-    }),
-    position: (p: { index: number; count: number }, f: Fmt) => `Visible observation ${f.number(p.index)} of ${f.number(p.count)}.`,
-    cannotMoveBoth: "Previous and Next cannot move.",
-    cannotMovePrevious: "Previous cannot move.",
-    cannotMoveNext: "Next cannot move.",
-  },
   selection: (p: { sequence: number; type: string; time: number | string }, _f: Fmt) =>
     `Selected Observation #${p.sequence}: ${p.type} at virtual time ${p.time}.`,
   /** What a revealed record cleared, named by the field that was cleared. */
@@ -170,12 +162,6 @@ export const timeline = {
     help: "Quick views narrow the recorded history; they never change the run.",
     /** `label` names the view; `inline` is the same name inside a sentence; `keeps` and `empty` are whole sentences. */
     views: {
-      "key-events": {
-        label: "Key events",
-        inline: "key events",
-        keeps: "It keeps the teaching milestones of the Story view.",
-        empty: (total: number, f: Fmt) => `The Key events quick view keeps the teaching milestones of the Story view, and this run recorded ${clause(total, f)} without any of them.`,
-      },
       "faults-and-timeouts": {
         label: "Faults & timeouts",
         inline: "faults & timeouts",
@@ -197,14 +183,14 @@ export const timeline = {
       "state-changes": {
         label: "State changes",
         inline: "state changes",
-        keeps: "It keeps committed and rolled back transactions and committed external effects.",
-        empty: (total: number, f: Fmt) => `The State changes quick view keeps committed and rolled back transactions and committed external effects, and this run recorded ${clause(total, f)} without any of them.`,
+        keeps: "It keeps committed and rolled back transactions, committed external effects, and key-value changes and expiries.",
+        empty: (total: number, f: Fmt) => `The State changes quick view keeps committed and rolled back transactions, committed external effects, and key-value changes and expiries, and this run recorded ${clause(total, f)} without any of them.`,
       },
-      assertions: {
-        label: "Assertions",
-        inline: "assertions",
-        keeps: "It keeps scenario assertion evaluations and their stored verdicts.",
-        empty: (total: number, f: Fmt) => `The Assertions quick view keeps scenario assertion evaluations and their stored verdicts, and this run recorded ${clause(total, f)} without any of them.`,
+      failures: {
+        label: "Rejections & failures",
+        inline: "rejections & failures",
+        keeps: "It keeps rejected transactions and key-value conditions, failed handlers, and rejected and dead-lettered messages.",
+        empty: (total: number, f: Fmt) => `The Rejections & failures quick view keeps rejected transactions and key-value conditions, failed handlers, and rejected and dead-lettered messages, and this run recorded ${clause(total, f)} without any of them.`,
       },
     },
     emptyRemove: "Remove the quick view chip to see the recorded history again.",
@@ -231,56 +217,32 @@ export const timeline = {
   view: {
     heading: "Recorded history",
     viewSwitch: "Timeline view",
-    /** The view tabs. The Story tab has two presentations. */
+    /** The two presentations of the same teaching milestones, by `ReviewViewMode`. */
     viewChoices: {
-      "story-diagram": "Story diagram",
-      "story-table": "Story table",
-      learning: "Learning",
-      raw: "Raw",
+      diagram: "Story diagram",
+      table: "Story table",
     },
     orderHint: {
-      label: "Row order",
-      body: "Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.",
+      label: "Milestone order",
+      body: "Selecting a milestone selects a recorded observation; it does not execute an event. Milestones follow observation sequence, including observations at equal virtual times.",
     },
     show: "Show",
     allCategories: "All categories",
     component: "Component",
     allComponents: "All components",
     moreFilters: "More filters…",
-    shown: (p: { shown: number; total: number }, f: Fmt) => `${f.number(p.shown)} of ${f.number(p.total)} shown`,
+    shown: (p: { shown: number; total: number }, f: Fmt) => `${f.number(p.shown)} of ${f.number(p.total)} milestones shown`,
     chipGroup: "Active filters and reset",
     chipList: "Active filters",
     remove: "Remove",
     clearAll: "Clear all filters",
-    /** The Raw and Story count line: `shown` of `total` visible, in recorded order. */
-    count: (p: { shown: number; total: number }, f: Fmt) => f.plural(p.total, {
-      one: `${f.number(p.shown)} of 1 observation in virtual-time order.`,
-      other: `${f.number(p.shown)} of ${f.number(p.total)} observations in virtual-time order.`,
-    }),
-    countLearning: (p: { shown: number; total: number; items: number; hidden: number }, f: Fmt) =>
-      `${f.plural(p.total, {
-        one: `${f.number(p.shown)} of 1 observation in virtual-time order.`,
-        other: `${f.number(p.shown)} of ${f.number(p.total)} observations in virtual-time order.`,
-      })} Learning view shows ${f.plural(p.items, { one: "1 item", other: `${f.number(p.items)} items` })}; ${f.plural(p.hidden, {
-        one: "1 record",
-        other: `${f.number(p.hidden)} records`,
-      })} summarized in expandable groups. Select a row to inspect its details.`,
-    learningHeadings: {
-      summary: "Summary",
-      timeSequence: "Virtual time · sequence",
-      destination: "Component / destination",
-    },
-    rowsLabel: {
-      story: "Story milestone strip and table",
-      learning: "Learning timeline observations",
-      raw: "Raw timeline observations",
-    },
+    rowsLabel: "Story milestone strip and table",
     noObservations: "No observations have been recorded for this run.",
 
     // Story view
     readingStory: "Reading the story",
     storyHint: (summary: string, _f: Fmt) => `${summary} Columns follow recorded sequence, not elapsed duration. Select a milestone for details.`,
-    storyNoMilestones: "None of the visible records is a teaching milestone. Use Learning or Raw to read them.",
+    storyNoMilestones: "None of the visible records is a teaching milestone. Remove a filter to see milestones again.",
     legendLabel: "Milestone categories, shapes, and counts",
     diagramLabel: "Story diagram",
     corner: "Component",
@@ -295,14 +257,6 @@ export const timeline = {
       destination: "Component / destination",
     },
     timeUnchanged: (time: number | string, _f: Fmt) => `t=${time} (unchanged)`,
-
-    // Learning rows
-    rowTitle: (p: { summary: string; type: string }, _f: Fmt) => `${p.summary} — ${p.type}`,
-    groupHide: (p: { count: number; summary: string; firstSequence: number; lastSequence: number; firstTime: number | string; lastTime: number | string }, f: Fmt) =>
-      `${f.plural(p.count, { one: "Hide 1 record", other: `Hide ${f.number(p.count)} records` })}: ${p.summary} (#${p.firstSequence}–#${p.lastSequence}, t=${p.firstTime}–${p.lastTime})`,
-    groupShow: (p: { count: number; summary: string; firstSequence: number; lastSequence: number; firstTime: number | string; lastTime: number | string }, f: Fmt) =>
-      `${f.plural(p.count, { one: "Show 1 record", other: `Show ${f.number(p.count)} records` })}: ${p.summary} (#${p.firstSequence}–#${p.lastSequence}, t=${p.firstTime}–${p.lastTime})`,
-    openRaw: "Open raw observation",
 
     // More filters dialog
     moreTitle: "More filters",

@@ -45,11 +45,11 @@ for (const name of commerceLessonNames) test(`${name}: browser worker matches he
   assert.equal(graph.error, null);
   assert.equal(new Set(graph.nodes.map(n => JSON.stringify(n.position))).size, graph.nodes.length);
   if (name.startsWith("outbox")) assert.ok(graph.edges.some(e => e.data?.relationship === "publication"));
-  // runtime.log is not a documented milestone: commerce Story strips stay on network, message,
-  // commit, and fault records, and those records keep their place in Learning and Raw.
+  // A lesson's business logs are milestones, so Recorded history shows each one the models wrote.
   const milestones = storyMilestones(result.history.observations, m);
   assert.ok(milestones.length > 0, "commerce lesson still teaches milestones");
-  assert.ok(milestones.every(m => m.observation.type !== "runtime.log"));
+  assert.equal(milestones.filter(m => m.observation.type === "runtime.log").length,
+    result.history.observations.filter(o => o.type === "runtime.log").length);
   assert.ok(result.history.observations.some(o => o.type === "runtime.log"));
   await adapter.receive({ version: 1, requestId: "reset", type: "reset" });
   assert.deepEqual(latest(), initial);

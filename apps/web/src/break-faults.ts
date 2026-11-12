@@ -290,12 +290,14 @@ export function describeEntry(entry: DraftEntry, m: Messages): string {
   ].join(copy.separator);
 }
 
-export function overlayFromDraft(entries: readonly DraftEntry[], parameters: SessionOverlay["parameters"] = []): SessionOverlay {
+/** The one draft overlay: faults, design choices, and design edits (absent when none remains, as the worker normalizes it). */
+export function overlayFromDraft(entries: readonly DraftEntry[], parameters: SessionOverlay["parameters"] = [], architecture?: ArchitectureEdits): SessionOverlay {
   return {
     version: 1,
     faults: entries.flatMap(entry => entry.kind === "rule" ? [entry.rule] : []),
     scheduledFaults: entries.flatMap(entry => entry.kind === "scheduled" ? [entry.action] : []),
     parameters,
+    ...(designEdits(architecture) ? { architecture: architecture! } : {}),
   };
 }
 

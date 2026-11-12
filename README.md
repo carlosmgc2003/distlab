@@ -17,7 +17,10 @@ base lesson (`validateAssessmentDefinition`, [Assessment](docs/spec/assessment.m
 experiment…**) lets a student add deterministic faults to a loaded lesson before Run, as a session
 overlay that the lesson's policy allows ([ADR-004](docs/spec/adr/004-session-overlays.md)), and
 change the settings a lesson declares (idempotency, timeout, compensation, outbox, circuit breaker)
-as parameter overrides in the same overlay. One **Apply and restart** sends both. Golden scenarios 01, 02, 04, 05, 06, and 07
+as parameter overrides in the same overlay. In a lesson whose policy allows architecture edits,
+its **Architecture** section also fills a slot with a catalog model and attaches the resources and
+subscriptions the model needs ([ADR-005](docs/spec/adr/005-architecture-editor.md)). One **Apply and
+restart** sends all of them. Golden scenarios 01, 02, 04, 05, 06, and 07
 are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
 
 ## Goals
@@ -332,10 +335,11 @@ a keyboard-operable table. Both representations select the same observation.
 The reduction is stated explicitly, for example `22 teaching milestones from
 267 recorded observations.`, and milestone labels, shapes, and virtual-time
 boundary markers describe stored records only; the view never implies an
-elapsed duration or a causal link that is not stored. Learning keeps labeled
-types and collapsed engine bookkeeping, and Raw lists every filtered canonical
-observation. All three share the same filters, selection, and Observation
-detail, and none of them modifies history, exports, or virtual time. The
+elapsed duration or a causal link that is not stored. Engine bookkeeping is
+not listed; an evidence or causation link to a record that is not a milestone
+opens it in the Story table and in Observation detail. Both presentations share
+the same filters, selection, and Observation detail, and neither modifies
+history, exports, or virtual time. The
 timeline lists canonical observations in sequence and labels time
 as virtual time. Each text filter lists the values present in the current
 visible history. Component choices show a readable name and the canonical id.
