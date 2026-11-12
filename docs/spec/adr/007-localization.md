@@ -6,6 +6,7 @@
 | Date | 2026-11-12 |
 | Scope | Browser application (`apps/web`), its tests, and the glossary. No contract, kernel, scenario, or catalog semantics change. |
 | Evidence | [Student evaluation, ITBA 73.40](../../evaluations/2026-11-itba-73-40/README.md) ("English only. The course is taught in Spanish") |
+| Related issues | #206, #210, #211, #212, #213 |
 | Supersedes | The deferral in [RFC 0001](../../rfc/0001-course-ready-design-module.md) ("Spanish. Later, and only if a pilot shows that language is a barrier"), at the maintainer's request |
 
 ## Context
@@ -185,7 +186,8 @@ selectors are good accessibility practice and stay as they are.
 ## Follow-up work
 
 - Translate the student-facing documents (`docs/commerce-lessons.md`,
-  `docs/glossary.md`, `docs/learning-timeline.md`, ~10,000 words).
+  `docs/glossary.md`, `docs/learning-timeline.md`, ~10,000 words): #210.
 - Check labels that hard-code run facts ("5 risk calls, 3 failures … (t=120)")
-  should take those facts as parameters from the scenario.
-- A per-language `presentation` in scenario documents (ADR-006 format version 2).
+  should take those facts as parameters from the scenario: #211.
+- A per-language `presentation` in scenario documents (ADR-006 format version 2): #212.
+- A native-speaker review of the Spanish catalogs: #213.
