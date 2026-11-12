@@ -164,3 +164,8 @@ The `/triage`, `/wayfinder`, `/grill-with-docs`, and `/domain-modeling` skills
 mentioned in these documents are installed on the maintainer's machine, not in
 this repository, so cloud sessions do not have them. This workflow does not
 depend on them.
+
+The `lesson-authoring` skill is in this repository
+(`.claude/skills/lesson-authoring/`), so every session has it. Use it for an
+issue that reviews, adjusts, or creates a lesson. It adds to this workflow and
+replaces none of it: the stop rules and the verification above still apply.
