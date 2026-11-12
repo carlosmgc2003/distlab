@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { HelpHint } from "./ui-hint.tsx";
+import { LanguageSwitcher } from "./LanguageSwitcher.tsx";
+import { useMessages } from "./i18n/react.tsx";
 import { CommerceFacts, EXPECTATIONS_HELP, INVARIANTS_HELP, LessonChecks, ServiceStateGrid, commerceLessonChecks } from "./CommerceLesson.tsx";
 import { DocumentDiagnostics, ImportedChecks, ImportedHeader } from "./ImportedScenario.tsx";
 import { errorDiagnostics, oversized } from "./scenario-file.ts";
@@ -46,6 +48,7 @@ const tabs = [
 const assessmentTabs = [["assessment", "Assessment results"], ...tabs] as const satisfies readonly (readonly [WorkspaceTab, string])[];
 
 export function App({ host }: { readonly host: SimulationHost }) {
+  const m = useMessages();
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
   const { projection, loading, pendingCommands } = snapshot;
   const commandBusy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
@@ -384,7 +387,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const checkView = useMemo(() => projection && !imported && loadedChoice?.family === "commerce"
     ? commerceLessonChecks(projection, loadedChoice.checks) : null, [projection, imported, loadedChoice]);
   // The one-line outcome (#141): the invariants' summary for commerce, the Run overview's sentence for checkout.
-  const summary = checkView ? outcomeSummary(checkView) : projection && report ? runOutcome(status) : null;
+  const summary = checkView ? outcomeSummary(checkView, m) : projection && report ? runOutcome(status, m) : null;
   // ③ Investigate's one hint (#147): what the checks mean, or why the Run overview states no duration.
   const investigateHelp = checkView || (projection && report) ? <HelpHint label="About these results" bodyId="investigate-help">
     {checkView ? <p>{INVARIANTS_HELP}</p> : null}
@@ -501,7 +504,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // execution, and the run summary. Errors get their own row under it, only while one exists.
   return <main className="app-shell">
     <header className="command-toolbar top-bar">
-      <div className="brand"><h1>DistLab</h1></div>
+      <div className="brand"><h1>DistLab</h1><LanguageSwitcher /></div>
       {/* A scenario file may also be dropped here. Open and drop are available only when Load is. */}
       <div className="scenario-picker"
         onDragOver={event => { if (!busy && event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}

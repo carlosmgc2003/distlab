@@ -372,3 +372,51 @@ from an external service or to a partner client.
 | `Fraud / Risk Provider` | Evaluates transactions and returns approval, review, or rejection decisions. |
 | `Shipping Carrier` | Creates and cancels shipments and reports tracking state. |
 | `Messaging Provider` | Accepts or rejects external email and SMS delivery requests. |
+
+## Spanish Terms
+
+The Spanish interface (ADR-007) uses these terms. Translators keep them
+consistent across the catalogs in `apps/web/src/i18n/es/`.
+
+**Voice.** Rioplatense *voseo*, the register of the course that asked for it:
+"Elegí una lección", "Ejecutá", "Aplicá el borrador". Short, direct sentences,
+like the English.
+
+**Stays as written.** Identifiers and recorded data are never translated:
+component IDs (`orders`), endpoint names (`POST /pay`), observation types
+(`network.request.sent`), status and error codes (`NETWORK_TIMEOUT`,
+`UNKNOWN`), business data (`Draft`, `sku-1`), and the virtual-time notation
+`t=`. Kernel concept names stay in code font: `VirtualClock`, `VirtualNetwork`,
+`MessageBus`. Pattern names that Spanish-speaking engineers use in English stay
+in English: Saga, Outbox, Circuit breaker, CQRS, timeout, dead letter, lease,
+endpoint, payload, span, checkout.
+
+| English | Spanish |
+| --- | --- |
+| lesson | lección |
+| scenario / scenario file | escenario / archivo de escenario |
+| run (noun) / run (verb) | ejecución / ejecutar |
+| step / pause / reset | paso / pausar / reiniciar |
+| replay (playback of recorded movements) | reproducción, reproducir |
+| virtual time | tiempo virtual |
+| observation / recorded history | observación / historial registrado |
+| timeline / quick view / filter | línea de tiempo / vista rápida / filtro |
+| component / client / internal service / external service | componente / cliente / servicio interno / servicio externo |
+| request / response / message | solicitud / respuesta / mensaje |
+| link / queue / topic / subscription / publication | enlace / cola / tópico / suscripción / publicación |
+| delivered / dropped / acknowledged | entregado / descartado / confirmado (ACK) |
+| deadline / ambiguous timeout | plazo / timeout ambiguo |
+| retry / idempotency / idempotency key | reintento / idempotencia / clave de idempotencia |
+| fault / student fault / fault rule | falla / falla del estudiante / regla de falla |
+| design choice / design edit | decisión de diseño / cambio de diseño |
+| draft / apply / experiment | borrador / aplicar / experimento |
+| seed | semilla |
+| check / business invariant / expectation | verificación / invariante de negocio / expectativa |
+| holds / violated / reproduced / pending / incomplete | se cumple / violado / reproducido / pendiente / incompleto |
+| assessment | evaluación |
+| database / transaction / committed / rolled back | base de datos / transacción / confirmada / revertida |
+| key-value store / cache | almacén clave-valor / caché |
+| compensation / consumer / producer | compensación / consumidor / productor |
+| order / payment / shipment / inventory / notification | pedido / pago / envío / inventario / notificación |
+| trace / redacted / omitted | traza / oculto / omitido |
+| Payment Processor (display name) | Procesador de pagos |
