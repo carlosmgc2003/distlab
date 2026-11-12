@@ -113,11 +113,16 @@ async function run(id: string): Promise<RuntimeProjectionSet> {
   return last.projection;
 }
 
+/** Escapes every regular-expression metacharacter, backslash included. */
+function escapeRegExp(text: string): string {
+  return text.replace(/[\\^$.*+?()[\]{}|-]/g, "\\$&");
+}
+
 /** Fails when a sentence names a component by its raw ID instead of its display name. */
 function assertNoRawId(text: string, names: ComponentNames): void {
   for (const [id, name] of names) {
     if (id === name) continue;
-    assert.doesNotMatch(text, new RegExp(`(^|[^\\w-])${id.replace(/[-]/g, "\\-")}($|[^\\w-])`), `"${text}" names ${id} by its ID`);
+    assert.doesNotMatch(text, new RegExp(`(^|[^\\w-])${escapeRegExp(id)}($|[^\\w-])`), `"${text}" names ${id} by its ID`);
   }
 }
 
