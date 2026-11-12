@@ -11,6 +11,26 @@ Components should use these tokens rather than adding isolated color values.
 | `--selection-*`, focus outline | Current panel, observation, graph path, and keyboard focus |
 | `--status-error*`, `--status-warning*`, `--status-uncertain*`, `--status-approved*` | Errors, faults/timeouts, unknown outcomes, and committed approval |
 | `--category-*` | Client, internal service, external service, and infrastructure labels |
+| `--shape-stroke`, `--edge-request`, `--data-stroke`, `--bus-*`, `--flight-*`, `--graph-grid` | Graph shapes, links, movement cues, and the canvas grid; graph code passes them as `var(--…)` |
+| `--shadow-*`, `--backdrop` | Elevation of popovers and dialogs, and the modal backdrop |
+
+### Light and dark themes
+
+Every color in `architecture.css` is a token. `:root` holds the light theme and
+`:root[data-theme="dark"]` redefines the same tokens for the dark theme, so a
+new rule picks up both themes by using tokens, and needs no dark-only rule.
+`<html data-theme>` always holds the resolved theme, `light` or `dark`.
+
+The reader chooses the theme with the **Theme** selector, a compact button at
+the right end of the workspace navigation row: beside the Architecture and
+Recorded history tabs, or alone above the welcome screen or file diagnostics.
+It is not in the top bar, which has no room left when no lesson is loaded. Its
+popover lists **System (‹light or dark›)**, **Light**, and **Dark**. System is the default and follows the operating
+system's `prefers-color-scheme`, live. The choice is kept in this browser's
+`localStorage` (`distlab-theme`; System removes it), and a small script in
+`apps/web/index.html` applies it before the first paint. The theme is
+presentation only: it never enters projections, worker commands, or history.
+Both themes pass the browser accessibility checks (`apps/web/e2e/theme.spec.ts`).
 
 ## Workspace hierarchy
 

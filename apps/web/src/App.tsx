@@ -28,6 +28,7 @@ import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
+import { ThemeSelector, useThemePreference } from "./ThemeSelector.tsx";
 import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
 import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, AssessmentMatrix, AssessmentRun, useAssessmentSuite } from "./AssessmentView.tsx";
@@ -48,6 +49,8 @@ const assessmentTabs = [["assessment", "Assessment results"], ...tabs] as const 
 
 export function App({ host }: { readonly host: SimulationHost }) {
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
+  // The color theme is presentation state, held once so the selector keeps it wherever it renders.
+  const theme = useThemePreference();
   const { projection, loading, pendingCommands } = snapshot;
   const commandBusy = loading || pendingCommands.length > 0 || projection?.simulation.status === "RUNNING";
   const [loadedChoice, setLoadedChoice] = useState<PackagedScenario | null>(null);
@@ -504,6 +507,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
     goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} revealInvestigate={revealToken} />;
   const workspaceTabs = assessment ? assessmentTabs : tabs;
 
+  // The Theme selector ends the workspace navigation row in every state; the top bar has no room for it.
+  const themeSelector = <ThemeSelector state={theme} />;
+
   // The top bar (#144) is one row and identical on both tabs: name, lesson trigger, Simulation
   // execution, and the run summary. Errors get their own row under it, only while one exists.
   return <main className="app-shell">
@@ -538,6 +544,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
             className={tab === id ? "is-active" : undefined}
             onClick={() => showTab(id)}>{label}</button>)}
         </div>
+        {themeSelector}
         </div>
         {/* Docked beside both tab panels and non-modal, so Pick on graph keeps working. */}
         {experimentDrawer}
@@ -570,8 +577,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
       {lessonPanel}
       <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>{experimentDrawer}</div>
     </div> : documentError ? <div className="investigation-workspace">
+      <div className="workspace-navigation">{themeSelector}</div>
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />
     </div> : <div className="investigation-workspace">
+      <div className="workspace-navigation">{themeSelector}</div>
       <section className="workspace-empty" tabIndex={-1}>
         <p className="eyebrow">A deterministic laboratory for distributed systems</p>
         <h2>What can one component know about the others?</h2>

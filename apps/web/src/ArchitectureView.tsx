@@ -558,7 +558,7 @@ function FitToCanvas({ container, sessionKey, layoutKey, legendOpen, onFitted, m
 
 function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined): ArchitectureEdge {
   if (!emphasis?.edgeId || edge.id !== emphasis.edgeId) return edge;
-  const stroke = emphasis.kind === "message" ? "#6d28d9" : emphasis.kind === "response" ? "#0f766e" : "#1d4ed8";
+  const stroke = emphasis.kind === "message" ? "var(--flight-message)" : emphasis.kind === "response" ? "var(--flight-response)" : "var(--flight-request)";
   const pulse = emphasis.pulseId ? ` ${movementPulseClass(emphasis.pulseId)}` : "";
   return {
     ...edge,
@@ -690,7 +690,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     const marked: ArchitectureEdge = marks?.length ? {
       ...edge, className: "has-fault", label: `✕ ${String(edge.label)}`,
       ariaLabel: `${edge.ariaLabel ?? ""}. Student fault: ${marks.join("; ")}`,
-      style: { ...edge.style, stroke: "#b91c1c", strokeDasharray: "10 4 2 4" },
+      style: { ...edge.style, stroke: "var(--status-error)", strokeDasharray: "10 4 2 4" },
     } : edge;
     const styled = emphasize(marked, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
@@ -768,7 +768,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
             onFitted={setFittedKey} movementNodes={movementNodes} />
           <RevealMovement container={canvas} movement={ready ? flight?.observationId : undefined} nodeIds={flight?.nodeIds ?? []} />
-          <Background gap={24} color="#cbd5e1" />
+          <Background gap={24} color="var(--graph-grid)" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />
           </Controls>
