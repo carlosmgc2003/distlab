@@ -138,3 +138,11 @@ test("I18N-AC-8: hard-coded user-visible strings do not grow (scanner budget)", 
   const over = [...counts].filter(([file, count]) => count > (HARD_CODED_BUDGET[file] ?? 0)).map(([file, count]) => `${file}: ${count} > ${HARD_CODED_BUDGET[file] ?? 0}`);
   assert.deepEqual(over, [], "Move these strings into src/i18n (see ADR-007), or list each remaining one by running tests/i18n-scan.ts");
 });
+
+test("I18N-AC-13: an unknown or prototype-named locale falls back to English instead of calling an inherited member", () => {
+  for (const name of ["__proto__", "constructor", "toString", "xx"]) {
+    const m = messages(name as Parameters<typeof messages>[0]);
+    assert.equal(m.locale, "en");
+    assert.equal(m.commerceLesson.outcome.pending, messages("en").commerceLesson.outcome.pending);
+  }
+});

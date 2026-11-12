@@ -53,7 +53,9 @@ export function messages(locale: Locale): Messages {
   if (!result) {
     const info = localeInfo(locale);
     const fmt = createFmt(info.tag, info.quotes);
-    result = Object.freeze({ ...bind(catalogs[locale](), fmt), locale, fmt }) as Messages;
+    // `locale` is typed, but it starts as text from the URL or storage: only an own entry may be called.
+    const source = Object.hasOwn(catalogs, locale) ? catalogs[locale] : catalogs.en;
+    result = Object.freeze({ ...bind(source(), fmt), locale: Object.hasOwn(catalogs, locale) ? locale : "en", fmt }) as Messages;
     bound.set(locale, result);
   }
   return result;
