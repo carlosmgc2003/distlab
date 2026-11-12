@@ -35,7 +35,7 @@ test("I18N-AC-2: Spanish strings are translated, except names and notations that
   // Brand and product names, codes, and notation. Add an entry only for text that is the same in both languages.
   const same = new Set(["common.brand",
     // Component names that mirror component IDs, and kernel or protocol terms kept as written (glossary, "Spanish Terms").
-    "faultInspection.names.orders", "faultInspection.names.payments", "architecture.resourceKind.kvstore", "playback.fieldLabel.endpoint", "story.kinds.timeout",
+    "faultInspection.names.orders", "faultInspection.names.payments", "architecture.resourceKind.kvstore", "playback.fieldLabel.endpoint", "story.kinds.timeout", "app.checkoutName",
     // Pattern names and acronyms that Spanish-speaking engineers use in English (glossary, "Spanish Terms").
     ...["timeout", "dead-letter-queue", "circuit-breaker", "saga", "inbox", "cqrs", "ttl", "lease", "fencing-token", "last-writer-wins", "happens-before"].map(id => `lessons.concepts.${id}`)]);
   const english = new Map(strings(en));
@@ -93,30 +93,11 @@ test("I18N-AC-7: bound messages are memoized and frozen per locale", () => {
 });
 
 /**
- * I18N-AC-8: user-visible English outside the catalogs may only shrink. Lower a file's
- * number when you move its strings into `src/i18n/`; never raise it. Run
+ * I18N-AC-8: no user-visible English outside the catalogs. A new string goes into `src/i18n/`. Run
  * `node --experimental-strip-types tests/i18n-scan.ts <file>` to list what is left.
  */
-// Measured when the catalogs were introduced; extraction lowers these toward zero.
-const HARD_CODED_BUDGET: Readonly<Record<string, number>> = {
-  "src/TimelineView.tsx": 145,
-  "src/App.tsx": 69,
-  "src/FaultInspectionView.tsx": 69,
-  "src/FaultsSection.tsx": 52,
-  "src/ArchitectureView.tsx": 50,
-  "src/AssessmentView.tsx": 40,
-  "src/SimulationControls.tsx": 21,
-  "src/CommerceLesson.tsx": 20,
-  "src/ComponentInspector.tsx": 20,
-  "src/ArchitecturePlayback.tsx": 18,
-  "src/LessonChooser.tsx": 14,
-  "src/ImportedScenario.tsx": 13,
-  "src/ExperimentDrawer.tsx": 7,
-  "src/LessonPanel.tsx": 5,
-  "src/DesignChoicesSection.tsx": 3,
-  "src/ServiceStateDialog.tsx": 2,
-  "src/ui-hint.tsx": 1,
-};
+// Every user-visible string is in the catalogs. Add an entry here only for a reviewed exception, with a comment.
+const HARD_CODED_BUDGET: Readonly<Record<string, number>> = {};
 
 test("I18N-AC-8: hard-coded user-visible strings do not grow (scanner budget)", () => {
   const counts = new Map<string, number>();

@@ -263,6 +263,8 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata: Ar
     type: "elk", data: { owner: node.data.owner, resource: node.data.kind, link: "data" },
     style: { stroke: DATA_STROKE, strokeWidth: 1.5 },
     selectable: false, focusable: false, deletable: false,
+    // Without a label React Flow names the link in English ("Edge from a to b").
+    ariaLabel: m.architecture.ownershipLink({ owner: node.data.owner, resource: resourceTitle(node.data.kind, node.data.owner, m) }),
   }));
   const publisher = nodes.find(node => node.id === "orders");
   const topic = destinations.get("OrderCreated");

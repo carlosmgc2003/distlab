@@ -129,4 +129,26 @@ export const playback = {
     "⊘": { label: "Token: dropped", detail: "the record says this movement never arrived; the token stops on the link" },
     "◷": { label: "Token: timed out", detail: "the record says the caller's deadline passed; the token rests at the caller" },
   },
+  /** The Replay toolbar (ArchitecturePlayback.tsx). */
+  toolbar: {
+    label: "Replay",
+    group: "Replay recorded movements",
+    previous: "Previous movement",
+    next: "Next movement",
+    speed: "Speed",
+    help: "These controls move a browser cursor over movements the run has already recorded. They send no simulation command, do not change virtual time, and do not record observations.",
+  },
+  /** The narration of the painted movement (ArchitecturePlayback.tsx). */
+  narration: {
+    position: "Architecture playback position",
+    region: "Recorded movement",
+    noFields: "This record stores no further fields for narration.",
+    lookFor: "What to look for",
+    trace: (id: string, _f: Fmt) => `Trace ${id}`,
+    activityRegion: "Component activity",
+    activityHeading: "Component activity at this record",
+    allIdle: "Every component is idle at this record.",
+    timeoutRests: "The token rests at the caller. This record states that the caller's deadline passed; it does not state whether the request or its response arrived.",
+    interrupted: "The token stops on this link. This record states that the movement did not arrive; it does not state what either component concluded.",
+  },
 };

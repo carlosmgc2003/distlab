@@ -226,4 +226,196 @@ export const timeline = {
     chip: (label: string, _f: Fmt) => `Quick view ${label}`,
     removeChip: (label: string, _f: Fmt) => `Remove the ${label} quick view`,
   },
+
+  // --- TimelineView.tsx: text only the component renders ---
+  view: {
+    heading: "Recorded history",
+    viewSwitch: "Timeline view",
+    /** The view tabs. The Story tab has two presentations. */
+    viewChoices: {
+      "story-diagram": "Story diagram",
+      "story-table": "Story table",
+      learning: "Learning",
+      raw: "Raw",
+    },
+    orderHint: {
+      label: "Row order",
+      body: "Next observation selects a recorded observation; it does not execute an event. Rows follow observation sequence, including observations at equal virtual times.",
+    },
+    show: "Show",
+    allCategories: "All categories",
+    component: "Component",
+    allComponents: "All components",
+    moreFilters: "More filters…",
+    shown: (p: { shown: number; total: number }, f: Fmt) => `${f.number(p.shown)} of ${f.number(p.total)} shown`,
+    chipGroup: "Active filters and reset",
+    chipList: "Active filters",
+    remove: "Remove",
+    clearAll: "Clear all filters",
+    /** The Raw and Story count line: `shown` of `total` visible, in recorded order. */
+    count: (p: { shown: number; total: number }, f: Fmt) => f.plural(p.total, {
+      one: `${f.number(p.shown)} of 1 observation in virtual-time order.`,
+      other: `${f.number(p.shown)} of ${f.number(p.total)} observations in virtual-time order.`,
+    }),
+    countLearning: (p: { shown: number; total: number; items: number; hidden: number }, f: Fmt) =>
+      `${f.plural(p.total, {
+        one: `${f.number(p.shown)} of 1 observation in virtual-time order.`,
+        other: `${f.number(p.shown)} of ${f.number(p.total)} observations in virtual-time order.`,
+      })} Learning view shows ${f.plural(p.items, { one: "1 item", other: `${f.number(p.items)} items` })}; ${f.plural(p.hidden, {
+        one: "1 record",
+        other: `${f.number(p.hidden)} records`,
+      })} summarized in expandable groups. Select a row to inspect its details.`,
+    learningHeadings: {
+      summary: "Summary",
+      timeSequence: "Virtual time · sequence",
+      destination: "Component / destination",
+    },
+    rowsLabel: {
+      story: "Story milestone strip and table",
+      learning: "Learning timeline observations",
+      raw: "Raw timeline observations",
+    },
+    noObservations: "No observations have been recorded for this run.",
+
+    // Story view
+    readingStory: "Reading the story",
+    storyHint: (summary: string, _f: Fmt) => `${summary} Columns follow recorded sequence, not elapsed duration. Select a milestone for details.`,
+    storyNoMilestones: "None of the visible records is a teaching milestone. Use Learning or Raw to read them.",
+    legendLabel: "Milestone categories, shapes, and counts",
+    diagramLabel: "Story diagram",
+    corner: "Component",
+    milestoneLabel: (p: { label: string; component: string; time: number | string; sequence: number | string }, _f: Fmt) =>
+      `${p.label}, ${p.component}, virtual time ${p.time}, sequence ${p.sequence}`,
+    tableCaption: (reduction: string, _f: Fmt) => `${reduction} Each row selects the same recorded observation as the strip.`,
+    tableHeads: {
+      milestone: "Milestone",
+      category: "Category",
+      time: "Virtual time",
+      sequence: "Sequence",
+      destination: "Component / destination",
+    },
+    timeUnchanged: (time: number | string, _f: Fmt) => `t=${time} (unchanged)`,
+
+    // Learning rows
+    rowTitle: (p: { summary: string; type: string }, _f: Fmt) => `${p.summary} — ${p.type}`,
+    groupHide: (p: { count: number; summary: string; firstSequence: number; lastSequence: number; firstTime: number | string; lastTime: number | string }, f: Fmt) =>
+      `${f.plural(p.count, { one: "Hide 1 record", other: `Hide ${f.number(p.count)} records` })}: ${p.summary} (#${p.firstSequence}–#${p.lastSequence}, t=${p.firstTime}–${p.lastTime})`,
+    groupShow: (p: { count: number; summary: string; firstSequence: number; lastSequence: number; firstTime: number | string; lastTime: number | string }, f: Fmt) =>
+      `${f.plural(p.count, { one: "Show 1 record", other: `Show ${f.number(p.count)} records` })}: ${p.summary} (#${p.firstSequence}–#${p.lastSequence}, t=${p.firstTime}–${p.lastTime})`,
+    openRaw: "Open raw observation",
+
+    // More filters dialog
+    moreTitle: "More filters",
+    matchingHint: "How matching works",
+    filtersCombine: "Filters combine. Choose another field to narrow further; remove any condition using its chip below.",
+    filtersForm: "Timeline filters",
+    timeFrom: "Virtual time from",
+    timeTo: "Virtual time to",
+    filterBy: "Filter by",
+    apply: "Apply",
+    clear: "Clear",
+    cancel: "Cancel",
+    matchMode: { exact: "Exact", prefix: "Prefix", contains: "Contains" },
+    matchLabel: (noun: string, _f: Fmt) => `${noun} match`,
+    choicesLabel: (noun: string, _f: Fmt) => `${noun} choices`,
+    noValues: (value: string, _f: Fmt) => `No recorded values contain "${value}".`,
+    moreValues: (hidden: number, f: Fmt) => `${f.number(hidden)} more. Keep typing to narrow this list.`,
+
+    // Observation detail
+    detailHeading: "Observation detail",
+    detailEmpty: "Select an observation to see its detail.",
+    hiddenByFilters: "This observation is hidden by the current filters.",
+    detailHeader: (p: { sequence: number; heading: string; time: number | string }, _f: Fmt) => `Observation #${p.sequence} · ${p.heading} · t=${p.time}`,
+    fieldsSummary: "Record fields & filter shortcuts",
+    fields: {
+      sequence: "Sequence",
+      time: "Virtual time",
+      source: "Source",
+      target: "Target",
+      payload: "Payload",
+    },
+    useSource: "Use source as component filter",
+    useTarget: "Use target as component filter",
+    /** What a copy button copies, named inside "Copy …", "Copied …" and "… to copy". */
+    copyWhat: {
+      source: "source id",
+      target: "target id",
+      observation: "observation id",
+      trace: "trace id",
+      event: "event id",
+    },
+    copy: (what: string, _f: Fmt) => `Copy ${what}`,
+    copied: (what: string, _f: Fmt) => `Copied ${what}`,
+    manualCopy: (what: string, _f: Fmt) => `${what} to copy`,
+    effectHeading: "Effect and evidence",
+    noEvidence: "No before or after values were stored.",
+    before: "Before",
+    after: "After",
+    beforeMissing: "Before was not stored.",
+    afterMissing: "After was not stored.",
+    relatedSummary: "Related evidence",
+    causation: "Causation",
+    selectCause: (p: { type: string; time: number | string }, _f: Fmt) => `Select causing observation ${p.type} at virtual time ${p.time}`,
+    selectEffect: (p: { type: string; time: number | string }, _f: Fmt) => `Select effect ${p.type} at virtual time ${p.time}`,
+    causeMissing: (id: string, _f: Fmt) => `Causation ${id} is not in this history.`,
+    noCausation: "No causation reference was stored.",
+    moreEffects: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 more effect. Show this trace to read them in order.",
+      other: `${f.number(count)} more effects. Show this trace to read them in order.`,
+    }),
+    noEffects: "No later observation points at this record.",
+    trace: "Trace",
+    showTrace: "Show this trace",
+    noTrace: "This observation has no trace.",
+    filterFromObservation: "Filter from this observation",
+    useEvent: "Use this event",
+    useEntity: (p: { kind: string; id: string }, _f: Fmt) => `Use entity ${p.kind} ${p.id}`,
+    technicalSummary: "Technical record",
+    technical: {
+      observation: "Observation",
+      type: "Type",
+      trace: "Trace",
+      span: "Span",
+      parentSpan: "Parent span",
+      causation: "Causation",
+      event: "Event",
+      entities: "Entities",
+    },
+    storedData: "Stored data",
+    unspanned: "Observations without a span",
+    typeAt: (p: { type: string; time: number | string }, _f: Fmt) => `${p.type} at virtual time ${p.time}`,
+    moreUnspanned: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 more observation has no span.",
+      other: `${f.number(count)} more observations have no span.`,
+    }),
+    spanLine: (p: { spanId: string; count: number }, f: Fmt) =>
+      `Span ${p.spanId}. ${f.plural(p.count, { one: "1 observation", other: `${f.number(p.count)} observations` })}.`,
+    spanLineParent: (p: { spanId: string; parentSpanId: string; count: number }, f: Fmt) =>
+      `Span ${p.spanId}, parent ${p.parentSpanId}. ${f.plural(p.count, { one: "1 observation", other: `${f.number(p.count)} observations` })}.`,
+    moreInSpan: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 more observation in this span. Show this trace to read them in order.",
+      other: `${f.number(count)} more observations in this span. Show this trace to read them in order.`,
+    }),
+    nestedSpans: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 nested span. Use the trace filter to inspect their observations in order.",
+      other: `${f.number(count)} nested spans. Use the trace filter to inspect their observations in order.`,
+    }),
+    moreSpans: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 more span. Use the trace filter to inspect their observations in order.",
+      other: `${f.number(count)} more spans. Use the trace filter to inspect their observations in order.`,
+    }),
+
+    // Check evidence
+    checkUnavailable: {
+      redacted: "The check's stored payload is redacted, so its evidence is not shown.",
+      omitted: "The check's stored payload is omitted, so its evidence is not shown.",
+    },
+    checkFallback: "Check",
+    checkNoResult: "The check stored no result at this boundary.",
+    checkPassed: (time: number | string, _f: Fmt) => `The check passed at t=${time}.`,
+    checkFailed: (time: number | string, _f: Fmt) => `The check did not pass at t=${time}.`,
+    checkNoEvidence: "This check stored no evidence.",
+    checkEmpty: "The stored evidence is empty: no rows matched.",
+    storedEvidence: "Stored evidence",
+  },
 };

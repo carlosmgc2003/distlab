@@ -52,4 +52,10 @@ export const designChoices = {
     label: "Empty slot",
     description: "No model fills this component yet. It receives, publishes, and stores nothing, and answers any request with NOT_IMPLEMENTED.",
   },
+  /** The Design choices section (DesignChoicesSection.tsx). */
+  section: {
+    title: "Design choices",
+    help: "Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read \"not reproduced\" under your choices. That shows how your change altered the story, not a simulator error.",
+    lessonDefault: (value: string, _f: Fmt) => `Lesson default: ${value}.`,
+  },
 };

@@ -348,3 +348,14 @@ test("a named request link and a destination of an unknown kind keep their raw c
   assert.deepEqual(graph.edges.map(edge => edge.label), ["Request · POST /pay", "Request"]);
   assert.deepEqual(map({ components, links: [{ source: "a", target: "b", label: "POST /pay" }] }, undefined, undefined, es).edges.map(edge => edge.label), ["Solicitud · POST /pay"]);
 });
+
+test("the architecture view's student-fault wording pluralizes and lists per language", () => {
+  const en = messages("en").architecture.view.fault;
+  const es = messages("es").architecture.view.fault;
+  assert.equal(en.badge(1), "Student fault");
+  assert.equal(en.badge(3), "3 student faults");
+  assert.equal(es.badge(1), "Falla del estudiante");
+  assert.equal(es.badge(2), "2 fallas del estudiante");
+  assert.equal(en.link({ label: "a to b: Request", faults: ["x"] }), "a to b: Request. Student fault: x");
+  assert.equal(es.link({ label: "a a b: Solicitud", faults: ["x", "z"] }), "a a b: Solicitud. Fallas del estudiante: x y z");
+});

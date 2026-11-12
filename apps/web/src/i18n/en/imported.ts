@@ -50,4 +50,26 @@ export const imported = {
   documentDepth: (levels: number, f: Fmt) => `The JSON nests deeper than ${f.number(levels)} levels.`,
   unknownDiagnostic: "The scenario engine rejected this value.",
   wholeDocument: "(whole document)",
+  /** Between the facts of the run header; a glyph, but one message so a locale can change it. */
+  factSeparator: " · ",
+  header: {
+    label: "Imported scenario",
+    imported: "Imported",
+    seed: (seed: string, _f: Fmt) => `seed ${seed}`,
+    /** Rich: `{digest}` is the shortened digest, with the full one as its title. */
+    digest: "digest {digest}",
+    run: (run: string, _f: Fmt) => `run ${run}`,
+    authorship: "The checks in this scenario were written by the file’s author and judged by DistLab catalog predicates.",
+  },
+  checksHeading: "Checks in this scenario",
+  checksList: "Scenario checks",
+  noChecks: "This scenario declares no checks.",
+  notLoaded: "The scenario file was not loaded",
+  problemsList: "Scenario file problems",
+  /** Rich: `{file}` is the file name. The rejection left the previous session loaded. */
+  problemsSessionKept: (count: number, f: Fmt) =>
+    `{file} has ${f.plural(count, { one: "1 problem", other: `${f.number(count)} problems` })}. The current session is unchanged. Fix the file, then open it again.`,
+  /** Rich: `{file}` is the file name. */
+  problemsNoSession: (count: number, f: Fmt) =>
+    `{file} has ${f.plural(count, { one: "1 problem", other: `${f.number(count)} problems` })}. No session is loaded. Fix the file, then open it again.`,
 };

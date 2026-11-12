@@ -29,7 +29,7 @@ export const story: typeof source = {
       one: "1 carril de componente",
       other: `${f.number(p.lanes.length)} carriles de componente`,
     })}: ${f.list(p.lanes)}. El primer hito se registró en el tiempo virtual ${p.first} y el último en el tiempo virtual ${p.last}.`,
-  detailEmpty: "La tira Story y su tabla están vacías.",
+  detailEmpty: "La tira de la historia y su tabla están vacías.",
   detail: (p: { columns: number; lanes: number; boundaries: number; kinds: readonly string[] }, f: Fmt) =>
     `${f.plural(p.columns, { one: "1 columna", other: `${f.number(p.columns)} columnas` })} y ${f.plural(p.lanes, { one: "1 carril de componente", other: `${f.number(p.lanes)} carriles de componente` })}. `
     + f.plural(p.boundaries, {
@@ -44,8 +44,8 @@ export const story: typeof source = {
     const rest = p.otherRecords === 0
       ? p.filtered === 0 ? "No hay registros visibles para reducir." : "Todos los registros visibles son hitos."
       : f.plural(p.otherRecords, {
-        one: "1 registro visible no es un hito didáctico; Learning y Raw lo conservan.",
-        other: `${f.number(p.otherRecords)} registros visibles no son hitos didácticos; Learning y Raw los conservan.`,
+        one: "1 registro visible no es un hito didáctico; Aprendizaje y Sin procesar lo conservan.",
+        other: `${f.number(p.otherRecords)} registros visibles no son hitos didácticos; Aprendizaje y Sin procesar los conservan.`,
       });
     return `${p.reduction} ${filters}${rest}`;
   },

@@ -2,6 +2,7 @@ import type { CanonicalValue, RuntimeProjectionSet, ScenarioDiagnostic, Scenario
 import { CheckItem } from "./CommerceLesson.tsx";
 import { importedChecks } from "./lesson-checks.ts";
 import { useMessages } from "./i18n/react.tsx";
+import { Rich } from "./i18n/rich.tsx";
 import { catalogLabel, diagnosticPath, explainDiagnostic, shortId } from "./scenario-file.ts";
 
 /**
@@ -16,19 +17,22 @@ export function ImportedHeader({ document, origin, runId }: {
   readonly origin: SessionOrigin | undefined;
   readonly runId: string | undefined;
 }) {
+  const m = useMessages();
+  const h = m.imported.header;
+  const sep = m.imported.factSeparator;
   const digest = origin?.kind === "imported" ? origin.digest : undefined;
   return <div className="imported-header">
-    <p className="imported-identity" aria-label="Imported scenario">
-      <span className="origin-label">Imported</span>
-      {" · "}<strong>{document.presentation.title}</strong>
-      {" · "}{document.scenario.name}
-      {" · seed "}{document.scenario.seed}
-      {" · "}{catalogLabel(document.catalog)}
-      {digest ? <>{" · digest "}<span title={digest}>{shortId(digest)}</span></> : null}
-      {runId ? <>{" · run "}{shortId(runId)}</> : null}
+    <p className="imported-identity" aria-label={h.label}>
+      <span className="origin-label">{h.imported}</span>
+      {sep}<strong>{document.presentation.title}</strong>
+      {sep}{document.scenario.name}
+      {sep}{h.seed(document.scenario.seed)}
+      {sep}{catalogLabel(document.catalog)}
+      {digest ? <>{sep}<Rich text={h.digest} values={{ digest: <span title={digest}>{shortId(digest)}</span> }} /></> : null}
+      {runId ? <>{sep}{h.run(shortId(runId))}</> : null}
     </p>
     {document.presentation.summary ? <p className="imported-summary">{document.presentation.summary}</p> : null}
-    <p className="authorship-note">The checks in this scenario were written by the file’s author and judged by DistLab catalog predicates.</p>
+    <p className="authorship-note">{h.authorship}</p>
   </div>;
 }
 
@@ -52,11 +56,12 @@ export function ImportedChecks({ projection, document, onShowEvidence }: {
   readonly document: ScenarioDocument;
   readonly onShowEvidence: (observationId: string) => void;
 }) {
+  const m = useMessages();
   const rows = importedChecks(verdicts(projection), document.presentation.assertions, projection.history.observations);
   return <section className="lesson-checks imported-checks" aria-labelledby="imported-checks-heading">
-    <h3 id="imported-checks-heading">Checks in this scenario</h3>
-    {rows.length ? <ul aria-label="Scenario checks">{rows.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
-      : <p>This scenario declares no checks.</p>}
+    <h3 id="imported-checks-heading">{m.imported.checksHeading}</h3>
+    {rows.length ? <ul aria-label={m.imported.checksList}>{rows.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
+      : <p>{m.imported.noChecks}</p>}
   </section>;
 }
 
@@ -69,10 +74,10 @@ export function DocumentDiagnostics({ fileName, diagnostics, loaded }: {
 }) {
   const m = useMessages();
   return <section className="document-diagnostics" aria-labelledby="document-diagnostics-heading">
-    <h2 id="document-diagnostics-heading">The scenario file was not loaded</h2>
-    <p><span className="file-name">{fileName}</span> has {diagnostics.length} problem{diagnostics.length === 1 ? "" : "s"}.
-      {loaded ? " The current session is unchanged." : " No session is loaded."} Fix the file, then open it again.</p>
-    <ul aria-label="Scenario file problems">{diagnostics.map((item, index) => <li key={`${item.path}:${item.code}:${index}`}>
+    <h2 id="document-diagnostics-heading">{m.imported.notLoaded}</h2>
+    <p><Rich text={(loaded ? m.imported.problemsSessionKept : m.imported.problemsNoSession)(diagnostics.length)}
+      values={{ file: <span className="file-name">{fileName}</span> }} /></p>
+    <ul aria-label={m.imported.problemsList}>{diagnostics.map((item, index) => <li key={`${item.path}:${item.code}:${index}`}>
       <code>{diagnosticPath(item.path, m)}</code> <code>{item.code}</code> — {explainDiagnostic(item.code, m)}
     </li>)}</ul>
   </section>;

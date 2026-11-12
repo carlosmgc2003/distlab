@@ -50,4 +50,22 @@ export const imported: typeof source = {
   documentDepth: (levels: number, f: Fmt) => `El JSON se anida más de ${f.number(levels)} niveles.`,
   unknownDiagnostic: "El motor de escenarios rechazó este valor.",
   wholeDocument: "(documento completo)",
+  factSeparator: " · ",
+  header: {
+    label: "Escenario importado",
+    imported: "Importado",
+    seed: (seed: string, _f: Fmt) => `semilla ${seed}`,
+    digest: "huella {digest}",
+    run: (run: string, _f: Fmt) => `ejecución ${run}`,
+    authorship: "Las verificaciones de este escenario las escribió el autor del archivo y las juzgan los predicados del catálogo de DistLab.",
+  },
+  checksHeading: "Verificaciones de este escenario",
+  checksList: "Verificaciones del escenario",
+  noChecks: "Este escenario no declara verificaciones.",
+  notLoaded: "No se cargó el archivo de escenario",
+  problemsList: "Problemas del archivo de escenario",
+  problemsSessionKept: (count: number, f: Fmt) =>
+    `{file} tiene ${f.plural(count, { one: "1 problema", other: `${f.number(count)} problemas` })}. La sesión actual no cambió. Corregí el archivo y volvé a abrirlo.`,
+  problemsNoSession: (count: number, f: Fmt) =>
+    `{file} tiene ${f.plural(count, { one: "1 problema", other: `${f.number(count)} problemas` })}. No hay ninguna sesión cargada. Corregí el archivo y volvé a abrirlo.`,
 };

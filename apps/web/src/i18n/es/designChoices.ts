@@ -48,4 +48,9 @@ export const designChoices: typeof source = {
     label: "Slot vacío",
     description: "Ningún modelo ocupa este componente todavía. No recibe, publica ni almacena nada, y responde cualquier solicitud con NOT_IMPLEMENTED.",
   },
+  section: {
+    title: "Decisiones de diseño",
+    help: "Los invariantes de negocio informan qué logran tus decisiones. Las verificaciones de configuración siguen describiendo la lección empaquetada, así que una puede decir “no reproducida” con tus decisiones. Eso muestra cómo tu cambio alteró la historia, no un error del simulador.",
+    lessonDefault: (value: string, _f: Fmt) => `Valor de la lección: ${value}.`,
+  },
 };

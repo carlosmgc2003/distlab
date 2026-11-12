@@ -5,9 +5,6 @@ import { useMessages } from "./i18n/react.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
 import type { FlightPace, FlightPosition, FlightStep } from "./flight.ts";
 
-const TRANSPORT_HELP = "These controls move a browser cursor over movements the run has already recorded. "
-  + "They send no simulation command, do not change virtual time, and do not record observations.";
-
 /**
  * The **Replay** toolbar (#144): a one-row toolbar inside the Architecture tab, above the graph it
  * drives. It moves a browser cursor over movements the run already recorded and never changes the
@@ -19,30 +16,31 @@ export function FlightControls({ playback }: { readonly playback: FlightPlayback
   const control = transport.control;
   return <div className="replay-toolbar">
     {/* The visible group label; the group itself is named "Replay recorded movements". */}
-    <span className="control-group-label" aria-hidden="true">Replay</span>
-    <div className="control-buttons" role="group" aria-label="Replay recorded movements" aria-describedby="flight-controls-help">
+    <span className="control-group-label" aria-hidden="true">{m.playback.toolbar.label}</span>
+    <div className="control-buttons" role="group" aria-label={m.playback.toolbar.group} aria-describedby="flight-controls-help">
       {playback.phase === "playing" ? <button type="button" onClick={playback.pause}>{transport.pauseLabel}</button>
         : <button type="button" disabled={control.action === "unavailable"}
           // The label states the action: at the recorded end it promises a restart from the first movement.
           onClick={control.action === "restart" ? playback.restart : playback.play}>{control.label}</button>}
-      <button type="button" disabled={!transport.previous} onClick={playback.previous}>Previous movement</button>
-      <button type="button" disabled={!transport.next} onClick={playback.next}>Next movement</button>
+      <button type="button" disabled={!transport.previous} onClick={playback.previous}>{m.playback.toolbar.previous}</button>
+      <button type="button" disabled={!transport.next} onClick={playback.next}>{m.playback.toolbar.next}</button>
     </div>
     <div className="flight-pace">
-      <label htmlFor="flight-pace">Speed</label>
+      <label htmlFor="flight-pace">{m.playback.toolbar.speed}</label>
       <select id="flight-pace" value={pace} disabled={playback.steps.length === 0}
         aria-describedby="flight-pace-help" onChange={event => playback.setPace(event.target.value as FlightPace)}>
         {FLIGHT_PACES.map(item => <option key={item.id} value={item.id} title={flightPaceText(item.id, m).note}>{flightPaceText(item.id, m).label}</option>)}
       </select>
     </div>
-    <p id="flight-controls-help" className="sr-only">{TRANSPORT_HELP}</p>
+    <p id="flight-controls-help" className="sr-only">{m.playback.toolbar.help}</p>
   </div>;
 }
 
 /** The replay cursor's own position, stated once and kept beside the graph it drives. */
 export function FlightReadout({ position }: { readonly position: FlightPosition }) {
+  const m = useMessages();
   return <div className="flight-readout">
-    <p className="flight-position" role="status" aria-label="Architecture playback position" aria-live="polite" aria-atomic="true">
+    <p className="flight-position" role="status" aria-label={m.playback.narration.position} aria-live="polite" aria-atomic="true">
       {position.text}
       {/* A jump names two recorded times. Playback never paints the interval as a duration. */}
       {position.jump ? <span className="flight-jump"> <span aria-hidden="true">⤼</span> {position.jump}</span> : null}
@@ -65,10 +63,10 @@ export function FlightNarration({ step, activity, changes }: {
   const m = useMessages();
   const busy = [...activity.values()].filter(item => item.state !== "idle" || item.timedOut !== undefined);
   return <article className={`flight-narration flight-${step.kind} shape-${step.shape}`}
-    aria-label="Recorded movement" data-flight={step.observationId}>
+    aria-label={m.playback.narration.region} data-flight={step.observationId}>
     {/* The graph's movement region. It restates the heading and the route for assistive
         technology rather than printing the same fact twice, then names what changed. */}
-    <p id="movement-cue" className="sr-only" role="status" aria-label="Request and message movement">
+    <p id="movement-cue" className="sr-only" role="status" aria-label={m.architecture.view.movementRegion}>
       {[step.announcement, ...changes].join(" ")}
     </p>
     <h4><span className="flight-glyph" aria-hidden="true">{step.glyph}</span> {step.headline}</h4>
@@ -76,17 +74,17 @@ export function FlightNarration({ step, activity, changes }: {
     <p className="flight-transit">{step.transit}</p>
     {step.facts.length > 0 ? <dl className="flight-facts">
       {step.facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}
-    </dl> : <p className="flight-facts-empty">This record stores no further fields for narration.</p>}
-    <p className="flight-pattern"><strong>What to look for</strong> {step.pattern}</p>
-    {step.traceId !== undefined ? <p className="flight-trace">Trace {step.traceId}</p> : null}
-    <section className="flight-activity" aria-label="Component activity">
-      <strong>Component activity at this record</strong>
+    </dl> : <p className="flight-facts-empty">{m.playback.narration.noFields}</p>}
+    <p className="flight-pattern"><strong>{m.playback.narration.lookFor}</strong> {step.pattern}</p>
+    {step.traceId !== undefined ? <p className="flight-trace">{m.playback.narration.trace(step.traceId)}</p> : null}
+    <section className="flight-activity" aria-label={m.playback.narration.activityRegion}>
+      <strong>{m.playback.narration.activityHeading}</strong>
       {busy.length > 0 ? <ul>{busy.map(item => <li key={item.componentId} className={`activity-${item.state}`}>
         <span className="activity-symbol" aria-hidden="true">{ACTIVITY_SYMBOLS[item.state]}</span> {activityDescription(item, m)}
-      </li>)}</ul> : <p>Every component is idle at this record.</p>}
+      </li>)}</ul> : <p>{m.playback.narration.allIdle}</p>}
     </section>
     {step.leg === "timeout"
-      ? <p className="flight-interrupted">The token rests at the caller. This record states that the caller's deadline passed; it does not state whether the request or its response arrived.</p>
-      : step.interrupted ? <p className="flight-interrupted">The token stops on this link. This record states that the movement did not arrive; it does not state what either component concluded.</p> : null}
+      ? <p className="flight-interrupted">{m.playback.narration.timeoutRests}</p>
+      : step.interrupted ? <p className="flight-interrupted">{m.playback.narration.interrupted}</p> : null}
   </article>;
 }
