@@ -110,23 +110,27 @@ const checkoutPositions: Readonly<Record<string, { readonly x: number; readonly 
   "payment-processor": { x: 800, y: 420 },
 };
 
-/** Data links (owner to its database or store) get their own color, apart from the slate request links. */
-export const DATA_STROKE = "#b45309";
+/**
+ * Graph colors are theme tokens from `architecture.css`, so links follow the light and dark themes.
+ * Data links (owner to its database or store) get their own color, apart from the slate request links.
+ */
+export const DATA_STROKE = "var(--data-stroke)";
 /** MessageBus links share the destinations' purple (`--category-infrastructure`), apart from slate requests. */
-export const BUS_STROKE = "#6b21a8";
+export const BUS_STROKE = "var(--bus-stroke)";
+const REQUEST_STROKE = "var(--edge-request)";
 
 /** Horizontal distance between layout columns: long enough that a token visibly travels a short link. */
 const COLUMN_GAP = 380;
 
 const relationshipMarkers = {
-  request: { type: MarkerType.ArrowClosed, color: "#334155", width: 20, height: 20 },
+  request: { type: MarkerType.ArrowClosed, color: REQUEST_STROKE, width: 20, height: 20 },
   subscription: { type: MarkerType.Arrow, color: BUS_STROKE, width: 20, height: 20 },
   publication: { type: MarkerType.ArrowClosed, color: BUS_STROKE, width: 14, height: 14 },
 } as const;
 
 /** Line pattern per relationship; the legend draws the same patterns. Pattern, not color, carries the meaning. */
 const relationshipStyles = {
-  request: { stroke: "#334155", strokeWidth: 2 },
+  request: { stroke: REQUEST_STROKE, strokeWidth: 2 },
   subscription: { stroke: BUS_STROKE, strokeWidth: 2, strokeDasharray: "8 5" },
   publication: { stroke: BUS_STROKE, strokeWidth: 2, strokeDasharray: "2 5", strokeLinecap: "round" },
 } as const;
@@ -158,9 +162,9 @@ export function deriveSymbol(component: ComponentNodeProjection, destination?: u
 function labelLook(relationship: keyof typeof relationshipStyles) {
   const bus = relationship !== "request";
   return {
-    labelStyle: { fill: bus ? BUS_STROKE : "#172033", fontSize: 13, ...(bus ? { fontWeight: 600 } : {}) },
+    labelStyle: { fill: bus ? BUS_STROKE : "var(--text-primary)", fontSize: 13, ...(bus ? { fontWeight: 600 } : {}) },
     labelBgPadding: [7, 5] as [number, number], labelBgBorderRadius: bus ? 10 : 2,
-    labelBgStyle: bus ? { fill: "#faf5ff", stroke: "#d8b4fe", strokeWidth: 1 } : { fill: "#fff" },
+    labelBgStyle: bus ? { fill: "var(--bus-label-bg)", stroke: "var(--bus-label-border)", strokeWidth: 1 } : { fill: "var(--surface-panel)" },
   };
 }
 
