@@ -4,10 +4,21 @@ import type { ArchitectureDefinition, LessonOverlayPolicy, ScenarioDefinition } 
 import { STUDENT_ID_PREFIX } from "@distlab/contracts";
 import { checkoutOverlayPolicy, commerceOverlayPolicy, commerceScenario, normalCheckout } from "@distlab/catalogs";
 import {
-  STUDENT_PREFIX, buildEntry, carryOverlay, describeEntry, designEdits, draftFromOverlay, emptyForm, faultKindOptions, faultMarks,
-  formFromEntry, isEmptyOverlay, nextStudentId, overlayFromDraft, pickTarget, placeDiagnostics, sameOverlay, targetOptions,
+  STUDENT_PREFIX, buildEntry, carryOverlay as carry, describeEntry as describe, designEdits, draftFromOverlay, emptyForm, faultKindOptions as kindOptions, faultMarks as marksOf,
+  fieldErrorText, formFromEntry, isEmptyOverlay, nextStudentId, overlayFromDraft, pickTarget, placeDiagnostics as place, sameOverlay, targetOptions as targetsFor,
 } from "../src/break-faults.ts";
 import type { DraftEntry, FaultForm } from "../src/break-faults.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
+const faultKindOptions = (policy: Parameters<typeof kindOptions>[0]) => kindOptions(policy, m);
+const targetOptions = (option: Parameters<typeof targetsFor>[0], architecture: Parameters<typeof targetsFor>[1]) => targetsFor(option, architecture, m);
+const describeEntry = (entry: DraftEntry) => describe(entry, m);
+const placeDiagnostics = (diagnostics: Parameters<typeof place>[0], overlay: Parameters<typeof place>[1]) => place(diagnostics, overlay, m);
+const carryOverlay = (overlay: Parameters<typeof carry>[0], from: Parameters<typeof carry>[1], to: Parameters<typeof carry>[2]) => carry(overlay, from, to, m);
+const faultMarks = (entries: Parameters<typeof marksOf>[0], architecture: Parameters<typeof marksOf>[1]) => marksOf(entries, architecture, m);
+const errorTexts = (errors: ReturnType<typeof buildEntry>["errors"]) => Object.fromEntries(Object.entries(errors).map(([field, error]) => [field, fieldErrorText(error!, m)]));
 
 const checkout = (normalCheckout as unknown as ScenarioDefinition).architecture;
 const policy = checkoutOverlayPolicy("normal");
@@ -98,8 +109,8 @@ test("text with no contract value is reported on its field and adds nothing", ()
   const result = buildEntry(form("network.request/delay", { from: "-1", until: "soon", occurrence: "0", maxApplications: "", probability: "1.5", duration: "2.5" }), options, targets, "student-x");
   assert.equal(result.entry, undefined);
   assert.deepEqual(Object.keys(result.errors).sort(), ["duration", "from", "maxApplications", "occurrence", "probability", "target", "until"]);
-  assert.deepEqual(buildEntry(form(""), options, [], "student-x").errors, { kind: "Choose a fault this lesson allows." });
-  assert.deepEqual(buildEntry(form("scheduled/external-availability"), options, [], "student-x").errors, { kind: "Choose a fault this lesson allows." }, "a kind the lesson does not allow is not accepted");
+  assert.deepEqual(errorTexts(buildEntry(form(""), options, [], "student-x").errors), { kind: "Choose a fault this lesson allows." });
+  assert.deepEqual(errorTexts(buildEntry(form("scheduled/external-availability"), options, [], "student-x").errors), { kind: "Choose a fault this lesson allows." }, "a kind the lesson does not allow is not accepted");
   // Contract rules such as an empty time window are left to the worker, which reports them by path.
   assert.ok(buildEntry(form("network.request/delay", { target: targets[0]!.value, from: "10", until: "5" }), options, targets, "student-x").entry);
 });
@@ -211,4 +222,32 @@ test("applied faults mark the links, destinations, databases, and components the
   const marks = faultMarks(entries, checkout);
   assert.deepEqual([...marks.links.keys()].sort(), ["OrderCreated->payments", "payments->payment-processor"]);
   assert.deepEqual([...marks.nodes.keys()].sort(), ["payments", "resource:db:orders"]);
+});
+
+test("the chip text is a sequence of whole facts, and the fallbacks are their own messages", () => {
+  const rule = (changes: Record<string, unknown>): DraftEntry => ({ kind: "rule", rule: { id: "student-a", from: 0, probability: 1, maxApplications: 1, effect: { kind: "drop" }, ...changes } as never });
+  assert.equal(describeEntry(rule({ point: "network.request" })), "Drop request · any → any");
+  assert.equal(describeEntry(rule({ point: "message.delivery" })), "Drop message delivery · any destination → any consumer");
+  assert.equal(describeEntry(rule({ point: "database.commit", effect: { kind: "fail" } })), "Fail database commit · database any");
+  assert.equal(describeEntry(rule({ point: "network.request", source: "a", target: "b", name: "POST /pay", effect: { kind: "delay", duration: 40 }, from: 5, occurrence: 2, maxApplications: 3, probability: 0.5 })),
+    "Delay request by 40 · a → b POST /pay · from t=5 · occurrence 2 · up to 3× · probability 0.5, uses the session seed");
+  assert.equal(describeEntry(rule({ point: "message.delivery", name: "T", target: "c", effect: { kind: "duplicate", additionalCopies: 2, spacing: 7 }, from: 1, until: 9 })),
+    "Duplicate message delivery ×3, 7 apart · T → c · t=1–9");
+  const spanish = describe(rule({ point: "network.request", effect: { kind: "delay", duration: 40 }, probability: 0.5, maxApplications: 2 }), es);
+  assert.equal(spanish, "Demorar solicitud por 40 · cualquiera → cualquiera · hasta 2× · probabilidad 0,5, usa la semilla de la sesión");
+  const crash: DraftEntry = { kind: "scheduled", action: { id: "student-b", at: 25, kind: "fault", fault: { id: "f", kind: "crash", target: "payments" } } as never };
+  assert.equal(describeEntry(crash), "Crash service · payments · at t=25");
+  assert.equal(describe(crash, es), "Caída del servicio · payments · en t=25");
+});
+
+test("form errors stay codes until they are worded, and diagnostics keep their code visible", () => {
+  const result = buildEntry(form("network.request/delay", { occurrence: "0", from: "x" }), options, targetsOf("network.request/delay"), "student-x");
+  assert.deepEqual(result.errors.occurrence, { code: "MINIMUM", minimum: 1 });
+  assert.equal(fieldErrorText(result.errors.occurrence!, m), "Enter 1 or more.");
+  assert.equal(fieldErrorText(result.errors.occurrence!, es), "Ingresá 1 o más.");
+  assert.deepEqual(result.errors.from, { code: "WHOLE_NUMBER" });
+  const overlay = overlayFromDraft([buildEntry(form("scheduled/crash", { target: targetsOf("scheduled/crash")[0]!.value }), options, targetsOf("scheduled/crash"), "student-b").entry!]);
+  assert.equal(place([{ path: "/scheduledFaults/0", code: "OVERLAY_LIMIT" }], overlay, m).entries[0]!.message, "This lesson allows fewer faults. Remove one. (OVERLAY_LIMIT)");
+  assert.equal(place([{ path: "/scheduledFaults/0", code: "OVERLAY_LIMIT" }], overlay, es).entries[0]!.message, "Esta lección permite menos fallas. Quitá una. (OVERLAY_LIMIT)");
+  assert.equal(place([{ path: "/scheduledFaults/0", code: "NEW_CODE" }], overlay, m).entries[0]!.message, "This value is not valid. (NEW_CODE)");
 });

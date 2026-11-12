@@ -1,12 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { AssessmentConfiguration, AssessmentRowResult, AssessmentVerdict, ParameterOverride, ScenarioDiagnostic } from "@distlab/contracts";
+import type { ApplicationError, AssessmentConfiguration, AssessmentRowResult, AssessmentVerdict, ParameterOverride, ScenarioDiagnostic } from "@distlab/contracts";
 import { DesignChoicesSection } from "./DesignChoicesSection.tsx";
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics } from "./design-choices.ts";
+import { useMessages } from "./i18n/react.tsx";
 import { HelpHint } from "./ui-hint.tsx";
+import { assessmentDescription, assessmentTitle } from "./scenarios.ts";
 import type { PackagedAssessment } from "./scenarios.ts";
 import type { SuiteHost } from "./assessment-runner.ts";
 import { reproduceRow, runSuite } from "./assessment-runner.ts";
-import { assessmentResult, exportFile, rowFinishedText, rowOutcome, rowStartedText, suiteSummary } from "./assessment.ts";
+import { assessmentResult, exportFile, invariantLabel, requirementText, rowFinishedText, rowLabel, rowOutcome, rowStartedText, suiteSummary } from "./assessment.ts";
+import { errorText } from "./error-text.ts";
 import type { RowOutcome } from "./assessment.ts";
 
 /**
@@ -18,7 +21,7 @@ import type { RowOutcome } from "./assessment.ts";
 
 type Problem =
   | { readonly kind: "rejected"; readonly row: string; readonly diagnostics: readonly ScenarioDiagnostic[]; readonly parameters: readonly ParameterOverride[] }
-  | { readonly kind: "failed"; readonly row: string; readonly message: string }
+  | { readonly kind: "failed"; readonly row: string; readonly error: ApplicationError }
   | { readonly kind: "mismatch"; readonly row: string };
 
 export interface AssessmentSuite {
@@ -53,6 +56,7 @@ export interface AssessmentSuite {
  */
 export function useAssessmentSuite(host: SuiteHost, choice: PackagedAssessment | null, busy: boolean,
   onEvidence: (observationId: string) => void): AssessmentSuite {
+  const m = useMessages();
   const definition = choice?.definition;
   const [draft, setDraft] = useState<readonly ParameterOverride[]>([]);
   const [ran, setRan] = useState<AssessmentConfiguration | null>(null);
@@ -84,28 +88,28 @@ export function useAssessmentSuite(host: SuiteHost, choice: PackagedAssessment |
       onProgress: progress => {
         if (progress.type === "row-started") {
           setCurrent(progress.index);
-          announce(rowStartedText(progress.index, total, progress.row));
+          announce(rowStartedText(progress.index, total, definition, progress.row, m));
         } else {
           setResults(rows => [...rows, progress.result]);
-          announce(rowFinishedText(progress.index, total, progress.row, progress.result));
+          announce(rowFinishedText(progress.index, total, definition, progress.row, progress.result, m));
         }
       },
     }).then(outcome => {
       setCurrent(null);
       setRunning(false);
       setStopping(false);
-      const label = (id: string) => definition.rows.find(row => row.id === id)?.label ?? id;
+      const label = (id: string) => { const row = definition.rows.find(item => item.id === id); return row ? rowLabel(definition, row, m) : id; };
       if (outcome.status === "rejected") {
         setProblem({ kind: "rejected", row: label(outcome.row.id), diagnostics: outcome.diagnostics, parameters: configuration.parameters });
         announce(`The assessment stopped: ${label(outcome.row.id)} could not be loaded.`);
       } else if (outcome.status === "failed") {
-        setProblem({ kind: "failed", row: label(outcome.row.id), message: outcome.error.message });
+        setProblem({ kind: "failed", row: label(outcome.row.id), error: outcome.error });
         announce(`The assessment stopped: ${label(outcome.row.id)} could not be run.`);
       } else {
-        announce(`${outcome.status === "stopped" ? "Assessment stopped" : "Assessment finished"}: ${suiteSummary(outcome.rows, total)}.`);
+        announce(`${outcome.status === "stopped" ? "Assessment stopped" : "Assessment finished"}: ${suiteSummary(outcome.rows, total, m)}.`);
       }
     });
-  }, [busy, running, invalid, draft, definition, host, choice, announce]);
+  }, [busy, running, invalid, draft, definition, host, choice, announce, m]);
 
   const download = useCallback(() => {
     if (!choice || !definition || !ran || !results.length) return;
@@ -128,10 +132,10 @@ export function useAssessmentSuite(host: SuiteHost, choice: PackagedAssessment |
     void reproduceRow(host, definition, choice.scenario, row, ran, stored).then(result => {
       setReopening(null);
       if (result.status === "reproduced") onEvidence(observationId);
-      else if (result.status === "mismatch") setProblem({ kind: "mismatch", row: row.label });
-      else setProblem({ kind: "failed", row: row.label, message: result.error.message });
+      else if (result.status === "mismatch") setProblem({ kind: "mismatch", row: rowLabel(definition, row, m) });
+      else setProblem({ kind: "failed", row: rowLabel(definition, row, m), error: result.error });
     });
-  }, [definition, results, ran, busy, running, host, choice, onEvidence]);
+  }, [definition, results, ran, busy, running, host, choice, onEvidence, m]);
 
   const reset = useCallback(() => {
     setDraft([]); setRan(null); setResults([]); setCurrent(null); setReopening(null); setMessages([]); setProblem(null); setInvalid(false);
@@ -142,18 +146,20 @@ export function useAssessmentSuite(host: SuiteHost, choice: PackagedAssessment |
 
 /** ① Goal: what the assessment asks, as plain requirement lines (vision §21). */
 export function AssessmentGoal({ choice }: { readonly choice: PackagedAssessment }) {
+  const m = useMessages();
   return <>
-    <p className="lesson-goal-title"><strong>{choice.title} assessment</strong></p>
-    <p>{choice.description}</p>
+    <p className="lesson-goal-title"><strong>{assessmentTitle(choice, m)} assessment</strong></p>
+    <p>{assessmentDescription(choice, m)}</p>
     <h4 className="assessment-requirements-heading">Requirements</h4>
-    <ul className="assessment-requirements" aria-label="Requirements">{choice.definition.requirements.map(line => <li key={line}>{line}</li>)}</ul>
+    <ul className="assessment-requirements" aria-label="Requirements">{choice.definition.requirements.map(line => <li key={line}>{requirementText(line, m)}</li>)}</ul>
   </>;
 }
 
 /** ② Run: the student's design, Run assessment, Stop, and the suite's polite live region. */
 export function AssessmentRun({ choice, suite, busy }: { readonly choice: PackagedAssessment; readonly suite: AssessmentSuite; readonly busy: boolean }) {
+  const m = useMessages();
   const rejected = suite.problem?.kind === "rejected" ? suite.problem : null;
-  const placed = useMemo(() => rejected ? placeChoiceDiagnostics(rejected.diagnostics.filter(isChoiceDiagnostic), rejected.parameters) : new Map<string, string>(), [rejected]);
+  const placed = useMemo(() => rejected ? placeChoiceDiagnostics(rejected.diagnostics.filter(isChoiceDiagnostic), rejected.parameters, m) : new Map<string, string>(), [rejected, m]);
   const total = choice.definition.rows.length;
   const editable = !busy && !suite.running;
   return <>
@@ -172,7 +178,7 @@ export function AssessmentRun({ choice, suite, busy }: { readonly choice: Packag
       {suite.problem.kind === "rejected" ? <>
         <p>The assessment stopped at <strong>{suite.problem.row}</strong>: the worker rejected its load. The rows already run are kept.</p>
         <ul aria-label="Diagnostics">{suite.problem.diagnostics.map(item => <li key={`${item.path} ${item.code}`}><code>{item.path}</code> {item.code}</li>)}</ul>
-      </> : suite.problem.kind === "failed" ? <p>The assessment could not continue at <strong>{suite.problem.row}</strong>: {suite.problem.message}</p>
+      </> : suite.problem.kind === "failed" ? <p>The assessment could not continue at <strong>{suite.problem.row}</strong>: {errorText(suite.problem.error, m)}</p>
         : <p>Reloading <strong>{suite.problem.row}</strong> gave a different run, so its evidence was not opened.</p>}
     </div> : null}
   </>;
@@ -180,11 +186,12 @@ export function AssessmentRun({ choice, suite, busy }: { readonly choice: Packag
 
 /** ③ Investigate: the one-line summary, where the matrix is, and Export result. */
 export function AssessmentInvestigate({ choice, suite, onShowResults }: { readonly choice: PackagedAssessment; readonly suite: AssessmentSuite; readonly onShowResults: () => void }) {
+  const m = useMessages();
   const total = choice.definition.rows.length;
   return <>
-    {suite.results.length ? <p className="lesson-outcome"><strong>{suiteSummary(suite.results, total)}</strong></p>
+    {suite.results.length ? <p className="lesson-outcome"><strong>{suiteSummary(suite.results, total, m)}</strong></p>
       : <p>No results yet. Set your design, then run the assessment.</p>}
-    {suite.ran ? <p className="run-identity" aria-label="Assessed design">{suite.ran.parameters.length ? describeChoices(suite.ran.parameters) : "Lesson defaults"}</p> : null}
+    {suite.ran ? <p className="run-identity" aria-label="Assessed design">{suite.ran.parameters.length ? describeChoices(suite.ran.parameters, m) : "Lesson defaults"}</p> : null}
     <div className="assessment-actions">
       <button type="button" onClick={onShowResults}>Show results</button>
       <button type="button" disabled={!suite.results.length || suite.running} onClick={suite.download}>Export result</button>
@@ -207,10 +214,11 @@ const glyphs: Readonly<Record<AssessmentVerdict | RowOutcome, string>> = { HOLDS
  * words with a glyph; colour only reinforces them. Each settled cell links its evidence record.
  */
 export function AssessmentMatrix({ choice, suite, busy }: { readonly choice: PackagedAssessment; readonly suite: AssessmentSuite; readonly busy: boolean }) {
+  const m = useMessages();
   const definition = choice.definition;
   return <section className="assessment-matrix" aria-labelledby="assessment-matrix-title">
     <div className="assessment-matrix-header">
-      <h2 id="assessment-matrix-title">{choice.title}: results</h2>
+      <h2 id="assessment-matrix-title">{assessmentTitle(choice, m)}: results</h2>
       <HelpHint label="About these results" bodyId="assessment-results-help">
         <p>Each scenario is one run of the base lesson with that scenario's faults and your design. A scenario passes when every business invariant holds. HOLDS and VIOLATED are the verdicts the run stored; INCOMPLETE means the run ended before the check settled.</p>
         <p>Show evidence opens the check's record in Recorded history. Only the last scenario's run stays loaded, so opening another one runs it again first; the same inputs give the same run.</p>
@@ -219,18 +227,18 @@ export function AssessmentMatrix({ choice, suite, busy }: { readonly choice: Pac
     </div>
     <div className="assessment-matrix-scroll">
       <table className="assessment-table">
-        <caption className="sr-only">{choice.title}: one row per fault scenario, one column per business invariant</caption>
+        <caption className="sr-only">{assessmentTitle(choice, m)}: one row per fault scenario, one column per business invariant</caption>
         <thead><tr>
           <th scope="col">Scenario</th>
           <th scope="col">Result</th>
-          {definition.invariants.map(invariant => <th key={invariant.id} scope="col">{invariant.label}</th>)}
+          {definition.invariants.map(invariant => <th key={invariant.id} scope="col">{invariantLabel(definition, invariant, m)}</th>)}
         </tr></thead>
         <tbody>{definition.rows.map((row, index) => {
           const result = suite.results[index];
           const outcome = result ? rowOutcome(result) : null;
           const pending = suite.running && suite.current === index ? "Running…" : suite.reopening === index ? "Reloading…" : "Not run";
           return <tr key={row.id} className={outcome ? `is-${outcome.toLowerCase()}` : undefined}>
-            <th scope="row">{row.label}</th>
+            <th scope="row">{rowLabel(definition, row, m)}</th>
             <td className={`assessment-outcome${outcome ? ` is-${outcome.toLowerCase()}` : ""}`}>
               {outcome ? <strong><span aria-hidden="true">{glyphs[outcome]} </span>{outcome}</strong> : <span className="assessment-pending">{pending}</span>}
               {result && result.status === "FAILED" ? <span className="assessment-failed"> (run failed)</span> : null}
@@ -239,9 +247,9 @@ export function AssessmentMatrix({ choice, suite, busy }: { readonly choice: Pac
               const cell = result?.cells.find(item => item.invariant === invariant.id);
               if (!cell) return <td key={invariant.id} className="assessment-cell"><span className="assessment-pending">—</span></td>;
               return <td key={invariant.id} className={`assessment-cell is-${cell.verdict.toLowerCase()}`}>
-                <span className="assessment-verdict"><span aria-hidden="true">{glyphs[cell.verdict]} </span>{cell.verdict}</span>
+                <span className="assessment-verdict"><span aria-hidden="true">{glyphs[cell.verdict]} </span>{m.commerceLesson.verdict.invariant[cell.verdict]}</span>
                 {cell.evidence ? <button type="button" disabled={busy || suite.running || suite.reopening !== null}
-                  aria-label={`Show evidence: ${row.label}, ${invariant.label}`} onClick={() => suite.openEvidence(index, cell.evidence!)}>Show evidence</button> : null}
+                  aria-label={`Show evidence: ${rowLabel(definition, row, m)}, ${invariantLabel(definition, invariant, m)}`} onClick={() => suite.openEvidence(index, cell.evidence!)}>Show evidence</button> : null}
               </td>;
             })}
           </tr>;

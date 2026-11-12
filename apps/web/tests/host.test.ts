@@ -261,3 +261,29 @@ test("APP-AC-9 loadDocument sends the file text unparsed and exposes the validat
   await packaged;
   assert.equal(host.getSnapshot().document, null);
 });
+
+// ADR-007: the worker and the host keep English developer text in `ApplicationError.message`; the screen renders it
+// through errorText, by code and reason, in the active language.
+test("errorText renders every error the worker, the host, and the suite runner can raise, in English and in Spanish", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { errorText } = await import("../src/error-text.ts");
+  const { messages } = await import("../src/i18n/catalog.ts");
+  const en = messages("en");
+  const es = messages("es");
+  const sources = ["worker/adapter.ts", "host.ts", "assessment-runner.ts"].map(file => readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8")).join("\n");
+  // Message literals passed as the second argument of applicationError(...), or as `message:` of a built error.
+  const found = [...sources.matchAll(/applicationError\(\s*"[A-Z_]+",\s*"([^"]+)"/g), ...sources.matchAll(/message: "([^"]+)"/g)].map(match => match[1]!);
+  assert.ok(found.length >= 10, `found ${found.length} messages`);
+  // And the other way: no catalog text outlives the message it renders.
+  for (const text of Object.values(en.errors.text)) assert.ok(sources.includes(text), `${text} is still raised somewhere`);
+  for (const message of new Set(found)) {
+    const error = { code: "X", message, context: null };
+    assert.equal(errorText(error, en), message, "English renders the protocol message unchanged");
+    assert.notEqual(errorText(error, es), message, `${message} has a Spanish text`);
+  }
+  // A shared code names its case by reason or message; an unknown message is shown as the worker wrote it.
+  const busy = { code: "INVALID_WORKER_COMMAND", message: "A simulation control is already in progress.", context: { reason: "CONTROL_BUSY" } };
+  assert.equal(errorText(busy, es), "Ya hay un control de la simulación en curso.");
+  assert.equal(errorText({ code: "INVALID_WORKER_COMMAND", message: "Something new", context: null }, es), "Something new");
+  assert.equal(errorText({ code: "SIMULATION_FAILED", message: "The simulation failed at an event boundary.", context: { code: "HANDLER_FAILED" } }, es), "La simulación falló en un límite de evento.");
+});

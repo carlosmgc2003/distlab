@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SCENARIO_DOCUMENT_FORMAT, ScenarioDocumentLimits } from "@distlab/contracts";
-import { scenarios } from "../src/scenarios.ts";
+import { messages } from "../src/i18n/catalog.ts";
+import { lessonDescription, lessonTitle, scenarios } from "../src/scenarios.ts";
 
 /** Hosted catalog references named in ADR-006 "Document envelope". */
 const catalogs = { checkout: { id: "mvp.checkout", version: "1.0.0" }, commerce: { id: "commerce.lessons", version: "1.0.0" } } as const;
@@ -22,14 +23,15 @@ type Scenario = {
 
 test("every packaged lesson, wrapped as a starter scenario document, is within ScenarioDocumentLimits", () => {
   assert.ok(scenarios.length >= 12, "both checkout lessons and every commerce lesson are checked");
-  for (const lesson of scenarios) {
+  // The copy is exported in the active language, so every language must fit the limits too.
+  for (const m of [messages("en"), messages("es")]) for (const lesson of scenarios) {
     const scenario = lesson.scenario as unknown as Scenario;
     // ADR-006 "Packaged lessons as starters": the packaged scenario, its catalog reference, its copy, and its policy.
     const document = {
       format: SCENARIO_DOCUMENT_FORMAT,
       formatVersion: 1,
       catalog: catalogs[lesson.family],
-      presentation: { title: lesson.title, summary: lesson.description },
+      presentation: { title: lessonTitle(lesson, m), summary: lessonDescription(lesson, m) },
       scenario: lesson.scenario,
       overlayPolicy: lesson.policy,
     };
@@ -48,7 +50,7 @@ test("every packaged lesson, wrapped as a starter scenario document, is within S
     }
     // The packaged value is the limit, and an omitted configuration takes the same engine default.
     assert.ok((scenario.configuration?.historyLimit ?? ScenarioDocumentLimits.historyLimit) <= ScenarioDocumentLimits.historyLimit, lesson.id);
-    assert.ok(lesson.title.length <= ScenarioDocumentLimits.titleLength, `${lesson.id}: title`);
-    assert.ok(lesson.description.length <= ScenarioDocumentLimits.summaryLength, `${lesson.id}: summary`);
+    assert.ok(lessonTitle(lesson, m).length <= ScenarioDocumentLimits.titleLength, `${lesson.id}: title`);
+    assert.ok(lessonDescription(lesson, m).length <= ScenarioDocumentLimits.summaryLength, `${lesson.id}: summary`);
   }
 });

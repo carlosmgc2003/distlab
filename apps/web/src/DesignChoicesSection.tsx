@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { LessonOverlayPolicy, ParameterOverride } from "@distlab/contracts";
-import { choiceCopy, choiceValues, formatChoice, readInteger, setChoice } from "./design-choices.ts";
+import { choiceCopy, choiceErrorText, choiceValues, formatChoice, readInteger, setChoice } from "./design-choices.ts";
+import type { ChoiceError } from "./design-choices.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 /** Why the setup checks can read "not reproduced" under a student's choices. It is in the Experiment drawer's hint (#147). */
 export const DESIGN_CHOICES_HELP = "Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read \"not reproduced\" under your choices. That shows how your change altered the story, not a simulator error.";
@@ -30,8 +32,9 @@ export interface DesignChoicesSectionProps {
  */
 export function DesignChoicesSection({ policy, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken, title = "Design choices" }: DesignChoicesSectionProps) {
   const ids = useId();
+  const m = useMessages();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
-  const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
+  const [errors, setErrors] = useState<Readonly<Record<string, ChoiceError>>>({});
   const values = useMemo(() => choiceValues(policy, draft), [policy, draft]);
   const invalid = Object.keys(errors).length > 0;
   useEffect(() => { onInvalidChange(invalid); }, [invalid, onInvalidChange]);
@@ -54,10 +57,10 @@ export function DesignChoicesSection({ policy, draft, onDraftChange, editable, r
         {policy.parameters.map(parameter => {
           const key = parameter.key;
           const id = `${ids}-${key}`;
-          const { label, hint } = choiceCopy(key, policy.lesson);
+          const { label, hint } = choiceCopy(key, policy.lesson, m);
           const value = values.get(key);
-          const error = errors[key] ?? rejected.get(key);
-          const defaultText = `Lesson default: ${formatChoice(parameter.domain.default)}.`;
+          const error = errors[key] ? choiceErrorText(errors[key], m) : rejected.get(key);
+          const defaultText = `Lesson default: ${formatChoice(parameter.domain.default, m)}.`;
           const describedBy = [`${id}-hint`, error ? `${id}-error` : ""].filter(Boolean).join(" ");
           const domain = parameter.domain;
           return <div key={key} className={`design-choice${value !== domain.default ? " is-changed" : ""}`}>

@@ -2,7 +2,8 @@ import type {
   AssessmentCell, AssessmentConfiguration, AssessmentDefinition, AssessmentResult, AssessmentRow, AssessmentRowResult, AssessmentVerdict,
   CanonicalValue, RuntimeProjectionSet, SessionOverlay,
 } from "@distlab/contracts";
-import { latestEvaluations } from "./lesson-checks.ts";
+import type { Messages } from "./i18n/catalog.ts";
+import { contentText, latestEvaluations } from "./lesson-checks.ts";
 import { isRecord } from "./records.ts";
 
 /**
@@ -78,24 +79,39 @@ export function exportFile(result: AssessmentResult): { readonly fileName: strin
   return { fileName: `${result.assessment}-result.json`, text: canonicalJson(result as unknown as CanonicalValue) };
 }
 
+/** A row's label in the active language: the catalog's English label, or its translation by `<assessment id>/<row id>`. */
+export function rowLabel(definition: Pick<AssessmentDefinition, "id">, row: Pick<AssessmentRow, "id" | "label">, m: Messages): string {
+  return contentText(m.content.assessmentRows, `${definition.id}/${row.id}`, row.label);
+}
+
+/** A business invariant's label in the active language, by `<assessment id>/<invariant id>`. */
+export function invariantLabel(definition: Pick<AssessmentDefinition, "id">, invariant: { readonly id: string; readonly label: string }, m: Messages): string {
+  return contentText(m.content.assessmentInvariants, `${definition.id}/${invariant.id}`, invariant.label);
+}
+
+/** A requirement line in the active language. Requirements have no ids, so they are keyed by their English text. */
+export function requirementText(line: string, m: Messages): string {
+  return contentText(m.content.assessmentRequirements, line, line);
+}
+
 /** The live region's words for a row that starts: "Row 3 of 6: Processor response lost — running". */
-export function rowStartedText(index: number, total: number, row: AssessmentRow): string {
-  return `Row ${index + 1} of ${total}: ${row.label} — running`;
+export function rowStartedText(index: number, total: number, definition: AssessmentDefinition, row: AssessmentRow, m: Messages): string {
+  return m.assessment.suite.rowStarted({ index: index + 1, total, label: rowLabel(definition, row, m) });
 }
 
 /** The live region's words for a row that finished: "Row 3 of 6: Processor response lost — 1 of 4 invariants violated". */
-export function rowFinishedText(index: number, total: number, row: AssessmentRow, result: AssessmentRowResult): string {
+export function rowFinishedText(index: number, total: number, definition: AssessmentDefinition, row: AssessmentRow, result: AssessmentRowResult, m: Messages): string {
   const count = (verdict: AssessmentVerdict) => result.cells.filter(cell => cell.verdict === verdict).length;
   const all = result.cells.length;
   const violated = count("VIOLATED"), incomplete = count("INCOMPLETE");
-  const summary = violated ? `${violated} of ${all} invariant${all === 1 ? "" : "s"} violated`
-    : incomplete ? `${incomplete} of ${all} invariant${all === 1 ? "" : "s"} incomplete`
-      : `all ${all} invariant${all === 1 ? "" : "s"} hold`;
-  return `Row ${index + 1} of ${total}: ${row.label} — ${summary}`;
+  const base = { index: index + 1, total, label: rowLabel(definition, row, m), all };
+  return violated ? m.assessment.suite.rowViolated({ ...base, count: violated })
+    : incomplete ? m.assessment.suite.rowIncomplete({ ...base, count: incomplete })
+      : m.assessment.suite.rowAllHold(base);
 }
 
 /** One line for the whole suite: "2 of 6 rows pass". */
-export function suiteSummary(results: readonly AssessmentRowResult[], total: number): string {
+export function suiteSummary(results: readonly AssessmentRowResult[], total: number, m: Messages): string {
   const passed = results.filter(result => rowOutcome(result) === "PASS").length;
-  return results.length < total ? `${results.length} of ${total} rows run, ${passed} pass` : `${passed} of ${total} row${total === 1 ? "" : "s"} pass`;
+  return results.length < total ? m.assessment.suite.partial({ run: results.length, total, passed }) : m.assessment.suite.complete({ passed, total });
 }

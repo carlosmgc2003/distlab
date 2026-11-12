@@ -23,7 +23,7 @@ const src = resolve(appRoot, "src");
 const TEXT_ATTRIBUTES = new Set(["aria-label", "aria-description", "aria-roledescription", "aria-valuetext", "title", "placeholder", "alt", "label", "summary", "help", "heading", "description", "emptyText"]);
 const CODE_ATTRIBUTES = new Set(["className", "id", "role", "type", "name", "htmlFor", "key", "href", "src", "accept", "autoComplete", "inputMode", "lang", "dir", "value", "defaultValue", "pattern", "d", "fill", "stroke", "viewBox", "transform", "style"]);
 const KEY_NAMES = new Set(["Enter", "Escape", "Space", "Tab", "Home", "End", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Backspace", "Delete", "Files"]);
-const DEVELOPER_CALLS = /^(?:console\.\w+|assert\w*|new (?:Type|Range|Syntax)?Error|(?:Type|Range)?Error|querySelector(?:All)?|closest|matches|getElementById|setAttribute|getAttribute|removeAttribute|addEventListener|removeEventListener|getPropertyValue|setProperty|structuredClone|postMessage)$/;
+const DEVELOPER_CALLS = /^(?:applicationError|console\.\w+|assert\w*|new (?:Type|Range|Syntax)?Error|(?:Type|Range)?Error|querySelector(?:All)?|closest|matches|getElementById|setAttribute|getAttribute|removeAttribute|addEventListener|removeEventListener|getPropertyValue|setProperty|structuredClone|postMessage)$/;
 
 export function files(directory = src): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -40,6 +40,8 @@ function looksLikeProse(text: string): boolean {
   // Identifier-shaped: codes, ids, dotted observation types, CSS class lists, selectors, paths, MIME types, URLs.
   if (/^[a-z0-9_.:/@#\[\]="'*>+~()^$|, -]*$/.test(trimmed) && !/[a-z]{2,} [a-z]{2,} [a-z]{2,}/.test(trimmed)) return false;
   if (/^[A-Z0-9_]+$/.test(trimmed)) return false;
+  // Colon, slash, dot, or at separated tokens with no spaces are ids: `publication:orders:OrderCreated`, `retry-unsafe@1`.
+  if (!/\s/.test(trimmed) && /[:/.@]/.test(trimmed) && !/[.:…]$/.test(trimmed)) return false;
   if (/^[a-z][A-Za-z0-9]*$/.test(trimmed)) return false;
   if (/^(?:https?:|\.{0,2}\/|data:|#|\[)/.test(trimmed)) return false;
   return /[A-Za-z]{2,}[\s,.;:!?'’–—-]+[A-Za-z]{2,}/.test(trimmed) || /^[A-Z][a-z]+[.:…]?$/.test(trimmed);

@@ -13,6 +13,7 @@ import { activityAt, activityChanges } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
 import type { Observation } from "@distlab/contracts";
+import { useMessages } from "./i18n/react.tsx";
 
 /** How often the host timer rechecks while the cursor waits for the run to record more movements. */
 const TAIL_POLL_MS = 200;
@@ -60,7 +61,9 @@ export function useFlightPlayback(
   /** Changes when Recorded history takes over the graph highlight. */
   release: string | undefined,
 ): FlightPlayback {
-  const steps = useMemo(() => flightSteps(observations, edges), [observations, edges]);
+  const m = useMessages();
+  // Text is produced here at render time, so a language switch recomputes it and nothing stale survives.
+  const steps = useMemo(() => flightSteps(observations, edges, m), [observations, edges, m]);
   // One record holds the cursor and the phase, so a single transition can never
   // paint a cursor the phase does not belong to.
   const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle", paint: 0 });
@@ -79,8 +82,8 @@ export function useFlightPlayback(
   const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
   const activity = useMemo(() => activityAt(observations, step?.observationId), [observations, step?.observationId]);
   const changes = useMemo(
-    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity),
-    [observations, previousId, activity, step],
+    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity, m),
+    [observations, previousId, activity, step, m],
   );
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current
@@ -123,8 +126,8 @@ export function useFlightPlayback(
     phase: cursor.phase,
     pace,
     paint: cursor.paint,
-    position: flightPosition(steps, cursor.index),
-    transport: flightTransport(cursor.index, steps.length, cursor.phase, recording),
+    position: flightPosition(steps, cursor.index, m),
+    transport: flightTransport(cursor.index, steps.length, cursor.phase, recording, m),
     activity,
     activityChanges: changes,
     play, pause, restart, previous, next, setPace,

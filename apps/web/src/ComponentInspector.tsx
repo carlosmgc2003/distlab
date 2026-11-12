@@ -1,22 +1,23 @@
 import type { ReactNode } from "react";
+import { useMessages } from "./i18n/react.tsx";
 import type { ArchitectureNode, ResourceNode } from "./architecture-view.ts";
-import { categoryLabels, resourceLabels, symbolLabels } from "./architecture-view.ts";
-import { EMPTY_SLOT_DESCRIPTION, EMPTY_SLOT_LABEL } from "./design-step.ts";
+import { categoryLabel, resourceTitle, symbolLabel } from "./architecture-view.ts";
 
 export function ComponentInspector({ node, children }: {
   readonly node: ArchitectureNode | ResourceNode | undefined;
   readonly children?: ReactNode;
 }) {
+  const m = useMessages();
   return <aside id="component-inspector" className="inspector" aria-labelledby="inspector-heading" tabIndex={0}>
     <h3 id="inspector-heading">Component inspector</h3>
     {node ? node.type === "component" ? <>
       <h4>{node.data.title}</h4>
-      {node.data.emptySlot ? <p className="inspector-empty-slot"><strong>{EMPTY_SLOT_LABEL}.</strong> {EMPTY_SLOT_DESCRIPTION}</p> : null}
+      {node.data.emptySlot ? <p className="inspector-empty-slot"><strong>{m.designChoices.emptySlot.label}.</strong> {m.designChoices.emptySlot.description}</p> : null}
       {children}<details className="inspector-metadata">
         <summary>Static architecture metadata</summary>
       <dl>
         <dt>Component ID</dt><dd>{node.id}</dd>
-        <dt>Category</dt><dd>{node.data.symbol === "kvstore" ? symbolLabels.kvstore : categoryLabels[node.data.component.kind]}</dd>
+        <dt>Category</dt><dd>{node.data.symbol === "kvstore" ? symbolLabel("kvstore", m) : categoryLabel(node.data.component.kind, m)}</dd>
         <dt>Model</dt><dd>{node.data.component.model ?? "Not declared"}</dd>
         <dt>Version</dt><dd>{node.data.component.version ?? "Not declared"}</dd>
       </dl>
@@ -26,7 +27,7 @@ export function ComponentInspector({ node, children }: {
       {node.data.resources.length ? <ul>{node.data.resources.map(resource => <li key={resource}>{resource}</li>)}</ul> : <p>No database or store declared for this component.</p>}
       </details>
     </> : <>
-      <h4>{`${resourceLabels[node.data.kind]} owned by ${node.data.owner}`}</h4>
+      <h4>{resourceTitle(node.data.kind, node.data.owner, m)}</h4>
       <ResourceFacts node={node} />
     </> : <p>Select a component to inspect its metadata.</p>}
   </aside>;

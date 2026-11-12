@@ -1,4 +1,5 @@
 import type { CanonicalValue, Observation, SimulationTime } from "@distlab/contracts";
+import type { Messages } from "./i18n/catalog.ts";
 
 /**
  * Record reading. One place decides what a stored record *is*, using only its
@@ -191,21 +192,27 @@ export function correlation(observations: readonly Observation[], observation: O
 }
 
 /** A movement the record itself states. Every field is a stored type, a stored
- * source and target, or text built from them. No edge is resolved here, because
- * link identity belongs to the presentation that draws it.
+ * source and target, or a stored time. No edge is resolved here, because
+ * link identity belongs to the presentation that draws it. Its sentence is
+ * produced at render time by `movementText`, so it never outlives the language.
  */
 export interface Movement {
   readonly observationId: string;
   readonly sequence: number;
   readonly time: SimulationTime;
   readonly kind: MovementKind;
-  /** Stored type's last segment, or the stored phase word. */
-  readonly phase: string;
+  /** The stored observation type: a code, never translated. */
+  readonly type: string;
   readonly relationship: MovementEdge["relationship"];
   readonly from: string;
   readonly to?: string;
-  /** One sentence naming the stored type, route, and virtual time. */
-  readonly text: string;
+}
+
+/** One sentence naming the stored type, route, and virtual time. An unknown type shows its raw code. */
+export function movementText(movement: Movement, m: Messages): string {
+  const params = { source: movement.from, ...(movement.to !== undefined ? { target: movement.to } : {}), time: movement.time };
+  const message = Object.hasOwn(m.records.movement, movement.type) ? m.records.movement[movement.type as keyof typeof m.records.movement] : undefined;
+  return message !== undefined ? message(params) : m.records.movementUnknown({ ...params, type: movement.type });
 }
 
 const REQUEST_TYPES: ReadonlySet<string> = new Set([
@@ -285,9 +292,9 @@ export function attemptOf(observation: Observation): number | string | undefined
 }
 
 /** The attempt as stored, for a label. No attempt stores no suffix. */
-export function attemptLabel(observation: Observation): string {
+export function attemptLabel(observation: Observation, m: Messages): string {
   const attempt = attemptOf(observation);
-  return attempt === undefined ? "" : ` (attempt ${attempt})`;
+  return attempt === undefined ? "" : m.records.attemptSuffix(attempt);
 }
 
 /** A stored scalar field, read only when the payload is visible. */
@@ -384,7 +391,7 @@ export type AssertionEvidence =
   | { readonly kind: "none"; readonly assertionId?: string; readonly passed?: boolean }
   | { readonly kind: "rows"; readonly assertionId?: string; readonly passed?: boolean; readonly rows: readonly EvidenceRow[] };
 
-export function assertionEvidence(observation: Observation): AssertionEvidence | undefined {
+export function assertionEvidence(observation: Observation, m: Messages): AssertionEvidence | undefined {
   if (observation.type !== "scenario.assertion.evaluated") return undefined;
   const visibility = payloadVisibility(observation);
   if (visibility !== "visible") return { kind: "unavailable", visibility };
@@ -393,14 +400,14 @@ export function assertionEvidence(observation: Observation): AssertionEvidence |
   const passed = typeof data.verdict === "boolean" ? data.verdict : undefined;
   const common = { ...(assertionId !== undefined ? { assertionId } : {}), ...(passed !== undefined ? { passed } : {}) };
   if (!Object.hasOwn(data, "evidence")) return { kind: "none", ...common };
-  return { kind: "rows", ...common, rows: evidenceRows(data.evidence!) };
+  return { kind: "rows", ...common, rows: evidenceRows(data.evidence!, m) };
 }
 
 /** Stored fields as one line, the form Service state uses: `field: value · field: value`. */
-function fieldText(value: CanonicalValue): string {
+function fieldText(value: CanonicalValue, m: Messages): string {
   if (!isRecord(value)) return value === null || typeof value !== "object" ? String(value) : JSON.stringify(value);
   const entries = Object.entries(value);
-  if (entries.length === 0) return "No stored fields.";
+  if (entries.length === 0) return m.records.noStoredFields;
   return entries.map(([key, item]) => `${key}: ${item !== null && typeof item === "object" ? JSON.stringify(item) : String(item)}`).join(" · ");
 }
 
@@ -409,15 +416,15 @@ function fieldText(value: CanonicalValue): string {
  * keyed by ID) gives one keyed row per entry; an object of scalars (metrics) gives one row; any
  * other object gives one keyed row per field. An empty list or object gives no rows.
  */
-function evidenceRows(evidence: CanonicalValue): readonly EvidenceRow[] {
-  if (Array.isArray(evidence)) return evidence.map(item => ({ text: fieldText(item) }));
-  if (!isRecord(evidence)) return [{ text: fieldText(evidence) }];
+function evidenceRows(evidence: CanonicalValue, m: Messages): readonly EvidenceRow[] {
+  if (Array.isArray(evidence)) return evidence.map(item => ({ text: fieldText(item, m) }));
+  if (!isRecord(evidence)) return [{ text: fieldText(evidence, m) }];
   const entries = Object.entries(evidence);
   if (entries.length === 0) return [];
-  if (entries.every(([, value]) => isRecord(value))) return entries.map(([key, value]) => ({ key, text: fieldText(value) }));
-  if (entries.every(([, value]) => value === null || typeof value !== "object")) return [{ text: fieldText(evidence) }];
+  if (entries.every(([, value]) => isRecord(value))) return entries.map(([key, value]) => ({ key, text: fieldText(value, m) }));
+  if (entries.every(([, value]) => value === null || typeof value !== "object")) return [{ text: fieldText(evidence, m) }];
   return entries.map(([key, value]) => ({
-    key, text: Array.isArray(value) ? (value.length ? value.map(item => fieldText(item)).join("; ") : "None.") : fieldText(value),
+    key, text: Array.isArray(value) ? (value.length ? value.map(item => fieldText(item, m)).join("; ") : m.records.none) : fieldText(value, m),
   }));
 }
 
@@ -464,28 +471,15 @@ function leg(
 ): Movement {
   const source = from && from.length > 0 ? from : observation.source;
   const target = to && to.length > 0 && to !== source ? to : undefined;
-  const phase = observation.type === "message.published" ? "published"
-    : observation.type === "message.delivered" ? "delivered"
-    : observation.type === "message.acknowledged" ? "acknowledged"
-    : observation.type.endsWith(".timedout") ? "timed out"
-    : observation.type.split(".").at(-1) ?? observation.type;
-  const where = target !== undefined ? `from ${source} to ${target}` : `at ${source}`;
-  const text = kind === "request" ? `Request ${phase} ${where} at virtual time ${observation.time}.`
-    : kind === "response" ? `Response ${phase} ${where} at virtual time ${observation.time}.`
-    : phase === "acknowledged" && target !== undefined ? `Message acknowledged by ${source} on ${target} at virtual time ${observation.time}.`
-    : phase === "published" ? `Message published ${where} at virtual time ${observation.time}.`
-    : phase === "delivered" ? `Message delivered ${where} at virtual time ${observation.time}.`
-    : `Message ${phase} ${where} at virtual time ${observation.time}.`;
   return {
     observationId: observation.id,
     sequence: observation.sequence,
     time: observation.time,
     kind,
-    phase,
+    type: observation.type,
     relationship,
     from: source,
     ...(target !== undefined ? { to: target } : {}),
-    text,
   };
 }
 

@@ -1,5 +1,7 @@
 import type { EntityRef, Observation, ObservationFilter, SimulationTime } from "@distlab/contracts";
 import { orderObservations } from "./records.ts";
+import type { Messages } from "./i18n/catalog.ts";
+import type { QuickViewId } from "./timeline-quick-views.ts";
 
 /** Popup size for recorded values. The applied filter still uses the full visible history. */
 export const TIMELINE_SUGGESTION_LIMIT = 8;
@@ -49,9 +51,26 @@ export const emptyTimelineDraft: TimelineDraft = {
 export type TextFilterField = "type" | "component" | "traceId" | "eventId" | "entityKind" | "entityId";
 export type TimelineFilterField = TextFilterField | "fromTime" | "toTime";
 
+/**
+ * Why a draft does not parse, as a code and its parameters. Review navigation keeps this in
+ * its state and `queryErrorText` renders it, so a language switch never leaves stale text.
+ */
+export type QueryError =
+  | { readonly kind: "not-whole-time"; readonly field: "fromTime" | "toTime"; readonly value: string }
+  | { readonly kind: "time-order"; readonly from: number; readonly to: number };
+
 export type QueryParse =
   | { readonly ok: true; readonly query: TimelineQuery }
-  | { readonly ok: false; readonly message: string };
+  | { readonly ok: false; readonly error: QueryError };
+
+export function queryErrorText(error: QueryError, m: Messages): string {
+  return error.kind === "not-whole-time"
+    ? m.timeline.queryError.notWholeTime({ field: error.field, value: error.value })
+    : m.timeline.queryError.timeOrder({ from: error.from, to: error.to });
+}
+
+/** A constraint a reveal or a trace narrowing removed. Identified by code, so it is deduplicated without display text. */
+export type ClearedField = "fromTime" | "toTime" | "type" | "component" | "traceId" | "eventId" | "entity";
 
 export interface ComponentTitle {
   readonly id: string;
@@ -78,35 +97,18 @@ export interface ActiveFilterChip {
   readonly removeLabel: string;
 }
 
-export const TIMELINE_FILTER_HELP = [
-  "Filters combine with AND.",
-  "Virtual time bounds are inclusive whole simulation times.",
-  "Exact matches the full stored value, Prefix matches its start, and Contains matches a substring.",
-  "Matching is case-sensitive and uses only this run's visible history.",
-  "The suggestion list shows recorded values whose stored value or label contains the typed text.",
-  "Choosing a suggestion applies Exact.",
-  "A component matches when the source or the target matches.",
-  "Entity kind and entity id must match the same stored entity reference.",
-].join(" ");
-
-const MODE_WORD: Readonly<Record<TextMatchMode, string>> = {
-  exact: "exactly",
-  prefix: "starting with",
-  contains: "containing",
-};
-
 /** Read-only projection. Exact mode matches ExecutionHistoryReader; prefix and contains stay in the UI. */
 export function queryTimeline(observations: readonly Observation[], query: TimelineQuery): readonly Observation[] {
   return orderObservations(observations).filter(record => matchesQuery(record, query));
 }
 
 export function parseTimelineQuery(draft: TimelineDraft): QueryParse {
-  const from = bound(draft.fromTime, "Virtual time from");
+  const from = bound(draft.fromTime, "fromTime");
   if (!from.ok) return from;
-  const to = bound(draft.toTime, "Virtual time to");
+  const to = bound(draft.toTime, "toTime");
   if (!to.ok) return to;
   if (from.value !== undefined && to.value !== undefined && from.value > to.value) {
-    return { ok: false, message: `Virtual time from ${from.value} is after virtual time to ${to.value}. Use a from time that is less than or equal to the to time.` };
+    return { ok: false, error: { kind: "time-order", from: from.value, to: to.value } };
   }
   const type = criterion(draft.type, draft.typeMode);
   const component = criterion(draft.component, draft.componentMode);
@@ -151,7 +153,7 @@ export function readerFilter(query: TimelineQuery): ObservationFilter | undefine
 }
 
 /** Distinct canonical values from this history snapshot, sorted by code unit. Payload fields are ignored. */
-export function timelineSuggestions(observations: readonly Observation[], titles: readonly ComponentTitle[] = []): TimelineSuggestions {
+export function timelineSuggestions(observations: readonly Observation[], titles: readonly ComponentTitle[], m: Messages): TimelineSuggestions {
   const types = new Set<string>();
   const components = new Set<string>();
   const traces = new Set<string>();
@@ -172,7 +174,7 @@ export function timelineSuggestions(observations: readonly Observation[], titles
   const plain = (value: string): FilterChoice => ({ value, label: value });
   return {
     types: sorted(types).map(plain),
-    components: sorted(components).map(value => ({ value, label: componentLabel(value, titles) })),
+    components: sorted(components).map(value => ({ value, label: componentLabel(value, titles, m) })),
     traces: sorted(traces).map(plain),
     events: sorted(events).map(plain),
     entityKinds: sorted(kinds).map(plain),
@@ -180,13 +182,13 @@ export function timelineSuggestions(observations: readonly Observation[], titles
   };
 }
 
-export function componentLabel(id: string, titles: readonly ComponentTitle[]): string {
+export function componentLabel(id: string, titles: readonly ComponentTitle[], m: Messages): string {
   const provided = titles.find(item => item.id === id)?.title;
-  const title = provided ?? (id === "simulation" ? "Simulation" : id);
+  const title = provided ?? (id === "simulation" ? m.timeline.simulation : id);
   return title === id ? id : `${title} (${id})`;
 }
 
-/** Case-sensitive substring over the stored value and the displayed label. */
+/** Case-sensitive substring over the stored value and the displayed label. Matching the stored value never depends on the language. */
 export function visibleChoices(choices: readonly FilterChoice[], query: string, limit = TIMELINE_SUGGESTION_LIMIT): {
   readonly shown: readonly FilterChoice[];
   readonly hidden: number;
@@ -196,50 +198,58 @@ export function visibleChoices(choices: readonly FilterChoice[], query: string, 
   return { shown: matches.slice(0, limit), hidden: Math.max(0, matches.length - limit) };
 }
 
-export function activeFilterChips(query: TimelineQuery, titles: readonly ComponentTitle[] = []): readonly ActiveFilterChip[] {
+export function activeFilterChips(query: TimelineQuery, titles: readonly ComponentTitle[], m: Messages): readonly ActiveFilterChip[] {
+  const copy = m.timeline.chip;
   const chips: ActiveFilterChip[] = [];
-  if (query.fromTime !== undefined) chips.push({ field: "fromTime", label: `Virtual time from ${query.fromTime} inclusive`, removeLabel: "Remove virtual time from filter" });
-  if (query.toTime !== undefined) chips.push({ field: "toTime", label: `Virtual time to ${query.toTime} inclusive`, removeLabel: "Remove virtual time to filter" });
-  const text: readonly { field: TextFilterField; noun: string; criterion: TextCriterion | undefined; display: (value: string) => string }[] = [
-    { field: "type", noun: "Type", criterion: query.type, display: value => value },
-    { field: "component", noun: "Component", criterion: query.component, display: value => componentLabel(value, titles) },
-    { field: "traceId", noun: "Trace", criterion: query.traceId, display: value => value },
-    { field: "eventId", noun: "Event", criterion: query.eventId, display: value => value },
-    { field: "entityKind", noun: "Entity kind", criterion: query.entityKind, display: value => value },
-    { field: "entityId", noun: "Entity id", criterion: query.entityId, display: value => value },
-  ];
-  for (const item of text) {
+  if (query.fromTime !== undefined) chips.push({ field: "fromTime", label: copy.timeFrom(query.fromTime), removeLabel: copy.removeTimeFrom });
+  if (query.toTime !== undefined) chips.push({ field: "toTime", label: copy.timeTo(query.toTime), removeLabel: copy.removeTimeTo });
+  for (const item of textFields(query)) {
     if (item.criterion === undefined) continue;
-    const shown = item.criterion.mode === "exact" ? item.display(item.criterion.value) : item.criterion.value;
-    chips.push({
-      field: item.field,
-      label: `${item.noun} ${MODE_WORD[item.criterion.mode]} ${shown}`,
-      removeLabel: `Remove ${item.noun.toLowerCase()} filter`,
-    });
+    const { noun, inline } = m.timeline.fieldNoun[item.field];
+    const value = item.criterion.mode === "exact" && item.field === "component"
+      ? componentLabel(item.criterion.value, titles, m) : item.criterion.value;
+    chips.push({ field: item.field, label: copy[item.criterion.mode]({ noun, value }), removeLabel: copy.removeField(inline) });
   }
   return chips;
 }
 
+function textFields(query: TimelineQuery): readonly { field: TextFilterField; criterion: TextCriterion | undefined }[] {
+  return [
+    { field: "type", criterion: query.type },
+    { field: "component", criterion: query.component },
+    { field: "traceId", criterion: query.traceId },
+    { field: "eventId", criterion: query.eventId },
+    { field: "entityKind", criterion: query.entityKind },
+    { field: "entityId", criterion: query.entityId },
+  ];
+}
+
+/**
+ * Why no observation matches. `resetQuickView` names the active quick view so the closing
+ * sentence can point at its chip; without one the sentence points at the filter chips.
+ */
 export function emptyFilterExplanation(
   query: TimelineQuery,
   observations: readonly Observation[],
-  titles: readonly ComponentTitle[] = [],
-  reset = "Remove a filter chip or clear all filters to see observations again.",
+  titles: readonly ComponentTitle[],
+  resetQuickView: QuickViewId | undefined,
+  m: Messages,
 ): string {
-  const suggestions = timelineSuggestions(observations, titles);
-  const sentences = ["No observations match every active filter. Filters combine with AND."];
-  explain(sentences, "Type", query.type, observations, suggestions.types, observation => [observation.type]);
-  explain(sentences, "Component", query.component, observations, suggestions.components, observation => [observation.source, ...(observation.target !== undefined ? [observation.target] : [])]);
-  explain(sentences, "Trace", query.traceId, observations, suggestions.traces, observation => observation.traceId !== undefined ? [observation.traceId] : []);
-  explain(sentences, "Event", query.eventId, observations, suggestions.events, observation => observation.eventId !== undefined ? [observation.eventId] : []);
-  explain(sentences, "Entity kind", query.entityKind, observations, suggestions.entityKinds, observation => (observation.entityRefs ?? []).map(entity => entity.kind));
-  explain(sentences, "Entity id", query.entityId, observations, suggestions.entityIds, observation => (observation.entityRefs ?? []).map(entity => entity.id));
-  if (query.fromTime !== undefined || query.toTime !== undefined) {
-    const from = query.fromTime !== undefined ? `from ${query.fromTime}` : "from the start";
-    const to = query.toTime !== undefined ? `to ${query.toTime}` : "onward";
-    sentences.push(`Virtual time is inclusive ${from} ${to}.`);
-  }
-  sentences.push(reset);
+  const copy = m.timeline.explain;
+  const suggestions = timelineSuggestions(observations, titles, m);
+  const sentences = [copy.intro];
+  const explainField = (field: TextFilterField, criterion: TextCriterion | undefined, choices: readonly FilterChoice[], valuesOf: (observation: Observation) => readonly string[]) =>
+    explain(sentences, field, criterion, observations, choices, valuesOf, m);
+  explainField("type", query.type, suggestions.types, observation => [observation.type]);
+  explainField("component", query.component, suggestions.components, observation => [observation.source, ...(observation.target !== undefined ? [observation.target] : [])]);
+  explainField("traceId", query.traceId, suggestions.traces, observation => observation.traceId !== undefined ? [observation.traceId] : []);
+  explainField("eventId", query.eventId, suggestions.events, observation => observation.eventId !== undefined ? [observation.eventId] : []);
+  explainField("entityKind", query.entityKind, suggestions.entityKinds, observation => (observation.entityRefs ?? []).map(entity => entity.kind));
+  explainField("entityId", query.entityId, suggestions.entityIds, observation => (observation.entityRefs ?? []).map(entity => entity.id));
+  if (query.fromTime !== undefined && query.toTime !== undefined) sentences.push(copy.timeBoth({ from: query.fromTime, to: query.toTime }));
+  else if (query.fromTime !== undefined) sentences.push(copy.timeFrom(query.fromTime));
+  else if (query.toTime !== undefined) sentences.push(copy.timeTo(query.toTime));
+  sentences.push(resetQuickView === undefined ? copy.resetDefault : copy.resetQuickView(m.timeline.quickView.views[resetQuickView].inline));
   return sentences.join(" ");
 }
 
@@ -284,45 +294,46 @@ export function timelineDraftIsBlank(draft: TimelineDraft): boolean {
 export interface TimelineReveal {
   readonly draft: TimelineDraft;
   readonly query: TimelineQuery;
-  readonly cleared: readonly string[];
+  readonly cleared: readonly ClearedField[];
   readonly changed: boolean;
 }
 
 export interface TraceNarrowing {
   readonly draft: TimelineDraft;
   readonly changed: boolean;
-  readonly cleared: readonly string[];
+  readonly cleared: readonly ClearedField[];
 }
 
 /** Drop only the constraints that exclude this stored observation, including prefix and contains. */
 export function revealTimelineObservation(draft: TimelineDraft, observation: Observation): TimelineReveal {
   let next = draft;
-  const cleared: string[] = [];
-  const clear = (label: string, field: TimelineFilterField) => {
+  const cleared: ClearedField[] = [];
+  const clear = (field: TimelineFilterField) => {
     next = clearTimelineField(next, field);
-    if (!cleared.includes(label)) cleared.push(label);
+    const code = clearedCode(field);
+    if (!cleared.includes(code)) cleared.push(code);
   };
-  if (wholeTime(next.fromTime) === "invalid") clear("virtual time from", "fromTime");
-  if (wholeTime(next.toTime) === "invalid") clear("virtual time to", "toTime");
+  if (wholeTime(next.fromTime) === "invalid") clear("fromTime");
+  if (wholeTime(next.toTime) === "invalid") clear("toTime");
   const from = wholeTime(next.fromTime);
   const to = wholeTime(next.toTime);
-  if (typeof from === "number" && observation.time < from) clear("virtual time from", "fromTime");
-  if (typeof to === "number" && observation.time > to) clear("virtual time to", "toTime");
+  if (typeof from === "number" && observation.time < from) clear("fromTime");
+  if (typeof to === "number" && observation.time > to) clear("toTime");
   let parsed = parseTimelineQuery(next);
   if (!parsed.ok) {
-    if (next.fromTime.trim()) clear("virtual time from", "fromTime");
-    if (next.toTime.trim()) clear("virtual time to", "toTime");
+    if (next.fromTime.trim()) clear("fromTime");
+    if (next.toTime.trim()) clear("toTime");
     parsed = parseTimelineQuery(next);
   }
   if (parsed.ok) {
     const query = parsed.query;
-    if (query.type !== undefined && !matchesText(observation.type, query.type)) clear("type", "type");
-    if (query.component !== undefined && !matchesComponent(observation, query.component)) clear("component", "component");
-    if (query.traceId !== undefined && !matchesText(observation.traceId, query.traceId)) clear("trace", "traceId");
-    if (query.eventId !== undefined && !matchesText(observation.eventId, query.eventId)) clear("event", "eventId");
+    if (query.type !== undefined && !matchesText(observation.type, query.type)) clear("type");
+    if (query.component !== undefined && !matchesComponent(observation, query.component)) clear("component");
+    if (query.traceId !== undefined && !matchesText(observation.traceId, query.traceId)) clear("traceId");
+    if (query.eventId !== undefined && !matchesText(observation.eventId, query.eventId)) clear("eventId");
     if ((query.entityKind !== undefined || query.entityId !== undefined) && !matchesEntity(observation, query.entityKind, query.entityId)) {
-      if (next.entityKind.trim()) clear("entity", "entityKind");
-      if (next.entityId.trim()) clear("entity", "entityId");
+      if (next.entityKind.trim()) clear("entityKind");
+      if (next.entityId.trim()) clear("entityId");
     }
   }
   const finalParse = parseTimelineQuery(next);
@@ -332,28 +343,21 @@ export function revealTimelineObservation(draft: TimelineDraft, observation: Obs
 /** Narrow the timeline to one trace and report every other constraint that was cleared. */
 export function narrowToTrace(draft: TimelineDraft, traceId: string): TraceNarrowing {
   const next = traceOnlyDraft(traceId);
-  const cleared: string[] = [];
-  const fields: readonly [TimelineFilterField, string][] = [
-    ["fromTime", "virtual time from"],
-    ["toTime", "virtual time to"],
-    ["type", "type"],
-    ["component", "component"],
-    ["traceId", "trace"],
-    ["eventId", "event"],
-    ["entityKind", "entity"],
-    ["entityId", "entity"],
-  ];
-  for (const [key, label] of fields) {
+  const cleared: ClearedField[] = [];
+  const fields: readonly TimelineFilterField[] = ["fromTime", "toTime", "type", "component", "traceId", "eventId", "entityKind", "entityId"];
+  for (const key of fields) {
     const value = draft[key].trim();
     if (!value || (key === "traceId" && value === traceId)) continue;
-    if (key === "entityKind" || key === "entityId") {
-      if (!cleared.includes("entity")) cleared.push("entity");
-      continue;
-    }
-    cleared.push(label);
+    const code = clearedCode(key);
+    if (!cleared.includes(code)) cleared.push(code);
   }
   const changed = textFieldsDiffer(draft, next) || modeFieldsDiffer(draft, next);
   return { draft: next, changed, cleared };
+}
+
+/** Entity kind and entity id are one constraint to the reader. */
+function clearedCode(field: TimelineFilterField): ClearedField {
+  return field === "entityKind" || field === "entityId" ? "entity" : field;
 }
 
 function matchesQuery(record: Observation, query: TimelineQuery): boolean {
@@ -385,42 +389,43 @@ function matchesText(stored: string | undefined, criterion: TextCriterion): bool
 
 function explain(
   sentences: string[],
-  noun: string,
+  field: TextFilterField,
   criterion: TextCriterion | undefined,
   observations: readonly Observation[],
   choices: readonly FilterChoice[],
   valuesOf: (observation: Observation) => readonly string[],
+  m: Messages,
 ): void {
   if (criterion === undefined) return;
-  const alone = observations.filter(observation => valuesOf(observation).some(value => matchesText(value, criterion))).length;
+  const copy = m.timeline.explain;
+  const { noun, inline } = m.timeline.fieldNoun[field];
+  const value = criterion.value;
+  const alone = observations.filter(observation => valuesOf(observation).some(item => matchesText(item, criterion))).length;
   if (alone > 0) {
-    sentences.push(`${noun} ${MODE_WORD[criterion.mode]} ${quote(criterion.value)} matches ${alone} observations. Another active filter excludes them.`);
+    const excluded = criterion.mode === "exact" ? copy.excludedExact : criterion.mode === "prefix" ? copy.excludedPrefix : copy.excludedContains;
+    sentences.push(excluded({ noun, value, count: alone }));
     return;
   }
-  const containing = choices.filter(choice => choice.value.includes(criterion.value) || choice.label.includes(criterion.value)).slice(0, 8);
-  if (criterion.mode === "exact" && containing.length > 0 && !containing.some(choice => choice.value === criterion.value)) {
-    sentences.push(`${noun} ${quote(criterion.value)} is not an exact recorded value. Recorded values containing ${quote(criterion.value)}: ${labels(containing)}. Choose one for an exact match, or set ${noun} match to Prefix or Contains.`);
+  const containing = choices.filter(choice => choice.value.includes(value) || choice.label.includes(value)).slice(0, 8);
+  if (criterion.mode === "exact" && containing.length > 0 && !containing.some(choice => choice.value === value)) {
+    sentences.push(copy.notExact({ noun, inline, value, values: labels(containing) }));
     return;
   }
   if (containing.length === 0) {
-    const folded = criterion.value.toLowerCase();
-    const insensitive = folded === criterion.value ? [] : choices.filter(choice =>
+    const folded = value.toLowerCase();
+    const insensitive = folded === value ? [] : choices.filter(choice =>
       choice.value.toLowerCase().includes(folded) || choice.label.toLowerCase().includes(folded)).slice(0, 4);
     sentences.push(insensitive.length > 0
-      ? `No recorded ${noun.toLowerCase()} contains ${quote(criterion.value)}. Matching is case-sensitive. Recorded values include ${labels(insensitive)}.`
-      : `No recorded ${noun.toLowerCase()} matches ${quote(criterion.value)}.`);
+      ? copy.caseSensitive({ inline, value, values: labels(insensitive) })
+      : copy.noneRecorded({ inline, value }));
     return;
   }
-  const how = criterion.mode === "prefix" ? "starts with" : criterion.mode === "contains" ? "contains" : "equals";
-  sentences.push(`No recorded ${noun.toLowerCase()} ${how} ${quote(criterion.value)}. Recorded values containing ${quote(criterion.value)}: ${labels(containing)}.`);
+  const none = criterion.mode === "prefix" ? copy.nonePrefix : criterion.mode === "contains" ? copy.noneContains : copy.noneExact;
+  sentences.push(none({ inline, value, values: labels(containing) }));
 }
 
-function labels(choices: readonly FilterChoice[]): string {
-  return choices.map(choice => choice.label).join(", ");
-}
-
-function quote(value: string): string {
-  return `"${value}"`;
+function labels(choices: readonly FilterChoice[]): readonly string[] {
+  return choices.map(choice => choice.label);
 }
 
 function criterion(value: string, mode: TextMatchMode): TextCriterion | undefined {
@@ -449,11 +454,11 @@ function modeFieldsDiffer(draft: TimelineDraft, next: TimelineDraft): boolean {
     || draft.entityIdMode !== next.entityIdMode;
 }
 
-function bound(value: string, label: string): { ok: true; value: number | undefined } | { ok: false; message: string } {
+function bound(value: string, field: "fromTime" | "toTime"): { ok: true; value: number | undefined } | { ok: false; error: QueryError } {
   const trimmed = value.trim();
   if (!trimmed) return { ok: true, value: undefined };
   if (!/^(0|[1-9][0-9]*)$/.test(trimmed) || !Number.isSafeInteger(Number(trimmed))) {
-    return { ok: false, message: `${label} "${trimmed}" is not a whole simulation time. Use a non-negative integer such as 0 or 12.` };
+    return { ok: false, error: { kind: "not-whole-time", field, value: trimmed } };
   }
   return { ok: true, value: Number(trimmed) };
 }

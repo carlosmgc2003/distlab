@@ -6,6 +6,7 @@ import {
 } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, composeOverlay, openHarness } from "@distlab/scenario";
+import { messages } from "../src/i18n/catalog.ts";
 import { canonicalJson, exportFile, assessmentResult, rowCells, rowFinishedText, rowOutcome, rowOverlay, rowStartedText, suiteSummary } from "../src/assessment.ts";
 import { reproduceRow, runSuite } from "../src/assessment-runner.ts";
 import type { SuiteHost } from "../src/assessment-runner.ts";
@@ -89,10 +90,18 @@ test("a row passes when every invariant holds (D-4), and the live region names t
   assert.equal(rowOutcome(result(["HOLDS", "VIOLATED", "INCOMPLETE", "HOLDS"])), "FAIL");
   assert.equal(rowOutcome(result(["HOLDS", "INCOMPLETE", "HOLDS", "HOLDS"])), "INCOMPLETE");
   const row = definition.rows[3]!;
-  assert.equal(rowStartedText(3, 6, row), "Row 4 of 6: Processor response lost — running");
-  assert.equal(rowFinishedText(2, 6, row, result(["HOLDS", "VIOLATED", "HOLDS", "HOLDS"])), "Row 3 of 6: Processor response lost — 1 of 4 invariants violated");
-  assert.equal(rowFinishedText(2, 6, row, result(["HOLDS", "HOLDS", "HOLDS", "HOLDS"])), "Row 3 of 6: Processor response lost — all 4 invariants hold");
-  assert.equal(suiteSummary([result(["HOLDS"]), result(["VIOLATED"])], 6), "2 of 6 rows run, 1 pass");
+  assert.equal(rowStartedText(3, 6, definition, row, messages("en")), "Row 4 of 6: Processor response lost — running");
+  assert.equal(rowFinishedText(2, 6, definition, row, result(["HOLDS", "VIOLATED", "HOLDS", "HOLDS"]), messages("en")), "Row 3 of 6: Processor response lost — 1 of 4 invariants violated");
+  assert.equal(rowFinishedText(2, 6, definition, row, result(["HOLDS", "HOLDS", "HOLDS", "HOLDS"]), messages("en")), "Row 3 of 6: Processor response lost — all 4 invariants hold");
+  assert.equal(suiteSummary([result(["HOLDS"]), result(["VIOLATED"])], 6, messages("en")), "2 of 6 rows run, 1 pass");
+  assert.equal(suiteSummary([result(["HOLDS"])], 1, messages("en")), "1 of 1 row pass");
+  // Spanish: whole phrases per plural form, and the row's label from the catalog's translation by id.
+  const es = messages("es");
+  assert.equal(rowStartedText(3, 6, definition, row, es), "Fila 4 de 6: Respuesta del procesador perdida — en ejecución");
+  assert.equal(rowFinishedText(2, 6, definition, row, result(["HOLDS", "VIOLATED", "HOLDS", "HOLDS"]), es), "Fila 3 de 6: Respuesta del procesador perdida — 1 de 4 invariantes violados");
+  assert.equal(rowFinishedText(2, 6, definition, row, result(["HOLDS"]), es), "Fila 3 de 6: Respuesta del procesador perdida — se cumple el único invariante");
+  assert.equal(suiteSummary([result(["HOLDS"]), result(["VIOLATED"])], 6, es), "2 de 6 filas ejecutadas, 1 superada");
+  assert.equal(suiteSummary([result(["HOLDS"]), result(["HOLDS"])], 2, es), "2 de 2 filas superadas");
 });
 
 test("the export is canonical JSON: sorted keys, the same encoding the kernel uses, and no wall-clock time", () => {

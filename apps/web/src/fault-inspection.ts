@@ -1,5 +1,6 @@
 import type { CanonicalValue, Observation, RuntimeProjectionSet, ScenarioDefinition } from "@distlab/contracts";
 import { checkoutLesson } from "./scenarios.ts";
+import type { Messages } from "./i18n/catalog.ts";
 
 export interface RowFact {
   readonly table: string;
@@ -36,6 +37,13 @@ export interface DeliveryFact {
   readonly state: string;
   readonly attempt: number;
   readonly consumer: string | null;
+}
+
+export type FaultStatus = "not-recorded" | "recorded" | "selected";
+
+/** The display label of a fault status code. */
+export function faultStatusLabel(status: FaultStatus, m: Messages): string {
+  return m.faultInspection.status[status];
 }
 
 export interface FaultFact {
@@ -76,7 +84,8 @@ export interface FaultReport {
   readonly seed: string;
   readonly lesson: string | null;
   readonly faults: readonly FaultFact[];
-  readonly faultStatus: "not recorded" | "recorded" | "selected";
+  /** A code; `faultStatusLabel` words it. */
+  readonly faultStatus: FaultStatus;
   readonly knowledge: string;
   readonly stagedNote: string;
   readonly studentFactsPresent: boolean;
@@ -90,9 +99,6 @@ export interface FaultReport {
   readonly evidence: readonly EvidenceLink[];
 }
 
-const STAGED_NOTE = "No staged transaction is included. The rows below are committed.";
-const TIMEOUT_BOUNDARY = "A network timeout is a missing response. It is not proof of denial or rollback.";
-
 function isRecord(value: CanonicalValue): value is Record<string, CanonicalValue> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -102,14 +108,15 @@ function studentState(projection: RuntimeProjectionSet, componentId: string): Re
   return item && isRecord(item.state) ? item.state : null;
 }
 
-function formatValue(value: CanonicalValue): string {
-  if (value === null) return "none";
+/** Display text for a value. A null stays null in the data; it is worded here, at display, and never read back. */
+function formatValue(value: CanonicalValue, m: Messages): string {
+  if (value === null) return m.faultInspection.none;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.map(item => formatValue(item)).join(", ");
-  return Object.entries(value).map(([key, item]) => `${key} ${formatValue(item)}`).join(", ");
+  if (Array.isArray(value)) return value.map(item => formatValue(item, m)).join(", ");
+  return Object.entries(value).map(([key, item]) => `${key} ${formatValue(item, m)}`).join(", ");
 }
 
-function rowsOf(tables: CanonicalValue): RowFact[] {
+function rowsOf(tables: CanonicalValue, m: Messages): RowFact[] {
   if (!isRecord(tables)) return [];
   const facts: RowFact[] = [];
   for (const [table, rows] of Object.entries(tables)) {
@@ -117,7 +124,7 @@ function rowsOf(tables: CanonicalValue): RowFact[] {
     for (const [key, row] of Object.entries(rows)) {
       facts.push({
         table, key, fields: isRecord(row)
-          ? Object.entries(row).map(([name, value]) => ({ name, value: formatValue(value) }))
+          ? Object.entries(row).map(([name, value]) => ({ name, value: formatValue(value, m) }))
           : [],
       });
     }
@@ -126,7 +133,7 @@ function rowsOf(tables: CanonicalValue): RowFact[] {
   return facts;
 }
 
-function serviceSnapshot(state: Record<string, CanonicalValue> | null): ServiceSnapshot | null {
+function serviceSnapshot(state: Record<string, CanonicalValue> | null, m: Messages): ServiceSnapshot | null {
   if (!state || state.role !== "service") return null;
   const committedValue = state.committed;
   const committed = committedValue !== undefined && isRecord(committedValue) ? committedValue : null;
@@ -136,25 +143,34 @@ function serviceSnapshot(state: Record<string, CanonicalValue> | null): ServiceS
     lifecycle: typeof state.lifecycle === "string" ? state.lifecycle : "UNKNOWN",
     processGeneration: typeof state.processGeneration === "number" ? state.processGeneration : 0,
     revision: typeof revision === "number" ? revision : 0,
-    rows: rowsOf(tables === undefined ? null : tables),
+    rows: rowsOf(tables === undefined ? null : tables, m),
   };
 }
 
-function paymentRows(snapshot: ServiceSnapshot | null): PaymentFact[] {
-  if (!snapshot) return [];
+/** A scalar field as text, or null when the field is missing or null. Null is never worded and read back. */
+function scalar(value: CanonicalValue | undefined, m: Messages): string | null {
+  return value === undefined || value === null ? null : formatValue(value, m);
+}
+
+/** Payment rows read from the committed state itself, so a null field stays null and no display text is compared. */
+function paymentRows(state: Record<string, CanonicalValue> | null, m: Messages): PaymentFact[] {
+  const committedValue = state?.role === "service" ? state.committed ?? null : null;
+  const committed = committedValue !== null && isRecord(committedValue) ? committedValue : null;
+  const tablesValue = committed?.tables ?? null;
+  const tables = tablesValue !== null && isRecord(tablesValue) ? tablesValue : null;
+  const paymentsValue = tables?.payments ?? null;
+  const payments = paymentsValue !== null && isRecord(paymentsValue) ? paymentsValue : null;
+  if (!payments) return [];
   const rows: PaymentFact[] = [];
-  for (const row of snapshot.rows) {
-    if (row.table !== "payments") continue;
-    const field = (name: string) => row.fields.find(item => item.name === name)?.value ?? null;
-    const paymentId = field("paymentId");
-    const state = field("state");
-    if (!paymentId || !state) continue;
-    const outcome = field("outcome");
-    const authorizationId = field("authorizationId");
+  for (const key of Object.keys(payments).sort((left, right) => left < right ? -1 : left > right ? 1 : 0)) {
+    const row = payments[key];
+    if (row === undefined || !isRecord(row)) continue;
+    const paymentId = scalar(row.paymentId, m);
+    const paymentState = scalar(row.state, m);
+    if (!paymentId || !paymentState) continue;
     rows.push({
-      paymentId, orderId: field("orderId") ?? "", state,
-      outcome: outcome === "none" ? null : outcome,
-      authorizationId: authorizationId === "none" ? null : authorizationId,
+      paymentId, orderId: scalar(row.orderId, m) ?? "", state: paymentState,
+      outcome: scalar(row.outcome, m), authorizationId: scalar(row.authorizationId, m),
     });
   }
   return rows;
@@ -222,24 +238,22 @@ function link(label: string, observation: Observation | undefined): EvidenceLink
   return { label, observationId: observation.id, type: observation.type, sequence: observation.sequence, time: observation.time };
 }
 
-function knowledge(studentFactsPresent: boolean, payments: readonly PaymentFact[], authorizations: readonly AuthorizationFact[]): string {
-  if (!studentFactsPresent) {
-    return `No student-visible checkout facts were projected. Host-only component state stays hidden. ${TIMEOUT_BOUNDARY}`;
-  }
-  const remote = authorizations.length
-    ? authorizations.map(item => `${item.authorizationId} ${item.status}`).join(", ")
-    : "no authorization";
+function knowledge(studentFactsPresent: boolean, payments: readonly PaymentFact[], authorizations: readonly AuthorizationFact[], m: Messages): string {
+  const copy = m.faultInspection.knowledge;
+  if (!studentFactsPresent) return copy.sentences([copy.noFacts, copy.timeoutBoundary]);
+  const processor = m.faultInspection.names.processor;
+  const ledger = authorizations.length
+    ? copy.ledger({ processor, list: m.fmt.list(authorizations.map(item => copy.authorization({ id: item.authorizationId, status: item.status }))) })
+    : copy.emptyLedger(processor);
   const local = payments.length
-    ? payments.map(row => `payment ${row.paymentId} committed ${row.state} with outcome ${row.outcome ?? "none"} and local authorization ID ${row.authorizationId ?? "none"}`).join("; ")
-    : "No payment row is committed yet";
+    ? copy.localPayments(m.fmt.list(payments.map(row => copy.payment({
+      id: row.paymentId, state: row.state, outcome: row.outcome ?? m.faultInspection.none, authorization: row.authorizationId ?? m.faultInspection.none,
+    }))))
+    : copy.noPayments;
   const timeout = payments.some(row => row.outcome === "NETWORK_TIMEOUT");
   const agreed = payments.some(row => row.authorizationId !== null && authorizations.some(item => item.authorizationId === row.authorizationId));
-  const relation = timeout
-    ? "Payments' timeout and the processor ledger are different facts."
-    : agreed
-      ? "The local authorization ID matches a visible processor authorization."
-      : "Local payment state and the processor ledger are shown as separate facts.";
-  return `${local}. The Payment Processor visible ledger shows ${remote}. ${relation} ${TIMEOUT_BOUNDARY}`;
+  const relation = timeout ? copy.timeoutDiffers : agreed ? copy.agreed : copy.separate;
+  return copy.sentences([local, ledger, relation, copy.timeoutBoundary]);
 }
 
 function checkoutRoles(projection: RuntimeProjectionSet): CheckoutRoles {
@@ -254,7 +268,7 @@ function checkoutRoles(projection: RuntimeProjectionSet): CheckoutRoles {
 }
 
 /** Read-only lesson view. Host-visibility state is ignored. */
-export function inspectFaults(projection: RuntimeProjectionSet, scenario: ScenarioDefinition): FaultReport {
+export function inspectFaults(projection: RuntimeProjectionSet, scenario: ScenarioDefinition, m: Messages): FaultReport {
   const observations = projection.history.observations;
   const studentFactsPresent = projection.components.some(item => item.visibility === "student");
   const selected = selectedRules(observations);
@@ -267,22 +281,23 @@ export function inspectFaults(projection: RuntimeProjectionSet, scenario: Scenar
     target: fault.target ?? null,
     status: selected.has(fault.id) ? "selected" : "recorded",
   }));
-  const faultStatus = faults.length === 0 ? "not recorded" : faults.every(fault => fault.status === "selected") ? "selected" : "recorded";
+  const faultStatus: FaultStatus = faults.length === 0 ? "not-recorded" : faults.every(fault => fault.status === "selected") ? "selected" : "recorded";
   const roles = checkoutRoles(projection);
   const state = (id: string | null) => id === null ? null : studentState(projection, id);
-  const orders = serviceSnapshot(state(roles.orders));
-  const paymentsService = serviceSnapshot(state(roles.payments));
-  const paymentRowsFound = paymentRows(paymentsService);
+  const orders = serviceSnapshot(state(roles.orders), m);
+  const paymentsState = state(roles.payments);
+  const paymentsService = serviceSnapshot(paymentsState, m);
+  const paymentRowsFound = paymentRows(paymentsState, m);
   const authorizations = authorizationsOf(state(roles.processor));
   const client = state(roles.client);
   const evidence = [
-    ...faults.map(fault => link("Show fault selection", faultSelection(observations, fault.id))),
-    link("Show dropped processor response", lastObservation(observations, "network.response.dropped")),
-    roles.processor ? link("Show processor authorization", lastObservation(observations, "external.effect.committed", roles.processor)) : null,
-    roles.payments ? link("Show Payments timeout", lastObservation(observations, "network.request.timedout", roles.payments)) : null,
-    link("Show bus acknowledgement", lastObservation(observations, "message.acknowledged")),
-    roles.orders ? link("Show Orders lifecycle", lastObservation(observations, "service.lifecycle.changed", roles.orders)) : null,
-    roles.payments ? link("Show Payments lifecycle", lastObservation(observations, "service.lifecycle.changed", roles.payments)) : null,
+    ...faults.map(fault => link(m.faultInspection.evidence.faultSelection, faultSelection(observations, fault.id))),
+    link(m.faultInspection.evidence.droppedResponse, lastObservation(observations, "network.response.dropped")),
+    roles.processor ? link(m.faultInspection.evidence.processorAuthorization, lastObservation(observations, "external.effect.committed", roles.processor)) : null,
+    roles.payments ? link(m.faultInspection.evidence.paymentsTimeout, lastObservation(observations, "network.request.timedout", roles.payments)) : null,
+    link(m.faultInspection.evidence.busAcknowledgement, lastObservation(observations, "message.acknowledged")),
+    roles.orders ? link(m.faultInspection.evidence.ordersLifecycle, lastObservation(observations, "service.lifecycle.changed", roles.orders)) : null,
+    roles.payments ? link(m.faultInspection.evidence.paymentsLifecycle, lastObservation(observations, "service.lifecycle.changed", roles.payments)) : null,
   ].filter((item): item is EvidenceLink => item !== null);
   const lesson = scenario.name === "checkout-normal@1" ? checkoutLesson.normal.explanation
     : scenario.name === "checkout-processor-response-lost@1" ? checkoutLesson["response-lost"].explanation
@@ -294,16 +309,16 @@ export function inspectFaults(projection: RuntimeProjectionSet, scenario: Scenar
     lesson,
     faults,
     faultStatus,
-    knowledge: knowledge(studentFactsPresent, paymentRowsFound, authorizations),
-    stagedNote: STAGED_NOTE,
+    knowledge: knowledge(studentFactsPresent, paymentRowsFound, authorizations, m),
+    stagedNote: m.faultInspection.stagedNote,
     studentFactsPresent,
     orders,
     paymentsService,
     paymentRows: paymentRowsFound,
     authorizations,
     deliveries: roles.destinations.flatMap(id => deliveriesOf(studentState(projection, id))),
-    clientRequest: client && client.role === "client-observed" ? formatValue(client.request ?? null) : "not projected",
-    clientOutcome: client && client.role === "client-observed" ? formatValue(client.outcome ?? null) : "not projected",
+    clientRequest: client && client.role === "client-observed" ? formatValue(client.request ?? null, m) : m.faultInspection.notProjected,
+    clientOutcome: client && client.role === "client-observed" ? formatValue(client.outcome ?? null, m) : m.faultInspection.notProjected,
     evidence,
   };
 }

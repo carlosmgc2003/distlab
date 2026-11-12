@@ -8,6 +8,15 @@ export const commerceLesson = {
     pending: "Checks are pending: run the lesson",
     incomplete: "Checks are incomplete",
   },
+  /** Verdict words by code. The codes, not these words, are compared, mapped to marks, and used as CSS tokens. */
+  verdict: {
+    invariant: { HOLDS: "HOLDS", VIOLATED: "VIOLATED", PENDING: "PENDING", INCOMPLETE: "INCOMPLETE" },
+    expectation: { REPRODUCED: "reproduced", NOT_REPRODUCED: "not reproduced", PENDING: "pending", INCOMPLETE: "incomplete" },
+    /** An imported document keeps the verdict its catalog predicate stored (ADR-006). */
+    imported: { PASS: "PASS", FAIL: "FAIL", PENDING: "PENDING", INCOMPLETE: "INCOMPLETE" },
+  },
+  /** The one-line summary of the expectations, by code. */
+  reproducedSummary: { YES: "yes", NO: "no", NOT_YET: "not yet", INCOMPLETE: "incomplete" },
   runOutcome: {
     completed: "Execution completed; business outcome is shown from recorded state.",
     failed: "Execution failed.",

@@ -1,6 +1,8 @@
 import type { CanonicalValue, RuntimeProjectionSet } from "@distlab/contracts";
 import type { CommerceCheck } from "../../../packages/catalogs/src/commerce/scenarios.ts";
-import { lessonChecks } from "./lesson-checks.ts";
+import { lessonChecks, verdictLabel, verdictMark, verdictTone } from "./lesson-checks.ts";
+import type { Messages } from "./i18n/catalog.ts";
+import { useMessages } from "./i18n/react.tsx";
 import type { CheckRow, LessonCheckView } from "./lesson-checks.ts";
 import { HelpHint } from "./ui-hint.tsx";
 
@@ -39,18 +41,11 @@ export function CommerceFacts({ projection, componentId }: { projection: Runtime
   </div>;
 }
 
-// Verdicts are carried by words and a glyph; colour only reinforces them.
-const marks: Readonly<Record<string, string>> = {
-  HOLDS: "✓", VIOLATED: "✗", PENDING: "…", INCOMPLETE: "–",
-  reproduced: "✓", "not reproduced": "✗", pending: "…", incomplete: "–",
-  // Imported documents keep the stored verdict (ADR-006): they declare no invariant classification.
-  PASS: "✓", FAIL: "✗",
-};
-
+// Verdicts are carried by words and a glyph; colour only reinforces them. All three come from the verdict code.
 export function CheckItem({ row, onShowEvidence }: { row: CheckRow<string>; onShowEvidence: (observationId: string) => void }) {
-  const tone = row.verdict.toLowerCase().replace(" ", "-");
-  return <li className={`lesson-check is-${tone}`}>
-    <strong className="lesson-check-verdict"><span aria-hidden="true">{marks[row.verdict]} </span>{row.verdict}</strong>
+  const m = useMessages();
+  return <li className={`lesson-check is-${verdictTone(row.verdict)}`}>
+    <strong className="lesson-check-verdict"><span aria-hidden="true">{verdictMark(row.verdict)} </span>{verdictLabel(row, m)}</strong>
     <span> — {row.label}{row.time !== undefined ? ` (checked at t=${row.time})` : ""}</span>
     {row.evidenceId ? <button type="button" aria-controls="timeline-rows" aria-label={`Show evidence: ${row.label}`}
       onClick={() => onShowEvidence(row.evidenceId!)}>Show evidence</button> : null}
@@ -61,9 +56,9 @@ export function CheckItem({ row, onShowEvidence }: { row: CheckRow<string>; onSh
  * The packaged lesson's checks, mapped from the `commerce-client` projection's stored verdicts. The
  * client is found by its role, never by a component ID.
  */
-export function commerceLessonChecks(projection: RuntimeProjectionSet, checks: readonly CommerceCheck[]): LessonCheckView {
+export function commerceLessonChecks(projection: RuntimeProjectionSet, lesson: string, checks: readonly CommerceCheck[], m: Messages): LessonCheckView {
   const client = projection.components.find(entry => entry.visibility === "student" && object(entry.state).role === "commerce-client");
-  return lessonChecks(object(client?.state).assertions, checks, projection.history.observations);
+  return lessonChecks(lesson, object(client?.state).assertions, checks, projection.history.observations, m);
 }
 
 /**
@@ -72,13 +67,14 @@ export function commerceLessonChecks(projection: RuntimeProjectionSet, checks: r
  * ③ Investigate's one hint (`INVARIANTS_HELP`, `EXPECTATIONS_HELP`), not in the lists.
  */
 export function LessonChecks({ view, onShowEvidence }: { view: LessonCheckView; onShowEvidence: (observationId: string) => void }) {
+  const m = useMessages();
   return <div className="lesson-checks-view" role="region" aria-label="Lesson checks">
     <section className="lesson-checks" aria-labelledby="business-invariants-heading">
       <h4 id="business-invariants-heading">Business invariants</h4>
       <ul aria-label="Business invariants">{view.invariants.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
     </section>
     {view.reproduced ? <section className="lesson-checks is-secondary" aria-labelledby="scenario-expectations-heading">
-      <h4 id="scenario-expectations-heading">Lesson setup reproduced: {view.reproduced}</h4>
+      <h4 id="scenario-expectations-heading">Lesson setup reproduced: {m.commerceLesson.reproducedSummary[view.reproduced]}</h4>
       <ul aria-label="Scenario expectations">{view.expectations.map(row => <CheckItem key={row.id} row={row} onShowEvidence={onShowEvidence} />)}</ul>
     </section> : null}
   </div>;

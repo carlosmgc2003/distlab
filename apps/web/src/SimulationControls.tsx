@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import type { SimulationHost, HostSnapshot } from "./host.ts";
+import { errorText } from "./error-text.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 /**
  * The top bar's simulation part (#144): the **Simulation execution** group and the one run summary,
@@ -60,11 +62,12 @@ export function SimulationControls({ host, snapshot, locked = false }: {
 
 /** The error row directly under the top bar, rendered only while an error or a terminal notice exists. */
 export function SimulationAlert({ snapshot, notices }: { readonly snapshot: HostSnapshot; readonly notices?: ReactNode }) {
+  const m = useMessages();
   const { error } = snapshot;
   if (!error && !notices) return null;
   return <div className="top-bar-alerts">
     {error ? <div role="alert">
-      <p>{error.code}: {error.message}</p>
+      <p>{error.code}: {errorText(error, m)}</p>
       {error.context !== null ? <details><summary>Error details</summary><pre>{JSON.stringify(error.context, null, 2)}</pre></details> : null}
     </div> : null}
     {notices}

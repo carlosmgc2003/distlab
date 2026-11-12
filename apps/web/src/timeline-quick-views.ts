@@ -2,6 +2,7 @@ import type { Observation } from "@distlab/contracts";
 import { orderObservations, recordKind, recordKinds } from "./records.ts";
 import type { RecordKind } from "./records.ts";
 import type { ComponentTitle } from "./timeline-query.ts";
+import type { Messages } from "./i18n/catalog.ts";
 
 export type QuickViewId =
   | "key-events"
@@ -11,11 +12,12 @@ export type QuickViewId =
   | "state-changes"
   | "assertions";
 
+/**
+ * The predicate of one quick view. Its wording (`label`, and the sentence naming the stored
+ * records it keeps, which never claims to change a run) lives in the catalog, by id.
+ */
 export interface QuickView {
   readonly id: QuickViewId;
-  readonly label: string;
-  /** Plain sentence naming the stored records this view keeps. It never claims to change a run. */
-  readonly keeps: string;
   readonly kinds: readonly RecordKind[];
   readonly types: readonly string[];
 }
@@ -29,33 +31,30 @@ export interface QuickView {
  */
 export const QUICK_VIEWS: readonly QuickView[] = [
   {
-    id: "key-events", label: "Key events", keeps: "the teaching milestones of the Story view",
+    id: "key-events",
     kinds: recordKinds, types: [],
   },
   {
-    id: "faults-and-timeouts", label: "Faults & timeouts", keeps: "fault rules, fault effects, dropped messages, and timeouts",
+    id: "faults-and-timeouts",
     kinds: ["fault", "drop", "timeout"], types: [],
   },
   {
-    id: "requests-and-responses", label: "Requests & responses", keeps: "recorded network requests and responses, including dropped and timed out ones",
+    id: "requests-and-responses",
     kinds: ["request", "response", "drop", "timeout"], types: [],
   },
   {
-    id: "messages", label: "Messages", keeps: "published, delivered, acknowledged, and retried messages",
+    id: "messages",
     kinds: ["message", "retry"], types: [],
   },
   {
-    id: "state-changes", label: "State changes", keeps: "committed and rolled back transactions and committed external effects",
+    id: "state-changes",
     kinds: ["commit", "rollback", "external"], types: [],
   },
   {
-    id: "assertions", label: "Assertions", keeps: "scenario assertion evaluations and their stored verdicts",
+    id: "assertions",
     kinds: [], types: ["scenario.assertion.evaluated"],
   },
 ];
-
-/** Copy shown with every quick view control. It states that views only narrow the display. */
-export const QUICK_VIEW_HELP = "Quick views narrow the recorded history; they never change the run.";
 
 export function quickViewById(id: QuickViewId): QuickView {
   const view = QUICK_VIEWS.find(item => item.id === id);
@@ -63,8 +62,8 @@ export function quickViewById(id: QuickViewId): QuickView {
   return view;
 }
 
-export function quickViewLabel(id: QuickViewId): string {
-  return quickViewById(id).label;
+export function quickViewLabel(id: QuickViewId, m: Messages): string {
+  return m.timeline.quickView.views[id].label;
 }
 
 export function matchesQuickView(id: QuickViewId | null, observation: Observation): boolean {
@@ -96,42 +95,43 @@ export interface QuickViewChip {
   readonly removeLabel: string;
 }
 
-export function quickViewChip(id: QuickViewId): QuickViewChip {
-  return { id: "quickView", label: `Quick view ${quickViewLabel(id)}`, removeLabel: `Remove the ${quickViewLabel(id)} quick view` };
+export function quickViewChip(id: QuickViewId, m: Messages): QuickViewChip {
+  const label = quickViewLabel(id, m);
+  return { id: "quickView", label: m.timeline.quickView.chip(label), removeLabel: m.timeline.quickView.removeChip(label) };
 }
 
 /** "Faults & timeouts shows 3 of 267 recorded observations." The count is the displayed rows over the recorded total. */
-export function quickViewSummary(id: QuickViewId | null, shown: number, recorded: number): string {
-  const total = `${recorded} recorded observation${recorded === 1 ? "" : "s"}`;
-  if (id === null) return `No quick view is active. Advanced filters show ${shown} of ${total}.`;
-  const view = quickViewById(id);
+export function quickViewSummary(id: QuickViewId | null, shown: number, recorded: number, m: Messages): string {
+  const copy = m.timeline.quickView;
+  if (id === null) return copy.summaryNone({ shown, recorded });
+  const view = copy.views[id];
   // With no matching record the empty-state paragraph names the records, so the summary stays short.
-  if (shown === 0) return `${view.label} shows 0 of ${total}. This run recorded no ${view.label.toLowerCase()}.`;
-  return `${view.label} shows ${shown} of ${total}. It keeps ${view.keeps}.`;
+  if (shown === 0) return copy.summaryNothing({ label: view.label, inline: view.inline, recorded });
+  return `${copy.summaryShown({ label: view.label, shown, recorded })} ${view.keeps}`;
 }
 
 /** Live-region copy for a quick view toggle. */
-export function quickViewFeedback(id: QuickViewId | null, shown: number, recorded: number): string {
-  if (id === null) return `Quick view cleared. All ${recorded} recorded observations are available again.`;
-  const view = quickViewById(id);
-  return `Quick view ${view.label} applied. It shows ${shown} of ${recorded} recorded observations and changes nothing in the run.`;
+export function quickViewFeedback(id: QuickViewId | null, shown: number, recorded: number, m: Messages): string {
+  const copy = m.timeline.quickView;
+  if (id === null) return copy.feedbackCleared(recorded);
+  return copy.feedbackApplied({ label: copy.views[id].label, shown, recorded });
 }
 
-export function emptyQuickViewExplanation(id: QuickViewId, recorded: number): string {
-  const view = quickViewById(id);
-  return `The ${view.label} quick view keeps ${view.keeps}, and this run recorded ${recorded} observation${recorded === 1 ? "" : "s"} without any of them. `
-    + "Remove the quick view chip to see the recorded history again.";
+export function emptyQuickViewExplanation(id: QuickViewId, recorded: number, m: Messages): string {
+  const copy = m.timeline.quickView;
+  return `${copy.views[id].empty(recorded)} ${copy.emptyRemove}`;
 }
 
 export interface QuickViewReveal {
   readonly id: QuickViewId | null;
-  readonly cleared: string;
+  /** The quick view that was cleared because it hid the record, when one was. */
+  readonly cleared: QuickViewId | null;
 }
 
 /** Clear the quick view when it hides this stored observation. Other quick views are left alone. */
 export function revealQuickView(id: QuickViewId | null, observation: Observation): QuickViewReveal {
-  if (id === null || matchesQuickView(id, observation)) return { id, cleared: "" };
-  return { id: null, cleared: `${quickViewLabel(id).toLowerCase()} quick view` };
+  if (id === null || matchesQuickView(id, observation)) return { id, cleared: null };
+  return { id: null, cleared: id };
 }
 
 export interface ComponentQuickChip {
@@ -141,7 +141,7 @@ export interface ComponentQuickChip {
 }
 
 /**
- * Recorded components of this snapshot, in label order. The simulation pseudo-component
+ * Recorded components of this snapshot, in title order. Titles are scenario data, so the order does not depend on the interface language. The simulation pseudo-component
  * is not offered as a chip; the advanced component field still suggests it.
  */
 export function recordedComponentChips(observations: readonly Observation[], titles: readonly ComponentTitle[] = []): readonly ComponentQuickChip[] {

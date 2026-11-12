@@ -12,7 +12,9 @@ import {
   storedScalar,
   storedScalarAt,
 } from "./records.ts";
+import { movementText } from "./records.ts";
 import type { Movement, MovementEdge } from "./records.ts";
+import type { Messages } from "./i18n/catalog.ts";
 import { recordLabel, selectionStep } from "./timeline.ts";
 
 /**
@@ -23,9 +25,9 @@ import { recordLabel, selectionStep } from "./timeline.ts";
 
 /** How long the browser paints one recorded movement. Presentation only: it never changes virtual time. */
 export const FLIGHT_PACES = [
-  { id: "slow", label: "Slow", delayMs: 1800, note: "one movement every 1.8 seconds" },
-  { id: "steady", label: "Steady", delayMs: 900, note: "one movement every 0.9 seconds" },
-  { id: "fast", label: "Fast", delayMs: 350, note: "one movement every 0.35 seconds" },
+  { id: "slow", delayMs: 1800 },
+  { id: "steady", delayMs: 900 },
+  { id: "fast", delayMs: 350 },
 ] as const;
 
 export type FlightPace = (typeof FLIGHT_PACES)[number]["id"];
@@ -33,6 +35,11 @@ export const DEFAULT_FLIGHT_PACE: FlightPace = "slow";
 
 export function flightPace(pace: FlightPace): (typeof FLIGHT_PACES)[number] {
   return FLIGHT_PACES.find(item => item.id === pace) ?? FLIGHT_PACES[0];
+}
+
+/** The pace's name and its note, for the Speed selector. */
+export function flightPaceText(pace: FlightPace, m: Messages): { readonly label: string; readonly note: string } {
+  return { label: m.playback.pace.label[pace], note: m.playback.pace.note({ seconds: flightPace(pace).delayMs / 1000 }) };
 }
 
 /** Milliseconds the host timer waits before painting the next recorded movement. */
@@ -104,43 +111,17 @@ export interface FlightStep {
   readonly transit: string;
 }
 
-const PATTERNS: Readonly<Record<string, string>> = {
-  "network.request.sent": "The caller is waiting for an answer. What has the receiver recorded so far?",
-  "network.request.delivered": "The request arrived. What work did the receiver start, and in which order?",
-  "network.request.dropped": "The request never arrived. Which component can tell that, and which cannot?",
-  "network.request.timedout": "The caller's deadline passed. What does the caller now know about the outcome?",
-  "network.response.sent": "The responder produced an answer. Compare it with the effect recorded just before it.",
-  "network.response.received": "The caller has an answer. Does it agree with the state the responder still holds?",
-  "network.response.dropped": "The response was discarded. What will the caller do next, and what will the sender still believe?",
-  "message.published": "The publisher no longer waits for a consumer. What does the MessageBus hold now?",
-  "message.delivered": "A consumer received a copy of the message. Was this the first delivery attempt?",
-  "message.acknowledged": "The delivery was acknowledged. What would a consumer do if the acknowledgement never arrived?",
-  "message.ack.stale": "This acknowledgement does not match the recorded delivery state. Which attempt does it belong to?",
-  "message.retry.scheduled": "The same message will be delivered again. Is the consumer's work safe to repeat?",
-};
+/** The stored fields worth naming in the narration, in reading order. Labels come from the catalog. Values are printed as stored. */
+const FIELD_KEYS = [
+  "endpoint", "operation", "deadline", "dueTime", "previousAttempt", "status", "late", "reason", "ruleId",
+  "attempt", "destination", "consumer", "subscriber", "transactionId", "messageId", "deliveryId", "routingId",
+] as const satisfies readonly (keyof Messages["playback"]["fieldLabel"])[];
 
-const PATTERN_FALLBACK = "What does this record state, and what does it leave unknown?";
-
-/** Stored data fields worth naming in the narration, in reading order. Values are printed as stored. */
-const FIELD_LABELS: readonly (readonly [string, string])[] = [
-  ["endpoint", "Endpoint"],
-  ["operation", "Recorded operation"],
-  ["deadline", "Deadline at virtual time"],
-  ["dueTime", "Retry due at virtual time"],
-  ["previousAttempt", "Retry of delivery attempt"],
-  ["status", "Stored status"],
-  ["late", "Stored late flag"],
-  ["reason", "Stored reason"],
-  ["ruleId", "Fault rule"],
-  ["attempt", "Delivery attempt"],
-  ["destination", "Destination"],
-  ["consumer", "Consumer"],
-  ["subscriber", "Subscriber"],
-  ["transactionId", "Transaction"],
-  ["messageId", "Message id"],
-  ["deliveryId", "Delivery id"],
-  ["routingId", "Routing id"],
-];
+/** The pattern question of one stored type, or the generic question for any other type. */
+function patternOf(type: string, m: Messages): string {
+  const table: Readonly<Record<string, string>> = m.playback.pattern;
+  return Object.hasOwn(table, type) ? table[type]! : m.playback.patternFallback;
+}
 
 const INTERRUPTED_TYPES = new Set([
   "network.request.dropped",
@@ -153,39 +134,33 @@ const INTERRUPTED_TYPES = new Set([
  * Stored fields for the narration. A redacted or omitted payload contributes
  * one visibility statement and nothing else: it is never reconstructed.
  */
-export function flightFacts(observation: Observation): readonly FlightFact[] {
+export function flightFacts(observation: Observation, m: Messages): readonly FlightFact[] {
   const visibility = payloadVisibility(observation);
   if (visibility !== "omitted" && visibility !== "redacted" && visibility !== "visible") return [];
   if (visibility !== "visible") {
-    return [{ label: "Stored payload", value: visibility === "redacted" ? "Redacted; not shown" : "Omitted; not shown" }];
+    return [{ label: m.playback.fact.storedPayload, value: visibility === "redacted" ? m.playback.fact.redacted : m.playback.fact.omitted }];
   }
   const facts: FlightFact[] = [];
-  for (const [key, label] of FIELD_LABELS) {
+  for (const key of FIELD_KEYS) {
     const value = storedScalar(observation, key);
-    if (value !== undefined) facts.push({ label, value });
+    if (value !== undefined) facts.push({ label: m.playback.fieldLabel[key], value });
   }
   const changes = recordedChanges(observation);
   const before = changes.find(change => change.before !== undefined)?.before;
   const after = changes.find(change => change.after !== undefined)?.after;
-  if (before !== undefined && after !== undefined) facts.push({ label: "Recorded transition", value: `${before} \u2192 ${after}` });
+  if (before !== undefined && after !== undefined) facts.push({ label: m.playback.fact.transition, value: `${before} \u2192 ${after}` });
   const rows = changes.flatMap(change => change.table !== undefined && change.key !== undefined ? [`${change.table}/${change.key}`] : []);
-  if (rows.length > 0) facts.push({ label: "Recorded changed rows", value: rows.join(", ") });
+  if (rows.length > 0) facts.push({ label: m.playback.fact.changedRows, value: rows.join(", ") });
   const messageType = storedScalarAt(observation, ["message", "type"]);
-  if (messageType !== undefined) facts.push({ label: "Message type", value: messageType });
+  if (messageType !== undefined) facts.push({ label: m.playback.fact.messageType, value: messageType });
   const messageFields = storedFieldsAt(observation, ["message", "body"]);
-  if (messageFields !== undefined) facts.push({ label: "Message body fields", value: messageFields });
+  if (messageFields !== undefined) facts.push({ label: m.playback.fact.messageBodyFields, value: messageFields });
   const body = bodyFields(observation, "body");
-  if (body !== undefined) facts.push({ label: "Stored body fields", value: body });
+  if (body !== undefined) facts.push({ label: m.playback.fact.bodyFields, value: body });
   const external = externalChanges(observation, "visibleChanges");
-  if (external.length > 0) facts.push({ label: "Recorded external change", value: external.join(", ") });
+  if (external.length > 0) facts.push({ label: m.playback.fact.externalChange, value: external.join(", ") });
   return facts;
 }
-
-const RELATIONSHIP_LABELS = {
-  request: "Request link",
-  publication: "MessageBus publication",
-  subscription: "MessageBus subscription",
-} as const satisfies Record<MovementEdge["relationship"], string>;
 
 function glyphOf(observation: Observation, kind: Movement["kind"]): FlightGlyph {
   if (observation.type === "network.request.timedout") return "◷";
@@ -223,21 +198,13 @@ function hopKey(observation: Observation, kind: Movement["kind"]): string | unde
   return requestId === undefined ? undefined : `${kind}:${requestId}`;
 }
 
-function transitText(leg: FlightLeg, movement: Movement, departure: FlightStep["departure"]): string {
-  const to = movement.to ?? "its destination";
-  const left = departure !== undefined ? ` that left at virtual time ${departure.time} (observation #${departure.sequence})` : "";
-  switch (leg) {
-    case "departure":
-      return `Departure: the token leaves ${movement.from} and waits mid-link. A later record states whether it arrived at ${to}.`;
-    case "arrival":
-      return `Arrival: the token${left ? ` from the departure${left}` : ""} reaches ${to}.`;
-    case "interrupted":
-      return `Stopped: the trip${left} ends on the link and never reaches ${to}.`;
-    case "timeout":
-      return `Deadline: ${movement.from} stops waiting for the request${left}. Nothing travels; this is the caller's own record.`;
-    case "trip":
-      return `Trip: the token travels from ${movement.from} to ${to} in one record.`;
-  }
+function transitText(leg: FlightLeg, movement: Movement, departure: FlightStep["departure"], m: Messages): string {
+  const params = {
+    from: movement.from,
+    ...(movement.to !== undefined ? { to: movement.to } : {}),
+    ...(departure !== undefined ? { departure: { time: departure.time, sequence: departure.sequence } } : {}),
+  };
+  return m.playback.transit[leg](params);
 }
 
 function shapeOf(observation: Observation, relationship: MovementEdge["relationship"]): FlightShape {
@@ -256,7 +223,8 @@ export function flightStep(
   observation: Observation,
   movement: Movement,
   edges: readonly MovementEdge[],
-  departure?: FlightStep["departure"],
+  departure: FlightStep["departure"] | undefined,
+  m: Messages,
 ): FlightStep {
   const edge = edgeFor(movement, edges);
   const leg = legOf(observation);
@@ -265,10 +233,7 @@ export function flightStep(
   const from = movement.from;
   const to = movement.to;
   const nodeIds = to !== undefined ? [from, to] : [from];
-  const route = to !== undefined
-    ? `${from} → ${to} · ${RELATIONSHIP_LABELS[relationship]}`
-    : `${from} · ${RELATIONSHIP_LABELS[relationship]}`;
-  const where = to !== undefined ? `from ${from} to ${to}` : `at ${from}`;
+  const route = m.playback.route({ from, ...(to !== undefined ? { to } : {}), relationship: m.playback.relationship[relationship] });
   return {
     observationId: movement.observationId,
     sequence: observation.sequence,
@@ -279,12 +244,12 @@ export function flightStep(
     nodeIds,
     from,
     ...(to !== undefined ? { to } : {}),
-    headline: recordLabel(observation),
-    announcement: movement.text,
+    headline: recordLabel(observation, m),
+    announcement: movementText(movement, m),
     route,
     ...(observation.traceId !== undefined ? { traceId: observation.traceId } : {}),
-    facts: flightFacts(observation),
-    pattern: PATTERNS[observation.type] ?? PATTERN_FALLBACK,
+    facts: flightFacts(observation, m),
+    pattern: patternOf(observation.type, m),
     glyph: glyphOf(observation, movement.kind),
     shape: shapeOf(observation, relationship),
     interrupted: INTERRUPTED_TYPES.has(observation.type),
@@ -294,7 +259,7 @@ export function flightStep(
     heading: leg !== "timeout",
     ...(hopId !== undefined ? { hopId } : {}),
     ...(departure !== undefined && leg !== "departure" && leg !== "trip" ? { departure } : {}),
-    transit: transitText(leg, movement, leg !== "departure" && leg !== "trip" ? departure : undefined),
+    transit: transitText(leg, movement, leg !== "departure" && leg !== "trip" ? departure : undefined, m),
   };
 }
 
@@ -302,7 +267,7 @@ export function flightStep(
  * Every recorded movement in canonical order. A record that travels no link is
  * not a movement and stays in Recorded history; nothing is merged or reordered.
  */
-export function flightSteps(observations: readonly Observation[], edges: readonly MovementEdge[]): readonly FlightStep[] {
+export function flightSteps(observations: readonly Observation[], edges: readonly MovementEdge[], m: Messages): readonly FlightStep[] {
   const steps: FlightStep[] = [];
   // Departures seen so far, by hop id. Only earlier records pair: nothing is read ahead of a step.
   const departures = new Map<string, NonNullable<FlightStep["departure"]>>();
@@ -312,7 +277,7 @@ export function flightSteps(observations: readonly Observation[], edges: readonl
     const hop = hopKey(observation, movement.kind);
     // An arrival, a drop, and a timeout share the stored request id of the departure they end.
     const departure = hop !== undefined ? departures.get(hop) : undefined;
-    const step = flightStep(observation, movement, edges, departure);
+    const step = flightStep(observation, movement, edges, departure, m);
     if (step.leg === "departure" && hop !== undefined) {
       departures.set(hop, { observationId: step.observationId, sequence: step.sequence, time: step.time });
     }
@@ -338,26 +303,26 @@ export interface FlightPosition {
 }
 
 /** Stated once for the playback cursor. Milestone position, virtual time, and the record's own facts. */
-export function flightPosition(steps: readonly FlightStep[], cursor: number): FlightPosition {
+export function flightPosition(steps: readonly FlightStep[], cursor: number, m: Messages): FlightPosition {
   const total = steps.length;
-  if (total === 0) return { text: "No recorded movements to replay.", detail: "Run the scenario, or open Recorded history and select a record." };
-  if (cursor < 0) return { text: `0 of ${total} recorded movements. Nothing selected.`, detail: boundaryDetail(steps) };
+  if (total === 0) return { text: m.playback.position.none, detail: m.playback.position.noneDetail };
+  if (cursor < 0) return { text: m.playback.position.nothingSelected(total), detail: boundaryDetail(steps, m) };
   const index = Math.min(cursor, total - 1);
   const step = steps[index]!;
-  const jump = flightJump(steps, index);
+  const jump = flightJump(steps, index, m);
   return {
-    text: `Movement ${index + 1} of ${total} · virtual time ${step.time} · observation #${step.sequence}.`,
-    detail: index >= total - 1 ? "At the last recorded movement. Playback waits for the run to record more." : boundaryDetail(steps),
+    text: m.playback.position.current({ index: index + 1, total, time: step.time, sequence: step.sequence }),
+    detail: index >= total - 1 ? m.playback.position.atLast : boundaryDetail(steps, m),
     ...(jump !== undefined ? { jump } : {}),
   };
 }
 
 /** The virtual-time jump into this movement from the previous one, or undefined when time did not advance. */
-export function flightJump(steps: readonly FlightStep[], index: number): string | undefined {
+export function flightJump(steps: readonly FlightStep[], index: number, m: Messages): string | undefined {
   const step = steps[index];
   const previous = index > 0 ? steps[index - 1] : undefined;
   if (step === undefined || previous === undefined || step.time <= previous.time) return undefined;
-  return `Virtual time jumped t=${previous.time} → t=${step.time} with no recorded movement in between.`;
+  return m.playback.position.jump({ from: previous.time, to: step.time });
 }
 
 /** Recorded virtual-time boundaries of the movement list. No duration or latency is implied. */
@@ -367,48 +332,37 @@ export function flightBoundaries(steps: readonly FlightStep[]): readonly Simulat
   return times;
 }
 
-function boundaryDetail(steps: readonly FlightStep[]): string {
+function boundaryDetail(steps: readonly FlightStep[], m: Messages): string {
   const times = flightBoundaries(steps);
   if (times.length === 0) return "";
   return times.length === 1
-    ? `All ${steps.length} recorded movements are at virtual time ${times[0]}.`
-    : `${steps.length} recorded movements across ${times.length} recorded virtual-time boundaries, from t=${times[0]} to t=${times.at(-1)}. Rules mark boundaries only; no duration is stored.`;
+    ? m.playback.position.sameTime({ total: steps.length, time: times[0]! })
+    : m.playback.position.boundaries({ total: steps.length, boundaries: times.length, from: times[0]!, to: times.at(-1)! });
 }
 
 export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
 
 export interface PlaybackControl {
   readonly action: "play" | "restart" | "unavailable";
-  readonly label: "Play replay" | "Restart replay";
+  readonly label: string;
   readonly reason: string;
 }
 
 /** Play, pause, and restart describe the cursor. They do not rewind the simulation. */
-export function playbackControl(index: number, count: number, playing: boolean): PlaybackControl {
-  if (playing) {
-    return {
-      action: "unavailable",
-      label: "Play replay",
-      reason: "Playing the visible timeline. Pause stops the cursor.",
-    };
-  }
-  if (count <= 0) return { action: "unavailable", label: "Play replay", reason: "No visible observations to play." };
+export function playbackControl(index: number, count: number, playing: boolean, m: Messages): PlaybackControl {
+  const copy = m.playback.control;
+  if (playing) return { action: "unavailable", label: copy.play, reason: copy.playing };
+  if (count <= 0) return { action: "unavailable", label: copy.play, reason: copy.noObservations };
   // One recorded movement is still worth painting (#192): Play paints it, and Restart paints it again.
-  if (index >= 0 && index >= count - 1) {
-    return {
-      action: "restart",
-      label: "Restart replay",
-      reason: "At the end of the visible results. Restart replay plays from the first visible observation.",
-    };
-  }
-  if (index < 0) return { action: "play", label: "Play replay", reason: "Play replay starts at the first visible observation." };
-  return { action: "play", label: "Play replay", reason: "Play replay continues from the selected observation." };
+  if (index >= 0 && index >= count - 1) return { action: "restart", label: copy.restart, reason: copy.atEnd };
+  if (index < 0) return { action: "play", label: copy.play, reason: copy.fromStart };
+  return { action: "play", label: copy.play, reason: copy.fromSelected };
 }
 
-export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl): string {
-  if (phase === "playing") return "Playing the visible timeline. Pause stops the cursor.";
-  if (phase === "paused") return "Playback is paused.";
-  if (phase === "ended") return "Playback reached the end of the visible results. Restart replay plays from the first visible observation.";
+export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl, m: Messages): string {
+  if (phase === "playing") return m.playback.control.playing;
+  if (phase === "paused") return m.playback.control.paused;
+  if (phase === "ended") return m.playback.control.ended;
   return control.reason;
 }
 
@@ -438,7 +392,7 @@ export function flightAdvance(cursor: number, count: number, phase: PlaybackPhas
 
 export interface FlightTransport {
   readonly control: PlaybackControl;
-  readonly pauseLabel: "Pause replay";
+  readonly pauseLabel: string;
   readonly status: string;
   readonly reason: string;
   readonly previous: boolean;
@@ -446,17 +400,15 @@ export interface FlightTransport {
 }
 
 /** Play, pause, restart, and the two step directions over recorded movements. */
-export function flightTransport(cursor: number, count: number, phase: PlaybackPhase, recording: boolean): FlightTransport {
+export function flightTransport(cursor: number, count: number, phase: PlaybackPhase, recording: boolean, m: Messages): FlightTransport {
   const playing = phase === "playing";
-  const control = playbackControl(cursor, count, playing);
+  const control = playbackControl(cursor, count, playing, m);
   const steps = selectionAvailability(cursor, count);
   return {
     control,
-    pauseLabel: "Pause replay",
-    status: playbackStatus(phase, control),
-    reason: recording && playing
-      ? "Playing recorded movements. The cursor waits at the end while the run records more."
-      : control.reason,
+    pauseLabel: m.playback.control.pause,
+    status: playbackStatus(phase, control, m),
+    reason: recording && playing ? m.playback.control.recording : control.reason,
     previous: steps.previous,
     next: steps.next,
   };
@@ -484,15 +436,19 @@ export interface FlightLegendEntry {
   readonly detail: string;
 }
 
-/** Legend of the tokens painted on the architecture graph. Text and shape carry the meaning. */
-export const FLIGHT_LEGEND: readonly FlightLegendEntry[] = [
-  { glyph: "REQ", shape: "solid", label: "Token: request", detail: "leaves the caller when sent, waits mid-link, and reaches the callee when delivered; its arrowhead points the way it travels" },
-  { glyph: "RES", shape: "solid", label: "Token: response", detail: "leaves the callee when sent and reaches the caller when received; its arrowhead points the way it travels" },
-  { glyph: "MSG", shape: "dashed", label: "Token: message", detail: "travels from the publisher to the MessageBus, or from the MessageBus to a consumer" },
-  { glyph: "ACK", shape: "dashed", label: "Token: acknowledgement", detail: "travels from the consumer back to the MessageBus" },
-  { glyph: "⊘", shape: "dotted", label: "Token: dropped", detail: "the record says this movement never arrived; the token stops on the link" },
-  { glyph: "◷", shape: "dotted", label: "Token: timed out", detail: "the record says the caller's deadline passed; the token rests at the caller" },
+const LEGEND_GLYPHS: readonly { readonly glyph: FlightGlyph; readonly shape: FlightShape }[] = [
+  { glyph: "REQ", shape: "solid" },
+  { glyph: "RES", shape: "solid" },
+  { glyph: "MSG", shape: "dashed" },
+  { glyph: "ACK", shape: "dashed" },
+  { glyph: "⊘", shape: "dotted" },
+  { glyph: "◷", shape: "dotted" },
 ];
+
+/** Legend of the tokens painted on the architecture graph. Text and shape carry the meaning. */
+export function flightLegend(m: Messages): readonly FlightLegendEntry[] {
+  return LEGEND_GLYPHS.map(item => ({ ...item, ...m.playback.legend[item.glyph] }));
+}
 
 /** Where a token stops, as a share of the link measured from the movement's own origin. */
 export function flightStop(step: FlightStep): string {

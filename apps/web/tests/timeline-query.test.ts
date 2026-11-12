@@ -4,13 +4,13 @@ import type { Observation } from "@distlab/contracts";
 import { simulationTime } from "@distlab/contracts";
 import { filterObservations } from "./filter-oracle.ts";
 import {
-  TIMELINE_FILTER_HELP,
   activeFilterChips,
   clearTimelineField,
   componentLabel,
   emptyFilterExplanation,
   emptyTimelineDraft,
   parseTimelineQuery,
+  queryErrorText,
   queryTimeline,
   readerFilter,
   timelineDraftIsBlank,
@@ -20,6 +20,10 @@ import {
   withExactValue,
 } from "../src/timeline-query.ts";
 import type { TimelineDraft } from "../src/timeline-query.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
 
 function observation(input: {
   id: string; time: number; sequence: number; type: string; source: string; target?: string;
@@ -95,7 +99,7 @@ test("exact timeline queries match the history filter and partial modes stay out
 
 test("suggestions expose only visible canonical fields and refresh when the run is replaced", () => {
   const before = JSON.stringify(rows);
-  const suggestions = timelineSuggestions(rows, titles);
+  const suggestions = timelineSuggestions(rows, titles, m);
   queryTimeline(rows, { type: { value: "network", mode: "prefix" } });
   assert.equal(JSON.stringify(rows), before);
   assert.deepEqual(suggestions.types.map(choice => choice.value), ["database.row.read", "network.request.sent", "network.response.dropped", "network.response.sent", "simulation.created"]);
@@ -112,14 +116,14 @@ test("suggestions expose only visible canonical fields and refresh when the run 
   assert.equal(visibleChoices(suggestions.types, "Network").shown.length, 0);
 
   const replacement = [observation({ id: "only", time: 1, sequence: 1, type: "message.published", source: "orders" })];
-  assert.deepEqual(timelineSuggestions(replacement).types.map(choice => choice.value), ["message.published"]);
-  assert.deepEqual(timelineSuggestions([]).types, []);
+  assert.deepEqual(timelineSuggestions(replacement, [], m).types.map(choice => choice.value), ["message.published"]);
+  assert.deepEqual(timelineSuggestions([], [], m).types, []);
   assert.deepEqual(queryTimeline([], { type: { value: "network", mode: "contains" } }), []);
 });
 
 test("component, entity, and combined filters are deterministic read-only projections", () => {
-  assert.equal(componentLabel("orders", titles), "Orders (orders)");
-  assert.equal(componentLabel("simulation", []), "Simulation (simulation)");
+  assert.equal(componentLabel("orders", titles, m), "Orders (orders)");
+  assert.equal(componentLabel("simulation", [], m), "Simulation (simulation)");
   const pay = queryTimeline(rows, { component: { value: "pay", mode: "prefix" } }).map(item => item.id);
   assert.deepEqual(pay, ["dropped"]);
   assert.deepEqual(queryTimeline(rows, { component: { value: "payments", mode: "exact" } }).map(item => item.id), ["dropped"]);
@@ -141,27 +145,30 @@ test("time validation explains malformed and reversed bounds, and chips remove o
   assert.equal(timelineDraftIsBlank(emptyTimelineDraft), true);
   const fraction = parseTimelineQuery(draft({ fromTime: "1.5" }));
   assert.equal(fraction.ok, false);
-  if (!fraction.ok) assert.match(fraction.message, /Virtual time from "1\.5" is not a whole simulation time/);
+  if (!fraction.ok) assert.match(queryErrorText(fraction.error, m), /Virtual time from "1\.5" is not a whole simulation time/);
   const word = parseTimelineQuery(draft({ toTime: "abc" }));
   assert.equal(word.ok, false);
-  if (!word.ok) assert.match(word.message, /Virtual time to "abc" is not a whole simulation time/);
+  if (!word.ok) assert.match(queryErrorText(word.error, m), /Virtual time to "abc" is not a whole simulation time/);
   const reversed = parseTimelineQuery(draft({ fromTime: "4", toTime: "1" }));
   assert.equal(reversed.ok, false);
-  if (!reversed.ok) assert.match(reversed.message, /Virtual time from 4 is after virtual time to 1/);
-  assert.match(TIMELINE_FILTER_HELP, /combine with AND/);
-  assert.match(TIMELINE_FILTER_HELP, /case-sensitive/);
-  assert.match(TIMELINE_FILTER_HELP, /Prefix/);
-  assert.match(TIMELINE_FILTER_HELP, /Contains/);
+  if (!reversed.ok) assert.match(queryErrorText(reversed.error, m), /Virtual time from 4 is after virtual time to 1/);
+  assert.match(m.timeline.filterHelp, /combine with AND/);
+  assert.match(m.timeline.filterHelp, /case-sensitive/);
+  assert.match(m.timeline.filterHelp, /Prefix/);
+  assert.match(m.timeline.filterHelp, /Contains/);
+  // The error is a code and its parameters; the sentence follows the language.
+  assert.deepEqual(fraction.ok ? null : fraction.error, { kind: "not-whole-time", field: "fromTime", value: "1.5" });
+  assert.match(queryErrorText(fraction.ok ? (null as never) : fraction.error, es), /El tiempo virtual desde «1\.5» no es un tiempo de simulación entero/);
 
   const parsed = parseTimelineQuery(draft({ type: "network", typeMode: "exact", component: "payments", fromTime: "0" }));
   assert.equal(parsed.ok, true);
   if (!parsed.ok) return;
-  assert.deepEqual(activeFilterChips(parsed.query, titles).map(chip => chip.label), [
+  assert.deepEqual(activeFilterChips(parsed.query, titles, m).map(chip => chip.label), [
     "Virtual time from 0 inclusive",
     "Type exactly network",
     "Component exactly Payments (payments)",
   ]);
-  assert.equal(activeFilterChips({ component: { value: "pay", mode: "prefix" } }, titles)[0]?.label, "Component starting with pay");
+  assert.equal(activeFilterChips({ component: { value: "pay", mode: "prefix" } }, titles, m)[0]?.label, "Component starting with pay");
   const cleared = clearTimelineField(draft({ type: "network", component: "payments", fromTime: "0" }), "type");
   assert.equal(cleared.type, "");
   assert.equal(cleared.component, "payments");
@@ -170,16 +177,24 @@ test("time validation explains malformed and reversed bounds, and chips remove o
   assert.equal(applied.entityKindMode, "exact");
   assert.deepEqual(traceOnlyDraft("trace-pay"), { ...emptyTimelineDraft, traceId: "trace-pay", traceMode: "exact" });
 
-  const explanation = emptyFilterExplanation(parsed.query, rows, titles);
+  const explanation = emptyFilterExplanation(parsed.query, rows, titles, undefined, m);
   assert.match(explanation, /Filters combine with AND/);
   assert.match(explanation, /network\.response\.dropped/);
   assert.match(explanation, /clear all filters/);
-  const wrongCase = emptyFilterExplanation({ type: { value: "Network", mode: "exact" } }, rows, titles);
+  const wrongCase = emptyFilterExplanation({ type: { value: "Network", mode: "exact" } }, rows, titles, undefined, m);
   assert.match(wrongCase, /case-sensitive/);
   assert.match(wrongCase, /network\.response\.dropped/);
-  assert.match(emptyFilterExplanation({ type: { value: "network", mode: "prefix" }, component: { value: "missing", mode: "exact" } }, rows, titles), /Another active filter excludes them/);
+  assert.match(emptyFilterExplanation({ type: { value: "network", mode: "prefix" }, component: { value: "missing", mode: "exact" } }, rows, titles, undefined, m), /Another active filter excludes them/);
+  // One match reads in the singular; Spanish lists and plurals come from Intl.
+  const single = emptyFilterExplanation({ type: { value: "network", mode: "prefix" }, component: { value: "customer-app", mode: "exact" } }, rows, titles, undefined, m);
+  assert.match(single, /matches \d+ observations?\. Another active filter excludes (it|them)\./);
+  assert.match(emptyFilterExplanation({ type: { value: "network.request.sent", mode: "exact" }, component: { value: "payments", mode: "exact" } }, rows, titles, undefined, m), /matches 1 observation\. Another active filter excludes it\./);
+  assert.match(emptyFilterExplanation({ type: { value: "network.request.sent", mode: "exact" }, component: { value: "payments", mode: "exact" } }, rows, titles, undefined, es), /coincide con 1 observación\. Otro filtro activo la excluye\./);
+  assert.equal(activeFilterChips({ type: { value: "network", mode: "prefix" } }, [], es)[0]?.label, "Tipo que empieza con network");
+  assert.equal(activeFilterChips({ type: { value: "network", mode: "prefix" } }, [], es)[0]?.removeLabel, "Quitar el filtro de tipo");
+  assert.match(emptyFilterExplanation({ type: { value: "a" , mode: "exact" } }, rows, titles, "messages", es), /Quitá el chip de la vista rápida mensajes/);
   const many = timelineSuggestions(Array.from({ length: 10 }, (_, index) => observation({
     id: `id-${index}`, time: index, sequence: index, type: `network.kind.${index}`, source: "orders",
-  }))).types;
+  })), [], m).types;
   assert.equal(visibleChoices(many, "network").hidden, 2);
 });

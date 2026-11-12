@@ -14,7 +14,7 @@ import { ExperimentDrawer } from "./ExperimentDrawer.tsx";
 import { ServiceStateDialog } from "./ServiceStateDialog.tsx";
 import { FaultsHelp, FaultsSection } from "./FaultsSection.tsx";
 import { LessonChooser } from "./LessonChooser.tsx";
-import { lessonTopics, type TopicFilter } from "./lesson-topics.ts";
+import { topicList, type TopicFilter } from "./lesson-topics.ts";
 import { LessonPanel } from "./LessonPanel.tsx";
 import { currentStep } from "./lesson-steps.ts";
 import { endsRun, outcomeSummary, runOutcome } from "./lesson-outcome.ts";
@@ -33,8 +33,9 @@ import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
 import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, AssessmentMatrix, AssessmentRun, useAssessmentSuite } from "./AssessmentView.tsx";
 import type { SimulationHost } from "./host.ts";
-import { assessments, experimentLabel, packagedMetadata, scenarios } from "./scenarios.ts";
-import { DESIGN_STEP_NOTICE, designStepUnavailable } from "./design-step.ts";
+import { assessmentTitle, assessments, experimentLabel, experimentShorthand, lessonCheckLabels, lessonCopy, lessonDescription, packagedMetadata, scenarios, starterSource } from "./scenarios.ts";
+import { invariantLabel } from "./assessment.ts";
+import { designStepUnavailable } from "./design-step.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 
@@ -115,15 +116,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // Student fault rules come from the session the worker applied; the report lists them beside the packaged rules.
   const studentRules = snapshot.session?.overlay.faults;
   const report = useMemo(() => projection && lesson && !commerce
-    ? inspectFaults(projection, studentRules?.length ? { ...lesson, faults: [...lesson.faults, ...studentRules] } : lesson) : null, [projection, lesson, commerce, studentRules]);
+    ? inspectFaults(projection, studentRules?.length ? { ...lesson, faults: [...lesson.faults, ...studentRules] } : lesson, m) : null, [projection, lesson, commerce, studentRules, m]);
   const graph = useMemo(() => projection && lesson
-    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name) : null, [projection, lesson]);
+    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name, m) : null, [projection, lesson, m]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
   // The session's check labels by assertion ID: the packaged lesson's classification, or the imported document's own labels.
   const checkLabels = useMemo((): Readonly<Record<string, string>> => imported ? importedScenario?.presentation.assertions ?? {}
-    : assessment ? Object.fromEntries(assessment.checks.map(check => [check.id, check.label]))
-    : loadedChoice?.family === "commerce" ? Object.fromEntries(loadedChoice.checks.map(check => [check.id, check.label])) : {}, [imported, importedScenario, assessment, loadedChoice]);
+    : assessment ? Object.fromEntries(assessment.checks.map(check => [check.id, invariantLabel(assessment.definition, check, m)]))
+    : loadedChoice ? lessonCheckLabels(loadedChoice, m) : {}, [imported, importedScenario, assessment, loadedChoice, m]);
   // Replay state lives in the shell, so the cursor and the narration survive a tab switch.
   // Choosing a record in Recorded history takes the graph highlight back, so the cursor stands
   // down. A record that travels no link has no pulse id, so its movement text is the fallback
@@ -134,7 +135,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   const applied = snapshot.session?.overlay ?? null;
   const appliedEntries = useMemo(() => applied ? draftFromOverlay(applied) : [], [applied]);
-  const marks = useMemo(() => appliedEntries.length ? faultMarks(appliedEntries, lesson?.architecture) : undefined, [appliedEntries, lesson]);
+  const marks = useMemo(() => appliedEntries.length ? faultMarks(appliedEntries, lesson?.architecture, m) : undefined, [appliedEntries, lesson, m]);
   const overlayError = snapshot.error?.code === "INVALID_OVERLAY" ? snapshot.error : null;
   const rejected = useMemo(() => {
     const context = overlayError?.context as { readonly diagnostics?: unknown } | null | undefined;
@@ -143,7 +144,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   }, [overlayError, submitted]);
   // Each panel shows the diagnostics that point into its own part of the overlay.
   const rejectedFaults = useMemo(() => rejected ? { ...rejected, diagnostics: rejected.diagnostics.filter(item => !isChoiceDiagnostic(item)) } : null, [rejected]);
-  const rejectedChoices = useMemo(() => rejected ? placeChoiceDiagnostics(rejected.diagnostics.filter(isChoiceDiagnostic), rejected.overlay.parameters) : new Map<string, string>(), [rejected]);
+  const rejectedChoices = useMemo(() => rejected ? placeChoiceDiagnostics(rejected.diagnostics.filter(isChoiceDiagnostic), rejected.overlay.parameters, m) : new Map<string, string>(), [rejected, m]);
   const choicesPending = !sameChoices(choiceDraft, applied?.parameters ?? []);
   const faultsPending = useMemo(() => {
     const faults = overlayFromDraft(draft, applied?.parameters ?? []);
@@ -158,7 +159,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     : snapshot.error ? "The lesson could not be opened. Choose a lesson to try again."
     : !projection ? "No lesson is loaded."
     : imported ? `Lesson ready: Imported · ${importedScenario?.presentation.title ?? importedFile.name}.`
-    : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice) : "checkout"}.`;
+    : `Lesson ready: ${loadedChoice ? experimentLabel(loadedChoice, m) : "checkout"}.`;
   const sessionKey = `${sessionName}:${snapshot.attempt}:${projection?.simulation.runId ?? ""}`;
 
   useEffect(() => { if (!projection) setEmphasis(undefined); }, [projection]);
@@ -281,10 +282,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
     const target = scenarios.find(item => item.id === id);
     if (!target) return;
     // Compare carries the applied overlay; the paired lesson's policy may still reject a fault.
-    const carried = carryOverlay(applied ?? { version: 1, faults: [], scheduledFaults: [], parameters: [] }, loadedChoice.policy, target.policy);
+    const carried = carryOverlay(applied ?? { version: 1, faults: [], scheduledFaults: [], parameters: [] }, loadedChoice.policy, target.policy, m);
     const faults = carried.overlay.faults.length + carried.overlay.scheduledFaults.length;
     const edits = designEdits(carried.overlay.architecture);
-    const kept = `${carried.overlay.parameters.length ? `, kept ${describeChoices(carried.overlay.parameters)}` : ""}${edits ? `, kept ${edits} design edit${edits === 1 ? "" : "s"}` : ""}`;
+    const kept = `${carried.overlay.parameters.length ? `, kept ${describeChoices(carried.overlay.parameters, m)}` : ""}${edits ? `, kept ${edits} design edit${edits === 1 ? "" : "s"}` : ""}`;
     // A dropped design choice is the one the pair compares: the paired lesson's own value applies.
     setCarryNotice(faults || kept || carried.dropped.length
       ? `Compare kept ${faults} student fault${faults === 1 ? "" : "s"}${kept}${carried.dropped.length ? ` and dropped ${carried.dropped.join(", ")}` : ""}.` : "");
@@ -296,7 +297,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
    */
   const saveStarter = () => {
     if (!loadedChoice) return;
-    const file = starterFile(loadedChoice);
+    const file = starterFile(starterSource(loadedChoice, m));
     const url = URL.createObjectURL(new Blob([file.text], { type: "application/json" }));
     const link = document.createElement("a");
     link.href = url;
@@ -345,8 +346,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
     setTab("assessment");
     void host.load(choice.scenario).catch(() => {});
   };
-  const triggerLabel = assessment ? `Lesson: ${assessment.title} assessment` : imported ? `Lesson: ${importedScenario?.presentation.title ?? importedFile.name}`
-    : loadedChoice ? `Lesson: ${experimentLabel(loadedChoice)}` : "Choose a lesson";
+  const triggerLabel = assessment ? `Lesson: ${assessmentTitle(assessment, m)} assessment` : imported ? `Lesson: ${importedScenario?.presentation.title ?? importedFile.name}`
+    : loadedChoice ? `Lesson: ${experimentLabel(loadedChoice, m)}` : "Choose a lesson";
 
   const editable = !busy && (projection !== null || overlayError !== null);
   const experimentPending = choicesPending || faultsPending;
@@ -385,7 +386,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const checkoutGuide = !imported && loadedChoice?.family !== "commerce";
   // The packaged commerce lesson's checks; an imported session lists its own with ImportedChecks.
   const checkView = useMemo(() => projection && !imported && loadedChoice?.family === "commerce"
-    ? commerceLessonChecks(projection, loadedChoice.checks) : null, [projection, imported, loadedChoice]);
+    ? commerceLessonChecks(projection, loadedChoice.id, loadedChoice.checks, m) : null, [projection, imported, loadedChoice, m]);
   // The one-line outcome (#141): the invariants' summary for commerce, the Run overview's sentence for checkout.
   const summary = checkView ? outcomeSummary(checkView, m) : projection && report ? runOutcome(status, m) : null;
   // ③ Investigate's one hint (#147): what the checks mean, or why the Run overview states no duration.
@@ -395,7 +396,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {projection && report ? <p>Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance.</p> : null}
   </HelpHint> : null;
   const runOverview = projection && report ? <div className="execution-overview">
-    <p><strong>{imported ? importedScenario?.presentation.title : loadedChoice?.id === "response-lost" ? "Lost processor response" : "Normal checkout"}</strong> — {summary}</p>
+    <p><strong>{imported ? importedScenario?.presentation.title : experimentShorthand(loadedChoice, m)}</strong> — {summary}</p>
     {investigateHelp}
     <div className="evidence-links">{report.evidence.map(item => <button key={item.observationId} type="button" onClick={() => showEvidence(item.observationId)}>{item.label}</button>)}</div>
     <p>{report.knowledge}</p>
@@ -405,11 +406,11 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const lessonGoal = imported && importedScenario
     ? <ImportedHeader document={importedScenario} origin={snapshot.session?.origin} runId={projection?.simulation.runId} />
     : <>
-      <p className="lesson-goal-title"><strong>{loadedChoice ? experimentLabel(loadedChoice) : null}</strong></p>
+      <p className="lesson-goal-title"><strong>{loadedChoice ? experimentLabel(loadedChoice, m) : null}</strong></p>
       {loadedChoice?.family === "commerce" ? null
         : <p className="lesson-goal-question">{loadedChoice?.id === "response-lost" ? "Does a timeout mean the payment failed?" : "How does a checkout travel through a distributed system?"}</p>}
-      <p>{loadedChoice?.family === "commerce" ? loadedChoice.description : "Explore the architecture, run the scenario, then follow its recorded story."}</p>
-      {loadedChoice && designStepUnavailable(loadedChoice.policy) ? <p className="design-step-notice" role="note">{DESIGN_STEP_NOTICE}</p> : null}
+      <p>{loadedChoice?.family === "commerce" ? lessonDescription(loadedChoice, m) : "Explore the architecture, run the scenario, then follow its recorded story."}</p>
+      {loadedChoice && designStepUnavailable(loadedChoice.policy) ? <p className="design-step-notice" role="note">{m.designChoices.stepNotice}</p> : null}
     </>;
   const lessonRun = <>
     <p role="status" aria-label="Lesson state" aria-live="polite">{lessonState}</p>
@@ -445,19 +446,19 @@ export function App({ host }: { readonly host: SimulationHost }) {
     {serviceState ? <button ref={serviceStateOpener} type="button" className="show-service-state" aria-haspopup="dialog" aria-expanded={serviceStateOpen}
       disabled={!projection} onClick={() => setServiceStateOpen(true)}>Show service state</button> : null}
   </>;
-  const appliedChanges = snapshot.session ? `${snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters)}` : ""} · ${appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"}` : "";
+  const appliedChanges = snapshot.session ? `${snapshot.session.overlay.parameters.length ? ` · ${describeChoices(snapshot.session.overlay.parameters, m)}` : ""} · ${appliedEntries.length ? `${appliedEntries.length} student fault${appliedEntries.length === 1 ? "" : "s"}` : "packaged faults only"}` : "";
   const lessonExperiment = <>
     {imported ? <>
       {/* Without an overlay policy there is no Experiment drawer; say so where the scenario is described (ADR-006). */}
       {policy ? null : <p className="imported-locked">This scenario accepts no student changes: its file declares no overlay policy.</p>}
       {snapshot.session && (appliedEntries.length || snapshot.session.overlay.parameters.length) ? <p className="run-identity" aria-label="Applied student changes">
-        {snapshot.session.overlay.parameters.length ? `${describeChoices(snapshot.session.overlay.parameters)} · ` : ""}{appliedEntries.length} student fault{appliedEntries.length === 1 ? "" : "s"}
+        {snapshot.session.overlay.parameters.length ? `${describeChoices(snapshot.session.overlay.parameters, m)} · ` : ""}{appliedEntries.length} student fault{appliedEntries.length === 1 ? "" : "s"}
       </p> : null}
     </> : <>
       {snapshot.session && projection ? <p className="run-identity" aria-label="Run identity">
         Seed {snapshot.session.seed}{appliedChanges} · run {projection.simulation.runId.replace(/^run:/, "").slice(0, 8)}
       </p> : null}
-      {loadedChoice?.family === "commerce" && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => compare(loadedChoice.compare)}>Compare: {scenarios.find(choice => choice.id === loadedChoice.compare)?.title}</button> : null}
+      {loadedChoice?.family === "commerce" && loadedChoice.compare ? <button type="button" disabled={busy} onClick={() => compare(loadedChoice.compare)}>Compare: {lessonCopy(loadedChoice.compare, m).title}</button> : null}
       {carryNotice ? <p role="status">{carryNotice}</p> : null}
     </>}
     {/* The one way to change a session: the Experiment drawer (#143). */}
@@ -520,7 +521,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
       </div>
       <SimulationControls host={host} snapshot={snapshot} locked={suiteActive} />
     </header>
-    <SimulationAlert snapshot={snapshot} notices={mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark)}</p> : null} />
+    <SimulationAlert snapshot={snapshot} notices={mark ? <p className="terminal-history" role="status" aria-label="Terminal history">{terminalCopy(mark, m)}</p> : null} />
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}
     {projection || assessment ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
@@ -576,7 +577,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <p>Distributed systems fail partially: a response is lost, a copy falls behind, two writers race, a slow dependency drags its callers down. Each lesson runs a small system of services on a virtual clock with a fixed seed, so every run replays exactly. Most lessons pair a flawed design with its correction under the same faults.</p>
         <h3 className="empty-topics-title">Topics</h3>
         <ul className="empty-topics">
-          {lessonTopics.map(topic => <li key={topic.id}>
+          {topicList(m).map(topic => <li key={topic.id}>
             <button type="button" disabled={busy} aria-haspopup="dialog" aria-describedby={`empty-topic-${topic.id}`}
               onClick={event => openChooser(event.currentTarget, topic.id)}>{topic.title}</button>
             <span id={`empty-topic-${topic.id}`}>{topic.summary}</span>

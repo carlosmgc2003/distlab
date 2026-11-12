@@ -1,5 +1,6 @@
 import type { Observation, SimulationTime } from "@distlab/contracts";
 import { orderObservations, storedScalar, storedText } from "./records.ts";
+import type { Messages } from "./i18n/catalog.ts";
 
 /**
  * Component activity at the playback cursor, read only from stored records at
@@ -34,13 +35,7 @@ export interface ComponentActivity {
   readonly work: readonly ActivityWork[];
   /** Set when the record at the cursor is this component's request timeout. */
   readonly timedOut?: { readonly target: string; readonly time: SimulationTime };
-  /** Short badge text: the state word plus the earliest stored deadline. */
-  readonly label: string;
-  /** One sentence for assistive technology and the narration. */
-  readonly description: string;
 }
-
-const STATE_WORDS = { idle: "Idle", processing: "Processing", waiting: "Waiting" } as const satisfies Record<ActivityState, string>;
 
 /** Text and shape cue for each state, so colour never carries the meaning alone. */
 export const ACTIVITY_SYMBOLS = { idle: "○", processing: "⚙", waiting: "⏳" } as const satisfies Record<ActivityState, string>;
@@ -132,66 +127,106 @@ export function activityAt(observations: readonly Observation[], cursorId: strin
     const work = [...owned(requests, componentId), ...owned(transactions, componentId), ...owned(deliveries, componentId)];
     const state: ActivityState = componentWaits.length > 0 ? "waiting" : work.length > 0 ? "processing" : "idle";
     const cue = timedOut?.owner === componentId ? { target: timedOut.target, time: timedOut.time } : undefined;
-    result.set(componentId, describe(componentId, state, componentWaits, work, cue));
+    result.set(componentId, derive(componentId, state, componentWaits, work, cue));
   }
   return result;
 }
 
 /** The activity of one component, or idle when no record at the cursor gives it any. */
 export function activityOf(activity: ReadonlyMap<string, ComponentActivity>, componentId: string): ComponentActivity {
-  return activity.get(componentId) ?? describe(componentId, "idle", [], [], undefined);
+  return activity.get(componentId) ?? derive(componentId, "idle", [], [], undefined);
 }
 
 /**
  * One sentence per component whose activity differs between two cursor
- * positions, in component order, for the live region.
+ * positions, in component order, for the live region. Change is decided on
+ * the structured summary, never on rendered text, so it does not depend on the
+ * language.
  */
 export function activityChanges(
   before: ReadonlyMap<string, ComponentActivity>,
   after: ReadonlyMap<string, ComponentActivity>,
+  m: Messages,
 ): readonly string[] {
   const ids = [...new Set([...before.keys(), ...after.keys()])].sort();
   const changes: string[] = [];
   for (const id of ids) {
     const previous = activityOf(before, id);
     const next = activityOf(after, id);
-    // A timeout at the cursor is announced even when the state word stays the same.
-    if (previous.description !== next.description || next.timedOut !== undefined) changes.push(next.description);
+    // A timeout at the cursor is announced even when the state stays the same.
+    if (summaryKey(previous) !== summaryKey(next) || next.timedOut !== undefined) changes.push(activityDescription(next, m));
   }
   return changes;
 }
 
-function describe(
+/** What the badge and the sentence say, as data: the state, the distinct targets, the earliest deadline, and the work counts. */
+interface ActivitySummary {
+  readonly state: ActivityState;
+  readonly targets: readonly string[];
+  readonly earliest?: SimulationTime;
+  readonly requests: number;
+  readonly transactions: number;
+  readonly deliveries: number;
+  readonly timedOut?: ComponentActivity["timedOut"];
+}
+
+function summarize(activity: ComponentActivity): ActivitySummary {
+  const deadlines = activity.waits.flatMap(wait => wait.deadline !== undefined ? [wait.deadline] : []);
+  const count = (kind: ActivityWork["kind"]) => activity.work.filter(item => item.kind === kind).length;
+  return {
+    state: activity.state,
+    targets: [...new Set(activity.waits.map(wait => wait.target))],
+    ...(deadlines.length > 0 ? { earliest: Math.min(...deadlines) as SimulationTime } : {}),
+    requests: count("request"),
+    transactions: count("transaction"),
+    deliveries: count("delivery"),
+    ...(activity.timedOut !== undefined ? { timedOut: activity.timedOut } : {}),
+  };
+}
+
+function summaryKey(activity: ComponentActivity): string {
+  return JSON.stringify(summarize(activity));
+}
+
+function derive(
   componentId: string,
   state: ActivityState,
   waits: readonly ActivityWait[],
   work: readonly ActivityWork[],
   timedOut: ComponentActivity["timedOut"],
 ): ComponentActivity {
-  const deadlines = waits.flatMap(wait => wait.deadline !== undefined ? [wait.deadline] : []);
-  const earliest = deadlines.length > 0 ? Math.min(...deadlines) : undefined;
-  const label = `${STATE_WORDS[state]}${state === "waiting" && earliest !== undefined ? ` · deadline t=${earliest}` : ""}`;
-  const parts: string[] = [];
-  if (waits.length > 0) {
-    const targets = [...new Set(waits.map(wait => wait.target))].join(", ");
-    parts.push(`waiting on ${targets}${earliest !== undefined ? ` with a recorded deadline at virtual time ${earliest}` : " with no recorded deadline"}`);
-  }
-  if (work.length > 0) parts.push(`processing ${workText(work)}`);
-  const timeout = timedOut !== undefined ? ` Its request to ${timedOut.target} timed out at virtual time ${timedOut.time}.` : "";
-  const description = parts.length > 0
-    ? `${componentId} is ${parts.join(" and ")}.${timeout}`
-    : `${componentId} is idle.${timeout}`;
-  return { componentId, state, waits, work, ...(timedOut !== undefined ? { timedOut } : {}), label, description };
+  return { componentId, state, waits, work, ...(timedOut !== undefined ? { timedOut } : {}) };
 }
 
-function workText(work: readonly ActivityWork[]): string {
-  const count = (kind: ActivityWork["kind"]) => work.filter(item => item.kind === kind).length;
+/** Short badge text: the state word, plus the earliest stored deadline while waiting. */
+export function activityLabel(activity: ComponentActivity, m: Messages): string {
+  const { earliest } = summarize(activity);
+  return activity.state === "waiting" && earliest !== undefined
+    ? m.architecture.activity.waitingUntil(earliest)
+    : m.architecture.activity.state[activity.state];
+}
+
+/** One sentence for assistive technology and the narration. */
+export function activityDescription(activity: ComponentActivity, m: Messages): string {
+  const summary = summarize(activity);
+  const id = activity.componentId;
+  const copy = m.architecture.activity;
+  const targets = m.fmt.list(summary.targets);
+  const work = workText(summary, m);
+  const waiting = summary.targets.length > 0;
+  const processing = work !== "";
+  const main = waiting && processing ? copy.waitingAndProcessing({ id, targets, work, ...(summary.earliest !== undefined ? { deadline: summary.earliest } : {}) })
+    : waiting ? copy.waiting({ id, targets, ...(summary.earliest !== undefined ? { deadline: summary.earliest } : {}) })
+    : processing ? copy.processing({ id, work })
+    : copy.idle(id);
+  return summary.timedOut !== undefined ? `${main} ${copy.timedOut({ target: summary.timedOut.target, time: summary.timedOut.time })}` : main;
+}
+
+/** The open work as a noun phrase: whole phrases per count, joined as a list. */
+function workText(summary: ActivitySummary, m: Messages): string {
   const phrases: string[] = [];
-  const requests = count("request");
-  const transactions = count("transaction");
-  const deliveries = count("delivery");
-  if (requests > 0) phrases.push(requests === 1 ? "a delivered request" : `${requests} delivered requests`);
-  if (transactions > 0) phrases.push(transactions === 1 ? "an open transaction" : `${transactions} open transactions`);
-  if (deliveries > 0) phrases.push(deliveries === 1 ? "an unacknowledged message delivery" : `${deliveries} unacknowledged message deliveries`);
-  return phrases.join(", ");
+  if (summary.requests > 0) phrases.push(m.architecture.activity.work.requests(summary.requests));
+  if (summary.transactions > 0) phrases.push(m.architecture.activity.work.transactions(summary.transactions));
+  if (summary.deliveries > 0) phrases.push(m.architecture.activity.work.deliveries(summary.deliveries));
+  return m.fmt.list(phrases);
 }

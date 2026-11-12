@@ -1,8 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./support/test.ts";
-import { scenarios } from "../src/scenarios.ts";
-import { DESIGN_STEP_NOTICE, designStepUnavailable } from "../src/design-step.ts";
+import { lessonDescription, scenarios } from "../src/scenarios.ts";
+import { designStepUnavailable } from "../src/design-step.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { lessonChoice, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
+
+const DESIGN_STEP_NOTICE = messages("en").designChoices.stepNotice;
 
 // #164: until the Design editor (#112) exists, the design lesson says that its design step is not
 // available, and the graph and inspector name its empty slot in words.
@@ -17,7 +20,7 @@ test("#164 the Lesson chooser states the missing design step on exactly the less
   for (const lesson of scenarios) {
     const choice = lessonChoice(page, lesson.id);
     // The notice is part of the card's accessible description, read right after the instruction.
-    if (designStepUnavailable(lesson.policy)) await expect(choice).toHaveAccessibleDescription(`${lesson.description} ${DESIGN_STEP_NOTICE}`);
+    if (designStepUnavailable(lesson.policy)) await expect(choice).toHaveAccessibleDescription(`${lessonDescription(lesson, messages("en"))} ${DESIGN_STEP_NOTICE}`);
     else await expect(choice).not.toContainText("not available in the browser");
   }
   expect(scenarios.filter(lesson => designStepUnavailable(lesson.policy)).map(lesson => lesson.id)).toEqual([gap]);

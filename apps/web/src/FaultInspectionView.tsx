@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode } from "react";
 import { HelpHint } from "./ui-hint.tsx";
+import { faultStatusLabel } from "./fault-inspection.ts";
 import type { DeliveryFact, FaultReport, RowFact, ServiceSnapshot } from "./fault-inspection.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 function Rows({ rows }: { readonly rows: readonly RowFact[] }) {
   if (!rows.length) return <p>No committed rows.</p>;
@@ -52,19 +54,20 @@ export function DistributedState({ report, onShowEvidence }: {
   readonly report: FaultReport;
   readonly onShowEvidence: (observationId: string) => void;
 }) {
+  const m = useMessages();
   return <section className="state-inspection" aria-labelledby="distributed-state-heading">
     <h3 id="distributed-state-heading">Distributed state</h3>
     <HelpHint label="About this session">This session was constructed from the recorded scenario input. Changing the experiment loads a new session.</HelpHint>
     <dl>
       <dt>Scenario</dt><dd>{report.scenarioName}</dd>
       <dt>Seed</dt><dd>{report.seed}</dd>
-      <dt>Fault status</dt><dd>Status: {report.faultStatus}</dd>
+      <dt>Fault status</dt><dd>Status: {faultStatusLabel(report.faultStatus, m)}</dd>
     </dl>
     {report.faults.length ? <ul className="fact-list">{report.faults.map(fault => <li key={fault.id}>
       Fault {fault.id} on {fault.point}
       {fault.source ? ` from ${fault.source}` : ""}
       {fault.target ? ` to ${fault.target}` : ""}
-      {fault.name ? ` for ${fault.name}` : ""}, effect {fault.effect}. Status: {fault.status}.
+      {fault.name ? ` for ${fault.name}` : ""}, effect {fault.effect}. Status: {faultStatusLabel(fault.status, m)}.
     </li>)}</ul> : <p>No fault rule is recorded.</p>}
     {report.lesson ? <p>{report.lesson}</p> : null}
     <h4>Local knowledge vs processor outcome</h4>

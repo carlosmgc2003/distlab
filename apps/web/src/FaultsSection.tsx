@@ -2,9 +2,10 @@ import { useEffect, useId, useMemo, useState } from "react";
 import type { ArchitectureDefinition, LessonOverlayPolicy, ScenarioDiagnostic, SessionOverlay } from "@distlab/contracts";
 import type { GraphPick } from "./ArchitectureView.tsx";
 import {
-  buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, formFromEntry, nextStudentId, pickTarget, placeDiagnostics, targetOptions,
+  buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, fieldErrorText, formFromEntry, nextStudentId, pickTarget, placeDiagnostics, targetOptions,
 } from "./break-faults.ts";
-import type { DraftEntry, FaultForm, FormField } from "./break-faults.ts";
+import type { DraftEntry, FaultForm, FieldError, FormField } from "./break-faults.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 export interface FaultsSectionProps {
   readonly policy: LessonOverlayPolicy;
@@ -44,7 +45,8 @@ const fieldLabels: Readonly<Record<FormField, string>> = {
  * probability is here, not under its field; each such field keeps it as a screen-reader description.
  */
 export function FaultsHelp({ policy }: { readonly policy: LessonOverlayPolicy }) {
-  const options = faultKindOptions(policy);
+  const m = useMessages();
+  const options = faultKindOptions(policy, m);
   if (options.length === 0) return null;
   const links = options.some(option => option.target === "link");
   const rules = options.some(option => option.kind === "rule");
@@ -66,14 +68,15 @@ export function FaultsHelp({ policy }: { readonly policy: LessonOverlayPolicy })
  */
 export function FaultsSection({ policy, architecture, applied, draft, onDraftChange, pending, editable, rejected, picking, onPickingChange, pick }: FaultsSectionProps) {
   const ids = useId();
+  const m = useMessages();
   const [form, setForm] = useState<FaultForm>(emptyForm);
-  const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<FormField, FieldError>>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
-  const options = useMemo(() => faultKindOptions(policy), [policy]);
+  const options = useMemo(() => faultKindOptions(policy, m), [policy, m]);
   const option = options.find(item => item.id === form.kind);
-  const targets = useMemo(() => targetOptions(option, architecture), [option, architecture]);
-  const placed = useMemo(() => rejected ? placeDiagnostics(rejected.diagnostics, rejected.overlay) : { entries: [], general: [] }, [rejected]);
+  const targets = useMemo(() => targetOptions(option, architecture, m), [option, architecture, m]);
+  const placed = useMemo(() => rejected ? placeDiagnostics(rejected.diagnostics, rejected.overlay, m) : { entries: [], general: [] }, [rejected, m]);
   const appliedIds = new Set(applied ? [...applied.faults.map(rule => rule.id), ...applied.scheduledFaults.map(action => action.id)] : []);
   const remaining = policy.faults.maxEntries - draft.length;
 
@@ -103,21 +106,21 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
     if (!result.entry) { setNotice("The fault was not added. Fix the marked fields."); return; }
     const entry = result.entry;
     onDraftChange(editing ? draft.map(item => entryId(item) === editing ? entry : item) : [...draft, entry]);
-    setNotice(`${editing ? "Updated" : "Added"} to the draft: ${describeEntry(entry)}. Apply the draft to run with it.`);
+    setNotice(`${editing ? "Updated" : "Added"} to the draft: ${describeEntry(entry, m)}. Apply the draft to run with it.`);
     setEditing(null);
     setForm(current => ({ ...emptyForm, kind: current.kind }));
   };
   const edit = (entry: DraftEntry) => {
     setEditing(entryId(entry));
     setErrors({});
-    setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture)));
+    setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture, m)));
     setNotice(`Editing ${entryId(entry)}. Change the fields, then choose Update fault.`);
     requestAnimationFrame(() => document.getElementById(`${ids}-kind`)?.focus());
   };
   const remove = (entry: DraftEntry) => {
     onDraftChange(draft.filter(item => entryId(item) !== entryId(entry)));
     if (editing === entryId(entry)) { setEditing(null); setForm(emptyForm); }
-    setNotice(`Removed ${describeEntry(entry)} from the draft. Apply the draft to run without it.`);
+    setNotice(`Removed ${describeEntry(entry, m)} from the draft. Apply the draft to run without it.`);
   };
   // Help shown under its field changes what the student types (probability). Other field help is read
   // as the field's description only, and shown in the drawer's hint (#147).
@@ -127,7 +130,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
       <label htmlFor={`${ids}-${name}`}>{fieldLabels[name]}</label>
       {input}
       {help ? <span id={`${ids}-${name}-help`} className={shown ? "field-help" : "sr-only"}>{help}</span> : null}
-      {error ? <span id={`${ids}-${name}-error`} className="field-error">{error}</span> : null}
+      {error ? <span id={`${ids}-${name}-error`} className="field-error">{fieldErrorText(error, m)}</span> : null}
     </div>;
   };
   const inputProps = (name: FormField) => ({
@@ -146,7 +149,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
         const id = entryId(entry);
         const problems = placed.entries.filter(item => item.entryId === id);
         return <li key={id} className={`fault-chip${appliedIds.has(id) && !pending ? " is-applied" : ""}${problems.length ? " has-error" : ""}`}>
-          <span className="fault-chip-text"><span aria-hidden="true">⚡ </span><code>{id}</code> {describeEntry(entry)}
+          <span className="fault-chip-text"><span aria-hidden="true">⚡ </span><code>{id}</code> {describeEntry(entry, m)}
             <span className="fault-chip-state">{appliedIds.has(id) ? pending ? " · applied, draft changed" : " · applied" : " · not applied yet"}</span>
           </span>
           {problems.length ? <ul className="fault-chip-errors">{problems.map((problem, index) => <li key={index}>

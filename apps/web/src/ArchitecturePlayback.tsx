@@ -1,6 +1,7 @@
-import { ACTIVITY_SYMBOLS } from "./activity.ts";
+import { ACTIVITY_SYMBOLS, activityDescription } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
-import { FLIGHT_PACES } from "./flight.ts";
+import { FLIGHT_PACES, flightPaceText } from "./flight.ts";
+import { useMessages } from "./i18n/react.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
 import type { FlightPace, FlightPosition, FlightStep } from "./flight.ts";
 
@@ -13,6 +14,7 @@ const TRANSPORT_HELP = "These controls move a browser cursor over movements the 
  * simulation, so it shares no row or name with **Simulation execution** in the top bar.
  */
 export function FlightControls({ playback }: { readonly playback: FlightPlayback }) {
+  const m = useMessages();
   const { transport, pace } = playback;
   const control = transport.control;
   return <div className="replay-toolbar">
@@ -30,7 +32,7 @@ export function FlightControls({ playback }: { readonly playback: FlightPlayback
       <label htmlFor="flight-pace">Speed</label>
       <select id="flight-pace" value={pace} disabled={playback.steps.length === 0}
         aria-describedby="flight-pace-help" onChange={event => playback.setPace(event.target.value as FlightPace)}>
-        {FLIGHT_PACES.map(item => <option key={item.id} value={item.id} title={item.note}>{item.label}</option>)}
+        {FLIGHT_PACES.map(item => <option key={item.id} value={item.id} title={flightPaceText(item.id, m).note}>{flightPaceText(item.id, m).label}</option>)}
       </select>
     </div>
     <p id="flight-controls-help" className="sr-only">{TRANSPORT_HELP}</p>
@@ -60,6 +62,7 @@ export function FlightNarration({ step, activity, changes }: {
   /** Activity that changed since the previous movement. */
   readonly changes: readonly string[];
 }) {
+  const m = useMessages();
   const busy = [...activity.values()].filter(item => item.state !== "idle" || item.timedOut !== undefined);
   return <article className={`flight-narration flight-${step.kind} shape-${step.shape}`}
     aria-label="Recorded movement" data-flight={step.observationId}>
@@ -79,7 +82,7 @@ export function FlightNarration({ step, activity, changes }: {
     <section className="flight-activity" aria-label="Component activity">
       <strong>Component activity at this record</strong>
       {busy.length > 0 ? <ul>{busy.map(item => <li key={item.componentId} className={`activity-${item.state}`}>
-        <span className="activity-symbol" aria-hidden="true">{ACTIVITY_SYMBOLS[item.state]}</span> {item.description}
+        <span className="activity-symbol" aria-hidden="true">{ACTIVITY_SYMBOLS[item.state]}</span> {activityDescription(item, m)}
       </li>)}</ul> : <p>Every component is idle at this record.</p>}
     </section>
     {step.leg === "timeout"

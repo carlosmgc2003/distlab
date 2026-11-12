@@ -1,6 +1,7 @@
 import type { CanonicalValue, RuntimeProjectionSet, ScenarioDiagnostic, ScenarioDocument, SessionOrigin } from "@distlab/contracts";
 import { CheckItem } from "./CommerceLesson.tsx";
 import { importedChecks } from "./lesson-checks.ts";
+import { useMessages } from "./i18n/react.tsx";
 import { catalogLabel, diagnosticPath, explainDiagnostic, shortId } from "./scenario-file.ts";
 
 /**
@@ -66,12 +67,13 @@ export function DocumentDiagnostics({ fileName, diagnostics, loaded }: {
   /** True when the rejection left the previous session loaded, as an oversized file does. */
   readonly loaded: boolean;
 }) {
+  const m = useMessages();
   return <section className="document-diagnostics" aria-labelledby="document-diagnostics-heading">
     <h2 id="document-diagnostics-heading">The scenario file was not loaded</h2>
     <p><span className="file-name">{fileName}</span> has {diagnostics.length} problem{diagnostics.length === 1 ? "" : "s"}.
       {loaded ? " The current session is unchanged." : " No session is loaded."} Fix the file, then open it again.</p>
     <ul aria-label="Scenario file problems">{diagnostics.map((item, index) => <li key={`${item.path}:${item.code}:${index}`}>
-      <code>{diagnosticPath(item.path)}</code> <code>{item.code}</code> — {explainDiagnostic(item.code)}
+      <code>{diagnosticPath(item.path, m)}</code> <code>{item.code}</code> — {explainDiagnostic(item.code, m)}
     </li>)}</ul>
   </section>;
 }

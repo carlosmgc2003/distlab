@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Observation, RuntimeProjectionSet } from "@distlab/contracts";
 import { simulationTime } from "@distlab/contracts";
-import { activityAt, activityChanges, activityOf } from "../src/activity.ts";
+import { activityAt, activityChanges, activityDescription, activityLabel, activityOf } from "../src/activity.ts";
 import { flightSteps } from "../src/flight.ts";
 import { scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import type { MovementEdge } from "../src/records.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
 
 const edges: readonly MovementEdge[] = [
   { id: "request:customer-app:orders:0", source: "customer-app", target: "orders", relationship: "request" },
@@ -37,10 +41,10 @@ async function run(id: string): Promise<RuntimeProjectionSet> {
 
 /** The activity label of each component at the step with this headline and origin. */
 function labelsAt(observations: readonly Observation[], headline: string, from: string): Record<string, string> {
-  const step = flightSteps(observations, edges).find(item => item.headline === headline && item.from === from);
+  const step = flightSteps(observations, edges, m).find(item => item.headline === headline && item.from === from);
   assert.ok(step, `${headline} from ${from}`);
   const activity = activityAt(observations, step.observationId);
-  return Object.fromEntries(["customer-app", "orders", "payments", "payment-processor"].map(id => [id, activityOf(activity, id).label]));
+  return Object.fromEntries(["customer-app", "orders", "payments", "payment-processor"].map(id => [id, activityLabel(activityOf(activity, id), m)]));
 }
 
 test("the lost-response lesson: who is waiting, who is processing, and when the wait ends", async () => {
@@ -63,21 +67,21 @@ test("the lost-response lesson: who is waiting, who is processing, and when the 
   assert.equal(dropped.payments, "Waiting · deadline t=1025");
   assert.equal(dropped["payment-processor"], "Idle");
   // The deadline passes: Payments leaves waiting with a timed-out cue, still handling its delivery.
-  const timeout = flightSteps(observations, edges).find(step => step.leg === "timeout")!;
+  const timeout = flightSteps(observations, edges, m).find(step => step.leg === "timeout")!;
   const payments = activityOf(activityAt(observations, timeout.observationId), "payments");
   assert.equal(payments.state, "processing");
   assert.deepEqual(payments.waits, []);
   assert.deepEqual(payments.timedOut, { target: "payment-processor", time: 1025 });
-  assert.match(payments.description, /timed out at virtual time 1025/);
-  assert.match(payments.description, /unacknowledged message delivery/);
+  assert.match(activityDescription(payments, m), /timed out at virtual time 1025/);
+  assert.match(activityDescription(payments, m), /unacknowledged message delivery/);
   // At the end of the run everyone is idle.
-  const last = flightSteps(observations, edges).at(-1)!;
+  const last = flightSteps(observations, edges, m).at(-1)!;
   assert.ok([...activityAt(observations, last.observationId).values()].every(item => item.state === "idle"));
 });
 
 test("activity reads only records at or before the cursor", async () => {
   const { observations } = (await run("response-lost")).history;
-  const steps = flightSteps(observations, edges);
+  const steps = flightSteps(observations, edges, m);
   for (const step of steps) {
     const cut = observations.filter(item => item.sequence <= step.sequence);
     assert.deepEqual(activityAt(observations, step.observationId), activityAt(cut, step.observationId),
@@ -107,13 +111,13 @@ test("drop, timeout, retry, late response, and duplicate delivery", () => {
   ];
   const at = (index: number, id: string) => activityOf(activityAt(history, history[index]!.id), id);
   // A dropped request does not end the wait: the caller recorded nothing.
-  assert.equal(at(1, "client").label, "Waiting · deadline t=100");
+  assert.equal(activityLabel(at(1, "client"), m), "Waiting · deadline t=100");
   assert.equal(at(1, "payments").state, "idle");
   // The timeout ends it, with the cue on that record only.
   assert.equal(at(2, "client").state, "idle");
   assert.equal(at(2, "client").timedOut?.time, 100);
   // The retry is a new wait with its own deadline.
-  assert.equal(at(3, "client").label, "Waiting · deadline t=300");
+  assert.equal(activityLabel(at(3, "client"), m), "Waiting · deadline t=300");
   assert.equal(at(3, "client").timedOut, undefined);
   // The receiver is processing the request and its transaction at once.
   assert.equal(at(5, "payments").state, "processing");
@@ -125,7 +129,7 @@ test("drop, timeout, retry, late response, and duplicate delivery", () => {
   // A late response after a timeout opens nothing.
   assert.equal(at(9, "client").state, "idle");
   // A duplicate delivery is two pieces of work until each is acknowledged or found stale.
-  assert.match(at(11, "notifications").description, /2 unacknowledged message deliveries/);
+  assert.match(activityDescription(at(11, "notifications"), m), /2 unacknowledged message deliveries/);
   assert.equal(at(12, "notifications").work.length, 1);
   assert.equal(at(13, "notifications").state, "idle");
 });
@@ -148,18 +152,51 @@ test("changes name only the components whose activity moved", () => {
     record("network.request.timedout", "client", "payments", { requestId: "q", deadline: 40 }, 40),
   ];
   const at = (index: number) => activityAt(history, history[index]!.id);
-  assert.deepEqual(activityChanges(new Map(), at(0)), ["client is waiting on payments with a recorded deadline at virtual time 40."]);
-  assert.deepEqual(activityChanges(at(0), at(1)), ["payments is processing a delivered request."]);
-  assert.deepEqual(activityChanges(at(1), at(2)), ["client is idle. Its request to payments timed out at virtual time 40."]);
-  assert.deepEqual(activityChanges(at(1), at(1)), []);
+  assert.deepEqual(activityChanges(new Map(), at(0), m), ["client is waiting on payments with a recorded deadline at virtual time 40."]);
+  assert.deepEqual(activityChanges(at(0), at(1), m), ["payments is processing a delivered request."]);
+  assert.deepEqual(activityChanges(at(1), at(2), m), ["client is idle. Its request to payments timed out at virtual time 40."]);
+  assert.deepEqual(activityChanges(at(1), at(1), m), []);
 });
 
 test("the same lesson run twice derives identical activity at every cursor", async () => {
   for (const id of ["response-lost", "retry-unsafe", "outbox-unsafe-consumer", "cascade-breaker"]) {
     const derive = async () => {
       const { observations } = (await run(id)).history;
-      return flightSteps(observations, edges).map(step => [...activityAt(observations, step.observationId).values()]);
+      return flightSteps(observations, edges, m).map(step => [...activityAt(observations, step.observationId).values()]);
     };
     assert.deepEqual(await derive(), await derive(), id);
   }
+});
+
+test("change detection reads structured data, and text follows the language", () => {
+  const history = [
+    record("network.request.sent", "client", "payments", { requestId: "q", deadline: 40 }),
+    record("network.request.delivered", "client", "payments", { requestId: "q", target: "payments" }, 10),
+    record("network.request.timedout", "client", "payments", { requestId: "q", deadline: 40 }, 40),
+  ];
+  const at = (index: number) => activityAt(history, history[index]!.id);
+  // The same two positions report the same changes in each language.
+  assert.equal(activityChanges(at(0), at(1), m).length, activityChanges(at(0), at(1), es).length);
+  assert.deepEqual(activityChanges(new Map(), at(0), es), ["client está esperando a payments con un plazo registrado en el tiempo virtual 40."]);
+  assert.deepEqual(activityChanges(at(1), at(2), es), ["client está inactivo. Su solicitud a payments venció por timeout en el tiempo virtual 40."]);
+  assert.equal(activityLabel(activityOf(at(0), "client"), es), "Esperando · plazo t=40");
+  assert.equal(activityLabel(activityOf(at(0), "client"), m), "Waiting · deadline t=40");
+  // The activity object stores no rendered text.
+  const stored = activityOf(at(0), "client") as unknown as Record<string, unknown>;
+  assert.equal("label" in stored, false);
+  assert.equal("description" in stored, false);
+});
+
+test("work is described with whole phrases per count, joined as a list", () => {
+  const delivery = (id: string, time: number) => record("message.delivered", "notifications", undefined, { deliveryId: id, consumer: "notifications" }, time);
+  const history = [
+    delivery("d1", 10), delivery("d2", 20),
+    record("database.transaction.begun", "notifications", undefined, { transactionId: "t1" }, 30),
+  ];
+  const last = activityOf(activityAt(history, history[2]!.id), "notifications");
+  assert.equal(activityDescription(last, m), "notifications is processing an open transaction and 2 unacknowledged message deliveries.");
+  assert.equal(activityDescription(last, es), "notifications está procesando una transacción abierta y 2 entregas de mensajes sin confirmar.");
+  const single = activityOf(activityAt(history, history[0]!.id), "notifications");
+  assert.equal(activityDescription(single, m), "notifications is processing an unacknowledged message delivery.");
+  assert.equal(activityDescription(single, es), "notifications está procesando una entrega de mensaje sin confirmar.");
 });

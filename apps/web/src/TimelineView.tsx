@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { Observation } from "@distlab/contracts";
-import { QUICK_VIEWS, QUICK_VIEW_HELP } from "./timeline-quick-views.ts";
-import { TIMELINE_FILTER_HELP, emptyTimelineDraft, parseTimelineQuery, visibleChoices, withExactValue, clearTimelineField } from "./timeline-query.ts";
+import { useMessages } from "./i18n/react.tsx";
+import { QUICK_VIEWS, quickViewLabel } from "./timeline-quick-views.ts";
+import { emptyTimelineDraft, parseTimelineQuery, queryErrorText, visibleChoices, withExactValue, clearTimelineField } from "./timeline-query.ts";
 import type { ComponentTitle, FilterChoice, TextFilterField, TextMatchMode, TimelineDraft, TimelineSuggestions } from "./timeline-query.ts";
 import type { AssertionEvidence, MovementEdge, SpanNode } from "./records.ts";
 import { assertionEvidence, correlation, payloadVisibility, traceView } from "./records.ts";
@@ -9,7 +10,7 @@ import { componentLabel } from "./timeline-query.ts";
 import { TIMELINE_ROW_HEIGHT, TIMELINE_VIEWPORT, changeEvidence, learningTimeline, payloadCopy, recordLabel } from "./timeline.ts";
 import type { GraphEmphasis, LearningTimelineItem } from "./timeline.ts";
 import type { StoryLegendEntry, StoryMilestone } from "./story-timeline.ts";
-import { createReviewNavigation, derive, transition } from "./review-navigation.ts";
+import { createReviewNavigation, derive, feedbackText, filterErrorText, transition } from "./review-navigation.ts";
 import type { ReviewContext, ReviewIntent, ReviewNavigation } from "./review-navigation.ts";
 import { HelpHint } from "./ui-hint.tsx";
 
@@ -38,6 +39,7 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
 }) {
+  const m = useMessages();
   const [navigation, send] = useReducer(reduce, undefined, createReviewNavigation);
   // Presentation state, not navigation: which Story presentation is shown, and the More filters dialog.
   const [presentation, setPresentation] = useState<"diagram" | "table">("diagram");
@@ -58,7 +60,7 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
     componentTitles,
     viewport: { scrollTop, height: rowViewport },
   }), [observations, edges, componentTitles, scrollTop, rowViewport]);
-  const view = derive(navigation, context);
+  const view = derive(navigation, context, m);
   const dispatch = (intent: ReviewIntent) => send({ intent, context });
 
   // History continuity: growth raises a cue for the newest movement, replacement
@@ -188,7 +190,7 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
         dispatch({ type: "select-quick-view", id: next ? next.id : null });
       }}>
         <option value="all">All categories</option>
-        {QUICK_VIEWS.map(item => <option key={item.id} value={item.id}>{item.label} ({quickCounts[item.id]})</option>)}
+        {QUICK_VIEWS.map(item => <option key={item.id} value={item.id}>{quickViewLabel(item.id, m)} ({quickCounts[item.id]})</option>)}
       </select>
       <label htmlFor="story-component">Component</label>
       <select id="story-component" value={componentChips.some(chip => chip.value === navigation.draft.component) && navigation.draft.componentMode === "exact" ? navigation.draft.component : ""}
@@ -201,10 +203,10 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
       {/* The one visible result count, only while a filter narrows the rows. */}
       {filtersActive ? <span className="timeline-shown">{filtered.length} of {observations.length} shown</span> : null}
     </div>
-    <p id="timeline-quick-help" className="sr-only">{QUICK_VIEW_HELP}</p>
+    <p id="timeline-quick-help" className="sr-only">{m.timeline.quickView.help}</p>
     <p id="timeline-boundary" className="timeline-boundary sr-only">{boundaryCopy}</p>
     {/* The one polite live region for review feedback, including the selection. It is read, not shown. */}
-    <p id="timeline-feedback" className="timeline-feedback sr-only" role="status" aria-live="polite" aria-atomic="true">{navigation.feedback}</p>
+    <p id="timeline-feedback" className="timeline-feedback sr-only" role="status" aria-live="polite" aria-atomic="true">{feedbackText(navigation.feedback, m)}</p>
     {/* Chips only remove. They appear only while a filter is active. */}
     <div className="timeline-chip-row" hidden={!filtersActive} tabIndex={0} role="group" aria-label="Active filters and reset">
       {viewChip !== null || chips.length > 0 ? <ul className="timeline-chips" aria-label="Active filters">
@@ -218,7 +220,7 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
         </li>)}</ul> : null}
       <button type="button" disabled={!filtersActive} onClick={() => dispatch({ type: "clear-all" })}>Clear all filters</button>
     </div>
-    <MoreFilters key={moreSession} open={moreOpen} draft={navigation.draft} field={navigation.filterField} error={navigation.filterError} suggestions={suggestions}
+    <MoreFilters key={moreSession} open={moreOpen} draft={navigation.draft} field={navigation.filterField} error={filterErrorText(navigation.filterError, m)} suggestions={suggestions}
       onApply={(draft, field) => { dispatch({ type: "set-filter-field", field }); dispatch({ type: "set-draft", draft }); closeMore(); }}
       onClose={closeMore} />
     <p className="timeline-count sr-only">{navigation.view === "story" ? storyCount
@@ -436,6 +438,7 @@ function MoreFilters({ open, draft, field, error, suggestions, onApply, onClose 
   readonly onApply: (draft: TimelineDraft, field: DialogField) => void;
   readonly onClose: () => void;
 }) {
+  const m = useMessages();
   const dialog = useRef<HTMLDialogElement>(null);
   const [local, setLocal] = useState(draft);
   const [localField, setLocalField] = useState<DialogField>(field === "component" ? "type" : field);
@@ -455,7 +458,7 @@ function MoreFilters({ open, draft, field, error, suggestions, onApply, onClose 
   const edit = (next: TimelineDraft) => { setLocal(next); setLocalError(null); };
   const apply = () => {
     const parsed = parseTimelineQuery(local);
-    if (!parsed.ok) { setLocalError(parsed.message); return; }
+    if (!parsed.ok) { setLocalError(queryErrorText(parsed.error, m)); return; }
     onApply(local, localField);
   };
   const invalid = { "aria-invalid": shownError !== null, "aria-describedby": shownError ? "timeline-filter-error" : undefined };
@@ -465,7 +468,7 @@ function MoreFilters({ open, draft, field, error, suggestions, onApply, onClose 
       <h2 id="more-filters-title">More filters</h2>
       {/* The dialog's one hint (#147): how matching works, and how filters combine. */}
       <HelpHint label="How matching works" bodyId="timeline-filter-help">
-        <p>{TIMELINE_FILTER_HELP}</p>
+        <p>{m.timeline.filterHelp}</p>
         <p>Filters combine. Choose another field to narrow further; remove any condition using its chip below.</p>
       </HelpHint>
     </div>
@@ -632,37 +635,38 @@ function DetailBody({ observation, observations, componentTitles, checkLabels, h
   readonly onUseText: (field: TextFilterField, value: string) => void;
   readonly onUseEntity: (kind: string, id: string) => void;
 }) {
+  const m = useMessages();
   const links = correlation(observations, observation);
-  const evidence = changeEvidence(observation);
-  const checked = assertionEvidence(observation);
+  const evidence = changeEvidence(observation, m);
+  const checked = assertionEvidence(observation, m);
   const visibility = payloadVisibility(observation);
   const trace = observation.traceId !== undefined ? traceView(observations, observation.traceId) : undefined;
   const eventId = observation.eventId;
   const traceId = observation.traceId;
   const target = observation.target;
   const entities = observation.entityRefs ?? [];
-  const heading = recordLabel(observation);
+  const heading = recordLabel(observation, m);
   return <>
     {hidden ? <p>This observation is hidden by the current filters.</p> : null}
     {/* The one visible statement of the selection: Observation #, plain-language label, virtual time. */}
     <h3 className="detail-header">Observation #{observation.sequence} · {heading} · t={observation.time}</h3>
-    <p className="event-path">{componentLabel(observation.source, componentTitles)}{target ? ` → ${componentLabel(target, componentTitles)}` : ""}</p>
+    <p className="event-path">{componentLabel(observation.source, componentTitles, m)}{target ? ` → ${componentLabel(target, componentTitles, m)}` : ""}</p>
     <details className="detail-disclosure">
     <summary>Record fields & filter shortcuts</summary>
     <dl>
       <dt>Sequence</dt><dd>#{observation.sequence}</dd>
       <dt>Virtual time</dt><dd>t={observation.time}</dd>
       <dt>Source</dt><dd>
-        <span>{componentLabel(observation.source, componentTitles)}</span>
+        <span>{componentLabel(observation.source, componentTitles, m)}</span>
         <button type="button" onClick={() => onUseText("component", observation.source)}>Use source as component filter</button>
         <CopyButton label="Copy source id" value={observation.source} />
       </dd>
       {target !== undefined ? <><dt>Target</dt><dd>
-        <span>{componentLabel(target, componentTitles)}</span>
+        <span>{componentLabel(target, componentTitles, m)}</span>
         <button type="button" onClick={() => onUseText("component", target)}>Use target as component filter</button>
         <CopyButton label="Copy target id" value={target} />
       </dd></> : null}
-      <dt>Payload</dt><dd>{payloadCopy(observation)}</dd>
+      <dt>Payload</dt><dd>{payloadCopy(observation, m)}</dd>
     </dl>
     </details>
     <h3>Effect and evidence</h3>
@@ -703,7 +707,7 @@ function DetailBody({ observation, observations, componentTitles, checkLabels, h
       {entities.length > 0 ? <><dt>Entities</dt><dd>{entities.map(entity => `${entity.kind} ${entity.id}`).join(", ")}</dd></> : null}
     </dl>
     <h4>Stored data</h4>
-    <p>{payloadCopy(observation)}</p>
+    <p>{payloadCopy(observation, m)}</p>
     {visibility === "redacted" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
     {visibility === "visible" ? <pre>{JSON.stringify(observation.data, null, 2)}</pre> : null}
     {trace ? <>

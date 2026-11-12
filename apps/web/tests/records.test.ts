@@ -13,6 +13,7 @@ import {
   edgeFor,
   milestoneTypeList,
   movementOf,
+  movementText,
   orderObservations,
   payloadVisibility,
   recordedChanges,
@@ -24,6 +25,10 @@ import {
 } from "../src/records.ts";
 import { recordLabel, emphasisFor } from "../src/timeline.ts";
 import { storyLabel, storyMilestones } from "../src/story-timeline.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
 
 const document = readFileSync(fileURLToPath(new URL("../../../docs/learning-timeline.md", import.meta.url)), "utf8");
 
@@ -85,17 +90,17 @@ test("the milestone table matches the documented Story milestone set", () => {
 test("every milestone has wording in each view that names it", () => {
   for (const type of milestoneTypeList) {
     const record = observation({ type, source: "orders", target: "payments" });
-    assert.notEqual(recordLabel(record), type, `no wording in Recorded history for ${type}`);
-    assert.notEqual(storyLabel(record), type, `no wording in Story for ${type}`);
-    assert.notEqual(storyLabel(record), undefined, `not a Story milestone for ${type}`);
+    assert.notEqual(recordLabel(record, m), type, `no wording in Recorded history for ${type}`);
+    assert.notEqual(storyLabel(record, m), type, `no wording in Story for ${type}`);
+    assert.notEqual(storyLabel(record, m), undefined, `not a Story milestone for ${type}`);
     assert.notEqual(recordKind(record), undefined, `no teaching category for ${type}`);
   }
 });
 
 test("the canonical transaction rollback type is worded and the removed alias is not", () => {
   const canonical = observation({ type: "database.transaction.rolledback", source: "orders" });
-  assert.equal(recordLabel(canonical), "Database transaction rolled back");
-  assert.equal(storyLabel(canonical), "Transaction rolled back");
+  assert.equal(recordLabel(canonical, m), "Database transaction rolled back");
+  assert.equal(storyLabel(canonical, m), "Transaction rolled back");
   assert.equal(recordKind(canonical), "rollback");
   // The kernel never emits `rolled_back`; it is a stored type no runtime produces.
   const alias = observation({ type: "database.transaction.rolled_back", source: "orders" });
@@ -106,18 +111,18 @@ test("records outside the milestone set state their stored type and never a mile
   for (const type of ["runtime.log", "service.lifecycle.changed", "database.write.staged", "scheduler.event.scheduled"]) {
     const record = observation({ type, source: "orders" });
     assert.equal(recordKind(record), undefined, type);
-    assert.equal(storyLabel(record), undefined, type);
-    assert.equal(recordLabel(record), type, type);
+    assert.equal(storyLabel(record, m), undefined, type);
+    assert.equal(recordLabel(record, m), type, type);
   }
   // Every fault record stays a milestone, including ones the table does not name.
   assert.equal(recordKind(observation({ type: "fault.custom.rule", source: "faults" })), "fault");
-  assert.equal(recordLabel(observation({ type: "fault.custom.rule", source: "faults" })), "Fault recorded");
+  assert.equal(recordLabel(observation({ type: "fault.custom.rule", source: "faults" }), m), "Fault recorded");
 });
 
 test("a selection emphasis names the movement, the link, and the components", () => {
   const edges = [{ id: "request:orders:payments:0", source: "orders", target: "payments", relationship: "request" as const }];
   const request = observation({ type: "network.request.sent", source: "orders", target: "payments", time: 7 });
-  const emphasis = emphasisFor(request, edges);
+  const emphasis = emphasisFor(request, edges, m);
   assert.equal(emphasis.origin, "selection");
   assert.equal(emphasis.kind, "request");
   assert.equal(emphasis.edgeId, "request:orders:payments:0");
@@ -128,7 +133,7 @@ test("a selection emphasis names the movement, the link, and the components", ()
 
   // A record that travels no link states that it does, and still names both components.
   const commit = observation({ type: "database.transaction.committed", source: "orders", target: "payments" });
-  const still = emphasisFor(commit, edges);
+  const still = emphasisFor(commit, edges, m);
   assert.equal(still.kind, undefined);
   assert.equal(still.pulseId, undefined);
   assert.deepEqual(still.nodeIds, ["orders", "payments"]);
@@ -139,19 +144,19 @@ test("a redacted or omitted payload is never reconstructed", () => {
   // Redaction is stored as the single field the kernel writes for a redacted mode.
   const redacted = observation({ type: "message.delivered", source: "payments", data: { redacted: true } });
   assert.equal(payloadVisibility(redacted), "redacted");
-  assert.equal(attemptLabel(redacted), "", "a redacted payload names no attempt");
-  assert.equal(recordLabel(redacted), "Message delivered");
+  assert.equal(attemptLabel(redacted, m), "", "a redacted payload names no attempt");
+  assert.equal(recordLabel(redacted, m), "Message delivered");
   assert.equal(storedText(redacted, "consumer"), undefined);
   assert.equal(storedScalar(redacted, "attempt"), undefined);
   assert.deepEqual(recordedChanges(redacted), []);
 
   const omitted = observation({ type: "message.delivered", source: "payments" });
   assert.equal(payloadVisibility(omitted), "omitted");
-  assert.equal(recordLabel(omitted), "Message delivered");
+  assert.equal(recordLabel(omitted, m), "Message delivered");
   assert.equal(attemptOf(omitted), undefined);
 
   const stored = observation({ type: "message.delivered", source: "payments", data: { attempt: 2 } });
-  assert.equal(recordLabel(stored), "Message delivered (attempt 2)");
+  assert.equal(recordLabel(stored, m), "Message delivered (attempt 2)");
 });
 
 test("stored changes carry only what the record stores", () => {
@@ -172,7 +177,9 @@ test("a movement states only stored fields and names no drawn link", () => {
   assert.equal(movement.from, "orders");
   assert.equal(movement.to, "payments");
   assert.equal(movement.relationship, "request");
-  assert.equal(movement.text, "Request sent from orders to payments at virtual time 4.");
+  assert.equal(movement.type, "network.request.sent");
+  assert.equal(movementText(movement, m), "Request sent from orders to payments at virtual time 4.");
+  assert.equal(movementText(movement, es), "Solicitud enviada de orders a payments en el tiempo virtual 4.");
   // Link identity belongs to the layer that draws the architecture.
   assert.equal("edgeId" in movement, false);
   assert.equal(edgeFor(movement, edges)?.id, "request:orders:payments:0");
@@ -225,7 +232,7 @@ test("every teaching category is listed once, in legend order", () => {
   const story = storyMilestones([
     observation({ id: "a", sequence: 1, type: "network.request.sent", source: "customer-app", target: "orders" }),
     observation({ id: "b", sequence: 2, type: "runtime.log", source: "orders" }),
-  ]);
+  ], m);
   assert.deepEqual(story.map(milestone => milestone.observation.id), ["a"]);
 });
 
@@ -235,27 +242,55 @@ test("#165 an assertion record's stored evidence reads as rows, from stored fiel
   assert.deepEqual(assertionEvidence(evaluated({ assertionId: "one-payment-per-order", verdict: false, evidence: {
     "payment-1": { paymentId: "payment-1", status: "APPROVED", orderId: "order-1", amount: 5000 },
     "payment-2": { paymentId: "payment-2", status: "APPROVED", orderId: "order-1", amount: 5000 },
-  } })), { kind: "rows", assertionId: "one-payment-per-order", passed: false, rows: [
+  } }), m), { kind: "rows", assertionId: "one-payment-per-order", passed: false, rows: [
     { key: "payment-1", text: "paymentId: payment-1 · status: APPROVED · orderId: order-1 · amount: 5000" },
     { key: "payment-2", text: "paymentId: payment-2 · status: APPROVED · orderId: order-1 · amount: 5000" },
   ] });
   // A list, as commerce.stock stores it: one row per item.
-  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "stock-never-negative", verdict: false, evidence: [{ sku: "sku-1", stock: -1, version: 3 }] })),
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "stock-never-negative", verdict: false, evidence: [{ sku: "sku-1", stock: -1, version: 3 }] }), m),
     { kind: "rows", assertionId: "stock-never-negative", passed: false, rows: [{ text: "sku: sku-1 · stock: -1 · version: 3" }] });
   // Metrics, as commerce.metrics stores them: one row of scalars.
-  const metrics = assertionEvidence(evaluated({ assertionId: "bounded-waiting", verdict: true, evidence: { peakActive: 3, active: 0 } }));
+  const metrics = assertionEvidence(evaluated({ assertionId: "bounded-waiting", verdict: true, evidence: { peakActive: 3, active: 0 } }), m);
   assert.deepEqual(metrics, { kind: "rows", assertionId: "bounded-waiting", passed: true, rows: [{ text: "peakActive: 3 · active: 0" }] });
   // Mixed groups, as commerce.dead-letters stores them: one keyed row per field.
-  const dead = assertionEvidence(evaluated({ assertionId: "failed-notification-dead-lettered", verdict: true, evidence: { exhausted: [{ messageId: "m-1", state: "DEAD", attempt: 3 }], deadLetters: ["m-1"] } }));
+  const dead = assertionEvidence(evaluated({ assertionId: "failed-notification-dead-lettered", verdict: true, evidence: { exhausted: [{ messageId: "m-1", state: "DEAD", attempt: 3 }], deadLetters: ["m-1"] } }), m);
   assert.deepEqual(dead?.kind === "rows" ? dead.rows : undefined, [
     { key: "exhausted", text: "messageId: m-1 · state: DEAD · attempt: 3" }, { key: "deadLetters", text: "m-1" },
   ]);
   // Empty evidence gives no rows; a payload without evidence says so; the result is only what was stored.
-  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "priced", verdict: true, evidence: [] })), { kind: "rows", assertionId: "priced", passed: true, rows: [] });
-  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "priced" })), { kind: "none", assertionId: "priced" });
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "priced", verdict: true, evidence: [] }), m), { kind: "rows", assertionId: "priced", passed: true, rows: [] });
+  assert.deepEqual(assertionEvidence(evaluated({ assertionId: "priced" }), m), { kind: "none", assertionId: "priced" });
   // A redacted or omitted payload is never reconstructed.
-  assert.deepEqual(assertionEvidence(evaluated({ redacted: true })), { kind: "unavailable", visibility: "redacted" });
-  assert.deepEqual(assertionEvidence(evaluated()), { kind: "unavailable", visibility: "omitted" });
+  assert.deepEqual(assertionEvidence(evaluated({ redacted: true }), m), { kind: "unavailable", visibility: "redacted" });
+  assert.deepEqual(assertionEvidence(evaluated(), m), { kind: "unavailable", visibility: "omitted" });
   // Any other record is not an assertion record.
-  assert.equal(assertionEvidence(observation({ type: "database.transaction.committed", source: "payments", data: { evidence: {} } })), undefined);
+  assert.equal(assertionEvidence(observation({ type: "database.transaction.committed", source: "payments", data: { evidence: {} } }), m), undefined);
+});
+
+test("every movement sentence is keyed by the stored type, and an unknown type shows its raw code", () => {
+  const sentences = {
+    "network.request.sent": "Request sent", "network.request.delivered": "Request delivered", "network.request.dropped": "Request dropped",
+    "network.request.timedout": "Request timed out", "network.response.sent": "Response sent", "network.response.dropped": "Response dropped",
+    "network.response.received": "Response received",
+  };
+  for (const [type, start] of Object.entries(sentences)) {
+    const movement = movementOf(observation({ type, source: "orders", target: "payments", time: 3 }))!;
+    assert.equal(movementText(movement, m), `${start} from orders to payments at virtual time 3.`, type);
+  }
+  const published = movementOf(observation({ type: "message.published", source: "orders", time: 3, data: { destination: "OrderCreated" } }))!;
+  assert.equal(movementText(published, m), "Message published from orders to OrderCreated at virtual time 3.");
+  const ack = movementOf({ ...observation({ type: "message.acknowledged", source: "payments", time: 3, data: { consumer: "payments" } }), entityRefs: [{ kind: "destination", id: "OrderCreated" }] })!;
+  assert.equal(movementText(ack, m), "Message acknowledged by payments on OrderCreated at virtual time 3.");
+  assert.equal(movementText(ack, es), "Mensaje confirmado por payments en OrderCreated en el tiempo virtual 3.");
+  const unknown = { ...movementOf(observation({ type: "network.request.sent", source: "orders", target: "payments", time: 3 }))!, type: "network.request.brand-new" };
+  assert.equal(movementText(unknown, m), "Movement network.request.brand-new from orders to payments at virtual time 3.");
+});
+
+test("the attempt suffix and the empty-evidence words are catalog messages in each language", () => {
+  const stored = observation({ type: "message.delivered", source: "payments", data: { attempt: 2 } });
+  assert.equal(attemptLabel(stored, m), " (attempt 2)");
+  assert.equal(attemptLabel(stored, es), " (intento 2)");
+  const evidence = (language: typeof m) => assertionEvidence(observation({ type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "x", verdict: true, evidence: { a: {}, b: [] } } }), language);
+  assert.deepEqual(evidence(m), { kind: "rows", assertionId: "x", passed: true, rows: [{ key: "a", text: "No stored fields." }, { key: "b", text: "None." }] });
+  assert.deepEqual(evidence(es), { kind: "rows", assertionId: "x", passed: true, rows: [{ key: "a", text: "Sin campos registrados." }, { key: "b", text: "Ninguno." }] });
 });

@@ -9,20 +9,15 @@ import { commerceDescriptors } from "../../../packages/catalogs/src/commerce/des
 
 /**
  * Whether the browser has a Design editor (#112). Until it does, a lesson whose policy allows
- * architecture edits cannot be completed here, so the Lesson chooser and ① Goal say so.
+ * architecture edits cannot be completed here, so the Lesson chooser and ① Goal say so
+ * (`m.designChoices.stepNotice`; the empty-slot words are `m.designChoices.emptySlot`).
  */
 export const DESIGN_EDITOR_AVAILABLE = false;
-
-export const DESIGN_STEP_NOTICE = "The design step is not available in the browser yet. You can run the lesson with the empty slot and see what is missing.";
 
 /** Whether a lesson asks for design edits that this browser cannot make. */
 export function designStepUnavailable(policy: Pick<LessonOverlayPolicy, "architecture"> | undefined, editorAvailable = DESIGN_EDITOR_AVAILABLE): boolean {
   return !editorAvailable && policy?.architecture !== undefined;
 }
-
-export const EMPTY_SLOT_LABEL = "Empty slot";
-
-export const EMPTY_SLOT_DESCRIPTION = "No model fills this component yet. It receives, publishes, and stores nothing, and answers any request with NOT_IMPLEMENTED.";
 
 const placeholders: readonly ModelDescriptor[] = [...checkoutDescriptors, ...commerceDescriptors].filter(descriptor => descriptor.placeholder === true);
 

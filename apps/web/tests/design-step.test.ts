@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { mapArchitecture } from "../src/architecture-view.ts";
-import { DESIGN_EDITOR_AVAILABLE, DESIGN_STEP_NOTICE, designStepUnavailable, isEmptySlot } from "../src/design-step.ts";
-import { packagedMetadata, scenarios } from "../src/scenarios.ts";
+import { DESIGN_EDITOR_AVAILABLE, designStepUnavailable, isEmptySlot } from "../src/design-step.ts";
+import { messages } from "../src/i18n/catalog.ts";
+import { lessonDescription, packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 
 async function load(index: number): Promise<RuntimeProjectionSet> {
@@ -24,9 +25,10 @@ test("#164 no offered lesson asks for a design edit the browser cannot make with
   assert.deepEqual(flagged, scenarios.filter(choice => choice.policy.architecture !== undefined).map(choice => choice.id));
   assert.deepEqual(flagged, ["outbox-notifications-gap"]);
   for (const choice of scenarios) {
-    if (designInstruction.test(choice.description)) assert.ok(designStepUnavailable(choice.policy), `${choice.id} instructs a design edit and carries the notice`);
+    if (designInstruction.test(lessonDescription(choice, messages("en")))) assert.ok(designStepUnavailable(choice.policy), `${choice.id} instructs a design edit and carries the notice`);
   }
-  assert.match(DESIGN_STEP_NOTICE, /not available in the browser/);
+  assert.match(messages("en").designChoices.stepNotice, /not available in the browser/);
+  assert.match(messages("es").designChoices.stepNotice, /no está disponible en el navegador/);
 });
 
 test("#164 the notice goes away once the Design editor is available", () => {
@@ -48,7 +50,7 @@ test("#164 the graph marks the empty notifications slot in words, and no other c
   for (const [index, choice] of scenarios.entries()) {
     const projection = await load(index);
     const metadata = packagedMetadata(choice);
-    const graph = mapArchitecture(projection.architecture, metadata.architecture, metadata.name);
+    const graph = mapArchitecture(projection.architecture, metadata.architecture, metadata.name, messages("en"));
     const empty = graph.nodes.filter(node => node.data.emptySlot === true);
     if (choice.id !== "outbox-notifications-gap") {
       assert.deepEqual(empty, [], choice.id);

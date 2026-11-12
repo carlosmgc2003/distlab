@@ -9,7 +9,7 @@ const outcomeSummary = (view: Parameters<typeof summarize>[0]) => summarize(view
 const runOutcome = (status: Parameters<typeof outcomeOf>[0]) => outcomeOf(status, m);
 
 const rows = (...verdicts: InvariantVerdict[]): { invariants: CheckRow<InvariantVerdict>[] } =>
-  ({ invariants: verdicts.map((verdict, i) => ({ id: `check-${i}`, label: `Check ${i}`, verdict })) });
+  ({ invariants: verdicts.map((verdict, i) => ({ id: `check-${i}`, kind: "invariant" as const, label: `Check ${i}`, verdict })) });
 
 test("outcomeSummary counts violated invariants, and a violation wins over pending or incomplete ones", () => {
   assert.equal(outcomeSummary(rows("VIOLATED", "VIOLATED", "VIOLATED")), "3 of 3 business invariants violated");

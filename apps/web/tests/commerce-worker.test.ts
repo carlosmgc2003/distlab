@@ -7,6 +7,9 @@ import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { mapArchitecture } from "../src/architecture-view.ts";
 import { scenarios, packagedMetadata } from "../src/scenarios.ts";
 import { storyMilestones } from "../src/story-timeline.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
 
 for (const name of commerceLessonNames) test(`${name}: browser worker matches headless state/history, resets, and projects only authorized facts`, async () => {
   const events: WorkerEvent[] = [];
@@ -38,13 +41,13 @@ for (const name of commerceLessonNames) test(`${name}: browser worker matches he
   const visible = JSON.stringify(result.components.filter(c => c.visibility === "student"));
   assert.ok(!visible.includes('"tasks"') && !visible.includes('"effectCount"'));
   const choice = scenarios.find(choice => choice.id === name)!;
-  const graph = mapArchitecture(result.architecture, packagedMetadata(choice).architecture, packagedMetadata(choice).name);
+  const graph = mapArchitecture(result.architecture, packagedMetadata(choice).architecture, packagedMetadata(choice).name, m);
   assert.equal(graph.error, null);
   assert.equal(new Set(graph.nodes.map(n => JSON.stringify(n.position))).size, graph.nodes.length);
   if (name.startsWith("outbox")) assert.ok(graph.edges.some(e => e.data?.relationship === "publication"));
   // runtime.log is not a documented milestone: commerce Story strips stay on network, message,
   // commit, and fault records, and those records keep their place in Learning and Raw.
-  const milestones = storyMilestones(result.history.observations);
+  const milestones = storyMilestones(result.history.observations, m);
   assert.ok(milestones.length > 0, "commerce lesson still teaches milestones");
   assert.ok(milestones.every(m => m.observation.type !== "runtime.log"));
   assert.ok(result.history.observations.some(o => o.type === "runtime.log"));

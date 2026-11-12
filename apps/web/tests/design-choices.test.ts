@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { commerceLessonNames, commerceOverlayPolicy, checkoutOverlayPolicy } from "@distlab/catalogs";
-import { carryOverlay } from "../src/break-faults.ts";
+import { carryOverlay as carry } from "../src/break-faults.ts";
 import {
-  choiceCopy, choiceValues, describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, readInteger, sameChoices, setChoice,
+  choiceCopy as copyOf, choiceErrorText, choiceValues, describeChoices as describe, isChoiceDiagnostic, placeChoiceDiagnostics as place, readInteger, sameChoices, setChoice,
 } from "../src/design-choices.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
+const choiceCopy = (key: string, lesson?: string) => copyOf(key, lesson, m);
+const describeChoices = (overrides: Parameters<typeof describe>[0]) => describe(overrides, m);
+const placeChoiceDiagnostics = (diagnostics: Parameters<typeof place>[0], overrides: Parameters<typeof place>[1]) => place(diagnostics, overrides, m);
+const carryOverlay = (overlay: Parameters<typeof carry>[0], from: Parameters<typeof carry>[1], to: Parameters<typeof carry>[2]) => carry(overlay, from, to, m);
 
 const retry = commerceOverlayPolicy("retry-unsafe");
 const timeout = retry.parameters.find(item => item.key === "timeout")!;
@@ -62,4 +70,17 @@ test("Compare keeps shared choices and drops the switch the pair compares", () =
   // The outbox lessons share consumer idempotency only between lessons with the same default.
   const outbox = carryOverlay({ ...overlay, parameters: [{ key: "consumer-idempotency", value: true }] }, commerceOverlayPolicy("dual-write"), commerceOverlayPolicy("outbox-unsafe-consumer"));
   assert.deepEqual(outbox.overlay.parameters, [{ key: "consumer-idempotency", value: true }]);
+});
+
+test("choice errors are codes until worded, and booleans read on and off in each language", () => {
+  const error = readInteger("61", timeout).error!;
+  assert.deepEqual(error, { code: "RANGE", minimum: 1, maximum: 60 });
+  assert.equal(choiceErrorText(error, m), "Enter a whole number from 1 to 60.");
+  assert.equal(choiceErrorText(error, es), "Ingresá un número entero de 1 a 60.");
+  assert.equal(choiceErrorText(readInteger("1", retry.parameters.find(item => item.key === "idempotency")!).error!, m), "This choice is not a number.");
+  assert.equal(describe([{ key: "idempotency", value: true }, { key: "outbox", value: false }], es), "idempotency=activado · outbox=desactivado");
+  assert.equal(copyOf("idempotency", undefined, es).label, "Clave de idempotencia");
+  assert.equal(copyOf("retries", "reliable-checkout@1", m).label, "Payment retries");
+  assert.equal(copyOf("ghost", undefined, m).label, "ghost");
+  assert.equal(place([{ path: "/parameters/0/value", code: "PARAMETER_VALUE" }], [{ key: "timeout", value: 0 }], es).get("timeout"), "Este valor está fuera del rango permitido. (PARAMETER_VALUE)");
 });

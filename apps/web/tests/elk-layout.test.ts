@@ -5,6 +5,7 @@ import type { WorkerEvent } from "@distlab/contracts";
 import type { XYPosition } from "@xyflow/react";
 import { Position } from "@xyflow/react";
 import { handleFor, mapArchitecture } from "../src/architecture-view.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "../src/architecture-view.ts";
 import { absoluteSectionPoints, elkLayout, SATELLITE_GAP, tierOf, TIERS } from "../src/layout/elk-layout.ts";
 import type { ElkLayoutOptions, LayoutEdge, LayoutNode } from "../src/layout/elk-layout.ts";
@@ -32,7 +33,7 @@ function measured<N extends AnyNode>(node: N, size = node.type === "component" ?
 }
 
 function graphOf(projection = platformProjection, metadata = platformMetadata, name?: string) {
-  const graph = mapArchitecture(projection, metadata, name);
+  const graph = mapArchitecture(projection, metadata, name, messages("en"));
   assert.equal(graph.error, null);
   const nodes: AnyNode[] = [...graph.nodes, ...graph.resourceNodes].map(node => measured(node));
   const edges: AnyEdge[] = [...graph.edges, ...graph.resourceEdges];
