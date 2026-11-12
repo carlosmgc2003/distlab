@@ -1,0 +1,356 @@
+import type { timeline as source } from "../en/timeline.ts";
+import type { Fmt } from "../format.ts";
+
+/** Spanish messages for the `timeline` area. Typed by the English source, so keys and parameters must match. */
+const recorded = (n: number, f: Fmt) => f.plural(n, { one: "1 observación registrada", other: `${f.number(n)} observaciones registradas` });
+const clause = (n: number, f: Fmt) => f.plural(n, { one: "1 observación", other: `${f.number(n)} observaciones` });
+
+export const timeline: typeof source = {
+  recordLabels: {
+    "network.request.sent": "Solicitud enviada",
+    "network.request.delivered": "Solicitud entregada",
+    "network.request.dropped": "Solicitud descartada",
+    "network.request.timedout": "Timeout de solicitud",
+    "network.response.sent": "Respuesta enviada",
+    "network.response.received": "Respuesta recibida",
+    "network.response.dropped": "Respuesta descartada",
+    "message.published": "Mensaje publicado",
+    "message.delivered": "Mensaje entregado",
+    "message.acknowledged": "Mensaje confirmado",
+    "message.ack.stale": "Confirmación de mensaje vencida",
+    "message.retry.scheduled": "Reintento de mensaje programado",
+    "database.transaction.committed": "Transacción de base de datos confirmada",
+    "database.transaction.rolledback": "Transacción de base de datos revertida",
+    "external.effect.committed": "Efecto externo confirmado",
+    "fault.rule.matched": "Regla de falla aplicada",
+    "fault.effect.selected": "Efecto de falla elegido",
+    "database.transaction.rejected": "Transacción de base de datos rechazada",
+    "service.handler.failed": "Falló el handler",
+    "message.nacked": "Mensaje rechazado (NACK)",
+    "message.dead": "Mensaje enviado a dead letter",
+    "kv.condition.failed": "Falló la condición clave-valor",
+    "kv.changed": "Entrada clave-valor modificada",
+    "kv.expired": "Entrada clave-valor vencida",
+    "runtime.log": "Registro",
+    "scenario.assertion.evaluated": "Verificación",
+  },
+  faultRecorded: "Falla registrada",
+  recordedChange: "Cambio registrado",
+  simulation: "Simulación",
+  selectedNoMovement: (p: { type: string; source: string; target?: string; time: number | string }, _f: Fmt) =>
+    `Elegiste ${p.type} en ${p.target === undefined ? p.source : `${p.source} hacia ${p.target}`} en el tiempo virtual ${p.time}. No hay movimiento de solicitud ni de mensaje.`,
+  selection: (p: { sequence: number; type: string; time: number | string }, _f: Fmt) =>
+    `Elegiste la observación n.º ${p.sequence}: ${p.type} en el tiempo virtual ${p.time}.`,
+  clearedName: {
+    fromTime: "tiempo virtual desde",
+    toTime: "tiempo virtual hasta",
+    type: "tipo",
+    component: "componente",
+    traceId: "traza",
+    eventId: "evento",
+    entity: "entidad",
+  },
+  clearedQuickView: (inline: string, _f: Fmt) => `vista rápida ${inline}`,
+  revealCleared: (names: readonly string[], f: Fmt) => f.plural(names.length, {
+    one: `Se quitó el filtro de ${f.list(names)} para que esta observación sea visible.`,
+    other: `Se quitaron los filtros de ${f.list(names)} para que esta observación sea visible.`,
+  }),
+  traceAlready: (traceId: string, _f: Fmt) => `La línea de tiempo ya muestra la traza ${traceId}.`,
+  traceNow: (traceId: string, _f: Fmt) => `La línea de tiempo ahora muestra la traza ${traceId}.`,
+  traceCleared: (names: readonly string[], f: Fmt) => f.plural(names.length, {
+    one: `Se quitó el filtro de ${f.list(names)}.`,
+    other: `Se quitaron los filtros de ${f.list(names)}.`,
+  }),
+  payload: {
+    omitted: "No se guardó ningún campo de datos.",
+    redacted: "El payload guardado está oculto. Los campos ocultos no están disponibles.",
+    stored: "Payload guardado",
+  },
+  terminal: {
+    failure: (code: string | null, _f: Fmt) => code ? `Falla terminal ${code}.` : "Falla terminal.",
+    historyIncomplete: "El historial de la ejecución está incompleto.",
+    historyComplete: "El historial de la ejecución está completo.",
+    historyNotReported: "No se informó si el historial de la ejecución está completo.",
+    lastObservation: (id: string, _f: Fmt) => `Última observación registrada: ${id}.`,
+  },
+
+  review: {
+    notInHistory: "Esa observación no está en este historial.",
+    clearedAll: (total: number, f: Fmt) => f.plural(total, {
+      one: "Se quitaron todos los filtros y vistas rápidas. La única observación registrada vuelve a estar disponible.",
+      other: `Se quitaron todos los filtros y vistas rápidas. Las ${f.number(total)} observaciones registradas vuelven a estar disponibles.`,
+    }),
+  },
+
+  filterHelp: [
+    "Los filtros se combinan con AND.",
+    "Los límites de tiempo virtual son inclusivos y son tiempos de simulación enteros.",
+    "Exacto coincide con el valor guardado completo, Prefijo con su comienzo y Contiene con una parte del valor.",
+    "La coincidencia distingue mayúsculas de minúsculas y usa solo el historial visible de esta ejecución.",
+    "La lista de sugerencias muestra los valores registrados cuyo valor guardado o etiqueta contiene el texto escrito.",
+    "Elegir una sugerencia aplica Exacto.",
+    "Un componente coincide cuando coincide el origen o el destino.",
+    "El tipo de entidad y el id de entidad tienen que coincidir con la misma referencia de entidad guardada.",
+  ].join(" "),
+  fieldNoun: {
+    type: { noun: "Tipo", inline: "tipo" },
+    component: { noun: "Componente", inline: "componente" },
+    traceId: { noun: "Traza", inline: "traza" },
+    eventId: { noun: "Evento", inline: "evento" },
+    entityKind: { noun: "Tipo de entidad", inline: "tipo de entidad" },
+    entityId: { noun: "Id de entidad", inline: "id de entidad" },
+  },
+  queryError: {
+    notWholeTime: (p: { field: "fromTime" | "toTime"; value: string }, f: Fmt) =>
+      `El tiempo virtual ${p.field === "fromTime" ? "desde" : "hasta"} ${f.quote(p.value)} no es un tiempo de simulación entero. Usá un entero no negativo, como 0 o 12.`,
+    timeOrder: (p: { from: number; to: number }, _f: Fmt) =>
+      `El tiempo virtual desde ${p.from} es posterior al tiempo virtual hasta ${p.to}. Usá un tiempo inicial menor o igual al final.`,
+  },
+  chip: {
+    timeFrom: (time: number, _f: Fmt) => `Tiempo virtual desde ${time} inclusive`,
+    timeTo: (time: number, _f: Fmt) => `Tiempo virtual hasta ${time} inclusive`,
+    removeTimeFrom: "Quitar el filtro de tiempo virtual desde",
+    removeTimeTo: "Quitar el filtro de tiempo virtual hasta",
+    exact: (p: { noun: string; value: string }, _f: Fmt) => `${p.noun} igual a ${p.value}`,
+    prefix: (p: { noun: string; value: string }, _f: Fmt) => `${p.noun} que empieza con ${p.value}`,
+    contains: (p: { noun: string; value: string }, _f: Fmt) => `${p.noun} que contiene ${p.value}`,
+    removeField: (inline: string, _f: Fmt) => `Quitar el filtro de ${inline}`,
+  },
+  explain: {
+    intro: "Ninguna observación cumple todos los filtros activos. Los filtros se combinan con AND.",
+    resetDefault: "Quitá un chip de filtro o limpiá todos los filtros para volver a ver las observaciones.",
+    resetQuickView: (inline: string, _f: Fmt) => `Quitá el chip de la vista rápida ${inline} o limpiá todos los filtros para volver a ver las observaciones registradas.`,
+    timeBoth: (p: { from: number; to: number }, _f: Fmt) => `El tiempo virtual es inclusivo desde ${p.from} hasta ${p.to}.`,
+    timeFrom: (from: number, _f: Fmt) => `El tiempo virtual es inclusivo desde ${from} en adelante.`,
+    timeTo: (to: number, _f: Fmt) => `El tiempo virtual es inclusivo desde el inicio hasta ${to}.`,
+    excludedExact: (p: { noun: string; value: string; count: number }, f: Fmt) => f.plural(p.count, {
+      one: `${p.noun} igual a ${f.quote(p.value)} coincide con 1 observación. Otro filtro activo la excluye.`,
+      other: `${p.noun} igual a ${f.quote(p.value)} coincide con ${f.number(p.count)} observaciones. Otro filtro activo las excluye.`,
+    }),
+    excludedPrefix: (p: { noun: string; value: string; count: number }, f: Fmt) => f.plural(p.count, {
+      one: `${p.noun} que empieza con ${f.quote(p.value)} coincide con 1 observación. Otro filtro activo la excluye.`,
+      other: `${p.noun} que empieza con ${f.quote(p.value)} coincide con ${f.number(p.count)} observaciones. Otro filtro activo las excluye.`,
+    }),
+    excludedContains: (p: { noun: string; value: string; count: number }, f: Fmt) => f.plural(p.count, {
+      one: `${p.noun} que contiene ${f.quote(p.value)} coincide con 1 observación. Otro filtro activo la excluye.`,
+      other: `${p.noun} que contiene ${f.quote(p.value)} coincide con ${f.number(p.count)} observaciones. Otro filtro activo las excluye.`,
+    }),
+    notExact: (p: { noun: string; inline: string; value: string; values: readonly string[] }, f: Fmt) =>
+      `${p.noun} ${f.quote(p.value)} no es un valor registrado exacto. Valores registrados que contienen ${f.quote(p.value)}: ${f.list(p.values)}. Elegí uno para una coincidencia exacta, o cambiá la coincidencia de ${p.inline} a Prefijo o Contiene.`,
+    caseSensitive: (p: { inline: string; value: string; values: readonly string[] }, f: Fmt) =>
+      `Ningún valor registrado de ${p.inline} contiene ${f.quote(p.value)}. La coincidencia distingue mayúsculas de minúsculas. Valores registrados parecidos: ${f.list(p.values)}.`,
+    noneRecorded: (p: { inline: string; value: string }, f: Fmt) => `Ningún valor registrado de ${p.inline} coincide con ${f.quote(p.value)}.`,
+    noneExact: (p: { inline: string; value: string; values: readonly string[] }, f: Fmt) =>
+      `Ningún valor registrado de ${p.inline} es igual a ${f.quote(p.value)}. Valores registrados que contienen ${f.quote(p.value)}: ${f.list(p.values)}.`,
+    nonePrefix: (p: { inline: string; value: string; values: readonly string[] }, f: Fmt) =>
+      `Ningún valor registrado de ${p.inline} empieza con ${f.quote(p.value)}. Valores registrados que contienen ${f.quote(p.value)}: ${f.list(p.values)}.`,
+    noneContains: (p: { inline: string; value: string; values: readonly string[] }, f: Fmt) =>
+      `Ningún valor registrado de ${p.inline} contiene ${f.quote(p.value)}. Valores registrados que contienen ${f.quote(p.value)}: ${f.list(p.values)}.`,
+  },
+
+  quickView: {
+    help: "Las vistas rápidas acotan el historial registrado; nunca cambian la ejecución.",
+    views: {
+      "faults-and-timeouts": {
+        label: "Fallas y timeouts",
+        inline: "fallas y timeouts",
+        keeps: "Conserva las reglas de falla, los efectos de falla, los mensajes descartados y los timeouts.",
+        empty: (total: number, f: Fmt) => `La vista rápida Fallas y timeouts conserva las reglas de falla, los efectos de falla, los mensajes descartados y los timeouts, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
+      },
+      "requests-and-responses": {
+        label: "Solicitudes y respuestas",
+        inline: "solicitudes y respuestas",
+        keeps: "Conserva las solicitudes y respuestas de red registradas, incluidas las descartadas y las que vencieron por timeout.",
+        empty: (total: number, f: Fmt) => `La vista rápida Solicitudes y respuestas conserva las solicitudes y respuestas de red registradas, incluidas las descartadas y las que vencieron por timeout, y esta ejecución registró ${clause(total, f)} sin ninguna de ellas.`,
+      },
+      messages: {
+        label: "Mensajes",
+        inline: "mensajes",
+        keeps: "Conserva los mensajes publicados, entregados, confirmados y reintentados.",
+        empty: (total: number, f: Fmt) => `La vista rápida Mensajes conserva los mensajes publicados, entregados, confirmados y reintentados, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
+      },
+      "state-changes": {
+        label: "Cambios de estado",
+        inline: "cambios de estado",
+        keeps: "Conserva las transacciones confirmadas y revertidas, los efectos externos confirmados y los cambios y vencimientos clave-valor.",
+        empty: (total: number, f: Fmt) => `La vista rápida Cambios de estado conserva las transacciones confirmadas y revertidas, los efectos externos confirmados y los cambios y vencimientos clave-valor, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
+      },
+      failures: {
+        label: "Rechazos y fallos",
+        inline: "rechazos y fallos",
+        keeps: "Conserva las transacciones y condiciones clave-valor rechazadas, los handlers que fallaron y los mensajes rechazados o enviados a dead letter.",
+        empty: (total: number, f: Fmt) => `La vista rápida Rechazos y fallos conserva las transacciones y condiciones clave-valor rechazadas, los handlers que fallaron y los mensajes rechazados o enviados a dead letter, y esta ejecución registró ${clause(total, f)} sin ninguno de ellos.`,
+      },
+    },
+    emptyRemove: "Quitá el chip de la vista rápida para volver a ver el historial registrado.",
+    summaryNone: (p: { shown: number; recorded: number }, f: Fmt) =>
+      `No hay ninguna vista rápida activa. Los filtros avanzados muestran ${f.number(p.shown)} de ${recorded(p.recorded, f)}.`,
+    summaryNothing: (p: { label: string; inline: string; recorded: number }, f: Fmt) =>
+      `${p.label} muestra 0 de ${recorded(p.recorded, f)}. Esta ejecución no registró ${p.inline}.`,
+    summaryShown: (p: { label: string; shown: number; recorded: number }, f: Fmt) =>
+      `${p.label} muestra ${f.number(p.shown)} de ${recorded(p.recorded, f)}.`,
+    feedbackCleared: (total: number, f: Fmt) => f.plural(total, {
+      one: "Se quitó la vista rápida. La única observación registrada vuelve a estar disponible.",
+      other: `Se quitó la vista rápida. Las ${f.number(total)} observaciones registradas vuelven a estar disponibles.`,
+    }),
+    feedbackApplied: (p: { label: string; shown: number; recorded: number }, f: Fmt) => f.plural(p.recorded, {
+      one: `Se aplicó la vista rápida ${p.label}. Muestra ${f.number(p.shown)} de 1 observación registrada y no cambia nada en la ejecución.`,
+      other: `Se aplicó la vista rápida ${p.label}. Muestra ${f.number(p.shown)} de ${f.number(p.recorded)} observaciones registradas y no cambia nada en la ejecución.`,
+    }),
+    chip: (label: string, _f: Fmt) => `Vista rápida ${label}`,
+    removeChip: (label: string, _f: Fmt) => `Quitar la vista rápida ${label}`,
+  },
+
+  view: {
+    heading: "Historial registrado",
+    viewSwitch: "Vista de la línea de tiempo",
+    viewChoices: {
+      diagram: "Diagrama de historia",
+      table: "Tabla de historia",
+    },
+    orderHint: {
+      label: "Orden de los hitos",
+      body: "Elegir un hito elige una observación registrada; no ejecuta un evento. Los hitos siguen la secuencia de observación, incluidas las observaciones con el mismo tiempo virtual.",
+    },
+    show: "Mostrar",
+    allCategories: "Todo",
+    component: "Componente",
+    allComponents: "Todos",
+    moreFilters: "Más filtros…",
+    shown: (p: { shown: number; total: number }, f: Fmt) => `${f.number(p.shown)} de ${f.number(p.total)} hitos a la vista`,
+    chipGroup: "Filtros activos y restablecer",
+    chipList: "Filtros activos",
+    remove: "Quitar",
+    clearAll: "Borrar todos los filtros",
+    rowsLabel: "Tira de hitos y tabla de la historia",
+    noObservations: "No se registró ninguna observación en esta ejecución.",
+
+    readingStory: "Cómo leer la historia",
+    storyHint: (summary: string, _f: Fmt) => `${summary} Las columnas siguen la secuencia registrada, no la duración transcurrida. Elegí un hito para ver el detalle.`,
+    storyNoMilestones: "Ninguno de los registros visibles es un hito didáctico. Quitá un filtro para volver a ver los hitos.",
+    legendLabel: "Categorías de hitos, formas y cantidades",
+    diagramLabel: "Diagrama de historia",
+    corner: "Componente",
+    milestoneLabel: (p: { label: string; component: string; time: number | string; sequence: number | string }, _f: Fmt) =>
+      `${p.label}, ${p.component}, tiempo virtual ${p.time}, secuencia ${p.sequence}`,
+    tableCaption: (reduction: string, _f: Fmt) => `${reduction} Cada fila elige la misma observación registrada que la tira.`,
+    tableHeads: {
+      milestone: "Hito",
+      category: "Categoría",
+      time: "Tiempo virtual",
+      sequence: "Secuencia",
+      destination: "Componente / destino",
+    },
+    timeUnchanged: (time: number | string, _f: Fmt) => `t=${time} (sin cambios)`,
+
+    moreTitle: "Más filtros",
+    matchingHint: "Cómo funciona la coincidencia",
+    filtersCombine: "Los filtros se combinan. Elegí otro campo para acotar más; quitá cualquier condición con su chip de abajo.",
+    filtersForm: "Filtros de la línea de tiempo",
+    timeFrom: "Tiempo virtual desde",
+    timeTo: "Tiempo virtual hasta",
+    filterBy: "Filtrar por",
+    apply: "Aplicar",
+    clear: "Borrar",
+    cancel: "Cancelar",
+    matchMode: { exact: "Exacto", prefix: "Prefijo", contains: "Contiene" },
+    matchLabel: (noun: string, _f: Fmt) => `Coincidencia de ${noun}`,
+    choicesLabel: (noun: string, _f: Fmt) => `Opciones de ${noun}`,
+    noValues: (value: string, f: Fmt) => `Ningún valor registrado contiene ${f.quote(value)}.`,
+    moreValues: (hidden: number, f: Fmt) => `${f.number(hidden)} más. Seguí escribiendo para acotar esta lista.`,
+
+    detailHeading: "Detalle de la observación",
+    detailEmpty: "Elegí una observación para ver su detalle.",
+    hiddenByFilters: "Los filtros actuales ocultan esta observación.",
+    detailHeader: (p: { sequence: number; heading: string; time: number | string }, _f: Fmt) => `Observación #${p.sequence} · ${p.heading} · t=${p.time}`,
+    fieldsSummary: "Campos del registro y atajos de filtro",
+    fields: {
+      sequence: "Secuencia",
+      time: "Tiempo virtual",
+      source: "Origen",
+      target: "Destino",
+      payload: "Carga útil (payload)",
+    },
+    useSource: "Usar el origen como filtro de componente",
+    useTarget: "Usar el destino como filtro de componente",
+    copyWhat: {
+      source: "id de origen",
+      target: "id de destino",
+      observation: "id de observación",
+      trace: "id de traza",
+      event: "id de evento",
+    },
+    copy: (what: string, _f: Fmt) => `Copiar ${what}`,
+    copied: (what: string, _f: Fmt) => `Se copió ${what}`,
+    manualCopy: (what: string, _f: Fmt) => `${what} para copiar`,
+    effectHeading: "Efecto y evidencia",
+    noEvidence: "No se guardaron valores anteriores ni posteriores.",
+    before: "Antes",
+    after: "Después",
+    beforeMissing: "No se guardó el valor anterior.",
+    afterMissing: "No se guardó el valor posterior.",
+    relatedSummary: "Evidencia relacionada",
+    causation: "Causalidad",
+    selectCause: (p: { type: string; time: number | string }, _f: Fmt) => `Elegir la observación causante ${p.type} en el tiempo virtual ${p.time}`,
+    selectEffect: (p: { type: string; time: number | string }, _f: Fmt) => `Elegir el efecto ${p.type} en el tiempo virtual ${p.time}`,
+    causeMissing: (id: string, _f: Fmt) => `La causa ${id} no está en este historial.`,
+    noCausation: "No se guardó ninguna referencia de causalidad.",
+    moreEffects: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 efecto más. Mostrá esta traza para leerlos en orden.",
+      other: `${f.number(count)} efectos más. Mostrá esta traza para leerlos en orden.`,
+    }),
+    noEffects: "Ninguna observación posterior apunta a este registro.",
+    trace: "Traza",
+    showTrace: "Mostrar esta traza",
+    noTrace: "Esta observación no tiene traza.",
+    filterFromObservation: "Filtrar a partir de esta observación",
+    useEvent: "Usar este evento",
+    useEntity: (p: { kind: string; id: string }, _f: Fmt) => `Usar la entidad ${p.kind} ${p.id}`,
+    technicalSummary: "Registro técnico",
+    technical: {
+      observation: "Observación",
+      type: "Tipo",
+      trace: "Traza",
+      span: "ID de span",
+      parentSpan: "ID del span padre",
+      causation: "Causa",
+      event: "Evento",
+      entities: "Entidades",
+    },
+    storedData: "Datos guardados",
+    unspanned: "Observaciones sin span",
+    typeAt: (p: { type: string; time: number | string }, _f: Fmt) => `${p.type} en el tiempo virtual ${p.time}`,
+    moreUnspanned: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 observación más no tiene span.",
+      other: `${f.number(count)} observaciones más no tienen span.`,
+    }),
+    spanLine: (p: { spanId: string; count: number }, f: Fmt) =>
+      `Span ${p.spanId}. ${f.plural(p.count, { one: "1 observación", other: `${f.number(p.count)} observaciones` })}.`,
+    spanLineParent: (p: { spanId: string; parentSpanId: string; count: number }, f: Fmt) =>
+      `Span ${p.spanId}, padre ${p.parentSpanId}. ${f.plural(p.count, { one: "1 observación", other: `${f.number(p.count)} observaciones` })}.`,
+    moreInSpan: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 observación más en este span. Mostrá esta traza para leerlas en orden.",
+      other: `${f.number(count)} observaciones más en este span. Mostrá esta traza para leerlas en orden.`,
+    }),
+    nestedSpans: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 span anidado. Usá el filtro de traza para inspeccionar sus observaciones en orden.",
+      other: `${f.number(count)} spans anidados. Usá el filtro de traza para inspeccionar sus observaciones en orden.`,
+    }),
+    moreSpans: (count: number, f: Fmt) => f.plural(count, {
+      one: "1 span más. Usá el filtro de traza para inspeccionar sus observaciones en orden.",
+      other: `${f.number(count)} spans más. Usá el filtro de traza para inspeccionar sus observaciones en orden.`,
+    }),
+
+    checkUnavailable: {
+      redacted: "El payload guardado de la verificación está oculto, así que no se muestra su evidencia.",
+      omitted: "El payload guardado de la verificación fue omitido, así que no se muestra su evidencia.",
+    },
+    checkFallback: "Verificación",
+    checkNoResult: "La verificación no guardó ningún resultado en este límite.",
+    checkPassed: (time: number | string, _f: Fmt) => `La verificación pasó en t=${time}.`,
+    checkFailed: (time: number | string, _f: Fmt) => `La verificación no pasó en t=${time}.`,
+    checkNoEvidence: "Esta verificación no guardó evidencia.",
+    checkEmpty: "La evidencia guardada está vacía: ninguna fila coincidió.",
+    storedEvidence: "Evidencia guardada",
+  },
+};

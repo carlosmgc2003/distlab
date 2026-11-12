@@ -8,6 +8,7 @@ import { DeterministicScenarioEngine, validateScenarioDocument } from "@distlab/
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { isWorkerEvent } from "../src/protocol.ts";
 import { inspectFaults } from "../src/fault-inspection.ts";
+import { messages } from "../src/i18n/catalog.ts";
 
 // ADR-006 browser import, worker part: APP-AC-8, APP-AC-9 (replay), DOC-AC-3, DOC-AC-6,
 // and the architecture-driven checkout projection.
@@ -285,7 +286,7 @@ test("a checkout document with renamed component IDs shows correct student state
 
   // The main-thread report finds each role by the component's model, not by a fixed ID.
   assert.ok(loaded.document);
-  const report = inspectFaults(finished, loaded.document.scenario);
+  const report = inspectFaults(finished, loaded.document.scenario, messages("en"));
   assert.deepEqual(report.roles, { client: "shopper", orders: "order-service", payments: "billing", processor: "psp", destinations: ["OrderCreated"] });
   assert.equal(report.paymentRows[0]?.state, "UNKNOWN");
   assert.equal(report.authorizations[0]?.status, "APPROVED");

@@ -3,8 +3,7 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useNodesInitialized, useReactFlow, useStore } from "@xyflow/react";
 import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
-import { EMPTY_SLOT_LABEL } from "./design-step.ts";
+import { flightTokenStyle, handleFor, mapArchitecture, resourceTitle, symbolLabel, type NodeSymbol } from "./architecture-view.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
@@ -12,10 +11,13 @@ import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
-import { flightDelayMs, FLIGHT_LEGEND } from "./flight.ts";
-import { ACTIVITY_SYMBOLS, activityOf } from "./activity.ts";
+import { flightDelayMs, flightLegend } from "./flight.ts";
+import { ACTIVITY_SYMBOLS, activityDescription, activityLabel, activityOf } from "./activity.ts";
 import { ComponentInspector } from "./ComponentInspector.tsx";
 import { HelpHint } from "./ui-hint.tsx";
+import { useMessages } from "./i18n/react.tsx";
+import type { Messages } from "./i18n/catalog.ts";
+import { Rich } from "./i18n/rich.tsx";
 import { movementPulseClass } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 import { elkLayout } from "./layout/elk-layout.ts";
@@ -135,16 +137,19 @@ function EdgeSample({ relationship, label }: { readonly relationship: "request" 
 }
 
 function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readonly onToggle: () => void }) {
-  return <Panel position="top-left" className={`graph-legend${open ? "" : " is-collapsed"}`} role="region" aria-label="Architecture legend" tabIndex={0}>
+  const m = useMessages();
+  const copy = m.architecture.legend;
+  const sr = (children: ReactNode) => <span className="sr-only">{children}</span>;
+  return <Panel position="top-left" className={`graph-legend${open ? "" : " is-collapsed"}`} role="region" aria-label={copy.region} tabIndex={0}>
     <div className="graph-legend-header">
-      <h3>Legend</h3>
+      <h3>{copy.heading}</h3>
       <button type="button" className="graph-legend-toggle" aria-expanded={open} aria-controls="graph-legend-body" onClick={onToggle}>
-        {open ? "Hide" : "Show"}<span className="sr-only"> legend</span>
+        <Rich text={open ? copy.hide : copy.show} tags={{ sr }} />
       </button>
     </div>
     <div id="graph-legend-body" hidden={!open}>
     <section aria-labelledby="legend-nodes-heading">
-      <h4 id="legend-nodes-heading">Nodes</h4>
+      <h4 id="legend-nodes-heading">{copy.nodes}</h4>
       <ul>{legendSymbols.map(symbol => <li key={symbol}>
         {symbol === "topic" || symbol === "queue"
           // At legend size the two channels share one outline; their glyph tells them apart.
@@ -153,34 +158,34 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
             <span className="legend-channel-glyph"><SymbolGlyph symbol={symbol} /></span>
           </span>
           : <svg className={`legend-node symbol-${symbol}`} viewBox="0 0 215 90" aria-hidden="true"><SymbolShape symbol={symbol} /></svg>}
-        <span>{symbolLabels[symbol]}</span>
+        <span>{symbolLabel(symbol, m)}</span>
       </li>)}
-        <li><ResourceSample kind="database" label="Cylinder" /><span>Database (owned)</span></li>
-        <li><ResourceSample kind="kvstore" label="Layered box with key" /><span>KV store (owned)</span></li>
+        <li><ResourceSample kind="database" label={copy.databaseShape} /><span>{copy.database}</span></li>
+        <li><ResourceSample kind="kvstore" label={copy.storeShape} /><span>{copy.store}</span></li>
       </ul>
     </section>
     <section aria-labelledby="legend-edges-heading">
-      <h4 id="legend-edges-heading">Relationships</h4>
+      <h4 id="legend-edges-heading">{copy.relationships}</h4>
       <ul>
-        <li><EdgeSample relationship="request" label="Solid line with filled arrowhead" /><span>Request</span></li>
-        <li><EdgeSample relationship="subscription" label="Purple dashed line with open arrowhead" /><span>MessageBus subscription</span></li>
-        <li><EdgeSample relationship="publication" label="Purple dotted line with small filled arrowhead" /><span>MessageBus publication</span></li>
-        <li><EdgeSample relationship="ownership" label="Short thin amber line without arrowhead" /><span>Ownership (data)</span></li>
+        <li><EdgeSample relationship="request" label={copy.requestShape} /><span>{copy.request}</span></li>
+        <li><EdgeSample relationship="subscription" label={copy.subscriptionShape} /><span>{copy.subscription}</span></li>
+        <li><EdgeSample relationship="publication" label={copy.publicationShape} /><span>{copy.publication}</span></li>
+        <li><EdgeSample relationship="ownership" label={copy.ownershipShape} /><span>{copy.ownership}</span></li>
       </ul>
     </section>
     <section aria-labelledby="legend-movements-heading">
-      <h4 id="legend-movements-heading">Recorded movements</h4>
-      <ul>{FLIGHT_LEGEND.map(entry => <li key={entry.glyph}>
+      <h4 id="legend-movements-heading">{copy.movements}</h4>
+      <ul>{flightLegend(m).map(entry => <li key={entry.glyph}>
         <span className={`token-sample shape-${entry.shape}`} aria-hidden="true">{entry.glyph}</span>
         <span>{entry.label}<span className="sr-only">, {entry.detail}</span></span>
       </li>)}</ul>
     </section>
     <section aria-labelledby="legend-activity-heading">
-      <h4 id="legend-activity-heading">Component activity</h4>
+      <h4 id="legend-activity-heading">{copy.activity}</h4>
       <ul>
-        <li><span className="activity-sample activity-processing" aria-hidden="true">{ACTIVITY_SYMBOLS.processing}</span><span>Processing<span className="sr-only">: handling a delivered request, an open transaction, or a message delivery</span></span></li>
-        <li><span className="activity-sample activity-waiting" aria-hidden="true">{ACTIVITY_SYMBOLS.waiting}</span><span>Waiting<span className="sr-only">: sent a request with no response or timeout recorded yet</span></span></li>
-        <li><span className="activity-sample activity-idle" aria-hidden="true">{ACTIVITY_SYMBOLS.idle}</span><span>Idle</span></li>
+        <li><span className="activity-sample activity-processing" aria-hidden="true">{ACTIVITY_SYMBOLS.processing}</span><span><Rich text={copy.processing} tags={{ sr }} values={{ state: m.architecture.activity.state.processing }} /></span></li>
+        <li><span className="activity-sample activity-waiting" aria-hidden="true">{ACTIVITY_SYMBOLS.waiting}</span><span><Rich text={copy.waiting} tags={{ sr }} values={{ state: m.architecture.activity.state.waiting }} /></span></li>
+        <li><span className="activity-sample activity-idle" aria-hidden="true">{ACTIVITY_SYMBOLS.idle}</span><span>{m.architecture.activity.state.idle}</span></li>
       </ul>
     </section>
     </div>
@@ -188,6 +193,7 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
 }
 
 const ComponentNode = memo(function ComponentNode({ data }: NodeProps<ArchitectureNode>) {
+  const m = useMessages();
   return <>
     {/* One handle per ELK port side: requests and bus links enter west and leave east, data leaves south. */}
     <Handle id={handleFor.request.target} type="target" position={Position.Left} />
@@ -199,15 +205,15 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
         <span className="node-glyph"><SymbolGlyph symbol={data.symbol} /></span>
       </div>
       <div className="node-content">
-        <span className="category-label">{symbolLabels[data.symbol]}</span>
+        <span className="category-label">{symbolLabel(data.symbol, m)}</span>
         <strong>{data.title}</strong>
-        {data.emptySlot ? <span className="empty-slot-badge">{EMPTY_SLOT_LABEL}</span> : null}
+        {data.emptySlot ? <span className="empty-slot-badge">{m.designChoices.emptySlot.label}</span> : null}
         {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
         {data.faults?.length ? <FaultBadge faults={data.faults} /> : null}
         {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>
-          <span aria-hidden="true">{ACTIVITY_SYMBOLS[data.activity.state]} </span>{data.activity.label}
-          {data.activity.timedOut ? <span className="activity-timeout"> · <span aria-hidden="true">◷</span> timed out t={data.activity.timedOut.time}</span> : null}
-          <span className="sr-only">. {data.activity.description}</span>
+          <span aria-hidden="true">{ACTIVITY_SYMBOLS[data.activity.state]} </span>{activityLabel(data.activity, m)}
+          {data.activity.timedOut ? <span className="activity-timeout"> · <span aria-hidden="true">◷</span> {m.architecture.view.timedOut(data.activity.timedOut.time)}</span> : null}
+          <span className="sr-only">. {data.activityText ?? activityDescription(data.activity, m)}</span>
         </span> : null}
       </div>
     </div>
@@ -216,6 +222,7 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
   </>;
 });
 const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<ResourceNode>) {
+  const m = useMessages();
   return <>
     <span className="target resource-anchor" data-handleid={handleFor.ownership.target} data-handlepos="top" aria-hidden="true" />
     <div className={`resource-body resource-body-${data.kind}`}>
@@ -226,7 +233,7 @@ const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<Reso
       <path d="M8 11l49-8 50 8-50 9z M8 11v34l49 8 50-8V11 M8 24l49 9 50-9 M8 36l49 9 50-9" />
     </svg>}
     <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
-    <span className="resource-title">{resourceLabels[data.kind]} owned by {data.ownerName}</span>
+    <span className="resource-title">{resourceTitle(data.kind, data.ownerName, m)}</span>
     {Array.isArray(data.faults) && data.faults.length ? <FaultBadge faults={data.faults as string[]} /> : null}
     </div>
   </>;
@@ -264,9 +271,10 @@ function FlightToken({ flight, path, readable, durationMs }: {
 
 /** A student fault from the applied overlay targets this element. */
 function FaultBadge({ faults }: { readonly faults: readonly string[] }) {
+  const m = useMessages();
   return <span className="fault-badge" title={faults.join("\n")}>
-    <span aria-hidden="true">⚡ </span>{faults.length === 1 ? "Student fault" : `${faults.length} student faults`}
-    <span className="sr-only">: {faults.join("; ")}</span>
+    <span aria-hidden="true">⚡ </span>{m.architecture.view.fault.badge(faults.length)}
+    <span className="sr-only">{m.architecture.view.fault.detail(faults)}</span>
   </span>;
 }
 
@@ -318,10 +326,18 @@ const ElkEdge = memo(function ElkEdge(props: EdgeProps<ArchitectureEdge | Owners
 });
 const nodeTypes = { component: ComponentNode, database: ResourceNodeView, kvstore: ResourceNodeView };
 const edgeTypes = { elk: ElkEdge };
-const ariaLabelConfig = {
-  "node.a11yDescription.default": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
-  "node.a11yDescription.keyboardDisabled": "Press Enter or Space to inspect this component. Press Escape to clear selection.",
-};
+/** React Flow's own accessible names, in the interface language. */
+function flowLabels(m: Messages) {
+  const view = m.architecture.view;
+  return {
+    "node.a11yDescription.default": view.nodeKeyboardHint,
+    "node.a11yDescription.keyboardDisabled": view.nodeKeyboardHint,
+    "controls.ariaLabel": view.controlPanel,
+    "controls.zoomIn.ariaLabel": view.zoomIn,
+    "controls.zoomOut.ariaLabel": view.zoomOut,
+    "controls.fitView.ariaLabel": view.fitView,
+  };
+}
 /** Gap kept between the graph and the legend, the zoom controls, the pan buttons, and the canvas edge. */
 const LEGEND_GAP = 16;
 /** The canvas edge's own margin around the graph at the default view. */
@@ -570,7 +586,8 @@ function emphasize(edge: ArchitectureEdge, emphasis: GraphEmphasis | undefined):
 /** Fit View returns to the default view, so the button and the automatic fit give one view (#166). */
 function LegendAwareFit({ container }: { readonly container: RefObject<HTMLDivElement | null> }) {
   const flow = useReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge>();
-  return <ControlButton className="react-flow__controls-fitview" aria-label="Fit View" title="Fit View"
+  const m = useMessages();
+  return <ControlButton className="react-flow__controls-fitview" aria-label={m.architecture.view.fitView} title={m.architecture.view.fitView}
     onClick={() => { if (container.current) void fitLegibly(flow, container.current); }}>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 30" aria-hidden="true">
       <path d="M3.692 4.63c0-.53.4-.938.939-.938h5.215V0H4.708C2.13 0 0 2.054 0 4.63v5.216h3.692V4.631zM27.354 0h-5.2v3.692h5.17c.53 0 .984.4.984.939v5.215H32V4.631A4.624 4.624 0 0027.354 0zm.954 24.83c0 .532-.4.94-.939.94h-5.215v3.768h5.215c2.577 0 4.631-2.13 4.631-4.707v-5.139h-3.692v5.139zm-23.677.94c-.531 0-.939-.4-.939-.94v-5.138H0v5.139c0 2.577 2.13 4.707 4.708 4.707h5.138V25.77H4.631z" />
@@ -579,16 +596,18 @@ function LegendAwareFit({ container }: { readonly container: RefObject<HTMLDivEl
 }
 
 function PanControls() {
+  const m = useMessages();
+  const copy = m.architecture.view.pan;
   const { getViewport, setViewport } = useReactFlow();
   const pan = (x: number, y: number) => {
     const viewport = getViewport();
     void setViewport({ ...viewport, x: viewport.x + x, y: viewport.y + y });
   };
-  return <Panel position="top-right" className="pan-controls" role="group" aria-label="Pan view">
-    <button type="button" aria-label="Pan left" onClick={() => pan(80, 0)}><span aria-hidden="true">←</span></button>
-    <button type="button" aria-label="Pan up" onClick={() => pan(0, 80)}><span aria-hidden="true">↑</span></button>
-    <button type="button" aria-label="Pan down" onClick={() => pan(0, -80)}><span aria-hidden="true">↓</span></button>
-    <button type="button" aria-label="Pan right" onClick={() => pan(-80, 0)}><span aria-hidden="true">→</span></button>
+  return <Panel position="top-right" className="pan-controls" role="group" aria-label={copy.group}>
+    <button type="button" aria-label={copy.left} onClick={() => pan(80, 0)}><span aria-hidden="true">←</span></button>
+    <button type="button" aria-label={copy.up} onClick={() => pan(0, 80)}><span aria-hidden="true">↑</span></button>
+    <button type="button" aria-label={copy.down} onClick={() => pan(0, -80)}><span aria-hidden="true">↓</span></button>
+    <button type="button" aria-label={copy.right} onClick={() => pan(-80, 0)}><span aria-hidden="true">→</span></button>
   </Panel>;
 }
 
@@ -620,11 +639,13 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   /** Set while the Break panel picks a target: a node or link choice is reported, nothing else changes. */
   readonly onPick?: (picked: GraphPick) => void;
 }) {
+  const m = useMessages();
+  const labels = useMemo(() => flowLabels(m), [m]);
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
-  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, ...(names ? [names] : [])), [architectureKey, metadata, scenarioName, names]);
+  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, m, ...(names ? [names] : [])), [architectureKey, metadata, scenarioName, m, names]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Layout follows structure only: ids and labels, never playback state or badges.
   const layoutKey = useMemo(() => JSON.stringify([
@@ -652,7 +673,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
     // Activity is shown only while the cursor stands on a record, and only from records at or before it.
-    const activity = flight ? activityOf(playback.activity, node.id, graph.names) : undefined;
+    const activity = flight ? activityOf(playback.activity, node.id) : undefined;
     const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : ""].filter(Boolean).join(" ");
     const size = sizes?.get(node.id);
     return {
@@ -662,8 +683,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
       className: classes,
       data: {
         ...node.data,
-        ...(role !== undefined && flight !== undefined ? { role, roleLabel: `${flight.glyph} ${role === "sending" ? "sends" : "receives"}` } : {}),
-        ...(activity ? { activity } : {}),
+        ...(role !== undefined && flight !== undefined ? { role, roleLabel: role === "sending" ? m.architecture.view.role.sending(flight.glyph) : m.architecture.view.role.receiving(flight.glyph) } : {}),
+        ...(activity ? { activity, activityText: activityDescription(activity, m, graph.names) } : {}),
         ...(faultMarks?.nodes.get(node.id)?.length ? { faults: faultMarks.nodes.get(node.id)! } : {}),
       },
       selected: node.id === selectedId,
@@ -673,7 +694,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
         ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
       },
     };
-  }), [graph.nodes, selectedId, painted, flight, playback.activity, faultMarks, laidOut, sizes]);
+  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, faultMarks, laidOut, sizes, m]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
     position: laidOut?.positions.get(node.id) ?? node.position,
@@ -689,13 +710,13 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     const marks = faultMarks?.links.get(`${edge.source}->${edge.target}`);
     const marked: ArchitectureEdge = marks?.length ? {
       ...edge, className: "has-fault", label: `✕ ${String(edge.label)}`,
-      ariaLabel: `${edge.ariaLabel ?? ""}. Student fault: ${marks.join("; ")}`,
+      ariaLabel: m.architecture.view.fault.link({ label: edge.ariaLabel ?? "", faults: marks }),
       style: { ...edge.style, stroke: "var(--status-error)", strokeDasharray: "10 4 2 4" },
     } : edge;
     const styled = emphasize(marked, painted);
     if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
     return { ...styled, data: { ...styled.data!, flight, pace: playback.pace, paint: playback.paint } };
-  }), [graph.edges, painted, flight, playback.pace, playback.paint, faultMarks, laidOut]);
+  }), [graph.edges, painted, flight, playback.pace, playback.paint, faultMarks, laidOut, m]);
   const ownershipEdges = useMemo<OwnershipEdge[]>(() => graph.resourceEdges.map(edge => {
     const route = laidOut?.routes.get(edge.id);
     return route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
@@ -734,28 +755,28 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   const toggleLegend = useCallback(() => setLegendOpen(open => !open), []);
 
   if (graph.error) return <p role="alert">{graph.error}</p>;
-  if (!nodes.length) return <p>No architecture components to display.</p>;
+  if (!nodes.length) return <p>{m.architecture.view.empty}</p>;
   return <>
     {/* The heading carries both explanations, so the graph area keeps its height. */}
     <div className="panel-heading">
-      <h2 id="architecture-heading">Architecture</h2>
-      <HelpHint label="Graph controls" bodyId="graph-controls-help">Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom and fit buttons to change the view.</HelpHint>
-      <HelpHint label="Playback speed" bodyId="flight-pace-help">Playback speed changes how fast the browser paints recorded movements. It does not change virtual time, the recorded history, or the run. Every movement you see was already recorded before it was painted.</HelpHint>
+      <h2 id="architecture-heading">{m.architecture.view.heading}</h2>
+      <HelpHint label={m.architecture.view.controlsHelpLabel} bodyId="graph-controls-help">{m.architecture.view.controlsHelp}</HelpHint>
+      <HelpHint label={m.architecture.view.paceHelpLabel} bodyId="flight-pace-help">{m.architecture.view.paceHelp}</HelpHint>
     </div>
     <FlightReadout position={playback.position} />
     {/* While a movement is painted, the narration carries this region's sentence, so it is stated once. */}
     {flight ? null
-      : <p id="movement-cue" className="movement-cue" role="status" aria-label="Request and message movement">{movementText ?? "No request or message movement is highlighted."}</p>}
-    {selectedId ? <a className="inspector-link" href="#component-inspector">Skip to component inspector</a> : null}
+      : <p id="movement-cue" className="movement-cue" role="status" aria-label={m.architecture.view.movementRegion}>{movementText ?? m.architecture.view.noMovement}</p>}
+    {selectedId ? <a className="inspector-link" href="#component-inspector">{m.architecture.view.skipToInspector}</a> : null}
     <div className={`architecture-layout${selectedId || flight ? " has-selection" : ""}${onPick ? " is-picking" : ""}`}>
-      <div className={`graph-canvas${ready ? "" : " is-laying-out"}`} ref={canvas} aria-busy={ready ? undefined : true} aria-label="Architecture graph" aria-describedby="movement-cue" onKeyDownCapture={event => {
+      <div className={`graph-canvas${ready ? "" : " is-laying-out"}`} ref={canvas} aria-busy={ready ? undefined : true} aria-label={m.architecture.view.graph} aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
         if (event.key === "Escape") {
           event.preventDefault(); event.stopPropagation(); clearSelection();
         }
       }}>
-        <ReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge> aria-label="Architecture graph" nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+        <ReactFlow<ArchitectureNode | ResourceNode, ArchitectureEdge | OwnershipEdge> aria-label={m.architecture.view.graph} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
           onNodesChange={onNodesChange} onPaneClick={clearSelection}
           onNodeClick={(_, node) => pickRef.current?.({ kind: "node", id: node.id })}
           onEdgeClick={(_, edge) => pickRef.current?.({ kind: "link", source: edge.source, target: edge.target })}
@@ -763,7 +784,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
           nodesFocusable edgesFocusable={false} deleteKeyCode={null}
           selectionKeyCode={null} multiSelectionKeyCode={null} panActivationKeyCode={null}
           minZoom={minZoom} maxZoom={maxZoom}
-          ariaLabelConfig={ariaLabelConfig}>
+          ariaLabelConfig={labels}>
           <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
             onFitted={setFittedKey} movementNodes={movementNodes} />
@@ -777,14 +798,14 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
         </ReactFlow>
       </div>
       {selectedId || flight ? <div className="architecture-side">
-        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges} /> : null}
+        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges} {...(graph.names ? { names: graph.names } : {})} /> : null}
         {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
           {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}
       </div> : null}
     </div>
     <details className="connections">
-      <summary>Connections ({graph.edges.length})</summary>
+      <summary>{m.architecture.view.connections(graph.edges.length)}</summary>
       <ul>{graph.edges.map(edge => <li key={edge.id}>{displayName(graph.names, edge.source)} → {displayName(graph.names, edge.target)}: {String(edge.label)}</li>)}</ul>
     </details>
   </>;

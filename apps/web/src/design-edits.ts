@@ -12,6 +12,8 @@ import type {
   SlotEdit,
   SubscriptionEdit,
 } from "@distlab/contracts";
+import { byCode } from "./i18n/catalog.ts";
+import type { Messages } from "./i18n/catalog.ts";
 
 /**
  * The Design editor's draft (ADR-005, #112). Pure and data-only: it reads a lesson's architecture
@@ -19,7 +21,8 @@ import type {
  * lists the controls to offer, and turns control values into `ArchitectureEdits` in the worker's
  * normalized form (the scenario package's stage-3 reading of an overlay, which the main thread
  * never imports). Offering choices from data is affordance, not validation: the worker's load
- * decides whether a design is valid.
+ * decides whether a design is valid. Labels are rendered from codes and ids with `m: Messages` (ADR-007);
+ * the draft itself holds no text.
  */
 
 /** What the draft functions read. Every field is data. */
@@ -156,15 +159,15 @@ function resolvedPeer(context: DesignContext, draft: DesignDraft, component: str
 }
 
 /** The controls to offer, in the allowance's order: each slot followed by its model's options, then bindings, resources, subscriptions. */
-export function designControls(context: DesignContext, draft: DesignDraft): readonly DesignControl[] {
+export function designControls(context: DesignContext, draft: DesignDraft, m: Messages): readonly DesignControl[] {
   const controls: DesignControl[] = [];
   for (const slot of context.allowance.slots) {
     const packaged = packagedComponent(context, slot.component);
     const packagedDescriptor = packaged?.model !== undefined && packaged.version !== undefined ? descriptor(context, packaged.model, packaged.version) : undefined;
-    const packagedLabel = packagedDescriptor?.placeholder ? "Empty slot (packaged)" : `${packaged?.model ?? "?"} ${packaged?.version ?? "?"} (packaged)`;
+    const packagedLabel = packagedDescriptor?.placeholder ? m.designEditor.controls.packagedEmpty : m.designEditor.controls.packagedModel({ model: packaged?.model ?? "?", version: packaged?.version ?? "?" });
     const edit = draft?.slots.find(item => item.component === slot.component);
     controls.push({
-      kind: "slot", id: slotControlId(slot.component), component: slot.component, label: `Model for ${slot.component}`,
+      kind: "slot", id: slotControlId(slot.component), component: slot.component, label: m.designEditor.controls.slot({ component: slot.component }),
       choices: [
         { value: PACKAGED_CHOICE, model: packaged?.model ?? "", version: packaged?.version ?? "", label: packagedLabel },
         ...slot.models.map(model => ({ value: `${model.model}@${model.version}`, model: model.model, version: model.version, label: `${model.model} ${model.version}` })),
@@ -177,7 +180,7 @@ export function designControls(context: DesignContext, draft: DesignDraft): read
     for (const option of descriptor(context, edit.model, edit.version)?.options ?? []) {
       controls.push({
         kind: "option", id: optionControlId(slot.component, option.key), component: slot.component, key: option.key,
-        label: `${slot.component}: ${option.key}`, domain: option.domain,
+        label: m.designEditor.controls.option({ component: slot.component, key: option.key }), domain: option.domain,
         value: edit.options.find(item => item.key === option.key)?.value ?? option.domain.default,
       });
     }
@@ -187,7 +190,7 @@ export function designControls(context: DesignContext, draft: DesignDraft): read
     const resolved = resolvedPeer(context, draft, binding.component, binding.peer);
     controls.push({
       kind: "binding", id: bindingControlId(binding.component, binding.peer), component: binding.component, peer: binding.peer,
-      label: `${binding.component} calls ${binding.peer} on`,
+      label: m.designEditor.controls.binding({ component: binding.component, peer: binding.peer }),
       // The resolved peer leads the list when it is not a candidate, so the select can show it.
       candidates: resolved !== undefined && !binding.candidates.includes(resolved) ? [resolved, ...binding.candidates] : binding.candidates,
       value: edit?.target ?? resolved ?? binding.candidates[0] ?? "",
@@ -199,7 +202,7 @@ export function designControls(context: DesignContext, draft: DesignDraft): read
     const edit = draft?.resources.find(item => item.owner === resource.owner && item.resource === resource.resource);
     controls.push({
       kind: "resource", id: resourceControlId(resource.owner, resource.resource), owner: resource.owner, resource: resource.resource,
-      label: `${resource.owner} owns ${resource.resource === "database" ? "a database" : "a key-value store"}`,
+      label: (resource.resource === "database" ? m.designEditor.controls.ownsDatabase : m.designEditor.controls.ownsStore)({ owner: resource.owner }),
       value: edit ? edit.change === "attach" : owned,
       packaged: edit === undefined,
     });
@@ -210,7 +213,7 @@ export function designControls(context: DesignContext, draft: DesignDraft): read
     controls.push({
       kind: "subscription", id: subscriptionControlId(subscription.consumer, subscription.destination),
       consumer: subscription.consumer, destination: subscription.destination,
-      label: `${subscription.consumer} subscribes to ${subscription.destination}`,
+      label: m.designEditor.controls.subscription({ consumer: subscription.consumer, destination: subscription.destination }),
       value: edit ? edit.change === "subscribe" : exists,
       packaged: edit === undefined,
     });
@@ -317,29 +320,16 @@ export function setSubscription(context: DesignContext, draft: DesignDraft, cons
 }
 
 /** The Run identity form of the applied edits: the count, then each filled slot. */
-export function describeDesign(edits: DesignDraft): string {
+export function describeDesign(edits: DesignDraft, m: Messages): string {
   const count = editCount(edits);
   if (!count) return "";
-  return [`${count} design edit${count === 1 ? "" : "s"}`, ...(edits?.slots ?? []).map(slot => `${slot.component}: ${slot.model} ${slot.version}`)].join(" · ");
+  return [m.designEditor.summary.edits(count), ...(edits?.slots ?? []).map(slot => m.designEditor.summary.slot({ component: slot.component, model: slot.model, version: slot.version }))].join(m.designChoices.separator);
 }
 
-const diagnosticText: Readonly<Record<string, string>> = {
-  STORAGE: "This model needs storage that the component does not own.",
-  SUBSCRIPTION: "The model's consumers and the component's subscriptions do not match.",
-  PEER: "A peer of this component does not resolve to a component it may call.",
-  INTERFACE: "The called component does not offer an endpoint this component calls.",
-  LINK: "No link carries this call.",
-  PUBLISH: "This model publishes to a destination that does not exist.",
-  OWNERSHIP: "Only services own resources.",
-  DUPLICATE: "Two edits change the same element.",
-  OVERLAY_NOT_ALLOWED: "This lesson does not allow this edit.",
-  PARAMETER_VALUE: "This value is outside the allowed range.",
-};
-
-/** Plain-language text for one diagnostic code, followed by the code. */
-export function designDiagnosticText(code: string, maxEdits: number): string {
-  const text = code === "OVERLAY_LIMIT" ? `This lesson allows at most ${maxEdits} design edits.` : diagnosticText[code] ?? "This edit is not valid.";
-  return `${text} (${code})`;
+/** Plain-language text for one diagnostic code, followed by the code. An unknown code gets the generic text. */
+export function designDiagnosticText(code: string, maxEdits: number, m: Messages): string {
+  const text = code === "OVERLAY_LIMIT" ? m.designEditor.limit(maxEdits) : byCode(m.designEditor.diagnostics, code) ?? m.designEditor.diagnosticUnknown;
+  return m.designChoices.withCode({ text, code });
 }
 
 /** True for a diagnostic that points into the architecture edits. */
@@ -351,14 +341,14 @@ export function isDesignDiagnostic(diagnostic: ScenarioDiagnostic): boolean {
  * Places each `/architecture` diagnostic on the control its path points to, in the submitted
  * edits, or in the section's general list when it points to none.
  */
-export function placeDesignDiagnostics(diagnostics: readonly ScenarioDiagnostic[], edits: DesignDraft, maxEdits: number): {
+export function placeDesignDiagnostics(diagnostics: readonly ScenarioDiagnostic[], edits: DesignDraft, maxEdits: number, m: Messages): {
   readonly controls: ReadonlyMap<string, readonly string[]>;
   readonly general: readonly string[];
 } {
   const controls = new Map<string, string[]>();
   const general: string[] = [];
   for (const item of diagnostics.filter(isDesignDiagnostic)) {
-    const message = designDiagnosticText(item.code, maxEdits);
+    const message = designDiagnosticText(item.code, maxEdits, m);
     const match = /^\/architecture\/(slots|bindings|resources|subscriptions)\/(\d+)(?:\/(.*))?$/.exec(item.path);
     const index = match ? Number(match[2]) : -1;
     let id: string | undefined;

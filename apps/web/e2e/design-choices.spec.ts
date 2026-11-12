@@ -147,7 +147,7 @@ test("Compare drops the choice the pair compares and keeps the shared one", asyn
   await expect(status(page)).toHaveText("READY");
   await button(page, "Compare: Retry with idempotency").click();
   await expect(status(page)).toHaveText("READY");
-  await expect(page.getByText("Compare kept 0 student faults, kept timeout=40 and dropped idempotency.")).toBeVisible();
+  await expect(page.getByText("Compare kept 0 student faults, kept timeout=40, and dropped idempotency.")).toBeVisible();
   // The drawer stays open, and the paired lesson's own default for idempotency is on.
   await expect(panel(page).getByLabel("Idempotency key")).toBeChecked();
   await expect(panel(page).getByLabel("Client timeout")).toHaveValue("40");

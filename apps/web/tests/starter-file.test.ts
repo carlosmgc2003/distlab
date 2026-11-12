@@ -5,12 +5,15 @@ import { hostedCatalogs } from "@distlab/catalogs";
 import { canonicalEncode } from "@distlab/kernel";
 import { DeterministicScenarioEngine, openHarness, resolveHostedCatalog, validateScenarioDocument } from "@distlab/scenario";
 import type { HarnessExport } from "@distlab/scenario";
-import { assessments, scenarios } from "../src/scenarios.ts";
+import { messages } from "../src/i18n/catalog.ts";
+import { assessments, lessonDescription, lessonTitle, scenarios, starterSource } from "../src/scenarios.ts";
 import { starterDocument, starterFile, starterName } from "../src/starter-file.ts";
 
 // #116: save a packaged lesson as a starter scenario file (ADR-006 "Follow-up work" item 4, DOC-AC-2).
 
 type Doc = Record<string, unknown>;
+const en = messages("en");
+const es = messages("es");
 const packagedNames = scenarios.map(choice => (choice.scenario as Doc).name as string);
 
 async function results(run: Promise<HarnessExport>): Promise<{ status: string; runId: string; results: string }> {
@@ -32,9 +35,9 @@ test("a starter's scenario name puts -copy before the packaged version", () => {
 
 test("Retry: idempotent downloads retry-idempotent-copy.json with the lesson's copy, catalog, labels, and renamed policy", () => {
   const choice = scenarios.find(item => item.id === "retry-idempotent")!;
-  const file = starterFile(choice);
+  const file = starterFile(starterSource(choice, en));
   assert.equal(file.fileName, "retry-idempotent-copy.json");
-  const document = starterDocument(choice);
+  const document = starterDocument(starterSource(choice, en));
   // Pretty-printed JSON of exactly the built document, ending in a newline.
   assert.equal(file.text, `${JSON.stringify(document, null, 2)}\n`);
   assert.deepEqual(Object.keys(document), ["format", "formatVersion", "catalog", "presentation", "scenario", "overlayPolicy"]);
@@ -56,18 +59,18 @@ test("Retry: idempotent downloads retry-idempotent-copy.json with the lesson's c
 test("checkout starters carry no assertion labels, so each check shows its ID", () => {
   for (const id of ["normal", "response-lost"]) {
     const choice = scenarios.find(item => item.id === id)!;
-    const document = starterDocument(choice);
-    assert.deepEqual(document.presentation, { title: choice.title, summary: choice.description });
+    const document = starterDocument(starterSource(choice, en));
+    assert.deepEqual(document.presentation, { title: lessonTitle(choice, en), summary: lessonDescription(choice, en) });
     assert.deepEqual(document.catalog, { id: "mvp.checkout", version: "1.0.0" });
   }
-  assert.equal(starterFile(scenarios.find(item => item.id === "response-lost")!).fileName, "checkout-processor-response-lost-copy.json");
+  assert.equal(starterFile(starterSource(scenarios.find(item => item.id === "response-lost")!, en)).fileName, "checkout-processor-response-lost-copy.json");
 });
 
 test("DOC-AC-2 every packaged lesson's starter file validates with no diagnostics and gives the packaged assertion results", async () => {
   // Every lesson card, plus each assessment's base lesson, which has no card of its own (#97).
   assert.equal(scenarios.length + assessments.length, hostedCatalogs.reservedNames.length);
   for (const choice of scenarios) {
-    const file = starterFile(choice);
+    const file = starterFile(starterSource(choice, en));
     const validated = validateScenarioDocument(file.text, hostedCatalogs);
     assert.ok(validated.ok, `${choice.id}: ${JSON.stringify(validated.ok ? null : validated.diagnostics)}`);
     // The starter never reuses a packaged lesson name.
@@ -90,8 +93,25 @@ test("DOC-AC-2 every packaged lesson's starter file validates with no diagnostic
 test("building a starter is pure: it leaves the frozen packaged lesson untouched and gives the same text every time", () => {
   for (const choice of scenarios) {
     const before = canonicalEncode(choice.scenario as CanonicalValue);
-    assert.equal(starterFile(choice).text, starterFile(choice).text);
+    assert.equal(starterFile(starterSource(choice, en)).text, starterFile(starterSource(choice, en)).text);
     assert.equal(canonicalEncode(choice.scenario as CanonicalValue), before);
     assert.equal((choice.scenario as Doc).name, packagedNames[scenarios.indexOf(choice)]);
+  }
+});
+
+test("a starter file is exported in the active language, and still validates and keeps its identifiers", () => {
+  const choice = scenarios.find(item => item.id === "retry-idempotent")!;
+  const document = starterDocument(starterSource(choice, es));
+  assert.deepEqual(document.presentation, {
+    title: "Reintento con idempotencia",
+    summary: "La misma respuesta perdida y el mismo reintento producen un solo pago y el resultado original.",
+    assertions: { "one-payment-per-order": "Una solicitud de pago reintentada cobra el pedido una sola vez" },
+  });
+  // Identifiers, the scenario, and the policy do not depend on the language.
+  assert.deepEqual(starterDocument(starterSource(choice, en)).scenario, document.scenario);
+  assert.deepEqual(starterDocument(starterSource(choice, en)).overlayPolicy, document.overlayPolicy);
+  for (const item of scenarios) {
+    const validated = validateScenarioDocument(starterFile(starterSource(item, es)).text, hostedCatalogs);
+    assert.ok(validated.ok, `${item.id}: ${JSON.stringify(validated.ok ? null : validated.diagnostics)}`);
   }
 });

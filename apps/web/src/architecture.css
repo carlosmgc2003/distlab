@@ -575,6 +575,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .top-bar .run-status { max-width: 11rem; margin: 0; white-space: normal; line-height: 1.15; }
 .top-bar .run-metrics > div { flex-direction: column; align-items: flex-start; gap: 0; }
 .top-bar .run-metrics dt { font-size: .7rem; line-height: 1.1; color: var(--text-secondary); font-weight: 600; }
+/* ADR-007: Spanish metric labels are longer; they wrap onto two short lines beside the 44px buttons, so the bar stays one row. */
+:root:lang(es) .top-bar .run-metrics dt { white-space: normal; max-width: 4.5rem; }
 .top-bar .run-metrics dd { margin: 0; line-height: 1.2; font-weight: 650; }
 .top-bar-alerts { flex: none; display: flex; flex-direction: column; gap: 6px; }
 .top-bar-alerts p { margin: 0; }
@@ -584,6 +586,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .replay-toolbar .control-buttons button { min-height: 36px; min-width: 0; padding: 4px 10px; font-size: .85rem; }
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
+.language-switcher select { font: inherit; font-size: 0.8125rem; padding: 2px 4px; }
+.workspace-empty > .language-switcher { float: right; margin: 0 0 8px 12px; }
+.lesson-chooser-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 /* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) a fixed cap
    would wrap the lesson trigger and Open scenario file… at the desktop baselines. */
 .scenario-picker { flex: 0 1 auto; }

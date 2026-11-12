@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import { useMessages } from "./i18n/react.tsx";
 
 /**
  * The Service state dialog (#142): what each service knows right now, reached from ③ Investigate.
@@ -15,6 +16,7 @@ export function ServiceStateDialog({ open, time, onClose, children }: {
   readonly onClose: () => void;
   readonly children: ReactNode;
 }) {
+  const m = useMessages();
   const dialog = useRef<HTMLDialogElement>(null);
   // The dialog may close natively (Escape): the shell's state follows it, never the reverse.
   const expected = useRef(open);
@@ -32,8 +34,8 @@ export function ServiceStateDialog({ open, time, onClose, children }: {
   return <dialog ref={dialog} className="service-state-dialog" role="dialog" aria-modal="true" aria-labelledby="service-state-title"
     onClose={() => { if (expected.current) onClose(); }}>
     <div className="service-state-header">
-      <h2 id="service-state-title">Service state at t={time ?? "—"}</h2>
-      <button type="button" className="service-state-close" onClick={onClose}>Close</button>
+      <h2 id="service-state-title">{m.serviceState.title(time ?? "—")}</h2>
+      <button type="button" className="service-state-close" onClick={onClose}>{m.serviceState.close}</button>
     </div>
     {/* Focusable so keyboard users can scroll a tall body. */}
     <div className="service-state-body" tabIndex={0}>{open ? children : null}</div>

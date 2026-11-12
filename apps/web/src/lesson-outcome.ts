@@ -1,5 +1,6 @@
 import type { RuntimeProjectionSet } from "@distlab/contracts";
 import type { LessonCheckView } from "./lesson-checks.ts";
+import type { Messages } from "./i18n/catalog.ts";
 
 /**
  * The one-line outcome at the top of the Lesson panel's ③ Investigate (#141). Pure: it reads the
@@ -11,21 +12,19 @@ import type { LessonCheckView } from "./lesson-checks.ts";
  * so it wins over pending or incomplete ones; "all hold" needs every invariant settled as HOLDS.
  * A view with no invariant rows yet (no client verdicts published) reads as pending.
  */
-export function outcomeSummary(view: Pick<LessonCheckView, "invariants">): string {
+export function outcomeSummary(view: Pick<LessonCheckView, "invariants">, m: Messages): string {
   const total = view.invariants.length;
   const violated = view.invariants.filter(row => row.verdict === "VIOLATED").length;
-  if (violated) return `${violated} of ${total} business invariants violated`;
-  if (total && view.invariants.every(row => row.verdict === "HOLDS")) return `All ${total} business invariants hold`;
-  if (!total || view.invariants.some(row => row.verdict === "PENDING")) return "Checks are pending: run the lesson";
-  return "Checks are incomplete";
+  if (violated) return m.commerceLesson.outcome.violated({ violated, total });
+  if (total && view.invariants.every(row => row.verdict === "HOLDS")) return m.commerceLesson.outcome.allHold(total);
+  if (!total || view.invariants.some(row => row.verdict === "PENDING")) return m.commerceLesson.outcome.pending;
+  return m.commerceLesson.outcome.incomplete;
 }
 
 /** A checkout lesson's outcome: the Run overview's existing outcome sentence, unchanged. */
-export function runOutcome(status: RuntimeProjectionSet["simulation"]["status"] | undefined): string {
-  return status === "COMPLETED" ? "Execution completed; business outcome is shown from recorded state."
-    : status === "FAILED" ? "Execution failed."
-      : status === "RUNNING" ? "Execution in progress."
-        : "Execution partial or ready.";
+export function runOutcome(status: RuntimeProjectionSet["simulation"]["status"] | undefined, m: Messages): string {
+  const copy = m.commerceLesson.runOutcome;
+  return status === "COMPLETED" ? copy.completed : status === "FAILED" ? copy.failed : status === "RUNNING" ? copy.running : copy.other;
 }
 
 /** Whether a status ends a run: the moment ③ Investigate is revealed and its summary announced. */

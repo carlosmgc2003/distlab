@@ -12,6 +12,7 @@ import {
   correlation,
   edgeFor,
   movementOf,
+  movementText,
   orderObservations,
   payloadVisibility,
   traceView,
@@ -30,6 +31,10 @@ import {
   traceFilterMessage,
 } from "../src/timeline.ts";
 import { filterObservations, parseTimelineFilter } from "./filter-oracle.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
 import { emptyTimelineDraft, narrowToTrace, parseTimelineQuery, queryTimeline, readerFilter, revealTimelineObservation, timelineSuggestions, visibleChoices } from "../src/timeline-query.ts";
 
 const checkoutEdges: readonly MovementEdge[] = [
@@ -105,9 +110,10 @@ test("timeline keeps sequence order when virtual times are equal", () => {
   assert.equal(JSON.stringify(rows), before);
 });
 
-test("a delivery's label names its stored attempt", () => {
+test("a delivery's label names its stored attempt, in each language", () => {
   const delivery = observation({ id: "delivery-1", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } });
-  assert.equal(recordLabel(delivery), "Message delivered (attempt 1)");
+  assert.equal(recordLabel(delivery, m), "Message delivered (attempt 1)");
+  assert.equal(recordLabel(delivery, messages("es")), "Mensaje entregado (intento 1)");
 });
 
 test("filters match headless history queries and reject invalid virtual-time bounds", async () => {
@@ -171,15 +177,15 @@ test("trace, span, and causation stay attached to stored before and after data",
   assert.equal(trace.causation.find(item => item.effectId === "write")?.causeFound, true);
   const linked = correlation(rows, write);
   assert.equal(linked.cause?.id, "published");
-  assert.deepEqual(changeEvidence(write).map(item => [item.label, item.before, item.after]), [["Recorded change", null, { status: "CREATED" }]]);
-  assert.equal(changeEvidence(committed)[0]?.label, "orders order-1");
-  assert.deepEqual(changeEvidence(redacted), []);
-  assert.deepEqual(changeEvidence(omitted), []);
+  assert.deepEqual(changeEvidence(write, m).map(item => [item.label, item.before, item.after]), [["Recorded change", null, { status: "CREATED" }]]);
+  assert.equal(changeEvidence(committed, m)[0]?.label, "orders order-1");
+  assert.deepEqual(changeEvidence(redacted, m), []);
+  assert.deepEqual(changeEvidence(omitted, m), []);
   assert.equal(payloadVisibility(redacted), "redacted");
   assert.equal(payloadVisibility(omitted), "omitted");
-  assert.equal(payloadCopy(redacted), "Stored payload is redacted. Hidden fields are not available.");
-  assert.equal(payloadCopy(omitted), "No data field was stored.");
-  assert.equal(payloadCopy(write), "Stored payload");
+  assert.equal(payloadCopy(redacted, m), "Stored payload is redacted. Hidden fields are not available.");
+  assert.equal(payloadCopy(omitted, m), "No data field was stored.");
+  assert.equal(payloadCopy(write, m), "Stored payload");
   assert.equal(JSON.stringify(redacted).includes("invented-secret"), false);
 });
 
@@ -187,7 +193,7 @@ test("request and message observations project onto the checkout links", async (
   for (const [scenario, choice] of [[normalCheckout, scenarios[0]], [responseLostCheckout, scenarios[1]]] as const) {
     const { projection } = await completed(scenario, choice);
     const metadata = packagedMetadata(choice);
-    const edges = movementEdges(mapArchitecture(projection.architecture, metadata.architecture, metadata.name).edges);
+    const edges = movementEdges(mapArchitecture(projection.architecture, metadata.architecture, metadata.name, m).edges);
     assert.deepEqual(edges.map(edge => [edge.source, edge.target, edge.relationship]), checkoutEdges.map(edge => [edge.source, edge.target, edge.relationship]));
     const observations = projection.history.observations;
     const request = observations.find(item => item.type === "network.request.sent" && item.source === "customer-app");
@@ -197,38 +203,38 @@ test("request and message observations project onto the checkout links", async (
     const acknowledged = observations.find(item => item.type === "message.acknowledged");
     assert.ok(request && response && published && delivered && acknowledged);
     assert.equal(edgeFor(movementOf(request)!, edges)?.id, edges.find(edge => edge.source === "customer-app")?.id);
-    assert.match(movementOf(request)?.text ?? "", /Request sent from customer-app to orders at virtual time/);
+    assert.match(movementText(movementOf(request)!, m), /Request sent from customer-app to orders at virtual time/);
     assert.equal(edgeFor(movementOf(response)!, edges)?.id, edges.find(edge => edge.source === "payments" && edge.target === "payment-processor")?.id);
-    assert.match(movementOf(response)?.text ?? "", /Response sent from payment-processor to payments/);
+    assert.match(movementText(movementOf(response)!, m), /Response sent from payment-processor to payments/);
     assert.equal(edgeFor(movementOf(published)!, edges)?.id, edges.find(edge => edge.relationship === "publication")?.id);
-    assert.match(movementOf(delivered)?.text ?? "", /Message delivered from OrderCreated to payments/);
+    assert.match(movementText(movementOf(delivered)!, m), /Message delivered from OrderCreated to payments/);
     assert.equal(edgeFor(movementOf(delivered)!, edges)?.id, edges.find(edge => edge.relationship === "subscription")?.id);
-    assert.match(movementOf(acknowledged)?.text ?? "", /Message acknowledged by payments on OrderCreated/);
+    assert.match(movementText(movementOf(acknowledged)!, m), /Message acknowledged by payments on OrderCreated/);
     const redactedPublished = { ...published, data: { redacted: true } };
     assert.equal(edgeFor(movementOf(redactedPublished)!, edges)?.id, edgeFor(movementOf(published)!, edges)?.id);
-    assert.equal(movementOf(redactedPublished)?.text.includes("OrderCreated"), true);
-    const emphasis = emphasisFor(request, edges);
+    assert.equal(movementText(movementOf(redactedPublished)!, m).includes("OrderCreated"), true);
+    const emphasis = emphasisFor(request, edges, m);
     assert.equal(emphasis.kind, "request");
     assert.equal(emphasis.pulseId, request.id);
     assert.match(movementPulseClass(request.id), /^pulse-[a-z0-9]+$/);
-    const quiet = emphasisFor(observations.find(item => item.type === "simulation.created")!, edges);
+    const quiet = emphasisFor(observations.find(item => item.type === "simulation.created")!, edges, m);
     assert.equal(quiet.kind, undefined);
     assert.match(quiet.text ?? "", /No request or message movement/);
   }
   const lost = await completed(responseLostCheckout, scenarios[1]);
   const dropped = lost.projection.history.observations.find(item => item.type === "network.response.dropped");
   assert.ok(dropped);
-  assert.match(movementOf(dropped)?.text ?? "", /Response dropped from payment-processor to payments/);
+  assert.match(movementText(movementOf(dropped)!, m), /Response dropped from payment-processor to payments/);
 });
 
 test("visible-history suggestions refresh across runs and exact mode matches the reader", async () => {
   const normal = await completed(normalCheckout, scenarios[0]);
   const lost = await completed(responseLostCheckout, scenarios[1]);
-  const normalTypes = timelineSuggestions(normal.projection.history.observations).types.map(choice => choice.value);
-  const lostTypes = timelineSuggestions(lost.projection.history.observations).types.map(choice => choice.value);
+  const normalTypes = timelineSuggestions(normal.projection.history.observations, [], m).types.map(choice => choice.value);
+  const lostTypes = timelineSuggestions(lost.projection.history.observations, [], m).types.map(choice => choice.value);
   assert.equal(normalTypes.includes("network.response.dropped"), false);
   assert.equal(lostTypes.includes("network.response.dropped"), true);
-  assert.equal(visibleChoices(timelineSuggestions(lost.projection.history.observations).types, "network").shown.some(choice => choice.value === "network.response.dropped"), true);
+  assert.equal(visibleChoices(timelineSuggestions(lost.projection.history.observations, [], m).types, "network").shown.some(choice => choice.value === "network.response.dropped"), true);
   const chosen = parseTimelineQuery({ ...emptyTimelineDraft, type: "network.response.dropped", typeMode: "exact" });
   assert.equal(chosen.ok, true);
   if (!chosen.ok) return;
@@ -277,10 +283,10 @@ test("playback, filters, and reset stay on the UI copy of history", () => {
   assert.equal(continuesHistory([...rows, observation({ id: "b", time: 1, sequence: 1, type: "clock.advanced", source: "simulation" })], rows), false);
   const incomplete = terminalMark("FAILED", { code: "SIMULATION_FAILED", message: "failed", context: { code: "HISTORY_LIMIT_EXCEEDED", historyComplete: false, time: 4, lastObservationId: "observation-9" } });
   assert.ok(incomplete);
-  assert.match(terminalCopy(incomplete), /HISTORY_LIMIT_EXCEEDED/);
-  assert.match(terminalCopy(incomplete), /incomplete/);
-  assert.match(terminalCopy(incomplete), /observation-9/);
-  assert.match(terminalCopy(terminalMark(null, { code: "SIMULATION_FAILED", message: "failed", context: { code: "UNKNOWN" } })!), /not reported/);
+  assert.match(terminalCopy(incomplete, m), /HISTORY_LIMIT_EXCEEDED/);
+  assert.match(terminalCopy(incomplete, m), /incomplete/);
+  assert.match(terminalCopy(incomplete, m), /observation-9/);
+  assert.match(terminalCopy(terminalMark(null, { code: "SIMULATION_FAILED", message: "failed", context: { code: "UNKNOWN" } })!, m), /not reported/);
   assert.equal(terminalMark("COMPLETED", null), null);
 });
 
@@ -315,10 +321,10 @@ test("navigation clears only the filters that hide the destination", () => {
   assert.equal(hiddenReader.type, undefined);
   assert.equal(hiddenReader.component, "payment-processor");
   assert.deepEqual(filterObservations([cause], hiddenReader).map(item => item.id), ["cause"]);
-  assert.match(revealMessage(hidden.cleared, cause), /The type filter was cleared so this observation is visible/);
+  assert.match(revealMessage(hidden.cleared, cause, m), /The type filter was cleared so this observation is visible/);
   const visible = revealTimelineObservation({ ...emptyTimelineDraft, component: "payment-processor" }, cause);
   assert.equal(visible.changed, false);
-  assert.match(revealMessage(visible.cleared, cause), /^Selected Observation #174: external\.effect\.committed at virtual time 5\.$/);
+  assert.match(revealMessage(visible.cleared, cause, m), /^Selected Observation #174: external\.effect\.committed at virtual time 5\.$/);
   const prefixed = revealTimelineObservation({
     ...emptyTimelineDraft, type: "external", typeMode: "prefix", component: "pay", componentMode: "prefix",
   }, cause);
@@ -332,8 +338,8 @@ test("navigation clears only the filters that hide the destination", () => {
   const several = revealTimelineObservation({
     ...emptyTimelineDraft, type: "network.response.dropped", traceId: "other", fromTime: "20", entityKind: "order", entityId: "order-1",
   }, cause);
-  assert.deepEqual(several.cleared, ["virtual time from", "type", "trace", "entity"]);
-  assert.match(revealMessage(several.cleared, cause), /virtual time from, type, trace, and entity filters were cleared/);
+  assert.deepEqual(several.cleared, ["fromTime", "type", "traceId", "entity"]);
+  assert.match(revealMessage(several.cleared, cause, m), /virtual time from, type, trace, and entity filters were cleared/);
   const invalid = revealTimelineObservation({ ...emptyTimelineDraft, fromTime: "nope", type: "other" }, cause);
   assert.equal(invalid.draft.fromTime, "");
   assert.equal(invalid.draft.type, "");
@@ -341,25 +347,25 @@ test("navigation clears only the filters that hide the destination", () => {
   assert.ok(invalidReader);
   assert.equal(invalidReader.fromTime, undefined);
   assert.equal(invalidReader.type, undefined);
-  assert.match(revealMessage(invalid.cleared, cause), /cleared so this observation is visible/);
+  assert.match(revealMessage(invalid.cleared, cause, m), /cleared so this observation is visible/);
   const invertedAtUpperBound = revealTimelineObservation({ ...emptyTimelineDraft, fromTime: "10", toTime: "5" }, cause);
-  assert.deepEqual(invertedAtUpperBound.cleared, ["virtual time from"]);
+  assert.deepEqual(invertedAtUpperBound.cleared, ["fromTime"]);
   assert.equal(invertedAtUpperBound.draft.toTime, "5");
   assert.deepEqual(readerFilter(invertedAtUpperBound.query), { toTime: 5 });
   const invertedBetweenBounds = revealTimelineObservation({ ...emptyTimelineDraft, fromTime: "10", toTime: "2" }, cause);
-  assert.deepEqual(invertedBetweenBounds.cleared, ["virtual time from", "virtual time to"]);
+  assert.deepEqual(invertedBetweenBounds.cleared, ["fromTime", "toTime"]);
   assert.deepEqual(readerFilter(invertedBetweenBounds.query), {});
   const trace = narrowToTrace({ ...emptyTimelineDraft, type: "network.response.dropped", traceId: "other" }, "trace-9");
   assert.equal(trace.changed, true);
   assert.deepEqual(trace.draft, { ...emptyTimelineDraft, traceId: "trace-9" });
-  assert.match(traceFilterMessage("trace-9", trace), /The timeline now shows trace trace-9/);
-  assert.match(traceFilterMessage("trace-9", trace), /type and trace filters were cleared/);
+  assert.match(traceFilterMessage("trace-9", trace, m), /The timeline now shows trace trace-9/);
+  assert.match(traceFilterMessage("trace-9", trace, m), /type and trace filters were cleared/);
   const same = narrowToTrace({ ...emptyTimelineDraft, traceId: "trace-9" }, "trace-9");
   assert.equal(same.changed, false);
-  assert.match(traceFilterMessage("trace-9", same), /already shows trace trace-9/);
+  assert.match(traceFilterMessage("trace-9", same, m), /already shows trace trace-9/);
   const opened = narrowToTrace(emptyTimelineDraft, "trace-9");
   assert.equal(opened.cleared.length, 0);
-  assert.match(traceFilterMessage("trace-9", opened), /The timeline now shows trace trace-9\.$/);
+  assert.match(traceFilterMessage("trace-9", opened, m), /The timeline now shows trace trace-9\.$/);
   assert.deepEqual(cause, before);
 });
 
@@ -402,18 +408,37 @@ test("observation headings describe only stored fields and never reconstruct red
     "fault.custom.rule": "Fault recorded",
   };
   for (const [type, heading] of Object.entries(headings)) {
-    assert.equal(recordLabel(observation({ id: type, time: 1, sequence: 1, type, source: "orders" })), heading);
+    assert.equal(recordLabel(observation({ id: type, time: 1, sequence: 1, type, source: "orders" }), m), heading);
   }
   const delivered = observation({ id: "delivered", time: 1, sequence: 2, type: "message.delivered", source: "payments", data: { attempt: 2 } });
-  assert.equal(recordLabel(delivered), "Message delivered (attempt 2)");
+  assert.equal(recordLabel(delivered, m), "Message delivered (attempt 2)");
   const redactedDelivered = observation({ id: "redacted", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { redacted: true } });
-  assert.equal(recordLabel(redactedDelivered), "Message delivered");
+  assert.equal(recordLabel(redactedDelivered, m), "Message delivered");
   assert.equal(JSON.stringify(redactedDelivered).includes("invented-secret"), false);
   const before = structuredClone(delivered);
-  recordLabel(delivered);
+  recordLabel(delivered, m);
   assert.deepEqual(delivered, before);
 });
 
 function blank() {
   return { fromTime: "", toTime: "", type: "", component: "", traceId: "", eventId: "", entityKind: "", entityId: "" };
 }
+
+test("labels and cleared-filter lists follow the language through plural and list rules", () => {
+  const delivered = observation({ id: "d", time: 1, sequence: 2, type: "message.delivered", source: "payments", data: { attempt: 2 } });
+  assert.equal(recordLabel(delivered, es), "Mensaje entregado (intento 2)");
+  assert.equal(recordLabel(observation({ id: "x", time: 1, sequence: 1, type: "unknown.type", source: "orders" }), es), "unknown.type");
+  const cause = observation({ id: "c", time: 5, sequence: 7, type: "external.effect.committed", source: "payment-processor" });
+  // One cleared filter is singular, several are a list; codes are deduplicated before any text exists.
+  assert.equal(revealMessage(["type"], cause, m), "Selected Observation #7: external.effect.committed at virtual time 5. The type filter was cleared so this observation is visible.");
+  assert.match(revealMessage(["type"], cause, es), /Se quitó el filtro de tipo para que esta observación sea visible\.$/);
+  assert.match(revealMessage(["type", "traceId", "entity"], cause, es), /Se quitaron los filtros de tipo, traza y entidad para que/);
+  assert.match(revealMessage([{ quickView: "messages" }], cause, m), /The messages quick view filter was cleared/);
+  assert.match(revealMessage([{ quickView: "messages" }], cause, es), /vista rápida mensajes/);
+  assert.match(traceFilterMessage("t", { changed: true, cleared: ["type", "component"] }, es), /^La línea de tiempo ahora muestra la traza t\. Se quitaron los filtros de tipo y componente\.$/);
+  const mark = terminalMark("FAILED", { code: "SIMULATION_FAILED", message: "failed", context: { code: "HISTORY_LIMIT_EXCEEDED", historyComplete: true, time: 4, lastObservationId: "o-9" } })!;
+  assert.equal(terminalCopy(mark, m), "Terminal failure HISTORY_LIMIT_EXCEEDED. Execution history is complete. Last recorded observation: o-9.");
+  assert.equal(terminalCopy(mark, es), "Falla terminal HISTORY_LIMIT_EXCEEDED. El historial de la ejecución está completo. Última observación registrada: o-9.");
+  assert.equal(emphasisFor(observation({ id: "q", time: 1, sequence: 1, type: "simulation.created", source: "simulation" }), [], es).text,
+    "Elegiste simulation.created en simulation en el tiempo virtual 1. No hay movimiento de solicitud ni de mensaje.");
+});

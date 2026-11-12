@@ -1,4 +1,6 @@
 import type { CanonicalValue, LessonOverlayPolicy, LessonParameter, ParameterOverride, ScenarioDiagnostic } from "@distlab/contracts";
+import { byCode } from "./i18n/catalog.ts";
+import type { Messages } from "./i18n/catalog.ts";
 
 /**
  * Design choices model (ADR-004 parameters, issue #95). Pure: it reads lesson
@@ -14,39 +16,10 @@ export interface ChoiceCopy {
   readonly hint: string;
 }
 
-const copy: Readonly<Record<string, ChoiceCopy>> = {
-  idempotency: { label: "Idempotency key", hint: "Payments stores each result by idempotency key and returns it for a repeated key." },
-  timeout: { label: "Client timeout", hint: "Virtual time the client waits for a Payments response before it gives up or retries." },
-  compensation: { label: "Compensation", hint: "Orders undoes completed saga steps when a later step fails." },
-  outbox: { label: "Transactional outbox", hint: "Payments records the event in the same commit as the payment and publishes it later." },
-  "consumer-idempotency": { label: "Idempotent consumer", hint: "Notifications records each event ID in an inbox and skips one it has seen." },
-  "circuit-breaker": { label: "Circuit breaker", hint: "Payments stops calling the risk provider after repeated failures and probes it later." },
-  "decoupled-confirmation": { label: "Confirm before notifying", hint: "Orders confirms the order at checkout instead of waiting for NotificationSent." },
-  "max-attempts": { label: "Notification delivery attempts", hint: "How many times the bus delivers OrderPlaced before it moves the message to the dead-letter queue." },
-  "optimistic-concurrency": { label: "Optimistic concurrency", hint: "Inventory checks the stock and writes the reservation in one transaction, so the database rejects a commit whose stock version changed since it was read." },
-  fencing: { label: "Fencing tokens", hint: "Storage remembers the largest lease token it has accepted for a file and rejects a write that carries a smaller one." },
-  "lease-ttl": { label: "Lease duration", hint: "The TTL each worker sets on the lease key. The key-value store removes the key when it ends, and another worker can then take the lease." },
-  "logical-clock": { label: "Lamport clocks", hint: "Both regions stamp edits with a Lamport counter instead of their wall clocks." },
-  "clock-skew": { label: "Clock skew in eu", hint: "How far region eu's wall clock runs ahead of virtual time (negative: behind)." },
-  "cache-invalidation": { label: "Invalidate cache on price change", hint: "Catalog deletes the cached price when the back office changes it, instead of letting it live until its TTL ends." },
-};
-
-/**
- * Copy for one lesson where a key means something different there. Reliable Checkout (#97) puts
- * the outbox in Orders and adds payment retries.
- */
-const lessonCopy: Readonly<Record<string, Readonly<Record<string, ChoiceCopy>>>> = {
-  "reliable-checkout@1": {
-    retries: { label: "Payment retries", hint: "How many times Payments repeats an authorization that timed out." },
-    idempotency: { label: "Idempotency key", hint: "Payments sends the order ID as an idempotency key; the processor answers a repeated key with the authorization it already holds." },
-    compensation: { label: "Compensation", hint: "Orders voids the payment and releases the inventory when a checkout step fails, then cancels the order." },
-    outbox: { label: "Transactional outbox", hint: "Orders records OrderConfirmed in the same commit as the confirmation and publishes it from a later relay." },
-  },
-};
-
 /** The copy for a parameter key, in `lesson` (a packaged scenario name) when that lesson words it differently. */
-export function choiceCopy(key: string, lesson?: string): ChoiceCopy {
-  return (lesson ? lessonCopy[lesson]?.[key] : undefined) ?? copy[key] ?? { label: key, hint: "" };
+export function choiceCopy(key: string, lesson: string | undefined, m: Messages): ChoiceCopy {
+  const own = lesson ? byCode(m.designChoices.lessonChoices, lesson) : undefined;
+  return (own ? byCode<ChoiceCopy>(own, key) : undefined) ?? byCode<ChoiceCopy>(m.designChoices.choices, key) ?? { label: key, hint: "" };
 }
 
 /** Every declared parameter, with the value the draft gives it (its default when absent). */
@@ -72,40 +45,41 @@ export function sameChoices(left: readonly ParameterOverride[], right: readonly 
   return left.length === right.length && left.every((item, index) => item.key === right[index]!.key && item.value === right[index]!.value);
 }
 
+/** A problem with a typed value as a code and its parameters. The section keeps this, never the finished text (ADR-007). */
+export type ChoiceError =
+  | { readonly code: "NOT_NUMBER" }
+  | { readonly code: "RANGE"; readonly minimum: number; readonly maximum: number };
+
+export function choiceErrorText(error: ChoiceError, m: Messages): string {
+  return error.code === "NOT_NUMBER" ? m.designChoices.errors.notNumber : m.designChoices.errors.range({ minimum: error.minimum, maximum: error.maximum });
+}
+
 /** Reads an integer field. The worker checks the same domain again; this only keeps an invalid draft from being applied. */
-export function readInteger(text: string, parameter: LessonParameter): { readonly value?: number; readonly error?: string } {
+export function readInteger(text: string, parameter: LessonParameter): { readonly value?: number; readonly error?: ChoiceError } {
   const domain = parameter.domain;
-  if (domain.type !== "integer") return { error: "This choice is not a number." };
+  if (domain.type !== "integer") return { error: { code: "NOT_NUMBER" } };
   const trimmed = text.trim();
   const value = /^-?\d+$/.test(trimmed) ? Number(trimmed) : Number.NaN;
-  if (!Number.isSafeInteger(value) || value < domain.minimum || value > domain.maximum) return { error: `Enter a whole number from ${domain.minimum} to ${domain.maximum}.` };
+  if (!Number.isSafeInteger(value) || value < domain.minimum || value > domain.maximum) return { error: { code: "RANGE", minimum: domain.minimum, maximum: domain.maximum } };
   return { value };
 }
 
-export function formatChoice(value: CanonicalValue): string {
-  return value === true ? "on" : value === false ? "off" : String(value);
+export function formatChoice(value: CanonicalValue, m: Messages): string {
+  return value === true ? m.designChoices.on : value === false ? m.designChoices.off : String(value);
 }
 
-/** The run header form of the applied overrides, for example `idempotency=on · timeout=40`. */
-export function describeChoices(overrides: readonly ParameterOverride[]): string {
-  return overrides.map(item => `${item.key}=${formatChoice(item.value)}`).join(" · ");
+/** The run header form of the applied overrides, for example `idempotency=on · timeout=40`. The key ids stay as they are. */
+export function describeChoices(overrides: readonly ParameterOverride[], m: Messages): string {
+  return overrides.map(item => `${item.key}=${formatChoice(item.value, m)}`).join(m.designChoices.separator);
 }
-
-const diagnosticText: Readonly<Record<string, string>> = {
-  UNKNOWN_PARAMETER: "This lesson does not offer this choice.",
-  PARAMETER_VALUE: "This value is outside the allowed range.",
-  DUPLICATE: "This choice appears twice.",
-  REQUIRED: "This value is required.",
-  TYPE: "This value has the wrong type.",
-};
 
 /** Places worker diagnostics whose paths point into `/parameters` on the choice they name. */
-export function placeChoiceDiagnostics(diagnostics: readonly ScenarioDiagnostic[], overrides: readonly ParameterOverride[]): ReadonlyMap<string, string> {
+export function placeChoiceDiagnostics(diagnostics: readonly ScenarioDiagnostic[], overrides: readonly ParameterOverride[], m: Messages): ReadonlyMap<string, string> {
   const placed = new Map<string, string>();
   for (const item of diagnostics) {
     const match = /^\/parameters\/(\d+)(?:\/|$)/.exec(item.path);
     const override = match ? overrides[Number(match[1])] : undefined;
-    if (override) placed.set(override.key, `${diagnosticText[item.code] ?? "This value is not valid."} (${item.code})`);
+    if (override) placed.set(override.key, m.designChoices.withCode({ text: byCode(m.designChoices.diagnostics, item.code) ?? m.designChoices.diagnosticUnknown, code: item.code }));
   }
   return placed;
 }

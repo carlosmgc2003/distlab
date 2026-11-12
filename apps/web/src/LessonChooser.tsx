@@ -1,8 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { LanguageSwitcher } from "./LanguageSwitcher.tsx";
 import { lessonPairs } from "./lesson-pairs.ts";
-import { groupConcepts, lessonMatches, lessonTopics, topicSections, type TopicFilter } from "./lesson-topics.ts";
-import type { PackagedScenario } from "./scenarios.ts";
-import { experimentLabel } from "./scenarios.ts";
+import { groupConcepts, lessonMatches, topicList, topicSections, type TopicFilter } from "./lesson-topics.ts";
+import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
+import { assessmentDescription, assessmentTitle, experimentLabel, lessonDescription } from "./scenarios.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 /**
  * The modal Lesson chooser (#139). It lists the packaged lessons as their failing/fixed pairs,
@@ -15,7 +17,7 @@ export function LessonChooser({ open, lessons, assessments = [], current, busy, 
   readonly open: boolean;
   readonly lessons: readonly PackagedScenario[];
   /** Packaged assessments (#97, D-7), listed in their own group after the lesson pairs. */
-  readonly assessments?: readonly { readonly id: string; readonly title: string; readonly description: string }[];
+  readonly assessments?: readonly PackagedAssessment[];
   /** The loaded packaged lesson, marked with `aria-current`. */
   readonly current: string | null;
   readonly busy: boolean;
@@ -29,13 +31,14 @@ export function LessonChooser({ open, lessons, assessments = [], current, busy, 
   /** Escape and Cancel close the dialog without changes. */
   readonly onClose: () => void;
 }) {
+  const m = useMessages();
   const dialog = useRef<HTMLDialogElement>(null);
   const groups = useMemo(() => lessonPairs(lessons), [lessons]);
   const [topic, setTopic] = useState<TopicFilter>(initialTopic);
   const [query, setQuery] = useState("");
-  const sections = useMemo(() => topicSections(groups, topic, query, experimentLabel), [groups, topic, query]);
+  const sections = useMemo(() => topicSections(groups, topic, query, m), [groups, topic, query, m]);
   const shown = sections.reduce((total, section) => total + section.groups.reduce((sum, group) => sum + group.length, 0), 0);
-  const shownAssessments = topic === "all" ? assessments.filter(item => lessonMatches(item, query)) : [];
+  const shownAssessments = topic === "all" ? assessments.filter(item => lessonMatches(item, query, m)) : [];
   const ids = useId();
   // The dialog may close natively (Escape): the shell's state follows it, never the reverse.
   const expected = useRef(open);
@@ -53,62 +56,62 @@ export function LessonChooser({ open, lessons, assessments = [], current, busy, 
 
   return <dialog ref={dialog} className="lesson-chooser" role="dialog" aria-modal="true" aria-labelledby="lesson-chooser-title"
     onClose={() => { if (expected.current) onClose(); }}>
-    <h2 id="lesson-chooser-title">Choose a lesson</h2>
-    {discardsDraft ? <p className="lesson-chooser-discard">Choosing a lesson discards your unapplied design choices and faults.</p> : null}
+    <div className="lesson-chooser-heading"><h2 id="lesson-chooser-title">{m.lessonChooser.title}</h2><LanguageSwitcher /></div>
+    {discardsDraft ? <p className="lesson-chooser-discard">{m.lessonChooser.discardNotice}</p> : null}
     <div className="lesson-chooser-filters">
-      <div className="lesson-topic-filter" role="group" aria-label="Topic">
-        {[{ id: "all" as const, title: "All topics" }, ...lessonTopics].map(item =>
+      <div className="lesson-topic-filter" role="group" aria-label={m.lessonChooser.topicGroup}>
+        {[{ id: "all" as const, title: m.lessonChooser.allTopics }, ...topicList(m)].map(item =>
           <button key={item.id} type="button" aria-pressed={topic === item.id} onClick={() => setTopic(item.id)}>{item.title}</button>)}
       </div>
       <label className="lesson-search">
-        <span>Search</span>
-        <input type="search" value={query} placeholder="Concept, pattern, or failure" onChange={event => setQuery(event.currentTarget.value)} />
+        <span>{m.lessonChooser.search}</span>
+        <input type="search" value={query} placeholder={m.lessonChooser.searchPlaceholder} onChange={event => setQuery(event.currentTarget.value)} />
       </label>
       <p className="lesson-chooser-count" role="status" aria-live="polite">
-        {shown === lessons.length ? `${lessons.length} lessons` : `${shown} of ${lessons.length} lessons`}
+        {m.lessonChooser.count({ shown, total: lessons.length })}
       </p>
     </div>
     {sections.map(section => <section key={section.topic.id} className="lesson-topic" aria-labelledby={`${ids}-${section.topic.id}`}
       aria-describedby={`${ids}-${section.topic.id}-summary`}>
       <h3 id={`${ids}-${section.topic.id}`}>{section.topic.title}</h3>
       <p id={`${ids}-${section.topic.id}-summary`} className="lesson-topic-summary">{section.topic.summary}</p>
-      <ul className="lesson-cards" aria-label={`${section.topic.title} lessons`}>
+      <ul className="lesson-cards" aria-label={m.lessonChooser.topicLessons(section.topic.title)}>
         {section.groups.map(group => <li key={group[0]!.id} className="lesson-card">
-          <p className="lesson-card-concepts"><span className="sr-only">Concepts: </span>{groupConcepts(group).join(" · ")}</p>
+          <p className="lesson-card-concepts"><span className="sr-only">{m.lessonChooser.concepts}</span>{groupConcepts(group, m).join(" · ")}</p>
           <ul className="lesson-card-lessons">
             {group.map(lesson => <li key={lesson.id}>
               <button type="button" className="lesson-choice" data-lesson-id={lesson.id} disabled={busy}
                 aria-current={lesson.id === current ? "true" : undefined}
                 aria-labelledby={`lesson-choice-${lesson.id}`} aria-describedby={`lesson-choice-${lesson.id}-description`}
                 onClick={() => onChoose(lesson.id)}>
-                <span id={`lesson-choice-${lesson.id}`} className="lesson-choice-title">{experimentLabel(lesson)}</span>
-                <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lesson.description}</span>
+                <span id={`lesson-choice-${lesson.id}`} className="lesson-choice-title">{experimentLabel(lesson, m)}</span>
+                <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lessonDescription(lesson, m)}</span>
                 {/* aria-current carries this to assistive technology; the badge is its visible text. */}
-                {lesson.id === current ? <span className="lesson-choice-current" aria-hidden="true">Loaded</span> : null}
+                {lesson.id === current ? <span className="lesson-choice-current" aria-hidden="true">{m.lessonChooser.loaded}</span> : null}
               </button>
             </li>)}
           </ul>
         </li>)}
       </ul>
     </section>)}
-    {shown === 0 && shownAssessments.length === 0 ? <p className="lesson-chooser-empty">No lesson matches. Clear the search or choose All topics.</p> : null}
+    {shown === 0 && shownAssessments.length === 0 ? <p className="lesson-chooser-empty">{m.lessonChooser.empty}</p> : null}
     {shownAssessments.length ? <section className="lesson-chooser-assessments" aria-labelledby="lesson-chooser-assessments-title">
-      <h3 id="lesson-chooser-assessments-title">Assessment</h3>
-      <ul className="lesson-cards" aria-label="Assessments">
+      <h3 id="lesson-chooser-assessments-title">{m.lessonChooser.assessment}</h3>
+      <ul className="lesson-cards" aria-label={m.lessonChooser.assessments}>
         {shownAssessments.map(assessment => <li key={assessment.id} className="lesson-card">
           <button type="button" className="lesson-choice" data-assessment-id={assessment.id} disabled={busy}
             aria-current={`assessment:${assessment.id}` === current ? "true" : undefined}
             aria-labelledby={`assessment-choice-${assessment.id}`} aria-describedby={`assessment-choice-${assessment.id}-description`}
             onClick={() => onChooseAssessment?.(assessment.id)}>
-            <span id={`assessment-choice-${assessment.id}`} className="lesson-choice-title">{assessment.title}</span>
-            <span id={`assessment-choice-${assessment.id}-description`} className="lesson-choice-description">{assessment.description}</span>
-            {`assessment:${assessment.id}` === current ? <span className="lesson-choice-current" aria-hidden="true">Loaded</span> : null}
+            <span id={`assessment-choice-${assessment.id}`} className="lesson-choice-title">{assessmentTitle(assessment, m)}</span>
+            <span id={`assessment-choice-${assessment.id}-description`} className="lesson-choice-description">{assessmentDescription(assessment, m)}</span>
+            {`assessment:${assessment.id}` === current ? <span className="lesson-choice-current" aria-hidden="true">{m.lessonChooser.loaded}</span> : null}
           </button>
         </li>)}
       </ul>
     </section> : null}
     <div className="lesson-chooser-footer">
-      <button type="button" onClick={onClose}>Cancel</button>
+      <button type="button" onClick={onClose}>{m.lessonChooser.cancel}</button>
     </div>
   </dialog>;
 }

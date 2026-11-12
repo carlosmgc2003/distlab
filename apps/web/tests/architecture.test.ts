@@ -2,10 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ArchitectureDefinition, ArchitectureProjection, ComponentNodeProjection, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { duration } from "@distlab/contracts/kernel";
-import { DATA_STROKE, deriveSymbol, isSharedStore, mapArchitecture, movementEdges, symbolLabels } from "../src/architecture-view.ts";
+import { DATA_STROKE, categoryLabel, deriveSymbol, isSharedStore, mapArchitecture, movementEdges, resourceTitle, symbolLabel } from "../src/architecture-view.ts";
+import type { Messages } from "../src/i18n/catalog.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { detached } from "../src/protocol.ts";
+
+const m = messages("en");
+const es = messages("es");
+
+function map(projection: ArchitectureProjection, metadata?: ArchitectureDefinition, scenarioName?: string, language: Messages = m) {
+  return mapArchitecture(projection, metadata, scenarioName, language);
+}
 
 async function load(index = 0): Promise<RuntimeProjectionSet> {
   const events: WorkerEvent[] = [];
@@ -25,7 +34,7 @@ test("maps both checkout projections, all categories, requests and bus relations
     const projection = await load(index);
     const metadata = packagedMetadata(choice);
     const before = JSON.stringify({ projection, metadata });
-    const graph = mapArchitecture(projection.architecture, metadata.architecture, metadata.name);
+    const graph = map(projection.architecture, metadata.architecture, metadata.name);
     assert.equal(graph.error, null);
     assert.equal(graph.nodes.length, 5);
     assert.equal(graph.resourceNodes.length, 2);
@@ -48,7 +57,7 @@ test("maps both checkout projections, all categories, requests and bus relations
       assert.ok(node.ariaLabel?.includes(node.data.title));
       assert.equal(node.data.symbol, deriveSymbol(node.data.component, metadata.architecture.destinations.find(d => d.id === node.id)));
       assert.ok(node.className?.includes(`symbol-${node.data.symbol}`));
-      assert.ok(node.ariaLabel?.includes(symbolLabels[node.data.symbol]));
+      assert.ok(node.ariaLabel?.includes(symbolLabel(node.data.symbol, m)));
     }
     assert.equal(JSON.stringify({ projection, metadata }), before);
     assert.ok(Object.isFrozen(metadata.architecture.components[0]?.configuration));
@@ -73,7 +82,7 @@ test("infrastructure nodes extend aria labels with topic or queue", () => {
       { id: "q", kind: "queue", deliveryDelay: duration(0), ackTimeout: duration(0), retryDelay: duration(0), maxAttempts: 3, capacity: 100 },
     ],
   };
-  const graph = mapArchitecture(projection, metadata);
+  const graph = map(projection, metadata);
   assert.equal(graph.error, null);
   assert.ok(graph.nodes.find(node => node.id === "t")!.ariaLabel!.includes("Message bus topic"));
   assert.ok(graph.nodes.find(node => node.id === "q")!.ariaLabel!.includes("Message bus queue"));
@@ -85,7 +94,7 @@ test("mapArchitecture never mutates its inputs", async () => {
   const beforeProjection = JSON.stringify(projection.architecture);
   const beforeMetadata = JSON.stringify(metadata.architecture);
   const beforeComponents = [...projection.architecture.components];
-  mapArchitecture(projection.architecture, metadata.architecture, metadata.name);
+  map(projection.architecture, metadata.architecture, metadata.name);
   assert.equal(JSON.stringify(projection.architecture), beforeProjection);
   assert.equal(JSON.stringify(metadata.architecture), beforeMetadata);
   assert.deepEqual(projection.architecture.components, beforeComponents);
@@ -94,10 +103,10 @@ test("mapArchitecture never mutates its inputs", async () => {
 
 test("layout is deterministic, detached, and independent of input ordering", async () => {
   const { architecture } = await load();
-  const first = mapArchitecture(architecture);
-  const second = mapArchitecture(detached(architecture));
+  const first = map(architecture);
+  const second = map(detached(architecture));
   assert.deepEqual(first, second);
-  assert.deepEqual(first.nodes, mapArchitecture({ ...architecture, components: [...architecture.components].reverse() }).nodes);
+  assert.deepEqual(first.nodes, map({ ...architecture, components: [...architecture.components].reverse() }).nodes);
   assert.deepEqual(first.nodes.map(node => [node.id, node.position]), [
     ["OrderCreated", { x: 400, y: 210 }], ["customer-app", { x: 0, y: 0 }],
     ["orders", { x: 400, y: 0 }], ["payment-processor", { x: 800, y: 420 }], ["payments", { x: 400, y: 420 }],
@@ -109,7 +118,7 @@ test("layout is deterministic, detached, and independent of input ordering", asy
 test("inspector metadata comes from matching static definitions and omits business-state values", async () => {
   const projection = await load();
   const metadata = packagedMetadata(scenarios[0]);
-  const graph = mapArchitecture(projection.architecture, metadata.architecture, metadata.name);
+  const graph = map(projection.architecture, metadata.architecture, metadata.name);
   const node = (id: string) => graph.nodes.find(item => item.id === id)!;
   assert.deepEqual(node("orders").data.configuration, {});
   assert.deepEqual(node("orders").data.resources, ["Database owned by Orders: orders, outbox"]);
@@ -129,19 +138,19 @@ test("inspector metadata comes from matching static definitions and omits busine
   assert.equal(node("OrderCreated").data.component.version, undefined);
   assert.ok(!JSON.stringify(graph).includes('"authorizations"'));
   const changed: ArchitectureProjection = { ...projection.architecture, components: projection.architecture.components.map(component => component.id === "orders" ? { ...component, version: "2.0.0" } : component) };
-  const unsupported = mapArchitecture(changed, metadata.architecture, metadata.name);
+  const unsupported = map(changed, metadata.architecture, metadata.name);
   assert.equal(unsupported.nodes.find(item => item.id === "orders")!.data.configuration, undefined);
   assert.ok(!unsupported.edges.some(edge => edge.data?.relationship === "publication"));
-  assert.ok(!mapArchitecture(projection.architecture, metadata.architecture, "another-lesson@1").edges.some(edge => edge.data?.relationship === "publication"));
+  assert.ok(!map(projection.architecture, metadata.architecture, "another-lesson@1").edges.some(edge => edge.data?.relationship === "publication"));
 });
 
 test("empty and invalid graphs have explicit presentation states", () => {
-  assert.deepEqual(mapArchitecture({ components: [], links: [] }), { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names: new Map(), error: null });
-  const missing = mapArchitecture({ components: [], links: [{ source: "a", target: "b" }] });
+  assert.deepEqual(map({ components: [], links: [] }), { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names: new Map(), error: null });
+  const missing = map({ components: [], links: [{ source: "a", target: "b" }] });
   assert.match(missing.error!, /missing components/);
   assert.deepEqual([missing.nodes, missing.edges, missing.resourceNodes, missing.resourceEdges], [[], [], [], []]);
   const component = { id: "a", kind: "service", label: "a" } as const;
-  const duplicate = mapArchitecture({ components: [component, component], links: [] });
+  const duplicate = map({ components: [component, component], links: [] });
   assert.match(duplicate.error!, /duplicate/);
   assert.deepEqual([duplicate.nodes, duplicate.edges, duplicate.resourceNodes, duplicate.resourceEdges], [[], [], [], []]);
 });
@@ -150,7 +159,7 @@ test("a key-value node is drawn as a shared store, by its declared model and not
   const index = scenarios.findIndex(choice => choice.id === "lease-unfenced");
   const projection = await load(index);
   const metadata = packagedMetadata(scenarios[index]!).architecture;
-  const graph = mapArchitecture(projection.architecture, metadata, "lease-unfenced");
+  const graph = map(projection.architecture, metadata, "lease-unfenced");
   const kv = graph.nodes.find(node => node.id === "kv")!;
   assert.equal(kv.data.symbol, "kvstore");
   assert.equal(kv.ariaLabel, "kv, Shared key-value store");
@@ -181,7 +190,7 @@ test("emits packaged owned resources as presentation-only satellite nodes and ow
   for (const [index, choice] of scenarios.entries()) {
     const projection = await load(index);
     const metadata = packagedMetadata(choice).architecture;
-    const graph = mapArchitecture(projection.architecture, metadata, choice.id);
+    const graph = map(projection.architecture, metadata, choice.id);
     const [nodeCount, edgeCount] = expected[choice.id]!;
     assert.equal(graph.resourceNodes.length, nodeCount, choice.id);
     assert.equal(graph.resourceEdges.length, edgeCount, choice.id);
@@ -233,21 +242,21 @@ test("resource grouping is last-wins, stable, owner-gated, and placed in the res
   const storeDefinition = packagedMetadata(scenarios.find(item => item.id === "cascade-breaker")!).architecture.stores[0]!;
   const store = { ...storeDefinition, owner: "orders" };
   const fixture: ArchitectureDefinition = { ...source, databases: [original, last], stores: [store] };
-  const first = mapArchitecture(architecture, fixture);
+  const first = map(architecture, fixture);
   assert.equal(first.resourceNodes.filter(node => node.data.owner === "orders" && node.data.kind === "database").length, 1);
   const db = first.resourceNodes.find(node => node.data.owner === "orders" && node.data.kind === "database")!;
   const kv = first.resourceNodes.find(node => node.data.owner === "orders" && node.data.kind === "kvstore")!;
   assert.equal(db.data.definition, last);
   assert.deepEqual(db.position, { x: 450, y: 120 });
   assert.deepEqual(kv.position, { x: 573, y: 120 });
-  const ordinary = mapArchitecture(architecture, source);
-  const reversed = mapArchitecture({ ...architecture, components: [...architecture.components].reverse() }, {
+  const ordinary = map(architecture, source);
+  const reversed = map({ ...architecture, components: [...architecture.components].reverse() }, {
     ...source, databases: [...source.databases].reverse(), stores: [...source.stores].reverse(),
   });
   assert.deepEqual(ordinary, reversed);
   const detachedFixture = detached({ architecture, metadata: source });
-  assert.deepEqual(mapArchitecture(detachedFixture.architecture, detachedFixture.metadata), ordinary);
-  const withoutMetadata = mapArchitecture(architecture);
+  assert.deepEqual(map(detachedFixture.architecture, detachedFixture.metadata), ordinary);
+  const withoutMetadata = map(architecture);
   assert.equal(withoutMetadata.nodes.length, architecture.components.length);
   assert.deepEqual(withoutMetadata.resourceNodes, []);
   assert.deepEqual(withoutMetadata.resourceEdges, []);
@@ -259,7 +268,7 @@ test("resource grouping is last-wins, stable, owner-gated, and placed in the res
   let shared = 0;
   for (const [index, item] of scenarios.entries()) {
     const meta = packagedMetadata(item).architecture;
-    const graph = mapArchitecture((await load(index)).architecture, meta, item.id);
+    const graph = map((await load(index)).architecture, meta, item.id);
     const satellites = graph.resourceNodes.map(node => box(node.position, 115, 56));
     const components = graph.nodes.map(node => box(node.position, 215, 90));
     satellites.forEach((a, i) => {
@@ -277,17 +286,17 @@ test("resource grouping is last-wins, stable, owner-gated, and placed in the res
   assert.equal(shared, 2);
 
   const mismatch = { ...architecture, components: architecture.components.map(item => item.id === "orders" ? { ...item, version: "2.0.0" } : item) };
-  const gated = mapArchitecture(mismatch, source);
+  const gated = map(mismatch, source);
   assert.equal(gated.resourceNodes.some(node => node.id === "resource:db:orders"), false);
-  const dangling = mapArchitecture(architecture, { ...source, databases: [...source.databases, { ...original, owner: "absent" }] });
+  const dangling = map(architecture, { ...source, databases: [...source.databases, { ...original, owner: "absent" }] });
   assert.equal(dangling.resourceNodes.some(node => node.id === "resource:db:absent"), false);
   assert.equal(dangling.error, null);
-  assert.deepEqual(mapArchitecture(architecture).resourceNodes, []);
-  assert.deepEqual(mapArchitecture(architecture).resourceEdges, []);
+  assert.deepEqual(map(architecture).resourceNodes, []);
+  assert.deepEqual(map(architecture).resourceEdges, []);
 });
 
 test("resource placement matches checkout and commerce layout cells, and inputs remain unchanged", async () => {
-  const checkout = mapArchitecture((await load(0)).architecture, packagedMetadata(scenarios[0]).architecture, scenarios[0].id);
+  const checkout = map((await load(0)).architecture, packagedMetadata(scenarios[0]).architecture, scenarios[0].id);
   assert.deepEqual(checkout.resourceNodes.map(node => [node.id, node.position]), [
     ["resource:db:orders", { x: 450, y: 120 }], ["resource:db:payments", { x: 450, y: 540 }],
   ]);
@@ -297,14 +306,56 @@ test("resource placement matches checkout and commerce layout cells, and inputs 
     ["cascade-breaker", "payments", { x: 1190, y: 120 }],
   ] as const) {
     const choice = scenarios.find(item => item.id === id)!;
-    const graph = mapArchitecture((await load(scenarios.indexOf(choice))).architecture, packagedMetadata(choice).architecture, id);
+    const graph = map((await load(scenarios.indexOf(choice))).architecture, packagedMetadata(choice).architecture, id);
     assert.deepEqual(graph.resourceNodes.find(node => node.data.owner === owner)!.position, expectedPosition);
   }
   const projection = await load(0);
   const metadata = packagedMetadata(scenarios[0]);
   const before = JSON.stringify({ projection, metadata });
-  const graph = mapArchitecture(projection.architecture, metadata.architecture, scenarios[0].id);
+  const graph = map(projection.architecture, metadata.architecture, scenarios[0].id);
   assert.equal(JSON.stringify({ projection, metadata }), before);
   assert.ok(Object.isFrozen(graph.resourceNodes[0]!.data.definition));
   assert.ok(!before.includes('"resource:'));
+});
+
+test("labels, link names, and resource lines come from the catalog in each language", async () => {
+  const projection = await load(0);
+  const metadata = packagedMetadata(scenarios[0]!);
+  const english = map(projection.architecture, metadata.architecture, metadata.name);
+  const spanish = map(projection.architecture, metadata.architecture, metadata.name, es);
+  // Structure never changes with the language: ids, relationships, and order are the same.
+  assert.deepEqual(spanish.nodes.map(node => node.id), english.nodes.map(node => node.id));
+  assert.deepEqual(spanish.edges.map(edge => [edge.id, edge.data?.relationship]), english.edges.map(edge => [edge.id, edge.data?.relationship]));
+  assert.deepEqual(english.edges.map(edge => edge.label), ["Request", "Request", "Subscription", "Publication"]);
+  assert.deepEqual(spanish.edges.map(edge => edge.label), ["Solicitud", "Solicitud", "Suscripción", "Publicación"]);
+  const node = (graph: typeof english, id: string) => graph.nodes.find(item => item.id === id)!;
+  assert.deepEqual(node(english, "OrderCreated").data.resources, ["MessageBus topic: OrderCreated"]);
+  assert.deepEqual(node(spanish, "OrderCreated").data.resources, ["Tópico de MessageBus: OrderCreated"]);
+  assert.deepEqual(node(spanish, "orders").data.resources, ["Base de datos de Pedidos: orders, outbox"]);
+  assert.equal(node(spanish, "OrderCreated").ariaLabel, "OrderCreated, Tópico del bus de mensajes");
+  assert.equal(spanish.edges.at(-1)!.ariaLabel, "Orders a MessageBus OrderCreated: publicación");
+  assert.equal(symbolLabel("queue", m), "Message bus queue");
+  assert.equal(categoryLabel("external", es), "Servicio externo");
+  assert.equal(resourceTitle("database", "orders", m), "Database owned by orders");
+  assert.equal(resourceTitle("kvstore", "orders", es), "KeyValueStore de orders");
+  const invalid = map({ components: [], links: [{ source: "a", target: "b" }] }, undefined, undefined, es);
+  assert.equal(invalid.error, "La arquitectura tiene componentes duplicados o conexiones a componentes que no existen.");
+});
+
+test("a named request link and a destination of an unknown kind keep their raw codes", () => {
+  const components = [component("a", "client"), component("b", "service")];
+  const graph = map({ components, links: [{ source: "a", target: "b", label: "POST /pay" }, { source: "b", target: "a" }] });
+  assert.deepEqual(graph.edges.map(edge => edge.label), ["Request · POST /pay", "Request"]);
+  assert.deepEqual(map({ components, links: [{ source: "a", target: "b", label: "POST /pay" }] }, undefined, undefined, es).edges.map(edge => edge.label), ["Solicitud · POST /pay"]);
+});
+
+test("the architecture view's student-fault wording pluralizes and lists per language", () => {
+  const en = messages("en").architecture.view.fault;
+  const es = messages("es").architecture.view.fault;
+  assert.equal(en.badge(1), "Student fault");
+  assert.equal(en.badge(3), "3 student faults");
+  assert.equal(es.badge(1), "Falla del estudiante");
+  assert.equal(es.badge(2), "2 fallas del estudiante");
+  assert.equal(en.link({ label: "a to b: Request", faults: ["x"] }), "a to b: Request. Student fault: x");
+  assert.equal(es.link({ label: "a a b: Solicitud", faults: ["x", "z"] }), "a a b: Solicitud. Fallas del estudiante: x y z");
 });

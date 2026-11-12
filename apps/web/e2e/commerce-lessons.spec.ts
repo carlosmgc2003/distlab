@@ -48,7 +48,7 @@ for (const name of commerceLessonNames) {
     const checks = state.getByRole("list", { name: "Business invariants", exact: true });
     // The first verdict is revealed in the Lesson panel without any scrolling by the test.
     await expect.poll(async () => (await measureLayout(page)).firstVerdictVisible, { message: `${name}: first verdict on screen at 1366x768` }).toBe(true);
-    await expect(summary(page)).toHaveText(/^(\d+ of \d+ business invariants violated|All \d+ business invariants hold)$/);
+    await expect(summary(page)).toHaveText(/^(\d+ of \d+ business invariants violated|All \d+ business invariants hold|The 1 business invariant holds)$/);
     const outcome = await summary(page).innerText();
     expect(await announcements(page)).toEqual([outcome]);
     await expect(checks).toContainText(/HOLDS|VIOLATED/);

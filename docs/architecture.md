@@ -357,6 +357,13 @@ These are not represented as vendor products.
 └─────────────────────────────────────────────┘
 ```
 
+**Language is presentation.** The UI turns codes, IDs, stored observation
+fields, and counts into text when it renders, from per-language message
+catalogs. No layer below the UI reads or stores interface text: the interface
+language is never a simulation input, a worker command, or part of recorded
+history, and changing it cannot change a run or its digest
+([ADR-007](spec/adr/007-localization.md)).
+
 ---
 
 # 6. Suggested Repository Structure

@@ -8,10 +8,6 @@ import { commerceDescriptors } from "../../../packages/catalogs/src/commerce/des
  * Component inspector mark one that is still empty.
  */
 
-export const EMPTY_SLOT_LABEL = "Empty slot";
-
-export const EMPTY_SLOT_DESCRIPTION = "No model fills this component yet. It receives, publishes, and stores nothing, and answers any request with NOT_IMPLEMENTED.";
-
 const placeholders: readonly ModelDescriptor[] = [...checkoutDescriptors, ...commerceDescriptors].filter(descriptor => descriptor.placeholder === true);
 
 /** Whether a component's declared model is a placeholder that fills an empty slot. */

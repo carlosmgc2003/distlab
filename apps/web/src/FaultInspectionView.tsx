@@ -1,9 +1,13 @@
 import { Fragment, type ReactNode } from "react";
 import { HelpHint } from "./ui-hint.tsx";
+import { faultStatusLabel } from "./fault-inspection.ts";
 import type { DeliveryFact, FaultReport, RowFact, ServiceSnapshot } from "./fault-inspection.ts";
+import { useMessages } from "./i18n/react.tsx";
+import { Rich } from "./i18n/rich.tsx";
 
 function Rows({ rows }: { readonly rows: readonly RowFact[] }) {
-  if (!rows.length) return <p>No committed rows.</p>;
+  const m = useMessages();
+  if (!rows.length) return <p>{m.faultInspection.view.noCommittedRows}</p>;
   return <ul className="fact-list">{rows.map(row => <li key={`${row.table}:${row.key}`}>
     <span>{row.table} / {row.key}</span>
     {row.fields.length ? <dl>{row.fields.map(field => <Fragment key={field.name}><dt>{field.name}</dt><dd>{field.value}</dd></Fragment>)}</dl> : null}
@@ -23,28 +27,32 @@ function ServiceFacts({ title, service, stagedNote }: {
   readonly service: ServiceSnapshot | null;
   readonly stagedNote: string;
 }) {
+  const m = useMessages();
+  const v = m.faultInspection.view;
   return <>
     <h4>{title}</h4>
     {service ? <>
       <dl>
-        <dt>Lifecycle</dt><dd>{service.lifecycle}</dd>
-        <dt>Process generation</dt><dd>{service.processGeneration}</dd>
-        <dt>Committed revision</dt><dd>{service.revision}</dd>
+        <dt>{v.lifecycle}</dt><dd>{service.lifecycle}</dd>
+        <dt>{v.processGeneration}</dt><dd>{service.processGeneration}</dd>
+        <dt>{v.committedRevision}</dt><dd>{service.revision}</dd>
       </dl>
       <details className="raw-state">
-        <summary>Committed state details · {service.rows.length} rows</summary>
+        <summary>{v.stateDetails(service.rows.length)}</summary>
         <p>{stagedNote}</p>
         <Rows rows={service.rows} />
       </details>
-    </> : <p>Service state was not projected.</p>}
+    </> : <p>{v.serviceNotProjected}</p>}
   </>;
 }
 
 function DeliveryList({ deliveries }: { readonly deliveries: readonly DeliveryFact[] }) {
-  if (!deliveries.length) return <p>No bus delivery is recorded.</p>;
+  const v = useMessages().faultInspection.view;
+  if (!deliveries.length) return <p>{v.noBusDelivery}</p>;
   return <ul className="fact-list">{deliveries.map(delivery => <li key={delivery.messageId}>
-    {delivery.destination} state {delivery.state}, attempt {delivery.attempt}
-    {delivery.consumer ? `, consumer ${delivery.consumer}` : ""}. Message {delivery.messageId}.
+    {delivery.consumer
+      ? v.deliveryConsumer({ destination: delivery.destination, state: delivery.state, attempt: delivery.attempt, consumer: delivery.consumer, messageId: delivery.messageId })
+      : v.delivery({ destination: delivery.destination, state: delivery.state, attempt: delivery.attempt, messageId: delivery.messageId })}
   </li>)}</ul>;
 }
 
@@ -52,66 +60,68 @@ export function DistributedState({ report, onShowEvidence }: {
   readonly report: FaultReport;
   readonly onShowEvidence: (observationId: string) => void;
 }) {
+  const m = useMessages();
+  const v = m.faultInspection.view;
   return <section className="state-inspection" aria-labelledby="distributed-state-heading">
-    <h3 id="distributed-state-heading">Distributed state</h3>
-    <HelpHint label="About this session">This session was constructed from the recorded scenario input. Changing the experiment loads a new session.</HelpHint>
+    <h3 id="distributed-state-heading">{v.distributedState}</h3>
+    <HelpHint label={v.aboutSession}>{v.aboutSessionBody}</HelpHint>
     <dl>
-      <dt>Scenario</dt><dd>{report.scenarioName}</dd>
-      <dt>Seed</dt><dd>{report.seed}</dd>
-      <dt>Fault status</dt><dd>Status: {report.faultStatus}</dd>
+      <dt>{v.scenario}</dt><dd>{report.scenarioName}</dd>
+      <dt>{v.seed}</dt><dd>{report.seed}</dd>
+      <dt>{v.faultStatus}</dt><dd>{v.statusIs(faultStatusLabel(report.faultStatus, m))}</dd>
     </dl>
     {report.faults.length ? <ul className="fact-list">{report.faults.map(fault => <li key={fault.id}>
-      Fault {fault.id} on {fault.point}
-      {fault.source ? ` from ${fault.source}` : ""}
-      {fault.target ? ` to ${fault.target}` : ""}
-      {fault.name ? ` for ${fault.name}` : ""}, effect {fault.effect}. Status: {fault.status}.
-    </li>)}</ul> : <p>No fault rule is recorded.</p>}
+      {v.fault({
+        id: fault.id, point: fault.point, effect: fault.effect, status: faultStatusLabel(fault.status, m),
+        ...(fault.source ? { source: fault.source } : {}), ...(fault.target ? { target: fault.target } : {}), ...(fault.name ? { name: fault.name } : {}),
+      })}
+    </li>)}</ul> : <p>{v.noFaultRule}</p>}
     {report.lesson ? <p>{report.lesson}</p> : null}
-    <h4>Local knowledge vs processor outcome</h4>
-    <p className="comparison-note">Observed facts so far; scenario expectations are not outcomes.</p>
+    <h4>{v.localVsProcessor}</h4>
+    <p className="comparison-note">{v.observedNote}</p>
     <div className="outcome-comparison">
-      <section aria-label="Payments local knowledge">
-        <h5>Payments knows</h5>
+      <section aria-label={v.paymentsKnowledgeRegion}>
+        <h5>{v.paymentsKnows}</h5>
         {report.paymentRows.length ? report.paymentRows.map(payment => <p key={payment.paymentId}>
           <span className={stateClass(payment.state)}>{payment.state}</span>
-          {payment.outcome ? <> · {payment.outcome}</> : null} · authorization ID {payment.authorizationId ?? "none"}
-        </p>) : <p>No local payment row observed.</p>}
+          {payment.outcome ? <> · {payment.outcome}</> : null} · {v.authorizationId(payment.authorizationId ?? m.faultInspection.none)}
+        </p>) : <p>{v.noLocalPaymentObserved}</p>}
       </section>
-      <section aria-label="Processor visible outcome">
-        <h5>Processor visible fact</h5>
+      <section aria-label={v.processorOutcomeRegion}>
+        <h5>{v.processorFact}</h5>
         {report.authorizations.length ? report.authorizations.map(item => <p key={item.authorizationId}>
           <span className={stateClass(item.status)}>{item.status}</span> · {item.authorizationId}
-        </p>) : <p>No authorization visible so far.</p>}
+        </p>) : <p>{v.noAuthorizationVisible}</p>}
       </section>
     </div>
     <p className="knowledge-boundary">{report.knowledge}</p>
-    <h4>Customer App observed outcome</h4>
+    <h4>{v.customerAppOutcome}</h4>
     <dl>
-      <dt>Request</dt><dd>{report.clientRequest}</dd>
-      <dt>Outcome</dt><dd><span className={stateClass(report.clientOutcome)}>{report.clientOutcome}</span>
-        {report.clientOutcome.toLowerCase().includes("unknown") ? <span className="state-explanation"> Uncertain: the local result does not establish denial.</span> : null}</dd>
+      <dt>{v.request}</dt><dd>{report.clientRequest}</dd>
+      <dt>{v.outcome}</dt><dd><span className={stateClass(report.clientOutcome)}>{report.clientOutcome}</span>
+        {report.clientOutcome.toLowerCase().includes("unknown") ? <span className="state-explanation">{" "}{v.clientUncertain}</span> : null}</dd>
     </dl>
     <details className="raw-state">
-      <summary>Raw payment and processor records</summary>
-      <h4>Payments local outcomes</h4>
+      <summary>{v.rawRecords}</summary>
+      <h4>{v.paymentsLocalOutcomes}</h4>
     {report.paymentRows.length ? <ul className="fact-list">{report.paymentRows.map(payment => <li key={payment.paymentId}>
-      Payment {payment.paymentId} for order {payment.orderId}: <span className={stateClass(payment.state)}>{payment.state}</span>
-      {payment.outcome ? <> · outcome <span className={stateClass(payment.outcome)}>{payment.outcome}</span></> : null}
-      {payment.state === "UNKNOWN" ? <span className="state-explanation"> Local state is uncertain; this does not prove denial.</span> : null}
-    </li>)}</ul> : <p>No local payment row is committed.</p>}
-    <ServiceFacts title="Orders committed state" service={report.orders} stagedNote={report.stagedNote} />
-    <ServiceFacts title="Payments committed state" service={report.paymentsService} stagedNote={report.stagedNote} />
-    <h4>Payment Processor visible authorizations</h4>
+      <Rich text={v.paymentRow} values={{ payment: payment.paymentId, order: payment.orderId, state: <span className={stateClass(payment.state)}>{payment.state}</span> }} />
+      {payment.outcome ? <> · <Rich text={v.paymentRowOutcome} values={{ outcome: <span className={stateClass(payment.outcome)}>{payment.outcome}</span> }} /></> : null}
+      {payment.state === "UNKNOWN" ? <span className="state-explanation">{" "}{v.paymentUncertain}</span> : null}
+    </li>)}</ul> : <p>{v.noLocalPaymentCommitted}</p>}
+    <ServiceFacts title={v.ordersCommitted} service={report.orders} stagedNote={report.stagedNote} />
+    <ServiceFacts title={v.paymentsCommitted} service={report.paymentsService} stagedNote={report.stagedNote} />
+    <h4>{v.processorAuthorizations}</h4>
     {report.authorizations.length ? <ul className="fact-list">{report.authorizations.map(item => <li key={item.authorizationId}>
-      {item.authorizationId} status <span className={stateClass(item.status)}>{item.status}</span>, amount {item.amount}, order {item.orderId}, payment {item.paymentId}.
-    </li>)}</ul> : <p>No visible authorization is declared.</p>}
-    <h4>Bus delivery</h4>
+      <Rich text={v.authorizationRow} values={{ id: item.authorizationId, status: <span className={stateClass(item.status)}>{item.status}</span>, amount: item.amount, order: item.orderId, payment: item.paymentId }} />
+    </li>)}</ul> : <p>{v.noAuthorizationDeclared}</p>}
+    <h4>{v.busDelivery}</h4>
     <DeliveryList deliveries={report.deliveries} />
     </details>
-    <h4>Linked observations</h4>
+    <h4>{v.linkedObservations}</h4>
     {report.evidence.length ? <div className="evidence-links">{report.evidence.map(item =>
       <button key={item.observationId} type="button" aria-controls="timeline-rows" onClick={() => onShowEvidence(item.observationId)}>{item.label}</button>)}</div>
-      : <p>No fault, timeout, authorization, or delivery observation has been recorded yet.</p>}
+      : <p>{v.noEvidence}</p>}
   </section>;
 }
 
@@ -119,29 +129,30 @@ export function ComponentRuntimeFacts({ report, componentId }: {
   readonly report: FaultReport;
   readonly componentId: string;
 }): ReactNode {
-  if (!report.studentFactsPresent) return <p>No student-visible state is projected for this component.</p>;
+  const v = useMessages().faultInspection.view;
+  if (!report.studentFactsPresent) return <p>{v.noStudentState}</p>;
   // Roles come from the architecture's models, so renamed components show the same facts.
   const { roles } = report;
-  if (componentId === roles.orders) return <ServiceFacts title="Runtime facts" service={report.orders} stagedNote={report.stagedNote} />;
-  if (componentId === roles.payments) return <ServiceFacts title="Runtime facts" service={report.paymentsService} stagedNote={report.stagedNote} />;
+  if (componentId === roles.orders) return <ServiceFacts title={v.runtimeFacts} service={report.orders} stagedNote={report.stagedNote} />;
+  if (componentId === roles.payments) return <ServiceFacts title={v.runtimeFacts} service={report.paymentsService} stagedNote={report.stagedNote} />;
   if (componentId === roles.processor) return <>
-    <h4>Runtime facts</h4>
-    <p>Declared visible authorizations. Provider counters stay hidden.</p>
+    <h4>{v.runtimeFacts}</h4>
+    <p>{v.processorFacts}</p>
     {report.authorizations.length ? <ul className="fact-list">{report.authorizations.map(item => <li key={item.authorizationId}>
-      {item.authorizationId} status {item.status}, amount {item.amount}, order {item.orderId}.
-    </li>)}</ul> : <p>No visible authorization is declared.</p>}
+      {v.processorAuthorizationRow({ id: item.authorizationId, status: item.status, amount: String(item.amount), order: item.orderId })}
+    </li>)}</ul> : <p>{v.noAuthorizationDeclared}</p>}
   </>;
   if (roles.destinations.includes(componentId)) return <>
-    <h4>Runtime facts</h4>
+    <h4>{v.runtimeFacts}</h4>
     <DeliveryList deliveries={report.deliveries.filter(delivery => delivery.destination === componentId)} />
   </>;
   if (componentId === roles.client) return <>
-    <h4>Runtime facts</h4>
-    <p>Client-observed checkout request and outcome.</p>
+    <h4>{v.runtimeFacts}</h4>
+    <p>{v.clientFacts}</p>
     <dl>
-      <dt>Request</dt><dd>{report.clientRequest}</dd>
-      <dt>Outcome</dt><dd>{report.clientOutcome}</dd>
+      <dt>{v.request}</dt><dd>{report.clientRequest}</dd>
+      <dt>{v.outcome}</dt><dd>{report.clientOutcome}</dd>
     </dl>
   </>;
-  return <p>No student-visible state is projected for this component.</p>;
+  return <p>{v.noStudentState}</p>;
 }

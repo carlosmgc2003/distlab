@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useMessages } from "./i18n/react.tsx";
 import {
   parseThemePreference, resolveTheme, SYSTEM_DARK_QUERY, THEME_PREFERENCES, THEME_STORAGE_KEY, themeOptionLabel,
   type ThemePreference,
@@ -93,22 +94,23 @@ export function ThemeSelector({ state: { preference, systemDark, choose } }: { r
     };
   }, []);
 
-  const current = themeOptionLabel(preference, systemDark);
+  const m = useMessages();
+  const current = themeOptionLabel(preference, systemDark, m);
   return <div className="theme-selector">
     <button ref={button} type="button" className="theme-trigger" popoverTarget={popoverId}
-      aria-label={`Theme: ${current}`} title={`Theme: ${current}`}>
+      aria-label={m.theme.button(current)} title={m.theme.button(current)}>
       <ThemeIcon preference={preference} />
     </button>
     <div ref={popover} id={popoverId} className="theme-popover" popover="auto">
       <fieldset>
-        <legend>Theme</legend>
+        <legend>{m.theme.legend}</legend>
         {THEME_PREFERENCES.map(option => <label key={option} className="theme-choice">
           <input type="radio" name={`${id}-preference`} value={option} checked={preference === option}
             onChange={() => choose(option)}
             // A pointer choice closes the popover; arrow keys (clicks with no detail) keep it open to compare.
             onClick={event => { if (event.detail > 0) popover.current?.hidePopover(); }} />
           <ThemeIcon preference={option} />
-          <span>{themeOptionLabel(option, systemDark)}</span>
+          <span>{themeOptionLabel(option, systemDark, m)}</span>
         </label>)}
       </fieldset>
     </div>

@@ -136,3 +136,22 @@ test("DOC-AC-5 and APP-AC-9: the main thread sends scenario file text unparsed a
   const adapter = readFileSync(resolve(app, "worker/adapter.ts"), "utf8");
   assert.match(adapter, /validateScenarioDocument\(command\.document, hostedCatalogs\)/);
 });
+
+test("I18N-AC-9: the worker never reaches the message catalogs, so the language cannot change a run", () => {
+  // ADR-007: text is presentation. The simulation's inputs, projections, and history are language-neutral.
+  const i18n = resolve(app, "i18n");
+  const visited = new Set<string>();
+  function walk(file: string): void {
+    if (visited.has(file) || !file.startsWith(app)) return;
+    visited.add(file);
+    assert.ok(!file.startsWith(i18n), `The worker imports a message catalog: ${file}`);
+    for (const dependency of imports(file)) if (dependency.path.startsWith(".")) walk(resolve(dirname(file), dependency.path));
+  }
+  walk(resolve(app, "worker/entry.ts"));
+  assert.ok(visited.has(resolve(app, "worker/adapter.ts")));
+  // Catalog modules import nothing that runs a simulation: only formatting, other catalog files, and React for rendering.
+  for (const file of files(i18n)) for (const dependency of imports(file)) {
+    assert.ok(dependency.path.startsWith(".") || dependency.path === "react", `${file} imports ${dependency.path}`);
+    if (dependency.path.startsWith(".")) assert.ok(resolve(dirname(file), dependency.path).startsWith(i18n), `${file} imports outside src/i18n: ${dependency.path}`);
+  }
+});

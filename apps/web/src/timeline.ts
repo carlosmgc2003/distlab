@@ -7,11 +7,16 @@ import {
   edgeBetween,
   edgeFor,
   movementOf,
+  movementText,
   payloadVisibility,
   recordedChanges,
   storedQualifier,
 } from "./records.ts";
-import type { MilestoneType, Movement, MovementEdge, MovementKind } from "./records.ts";
+import type { Movement, MovementEdge, MovementKind } from "./records.ts";
+import { byCode } from "./i18n/catalog.ts";
+import type { Messages } from "./i18n/catalog.ts";
+import type { QuickViewId } from "./timeline-quick-views.ts";
+import type { ClearedField } from "./timeline-query.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 
@@ -46,82 +51,48 @@ export interface TerminalMark {
 }
 
 /**
- * Wording for one stored record, shared by the detail heading and architecture
- * playback so the two never name the same record differently.
- *
- * Typed by `MilestoneType`: a milestone without a label is a compile error, not
- * a raw type string shown to a student. Records that are not milestones state
- * their stored type, which is all that is stored for them.
- */
-const RECORD_LABELS: Readonly<Record<MilestoneType, string>> = {
-  "network.request.sent": "Request sent",
-  "network.request.delivered": "Request delivered",
-  "network.request.dropped": "Request dropped",
-  "network.request.timedout": "Request timed out",
-  "network.response.sent": "Response sent",
-  "network.response.received": "Response received",
-  "network.response.dropped": "Response dropped",
-  "message.published": "Message published",
-  "message.delivered": "Message delivered",
-  "message.acknowledged": "Message acknowledged",
-  "message.ack.stale": "Stale message acknowledgement",
-  "message.retry.scheduled": "Message retry scheduled",
-  "database.transaction.committed": "Database transaction committed",
-  "database.transaction.rolledback": "Database transaction rolled back",
-  "external.effect.committed": "External side effect committed",
-  "fault.rule.matched": "Fault rule matched",
-  "fault.effect.selected": "Fault effect selected",
-  "database.transaction.rejected": "Database transaction rejected",
-  "service.handler.failed": "Handler failed",
-  "message.nacked": "Message rejected (NACK)",
-  "message.dead": "Message dead-lettered",
-  "kv.condition.failed": "Key-value condition failed",
-  "kv.changed": "Key-value entry changed",
-  "kv.expired": "Key-value entry expired",
-  "runtime.log": "Log",
-  "scenario.assertion.evaluated": "Check",
-};
-
-/** Wording for a fault record the milestone table does not name individually. */
-const OTHER_FAULT_LABEL = "Fault recorded";
-
-/**
  * Plain-language label derived only from stored observation fields. It maps the
  * stored type and a stored delivery attempt to text; it never infers outcomes,
  * durations, or causality. A redacted or omitted payload stores no attempt, so
  * no attempt is named and no value is reconstructed.
+ *
+ * The wording is shared by the detail heading and architecture playback so the two
+ * never name the same record differently. `recordLabels` in
+ * the catalog is typed by `MilestoneType`: a milestone without a label is a compile
+ * error, not a raw type string shown to a student. Records that are not milestones
+ * state their stored type, which is all that is stored for them.
  */
-export function recordLabel(observation: Observation): string {
-  const base = (RECORD_LABELS as Readonly<Record<string, string | undefined>>)[observation.type]
-    ?? (observation.type.startsWith("fault.") ? OTHER_FAULT_LABEL : undefined);
-  if (base === undefined) return observation.type;
-  return `${base}${storedQualifier(observation)}`;
+export function recordLabel(observation: Observation, m: Messages): string {
+  const base = byCode(m.timeline.recordLabels, observation.type)
+    ?? (observation.type.startsWith("fault.") ? m.timeline.faultRecorded : undefined);
+  return base === undefined ? observation.type : `${base}${storedQualifier(observation, m)}`;
 }
 
 /** Reads only stored before/after fields. Redacted and omitted payloads contribute no evidence. */
-export function changeEvidence(observation: Observation): readonly ChangeEvidence[] {
+export function changeEvidence(observation: Observation, m: Messages): readonly ChangeEvidence[] {
   return recordedChanges(observation).map(change => ({
-    label: change.table ? `${change.table}${change.key ? ` ${change.key}` : ""}` : "Recorded change",
+    label: change.table ? `${change.table}${change.key ? ` ${change.key}` : ""}` : m.timeline.recordedChange,
     ...(Object.hasOwn(change, "before") ? { before: change.before } : {}),
     ...(Object.hasOwn(change, "after") ? { after: change.after } : {}),
   }));
 }
 
 /** Selection highlight, or the movement cue when the observation travels a link. */
-export function emphasisFor(observation: Observation, edges: readonly MovementEdge[], names?: ComponentNames): GraphEmphasis {
-  const movement = movementOf(observation, names);
+export function emphasisFor(observation: Observation, edges: readonly MovementEdge[], m: Messages, names?: ComponentNames): GraphEmphasis {
+  const movement = movementOf(observation);
   // A selected movement carries its sentence: the reader is told what moved, where, and when.
-  if (movement) return { ...emphasisOf(movement, edges), text: movement.text, pulseId: movement.observationId, origin: "selection" };
+  if (movement) return { ...emphasisOf(movement, edges), text: movementText(movement, m, names), pulseId: movement.observationId, origin: "selection" };
   const involved = observation.target !== undefined && observation.target !== observation.source
     ? [observation.source, observation.target] : [observation.source];
   const link = observation.target !== undefined ? edgeBetween(edges, observation.source, observation.target) : undefined;
-  const where = observation.target !== undefined && observation.target !== observation.source
-    ? `${displayName(names, observation.source)} to ${displayName(names, observation.target)}` : displayName(names, observation.source);
+  const target = observation.target !== undefined && observation.target !== observation.source ? displayName(names, observation.target) : undefined;
   return {
     nodeIds: involved,
     ...(link !== undefined ? { edgeId: link.id } : {}),
     origin: "selection",
-    text: `Selected ${observation.type} at ${where} at virtual time ${observation.time}. No request or message movement.`,
+    text: m.timeline.selectedNoMovement({
+      type: observation.type, source: displayName(names, observation.source), time: observation.time, ...(target !== undefined ? { target } : {}),
+    }),
   };
 }
 
@@ -148,34 +119,49 @@ export function selectionStep(index: number, count: number, delta: -1 | 1): numb
   return next;
 }
 
+/** The stored fields a selection announcement names. Small enough to keep in state without keeping the record. */
+export interface SelectionRef {
+  readonly sequence: number;
+  readonly type: string;
+  readonly time: number;
+}
+
 /**
  * The review position, naming the stored type. It is announced through Recorded history's one
  * polite live region and never shown: the docked detail's header is the visible statement (#146).
  */
-export function selectionMessage(observation: Observation): string {
-  return `Selected Observation #${observation.sequence}: ${observation.type} at virtual time ${observation.time}.`;
+export function selectionMessage(observation: SelectionRef, m: Messages): string {
+  return m.timeline.selection({ sequence: observation.sequence, type: observation.type, time: observation.time });
 }
 
-export function revealMessage(cleared: readonly string[], observation: Observation): string {
-  const selected = selectionMessage(observation);
+/** A filter a reveal or a trace narrowing removed: a field, or the quick view that hid the record. */
+export type ClearedFilter = ClearedField | { readonly quickView: QuickViewId };
+
+/** The names of what was cleared, rendered at the end so deduplication and ordering never depend on the language. */
+function clearedNames(cleared: readonly ClearedFilter[], m: Messages): readonly string[] {
+  return cleared.map(item => typeof item === "string"
+    ? m.timeline.clearedName[item]
+    : m.timeline.clearedQuickView(m.timeline.quickView.views[item.quickView].inline));
+}
+
+export function revealMessage(cleared: readonly ClearedFilter[], observation: SelectionRef, m: Messages): string {
+  const selected = selectionMessage(observation, m);
   if (cleared.length === 0) return selected;
-  const labels = listLabels(cleared);
-  const verb = cleared.length === 1 ? "filter was" : "filters were";
-  return `${selected} The ${labels} ${verb} cleared so this observation is visible.`;
+  return `${selected} ${m.timeline.revealCleared(clearedNames(cleared, m))}`;
 }
 
-export function traceFilterMessage(traceId: string, change: { readonly changed: boolean; readonly cleared: readonly string[] }): string {
-  if (!change.changed) return `The timeline already shows trace ${traceId}.`;
-  if (change.cleared.length === 0) return `The timeline now shows trace ${traceId}.`;
-  const verb = change.cleared.length === 1 ? "filter was" : "filters were";
-  return `The timeline now shows trace ${traceId}. The ${listLabels(change.cleared)} ${verb} cleared.`;
+export function traceFilterMessage(traceId: string, change: { readonly changed: boolean; readonly cleared: readonly ClearedFilter[] }, m: Messages): string {
+  if (!change.changed) return m.timeline.traceAlready(traceId);
+  const now = m.timeline.traceNow(traceId);
+  if (change.cleared.length === 0) return now;
+  return `${now} ${m.timeline.traceCleared(clearedNames(change.cleared, m))}`;
 }
 
-export function payloadCopy(observation: Observation): string {
+export function payloadCopy(observation: Observation, m: Messages): string {
   const visibility = payloadVisibility(observation);
-  if (visibility === "omitted") return "No data field was stored.";
-  if (visibility === "redacted") return "Stored payload is redacted. Hidden fields are not available.";
-  return "Stored payload";
+  if (visibility === "omitted") return m.timeline.payload.omitted;
+  if (visibility === "redacted") return m.timeline.payload.redacted;
+  return m.timeline.payload.stored;
 }
 
 export function terminalMark(status: string | null | undefined, error: ApplicationError | null): TerminalMark | null {
@@ -197,18 +183,13 @@ export function terminalMark(status: string | null | undefined, error: Applicati
   };
 }
 
-export function terminalCopy(mark: TerminalMark): string {
-  const code = mark.code ? ` ${mark.code}` : "";
-  const last = mark.lastObservationId ? ` Last recorded observation: ${mark.lastObservationId}.` : "";
-  if (mark.historyComplete === false) return `Terminal failure${code}. Execution history is incomplete.${last}`;
-  if (mark.historyComplete === true) return `Terminal failure${code}. Execution history is complete.${last}`;
-  return `Terminal failure${code}. Execution history completeness was not reported.`;
-}
-
-function listLabels(labels: readonly string[]): string {
-  if (labels.length <= 1) return labels[0] ?? "";
-  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
-  return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+export function terminalCopy(mark: TerminalMark, m: Messages): string {
+  const copy = m.timeline.terminal;
+  const history = mark.historyComplete === false ? copy.historyIncomplete
+    : mark.historyComplete === true ? copy.historyComplete : copy.historyNotReported;
+  // Completeness that was not reported does not name a last observation.
+  const last = mark.historyComplete !== null && mark.lastObservationId ? ` ${copy.lastObservation(mark.lastObservationId)}` : "";
+  return `${copy.failure(mark.code)} ${history}${last}`;
 }
 
 function isRecord(value: unknown): value is Record<string, CanonicalValue> {

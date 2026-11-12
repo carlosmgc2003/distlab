@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CheckRow, InvariantVerdict } from "../src/lesson-checks.ts";
-import { endsRun, outcomeSummary, runOutcome } from "../src/lesson-outcome.ts";
+import { endsRun, outcomeSummary as summarize, runOutcome as outcomeOf } from "../src/lesson-outcome.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const outcomeSummary = (view: Parameters<typeof summarize>[0]) => summarize(view, m);
+const runOutcome = (status: Parameters<typeof outcomeOf>[0]) => outcomeOf(status, m);
 
 const rows = (...verdicts: InvariantVerdict[]): { invariants: CheckRow<InvariantVerdict>[] } =>
-  ({ invariants: verdicts.map((verdict, i) => ({ id: `check-${i}`, label: `Check ${i}`, verdict })) });
+  ({ invariants: verdicts.map((verdict, i) => ({ id: `check-${i}`, kind: "invariant" as const, label: `Check ${i}`, verdict })) });
 
 test("outcomeSummary counts violated invariants, and a violation wins over pending or incomplete ones", () => {
   assert.equal(outcomeSummary(rows("VIOLATED", "VIOLATED", "VIOLATED")), "3 of 3 business invariants violated");
@@ -13,7 +18,7 @@ test("outcomeSummary counts violated invariants, and a violation wins over pendi
 });
 
 test("outcomeSummary says all invariants hold only when every one is settled as HOLDS", () => {
-  assert.equal(outcomeSummary(rows("HOLDS")), "All 1 business invariants hold");
+  assert.equal(outcomeSummary(rows("HOLDS")), "The 1 business invariant holds");
   assert.equal(outcomeSummary(rows("HOLDS", "HOLDS", "HOLDS")), "All 3 business invariants hold");
   assert.notEqual(outcomeSummary(rows("HOLDS", "PENDING")), "All 2 business invariants hold");
 });

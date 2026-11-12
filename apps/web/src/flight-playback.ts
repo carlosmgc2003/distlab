@@ -13,6 +13,7 @@ import { activityAt, activityChanges } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
 import type { Observation } from "@distlab/contracts";
+import { useMessages } from "./i18n/react.tsx";
 import type { ComponentNames } from "./component-display.ts";
 
 /** How often the host timer rechecks while the cursor waits for the run to record more movements. */
@@ -63,7 +64,9 @@ export function useFlightPlayback(
   /** The session's component display names, for the narration and activity lines (#103). */
   names?: ComponentNames,
 ): FlightPlayback {
-  const steps = useMemo(() => flightSteps(observations, edges, names), [observations, edges, names]);
+  const m = useMessages();
+  // Text is produced here at render time, so a language switch recomputes it and nothing stale survives.
+  const steps = useMemo(() => flightSteps(observations, edges, m, names), [observations, edges, m, names]);
   // One record holds the cursor and the phase, so a single transition can never
   // paint a cursor the phase does not belong to.
   const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle", paint: 0 });
@@ -80,10 +83,10 @@ export function useFlightPlayback(
 
   const step = cursor.index >= 0 ? steps[cursor.index] : undefined;
   const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
-  const activity = useMemo(() => activityAt(observations, step?.observationId, names), [observations, step?.observationId, names]);
+  const activity = useMemo(() => activityAt(observations, step?.observationId), [observations, step?.observationId]);
   const changes = useMemo(
-    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId, names), activity, names),
-    [observations, previousId, activity, step, names],
+    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity, m, names),
+    [observations, previousId, activity, step, m, names],
   );
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current
@@ -126,8 +129,8 @@ export function useFlightPlayback(
     phase: cursor.phase,
     pace,
     paint: cursor.paint,
-    position: flightPosition(steps, cursor.index),
-    transport: flightTransport(cursor.index, steps.length, cursor.phase, recording),
+    position: flightPosition(steps, cursor.index, m),
+    transport: flightTransport(cursor.index, steps.length, cursor.phase, recording, m),
     activity,
     activityChanges: changes,
     play, pause, restart, previous, next, setPace,

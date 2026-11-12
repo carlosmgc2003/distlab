@@ -3,33 +3,28 @@ import { MarkerType, Position } from "@xyflow/react";
 import type { Edge, Node } from "@xyflow/react";
 
 import { checkoutDisplay } from "./checkout-display.ts";
+import { isEmptySlot } from "./design-step.ts";
 import { componentNames, displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
-import { EMPTY_SLOT_LABEL, isEmptySlot } from "./design-step.ts";
 import { kvServerDescriptor } from "../../../packages/catalogs/src/commerce/descriptors.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { FlightPace, FlightStep } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
+import type { Messages } from "./i18n/catalog.ts";
 import type { EdgeRoute, LinkKind } from "./layout/elk-layout.ts";
 
-export const categoryLabels = {
-  client: "Client",
-  service: "Internal service",
-  external: "External service",
-  infrastructure: "Infrastructure",
-} as const satisfies Record<ComponentNodeProjection["kind"], string>;
+/** The category of a component, in the active language. */
+export function categoryLabel(kind: ComponentNodeProjection["kind"], m: Messages): string {
+  return m.architecture.category[kind];
+}
 
 /** Derived presentation symbol: one shape plus glyph per value. */
 export type NodeSymbol = "client" | "service" | "external" | "topic" | "queue" | "kvstore";
 
-export const symbolLabels: Record<NodeSymbol, string> = {
-  client: "Client",
-  service: "Internal service",
-  external: "External service",
-  topic: "Message bus topic",
-  queue: "Message bus queue",
-  kvstore: "Shared key-value store",
-};
+/** The caption of a node symbol, in the active language. */
+export function symbolLabel(symbol: NodeSymbol, m: Messages): string {
+  return m.architecture.symbol[symbol];
+}
 
 /**
  * Whether a component is a key-value node: its model is the catalog's data-only descriptor of a
@@ -50,6 +45,8 @@ export type ArchitectureNode = Node<{
   /** Set while a recorded movement is painted on the graph. */
   role?: "sending" | "receiving";
   roleLabel?: string;
+  /** The activity sentence, with display names (#103), rendered where the names are known. */
+  activityText?: string;
   /** Set while the playback cursor is on a record: idle, processing, or waiting, read from records at or before it. */
   activity?: ComponentActivity;
   /** Applied student faults that target this component. */
@@ -75,10 +72,15 @@ export type ArchitectureEdge = Edge<{
 
 export type ResourceKind = "database" | "kvstore";
 
-export const resourceLabels = {
-  database: "Database",
-  kvstore: "KeyValueStore",
-} as const satisfies Record<ResourceKind, string>;
+/** The kernel name of a resource kind, in the active language's catalog. */
+export function resourceLabel(kind: ResourceKind, m: Messages): string {
+  return m.architecture.resourceKind[kind];
+}
+
+/** "Database owned by orders": the title of a resource node and of the break-fault target that names it. */
+export function resourceTitle(kind: ResourceKind, owner: string, m: Messages): string {
+  return kind === "database" ? m.architecture.databaseOwnedBy(owner) : m.architecture.storeOwnedBy(owner);
+}
 
 export interface ResourceNodeData {
   readonly [key: string]: unknown;
@@ -147,9 +149,6 @@ export const handleFor = {
   ownership: { source: "south", target: "north" },
 } as const;
 
-/** Bus link label: the relationship alone, since the destination already names itself on the graph. */
-const busLabels = { subscription: "Subscription", publication: "Publication" } as const;
-
 /** Derive the presentation symbol from the component kind, its model for a key-value node, and, for infrastructure, the destination kind. */
 export function deriveSymbol(component: ComponentNodeProjection, destination?: unknown): NodeSymbol {
   if (component.kind === "service" && isSharedStore(component.model, component.version)) return "kvstore";
@@ -173,13 +172,13 @@ function labelLook(relationship: keyof typeof relationshipStyles) {
  * `names` are the session's component display names (#103); without them, only the checkout
  * lessons' names apply, as `scenarioName` selects them.
  */
-export function mapArchitecture(projection: ArchitectureProjection, metadata?: ArchitectureDefinition, scenarioName?: string,
-  names: ComponentNames = componentNames({ source: "checkout", scenarioName }, projection.components)): {
+export function mapArchitecture(projection: ArchitectureProjection, metadata: ArchitectureDefinition | undefined, scenarioName: string | undefined, m: Messages,
+  names: ComponentNames = componentNames({ source: "checkout", scenarioName }, projection.components, m)): {
   nodes: ArchitectureNode[]; edges: ArchitectureEdge[]; resourceNodes: ResourceNode[]; resourceEdges: OwnershipEdge[]; names: ComponentNames; error: string | null;
 } {
   const ids = new Set(projection.components.map(component => component.id));
   if (ids.size !== projection.components.length || projection.links.some(link => !ids.has(link.source) || !ids.has(link.target))) {
-    return { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names, error: "Architecture contains duplicate components or connections to missing components." };
+    return { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names, error: m.architecture.invalid };
   }
   const instances = new Map(metadata?.components.map(component => [component.id, component]));
   const destinations = new Map(metadata?.destinations.map(destination => [destination.id, destination]));
@@ -199,16 +198,17 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const matches = instance?.kind === component.kind && instance.model === component.model && instance.version === component.version;
     const destination = component.kind === "infrastructure" ? destinations.get(component.id) : undefined;
     const symbol = deriveSymbol(component, destination);
-    const copy = matches ? checkoutDisplay(scenarioName, component) : undefined;
+    const copy = matches ? checkoutDisplay(scenarioName, component, m) : undefined;
     const emptySlot = matches && isEmptySlot(instance.model, instance.version);
     // The channel symbol and its "MessageBus topic" caption say what a destination is; the name says which.
     const title = destination ? component.label : names.get(component.id) ?? component.label;
+    // Ordered by kind and then by definition order, never by rendered text, so the order does not depend on the language.
     const resources = matches ? [
-      ...(copy?.resource ? [copy.resource] : []),
       ...(metadata?.databases.filter(database => database.owner === component.id).map(database =>
-        `Database owned by ${displayName(names, database.owner)}: ${database.tables.map(table => table.name).join(", ")}`) ?? []),
-      ...(metadata?.stores.filter(store => store.owner === component.id).map(store => `KeyValueStore owned by ${displayName(names, store.owner)}`) ?? []),
-    ].sort() : destination ? [`MessageBus ${destination.kind}: ${destination.id}`] : [];
+        m.architecture.databaseResource({ owner: displayName(names, database.owner), tables: database.tables.map(table => table.name) })) ?? []),
+      ...(metadata?.stores.filter(store => store.owner === component.id).map(store => m.architecture.storeResource(displayName(names, store.owner))) ?? []),
+      ...(copy?.resource ? [copy.resource] : []),
+    ] : destination ? [destinationResource(destination.kind, destination.id, m)] : [];
     const column = depth.get(component.id) ?? 0;
     const row = rows.get(column) ?? 0;
     rows.set(column, row + 1);
@@ -223,7 +223,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       position: commerce ? { x: column * COLUMN_GAP, y: row * 210 } : { ...(checkoutPositions[component.id] ?? { x: 930, y: index * 180 }) },
       sourcePosition: Position.Bottom, targetPosition: Position.Top,
       draggable: false, connectable: false, deletable: false, focusable: true,
-      ariaRole: "button", ariaLabel: `${title}, ${symbolLabels[symbol]}${emptySlot ? `, ${EMPTY_SLOT_LABEL.toLowerCase()}` : ""}`,
+      ariaRole: "button", ariaLabel: (emptySlot ? m.architecture.nodeAriaEmptySlot : m.architecture.nodeAria)({ title, symbol: symbolLabel(symbol, m) }),
       className: `component-node category-${component.kind} symbol-${symbol}${emptySlot ? " is-empty-slot" : ""} nopan`,
     };
   });
@@ -232,10 +232,11 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
       || link.label === "subscription";
     const publication = link.label === "publication";
     const relationship = subscription ? "subscription" : publication ? "publication" : "request";
-    const label = subscription ? busLabels.subscription : publication ? busLabels.publication : `Request${link.label ? ` · ${link.label}` : ""}`;
+    const label = subscription ? m.architecture.link.subscription : publication ? m.architecture.link.publication
+      : link.label ? m.architecture.link.requestNamed(link.label) : m.architecture.link.request;
     return {
       id: `${relationship}:${link.source}:${link.target}:${index}`, source: link.source, target: link.target,
-      type: "elk", label, ariaLabel: `${displayName(names, link.source)} to ${displayName(names, link.target)}: ${label}`, data: { relationship, link: relationship === "request" ? "sync" : "async" },
+      type: "elk", label, ariaLabel: m.architecture.link.aria({ source: displayName(names, link.source), target: displayName(names, link.target), label }), data: { relationship, link: relationship === "request" ? "sync" : "async" },
       sourceHandle: handleFor[relationship].source, targetHandle: handleFor[relationship].target,
       markerEnd: relationshipMarkers[relationship],
       style: { ...relationshipStyles[relationship] },
@@ -262,7 +263,7 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     const offsetX = kind === "kvstore" && companion ? 173 : 50;
     const id = `resource:${kind === "database" ? "db" : "kv"}:${owner}`;
     const ownerName = displayName(names, owner);
-    const title = `${resourceLabels[kind]} owned by ${ownerName}`;
+    const title = resourceTitle(kind, ownerName, m);
     return {
       id, type: kind, data: { kind, owner, ownerName, definition },
       position: { x: ownerNode.position.x + offsetX, y: ownerNode.position.y + 120 },
@@ -278,21 +279,30 @@ export function mapArchitecture(projection: ArchitectureProjection, metadata?: A
     type: "elk", data: { owner: node.data.owner, resource: node.data.kind, link: "data" },
     style: { stroke: DATA_STROKE, strokeWidth: 1.5 },
     selectable: false, focusable: false, deletable: false,
+    // Without a label React Flow names the link in English ("Edge from a to b").
+    ariaLabel: m.architecture.ownershipLink({ owner: node.data.ownerName, resource: resourceTitle(node.data.kind, node.data.ownerName, m) }),
   }));
   const publisher = nodes.find(node => node.id === "orders");
   const topic = destinations.get("OrderCreated");
-  if (publisher && publisher.data.configuration !== undefined && checkoutDisplay(scenarioName, publisher.data.component) && topic?.kind === "topic"
+  if (publisher && publisher.data.configuration !== undefined && checkoutDisplay(scenarioName, publisher.data.component, m) && topic?.kind === "topic"
     && nodes.some(node => node.id === topic.id && node.data.component.kind === "infrastructure")) {
     edges.push({
       id: "publication:orders:OrderCreated", source: "orders", target: "OrderCreated",
       sourceHandle: handleFor.publication.source, targetHandle: handleFor.publication.target, type: "elk",
-      label: busLabels.publication, ariaLabel: "Orders to MessageBus OrderCreated: publication", data: { relationship: "publication", link: "async" },
+      label: m.architecture.link.publication, ariaLabel: m.architecture.link.publicationAria, data: { relationship: "publication", link: "async" },
       markerEnd: relationshipMarkers.publication,
       style: { ...relationshipStyles.publication },
       ...labelLook("publication"), selectable: false, focusable: false, deletable: false,
     });
   }
   return { nodes, edges, resourceNodes, resourceEdges, names, error: null };
+}
+
+/** A MessageBus destination as a resource line. A kind this build does not know shows its raw code. */
+function destinationResource(kind: string, id: string, m: Messages): string {
+  return kind === "topic" ? m.architecture.destinationResource.topic(id)
+    : kind === "queue" ? m.architecture.destinationResource.queue(id)
+      : m.architecture.destinationResourceOther({ kind, id });
 }
 
 /** Read-only link identity for observation movement. Relationship comes from the presentation edge. */

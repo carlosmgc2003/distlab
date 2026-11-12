@@ -619,11 +619,11 @@ test("one recorded movement can be played and restarted (#192)", async ({ page }
   const status = page.getByRole("status", { name: "Simulation status" });
   const step = page.getByRole("button", { name: "Step", exact: true });
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    if ((await position(page).innerText()).startsWith("0 of 1 recorded movements")) break;
+    if ((await position(page).innerText()).startsWith("0 of 1 recorded movement.")) break;
     await step.click();
     await expect(status).toHaveText(/^(READY|PAUSED)$/);
   }
-  await expect(position(page)).toHaveText("0 of 1 recorded movements. Nothing selected.");
+  await expect(position(page)).toHaveText("0 of 1 recorded movement. Nothing selected.");
   const play = page.getByRole("button", { name: "Play replay" });
   await expect(play).toBeEnabled();
   await expect(page.getByRole("button", { name: "Previous movement" })).toBeDisabled();

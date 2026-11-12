@@ -1,13 +1,18 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { CanonicalValue, ScenarioDiagnostic } from "@distlab/contracts";
-import { readInteger } from "./design-choices.ts";
+import { choiceErrorText, readInteger } from "./design-choices.ts";
+import type { ChoiceError } from "./design-choices.ts";
 import {
   controlAvailable, designControls, editCount, placeDesignDiagnostics, setBinding, setResource, setSlotModel, setSlotOption, setSubscription,
 } from "./design-edits.ts";
 import type { DesignContext, DesignControl, DesignDraft } from "./design-edits.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 /** What the Architecture section is for. It is in the Experiment drawer's hint (#147). */
-export const DESIGN_EDITS_HELP = "Design edits change the lesson's architecture: the model that fills a slot, a peer it calls, the resources a service owns, and the destinations it subscribes to. Only the edits this lesson allows are offered, and Apply and restart is what checks that a design is valid.";
+export function DesignEditsHelp() {
+  const m = useMessages();
+  return <p>{m.designEditor.help}</p>;
+}
 
 export interface ArchitectureSectionProps {
   readonly context: DesignContext;
@@ -31,11 +36,12 @@ export interface ArchitectureSectionProps {
  */
 export function ArchitectureSection({ context, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken }: ArchitectureSectionProps) {
   const ids = useId();
+  const m = useMessages();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
-  const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
-  const controls = useMemo(() => designControls(context, draft), [context, draft]);
-  const placed = useMemo(() => rejected ? placeDesignDiagnostics(rejected.diagnostics, rejected.edits, context.allowance.maxEdits) : { controls: new Map<string, readonly string[]>(), general: [] },
-    [rejected, context.allowance.maxEdits]);
+  const [errors, setErrors] = useState<Readonly<Record<string, ChoiceError>>>({});
+  const controls = useMemo(() => designControls(context, draft, m), [context, draft, m]);
+  const placed = useMemo(() => rejected ? placeDesignDiagnostics(rejected.diagnostics, rejected.edits, context.allowance.maxEdits, m) : { controls: new Map<string, readonly string[]>(), general: [] },
+    [rejected, context.allowance.maxEdits, m]);
   const invalid = Object.keys(errors).length > 0;
   useEffect(() => { onInvalidChange(invalid); }, [invalid, onInvalidChange]);
   useEffect(() => { setTexts({}); setErrors({}); }, [resetToken]);
@@ -58,13 +64,13 @@ export function ArchitectureSection({ context, draft, onDraftChange, editable, r
   };
 
   return <section className="design-choices design-edits" aria-labelledby={`${ids}-heading`}>
-    <h3 id={`${ids}-heading`}>Architecture</h3>
-    <p id={`${ids}-count`} className="field-help">{count} of {context.allowance.maxEdits} design edits</p>
-    {placed.general.length ? <ul className="field-error" aria-label="Design problems">{placed.general.map(item => <li key={item}>{item}</li>)}</ul> : null}
+    <h3 id={`${ids}-heading`}>{m.designEditor.title}</h3>
+    <p id={`${ids}-count`} className="field-help">{m.designEditor.count({ count, max: context.allowance.maxEdits })}</p>
+    {placed.general.length ? <ul className="field-error" aria-label={m.designEditor.problems}>{placed.general.map(item => <li key={item}>{item}</li>)}</ul> : null}
     <div className="design-choices-grid">
       {controls.map(control => {
         const id = `${ids}-${control.id}`;
-        const messages = [...(errors[control.id] ? [errors[control.id]!] : []), ...(placed.controls.get(control.id) ?? [])];
+        const messages = [...(errors[control.id] ? [choiceErrorText(errors[control.id]!, m)] : []), ...(placed.controls.get(control.id) ?? [])];
         const describedBy = messages.length ? `${id}-error` : undefined;
         const disabled = !editable || !controlAvailable(context, draft, control);
         const changed = control.kind === "option" ? control.value !== control.domain.default : !control.packaged;

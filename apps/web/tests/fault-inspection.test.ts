@@ -3,10 +3,13 @@ import test from "node:test";
 import type { CanonicalValue, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { checkoutAssessment, checkoutCatalog, normalCheckout, responseLostCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine } from "@distlab/scenario";
-import { inspectFaults } from "../src/fault-inspection.ts";
+import { faultStatusLabel, inspectFaults as inspect } from "../src/fault-inspection.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 
+const m = messages("en");
+const inspectFaults = (projection: Parameters<typeof inspect>[0], scenario: Parameters<typeof inspect>[1]) => inspect(projection, scenario, m);
 const hiddenKeys = ["effectCount", "admittedCount", "rejectedCount", "suppressedCount", "tasks", "callbacks", "actions", "availability", "secret"];
 
 function latest(events: readonly WorkerEvent[]): RuntimeProjectionSet {
@@ -43,6 +46,7 @@ test("response-lost selection shows remote authorization and local timeout as di
   assert.equal(report.scenarioName, "checkout-processor-response-lost@1");
   assert.equal(report.seed, "mvp-response-lost-001");
   assert.equal(report.faultStatus, "selected");
+  assert.equal(faultStatusLabel(report.faultStatus, m), "selected");
   assert.equal(report.faults[0]?.id, "drop-first-processor-authorize-response");
   assert.equal(report.faults[0]?.effect, "drop");
   assert.equal(report.paymentRows[0]?.state, "UNKNOWN");
@@ -78,6 +82,18 @@ test("response-lost selection shows remote authorization and local timeout as di
 
   const replayed = await drive(responseLostCheckout, events, adapter, "reset").then(() => drive(responseLostCheckout, events, adapter, "run"));
   assert.deepEqual(inspectFaults(replayed, scenario), report);
+
+  // A null authorization ID stays null in the data and is worded only when shown, in each language.
+  assert.equal(report.paymentRows[0]?.authorizationId, null);
+  assert.match(report.knowledge, /local authorization ID none\./);
+  const spanish = inspect(finished, scenario, messages("es"));
+  assert.deepEqual(spanish.paymentRows, report.paymentRows);
+  assert.match(spanish.knowledge, /ID de autorización local ninguno\./);
+  assert.match(spanish.knowledge, /authorization-1 APPROVED/);
+  assert.match(spanish.knowledge, /NETWORK_TIMEOUT/);
+  assert.match(spanish.knowledge, /hechos distintos/);
+  assert.equal(faultStatusLabel(spanish.faultStatus, messages("es")), "seleccionada");
+  assert.ok(spanish.evidence.some(item => item.type === "network.request.timedout" && item.label === "Mostrar el timeout de Payments"));
 });
 
 test("normal selection keeps the authorization and records no response-drop", async () => {
@@ -86,7 +102,8 @@ test("normal selection keeps the authorization and records no response-drop", as
   const scenario = packagedMetadata(scenarios.find(item => item.id === "normal")!);
   await drive(normalCheckout, events, adapter, "load");
   const ready = inspectFaults(latest(events), scenario);
-  assert.equal(ready.faultStatus, "not recorded");
+  assert.equal(ready.faultStatus, "not-recorded");
+  assert.equal(faultStatusLabel(ready.faultStatus, m), "not recorded");
   assert.equal(ready.paymentRows.length, 0);
   assert.equal(ready.authorizations.length, 0);
   assert.doesNotMatch(ready.knowledge, /NETWORK_TIMEOUT/);
@@ -119,7 +136,7 @@ test("switching experiments replaces the session and drops the previous timeout"
   assert.equal(ready.simulation.processedEvents, 0);
   assert.equal(readyReport.paymentRows.length, 0);
   assert.equal(readyReport.authorizations.length, 0);
-  assert.equal(readyReport.faultStatus, "not recorded");
+  assert.equal(readyReport.faultStatus, "not-recorded");
   assert.doesNotMatch(readyReport.knowledge, /NETWORK_TIMEOUT/);
   const lostIds = new Set(lost.history.observations.map(item => item.id));
   assert.equal(ready.history.observations.some(item => lostIds.has(item.id)), false);

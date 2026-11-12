@@ -1,39 +1,18 @@
 import type { ComponentNodeProjection } from "@distlab/contracts";
 
 import { checkoutDisplay } from "./checkout-display.ts";
+import type { Messages } from "./i18n/catalog.ts";
+import { en } from "./i18n/en/index.ts";
+import { byCode } from "./i18n/catalog.ts";
 
 /**
  * Display names of the packaged commerce catalog's components (#103). Presentation copy only:
  * the worker keeps publishing `label: id`, and no simulation input, projection, or command
  * reads these names. Destinations (topics and queues) keep their IDs, which are event names.
+ * The names are catalog text (ADR-007): `m.components.names` in each language, with this
+ * English table as the source.
  */
-export const commerceComponentNames: Readonly<Record<string, string>> = Object.freeze({
-  client: "Customer App",
-  "customer-app": "Customer App",
-  "partner-api": "Partner API",
-  backoffice: "Backoffice",
-  scheduler: "Scheduler",
-  "editor-eu": "Editor (EU)",
-  "editor-us": "Editor (US)",
-  orders: "Orders",
-  payments: "Payments",
-  inventory: "Inventory",
-  notifications: "Notifications",
-  reporting: "Reporting",
-  catalog: "Catalog",
-  cart: "Cart",
-  storage: "Storage",
-  api: "API",
-  kv: "Key-Value Store",
-  "worker-1": "Worker 1",
-  "worker-2": "Worker 2",
-  eu: "Region EU",
-  us: "Region US",
-  carrier: "Shipping Carrier",
-  messaging: "Messaging Provider",
-  risk: "Risk Provider",
-  "payment-processor": "Payment Processor",
-});
+export const commerceComponentNames: Readonly<Record<string, string>> = Object.freeze({ ...en.components.names });
 
 /**
  * Which copy names a session's components. Names apply to packaged sessions only: the two
@@ -51,14 +30,14 @@ export type ComponentNames = ReadonlyMap<string, string>;
 
 export const NO_COMPONENT_NAMES: ComponentNames = new Map();
 
-/** The display names of one session's components. Pure: it reads the naming and the projected components only. */
-export function componentNames(naming: ComponentNaming, components: readonly ComponentNodeProjection[]): ComponentNames {
+/** The display names of one session's components, in `m`'s language. Pure: it reads the naming, the projected components, and the catalog only. */
+export function componentNames(naming: ComponentNaming, components: readonly ComponentNodeProjection[], m: Messages): ComponentNames {
   const names = new Map<string, string>();
   for (const component of components) {
     // A destination's name is its event name, so it is never renamed.
     if (component.kind === "infrastructure") continue;
-    const name = naming.source === "checkout" ? checkoutDisplay(naming.scenarioName, component)?.title
-      : naming.source === "commerce" && Object.hasOwn(commerceComponentNames, component.id) ? commerceComponentNames[component.id]
+    const name = naming.source === "checkout" ? checkoutDisplay(naming.scenarioName, component, m)?.title
+      : naming.source === "commerce" ? byCode(m.components.names, component.id)
       : undefined;
     if (name !== undefined) names.set(component.id, name);
   }

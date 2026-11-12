@@ -125,7 +125,7 @@ export class SimulationHost {
   }
 
   #receive(value: unknown): void {
-    if (!isWorkerEvent(value)) { this.#unavailable("The worker returned an invalid protocol message."); return; }
+    if (!isWorkerEvent(value)) { this.#unavailable(true); return; }
     const event = detached(value);
     const pending = event.requestId === undefined ? undefined : this.#pending.get(event.requestId);
     if (event.requestId !== undefined && !pending) return;
@@ -154,8 +154,9 @@ export class SimulationHost {
     } else if (terminal) this.#update(this.#snapshot);
   }
 
-  #unavailable(message = "The simulation worker stopped or could not exchange messages."): ApplicationError {
-    const error = applicationError("WORKER_UNAVAILABLE", message);
+  /** The worker stopped, or answered with something that is not a protocol message. `message` stays developer text (errorText renders it). */
+  #unavailable(invalidMessage = false): ApplicationError {
+    const error = applicationError("WORKER_UNAVAILABLE", invalidMessage ? "The worker returned an invalid protocol message." : "The simulation worker stopped or could not exchange messages.");
     this.#release(error);
     this.#update({ projection: null, error, loading: false });
     return error;

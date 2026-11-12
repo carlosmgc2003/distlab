@@ -1,13 +1,14 @@
 import type { Observation } from "@distlab/contracts";
-import { continuesHistory, edgeFor, movementOf } from "./records.ts";
+import { continuesHistory, edgeFor, movementOf, movementText } from "./records.ts";
 import type { Movement, MovementEdge } from "./records.ts";
+import type { Messages } from "./i18n/catalog.ts";
 import {
   emphasisFor,
   revealMessage,
   selectionMessage,
   traceFilterMessage,
 } from "./timeline.ts";
-import type { GraphEmphasis } from "./timeline.ts";
+import type { ClearedFilter, GraphEmphasis, SelectionRef } from "./timeline.ts";
 import {
   activeFilterChips,
   clearTimelineField,
@@ -16,6 +17,7 @@ import {
   emptyTimelineDraft,
   narrowToTrace,
   parseTimelineQuery,
+  queryErrorText,
   queryTimeline,
   revealTimelineObservation,
   timelineDraftIsBlank,
@@ -25,6 +27,7 @@ import {
 import type {
   ActiveFilterChip,
   ComponentTitle,
+  QueryError,
   TextFilterField,
   TimelineDraft,
   TimelineQuery,
@@ -35,7 +38,6 @@ import {
   quickViewChip,
   quickViewCounts,
   quickViewFeedback,
-  quickViewLabel,
   quickViewObservations,
   quickViewSummary,
   recordedComponentChips,
@@ -95,17 +97,49 @@ export interface ScrollRequest {
   readonly observationId?: string;
 }
 
+/**
+ * The live-region announcement for the last transition, as a code and its parameters. State keeps
+ * this instead of a sentence, so `feedbackText` renders it in the current language and a language
+ * switch never leaves stale text behind.
+ */
+export type ReviewFeedback =
+  | { readonly kind: "not-in-history" }
+  | { readonly kind: "selected"; readonly selection: SelectionRef }
+  | { readonly kind: "revealed"; readonly selection: SelectionRef; readonly cleared: readonly ClearedFilter[] }
+  | { readonly kind: "quick-view"; readonly id: QuickViewId | null; readonly shown: number; readonly recorded: number }
+  | { readonly kind: "cleared-all"; readonly recorded: number }
+  | { readonly kind: "trace"; readonly traceId: string; readonly changed: boolean; readonly cleared: readonly ClearedFilter[] };
+
+/** Renders feedback for the live region. Nothing has been announced yet when there is none. */
+export function feedbackText(feedback: ReviewFeedback | null, m: Messages): string {
+  if (feedback === null) return "";
+  switch (feedback.kind) {
+    case "not-in-history": return m.timeline.review.notInHistory;
+    case "selected": return selectionMessage(feedback.selection, m);
+    case "revealed": return revealMessage(feedback.cleared, feedback.selection, m);
+    case "quick-view": return quickViewFeedback(feedback.id, feedback.shown, feedback.recorded, m);
+    case "cleared-all": return m.timeline.review.clearedAll(feedback.recorded);
+    case "trace": return traceFilterMessage(feedback.traceId, feedback, m);
+  }
+}
+
+/** Renders the filter error the drawer shows, or nothing when the draft parses. */
+export function filterErrorText(error: QueryError | null, m: Messages): string | null {
+  return error === null ? null : queryErrorText(error, m);
+}
+
 /** Everything review navigation owns. The reader's position, never the run's. */
 export interface ReviewNavigation {
   readonly draft: TimelineDraft;
   readonly query: TimelineQuery;
-  readonly filterError: string | null;
+  readonly filterError: QueryError | null;
   readonly filterField: TextFilterField;
   readonly quickView: QuickViewId | null;
   readonly view: ReviewViewMode;
   /** The review position: the stored record the reader selected. */
   readonly selectedId: string | null;
-  readonly feedback: string;
+  /** What to announce, as a descriptor. Render it with `feedbackText`. */
+  readonly feedback: ReviewFeedback | null;
   /** The newest recorded movement flashing by itself. Never takes the graph highlight from playback. */
   readonly liveCueId: string | null;
   readonly focus: FocusRequest | null;
@@ -148,7 +182,7 @@ export function createReviewNavigation(): ReviewNavigation {
     quickView: null,
     view: "diagram",
     selectedId: null,
-    feedback: "",
+    feedback: null,
     liveCueId: null,
     focus: null,
     scroll: { kind: "top", epoch: 0, view: "diagram", index: -1 },
@@ -191,7 +225,7 @@ export function transition(state: ReviewNavigation, intent: ReviewIntent, contex
       // Cleared through the same path as any draft edit, so an invalid filter
       // left in the drawer is cleared with the rest of the constraints.
       const cleared = applyDraft(state, emptyTimelineDraft);
-      return { ...cleared, quickView: null, feedback: `All filters and quick views were cleared. ${context.observations.length} recorded observations are available again.` };
+      return { ...cleared, quickView: null, feedback: { kind: "cleared-all", recorded: context.observations.length } };
     }
     case "set-draft": return applyDraft(state, intent.draft);
     case "set-filter-field": return { ...state, filterField: intent.field };
@@ -239,7 +273,7 @@ export interface ReviewView {
   readonly scroll: ScrollRequest;
 }
 
-export function derive(state: ReviewNavigation, context: ReviewContext): ReviewView {
+export function derive(state: ReviewNavigation, context: ReviewContext, m: Messages): ReviewView {
   const { observations, edges, componentTitles } = context;
   // The quick view narrows the snapshot first; the canonical fields then narrow that result.
   const scoped = quickViewObservations(observations, state.quickView);
@@ -247,26 +281,23 @@ export function derive(state: ReviewNavigation, context: ReviewContext): ReviewV
   const selected = state.selectedId === null ? undefined : observations.find(item => item.id === state.selectedId);
   const selectedTrace = selected?.traceId;
   const selectedIndex = state.selectedId === null ? -1 : filtered.findIndex(item => item.id === state.selectedId);
-  const componentLabels = new Map(componentTitles.map(item => [item.id, componentLabel(item.id, componentTitles)]));
+  const componentLabels = new Map(componentTitles.map(item => [item.id, componentLabel(item.id, componentTitles, m)]));
   // The graph's node titles are the session's display names (#103); a movement sentence uses them too.
   const names: ComponentNames = new Map(componentTitles.flatMap(item => item.title !== item.id ? [[item.id, item.title] as const] : []));
-  const milestones = storyMilestones(filtered);
-  const totalMilestones = filtered.length === observations.length ? milestones.length : storyMilestones(observations).length;
+  const milestones = storyMilestones(filtered, m);
+  const totalMilestones = filtered.length === observations.length ? milestones.length : storyMilestones(observations, m).length;
   const lanes = storyLanes(milestones);
-  const legend = storyLegend(milestones);
-  const reduction = storyReduction(milestones, filtered.length);
-  const chips = activeFilterChips(state.query, componentTitles);
-  const viewChip = state.quickView === null ? null : quickViewChip(state.quickView);
+  const legend = storyLegend(milestones, m);
+  const reduction = storyReduction(milestones, filtered.length, m);
+  const chips = activeFilterChips(state.query, componentTitles, m);
+  const viewChip = state.quickView === null ? null : quickViewChip(state.quickView, m);
   const filtersActive = !timelineDraftIsBlank(state.draft) || state.filterError !== null || state.quickView !== null;
 
   let explanation = "";
   if (filtered.length === 0 && observations.length > 0) {
-    const reset = state.quickView === null
-      ? undefined
-      : `Remove the ${quickViewLabel(state.quickView).toLowerCase()} quick view chip or clear all filters to see recorded observations again.`;
     const parts: string[] = [];
-    if (state.quickView !== null) parts.push(emptyQuickViewExplanation(state.quickView, observations.length));
-    parts.push(emptyFilterExplanation(state.query, scoped, componentTitles, reset));
+    if (state.quickView !== null) parts.push(emptyQuickViewExplanation(state.quickView, observations.length, m));
+    parts.push(emptyFilterExplanation(state.query, scoped, componentTitles, state.quickView ?? undefined, m));
     explanation = parts.join(" ");
   }
 
@@ -274,13 +305,12 @@ export function derive(state: ReviewNavigation, context: ReviewContext): ReviewV
   let liveCue: Movement | null = null;
   if (!selected && state.liveCueId !== null) {
     const cue = observations.find(item => item.id === state.liveCueId);
-    if (cue) liveCue = movementOf(cue, names);
+    if (cue) liveCue = movementOf(cue);
   }
-  const emphasis = deriveEmphasis(selected, liveCue, edges, names);
+  const emphasis = deriveEmphasis(selected, liveCue, edges, m, names);
 
-  const storyCount = `${reduction} ${observations.length === filtered.length ? "" : `Filters show ${filtered.length} of ${observations.length} observations. `}`
-    + (selected !== undefined && !milestones.some(item => item.observation.id === selected.id) && filtered.some(item => item.id === selected.id)
-      ? "The Story table also lists the selected record, which is not a teaching milestone." : "");
+  const tableExtra = selected !== undefined && !milestones.some(item => item.observation.id === selected.id) && filtered.some(item => item.id === selected.id);
+  const storyCount = m.story.count({ reduction, filtered: filtered.length, total: observations.length, tableExtra });
 
   return {
     scoped,
@@ -288,23 +318,23 @@ export function derive(state: ReviewNavigation, context: ReviewContext): ReviewV
     selected,
     selectedTrace,
     selectedIndex,
-    suggestions: timelineSuggestions(observations, componentTitles),
+    suggestions: timelineSuggestions(observations, componentTitles, m),
     quickCounts: quickViewCounts(observations),
     componentChips: recordedComponentChips(observations, componentTitles),
     componentLabels,
     chips,
     viewChip,
     filtersActive,
-    quickCopy: quickViewSummary(state.quickView, filtered.length, observations.length),
+    quickCopy: quickViewSummary(state.quickView, filtered.length, observations.length, m),
     explanation,
     milestones,
-    tableRows: storyTableRows(milestones, filtered, state.selectedId),
+    tableRows: storyTableRows(milestones, filtered, state.selectedId, m),
     totalMilestones,
     lanes,
     legend,
     reduction,
-    storyCopy: storySummary(milestones, filtered.length, componentLabels),
-    storyDetailCopy: storyDetail(milestones),
+    storyCopy: storySummary(milestones, filtered.length, componentLabels, m),
+    storyDetailCopy: storyDetail(milestones, m),
     storyCount,
     emphasis,
     focus: state.focus,
@@ -323,14 +353,14 @@ export function derive(state: ReviewNavigation, context: ReviewContext): ReviewV
  */
 function revealRecord(state: ReviewNavigation, observationId: string, context: ReviewContext): ReviewNavigation {
   const observation = context.observations.find(item => item.id === observationId);
-  if (!observation) return { ...state, feedback: "That observation is not in this history." };
+  if (!observation) return { ...state, feedback: { kind: "not-in-history" } };
   const revealed = revealTimelineObservation(state.draft, observation);
   const unhidden = revealQuickView(state.quickView, observation);
   const draft = revealed.changed ? revealed.draft : state.draft;
   const query = revealed.changed ? revealed.query : state.query;
   const filterError = revealed.changed ? null : state.filterError;
   const quickView = unhidden.id === state.quickView ? state.quickView : unhidden.id;
-  const cleared = [...revealed.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])];
+  const cleared: readonly ClearedFilter[] = [...revealed.cleared, ...(unhidden.cleared !== null ? [{ quickView: unhidden.cleared }] : [])];
   return {
     ...state,
     draft,
@@ -339,7 +369,7 @@ function revealRecord(state: ReviewNavigation, observationId: string, context: R
     quickView,
     view: "table",
     selectedId: observation.id,
-    feedback: revealMessage(cleared, observation),
+    feedback: { kind: "revealed", selection: selectionRef(observation), cleared },
     focus: { observationId: observation.id, token: (state.focus?.token ?? 0) + 1 },
     scroll: scrollTo(state, "focus-row"),
   };
@@ -350,7 +380,7 @@ function selectRecord(state: ReviewNavigation, observationId: string, context: R
   return {
     ...state,
     selectedId: observationId,
-    feedback: observation ? selectionMessage(observation) : state.feedback,
+    feedback: observation ? { kind: "selected", selection: selectionRef(observation) } : state.feedback,
     scroll: scrollTo(state, "ensure-visible"),
   };
 }
@@ -359,34 +389,36 @@ function applyQuickView(state: ReviewNavigation, next: QuickViewId | null, conte
   return {
     ...state,
     quickView: next,
-    feedback: quickViewFeedback(next, quickViewObservations(context.observations, next).length, context.observations.length),
+    feedback: { kind: "quick-view", id: next, shown: quickViewObservations(context.observations, next).length, recorded: context.observations.length },
     scroll: scrollTo(state, "top"),
   };
 }
 
 function clearQuickView(state: ReviewNavigation, context: ReviewContext): ReviewNavigation {
   const total = context.observations.length;
-  return { ...state, quickView: null, feedback: quickViewFeedback(null, total, total), scroll: scrollTo(state, "top") };
+  return { ...state, quickView: null, feedback: { kind: "quick-view", id: null, shown: total, recorded: total }, scroll: scrollTo(state, "top") };
 }
 
 function narrowToTraceIntent(state: ReviewNavigation, traceId: string, context: ReviewContext): ReviewNavigation {
   const change = narrowToTrace(state.draft, traceId);
   const member = context.observations.find(item => item.traceId === traceId);
-  const unhidden = member === undefined ? { id: state.quickView, cleared: "" } : revealQuickView(state.quickView, member);
+  const unhidden = member === undefined ? { id: state.quickView, cleared: null } : revealQuickView(state.quickView, member);
   // Narrowing rewrites the draft, so the result is re-read from it. Keeping the
   // previous query here would leave the draft and the result describing
   // different constraints, and reveal would stop seeing what is filtering.
   const parsed = parseTimelineQuery(change.draft);
   const base: ReviewNavigation = parsed.ok
     ? { ...state, draft: change.draft, query: parsed.query, filterError: null }
-    : { ...state, draft: change.draft, filterError: parsed.message };
+    : { ...state, draft: change.draft, filterError: parsed.error };
   return {
     ...base,
     quickView: unhidden.id === state.quickView ? state.quickView : unhidden.id,
-    feedback: traceFilterMessage(traceId, {
-      changed: change.changed || unhidden.cleared !== "",
-      cleared: [...change.cleared, ...(unhidden.cleared ? [unhidden.cleared] : [])],
-    }),
+    feedback: {
+      kind: "trace",
+      traceId,
+      changed: change.changed || unhidden.cleared !== null,
+      cleared: [...change.cleared, ...(unhidden.cleared !== null ? [{ quickView: unhidden.cleared }] : [])],
+    },
     // A focus request already in flight outranks the scroll reset a filter change asks for.
     focus: state.selectedId === null ? state.focus : { observationId: state.selectedId, token: (state.focus?.token ?? 0) + 1 },
     scroll: scrollTo(state, state.selectedId === null ? "top" : "focus-row"),
@@ -398,7 +430,7 @@ function applyDraft(state: ReviewNavigation, draft: TimelineDraft): ReviewNaviga
   const parsed = parseTimelineQuery(draft);
   return parsed.ok
     ? { ...withDraft(state, draft, parsed.query), filterError: null, scroll: scrollTo(state, "top") }
-    : { ...state, draft, filterError: parsed.message, scroll: scrollTo(state, "top") };
+    : { ...state, draft, filterError: parsed.error, scroll: scrollTo(state, "top") };
 }
 
 function withDraft(state: ReviewNavigation, draft: TimelineDraft, query: TimelineQuery): ReviewNavigation {
@@ -420,7 +452,7 @@ function published(state: ReviewNavigation, next: readonly Observation[]): Revie
       published: next,
       seenSequence: next.at(-1)?.sequence ?? -1,
       selectedId: null,
-      feedback: "",
+      feedback: null,
       liveCueId: null,
       draft: emptyTimelineDraft,
       query: {},
@@ -443,15 +475,19 @@ function scrollTo(state: ReviewNavigation, kind: ScrollKind): ScrollRequest {
   return { kind, epoch: state.scroll.epoch + 1, view: state.view, index: -1 };
 }
 
-function deriveEmphasis(selected: Observation | undefined, liveCue: Movement | null, edges: readonly MovementEdge[], names: ComponentNames): GraphEmphasis | undefined {
-  if (selected) return emphasisFor(selected, edges, names);
+function selectionRef(observation: Observation): SelectionRef {
+  return { sequence: observation.sequence, type: observation.type, time: observation.time };
+}
+
+function deriveEmphasis(selected: Observation | undefined, liveCue: Movement | null, edges: readonly MovementEdge[], m: Messages, names: ComponentNames): GraphEmphasis | undefined {
+  if (selected) return emphasisFor(selected, edges, m, names);
   if (!liveCue) return undefined;
   const edge = edgeFor(liveCue, edges);
   return {
     nodeIds: liveCue.to !== undefined ? [liveCue.from, liveCue.to] : [liveCue.from],
     ...(edge !== undefined ? { edgeId: edge.id } : {}),
     kind: liveCue.kind,
-    text: liveCue.text,
+    text: movementText(liveCue, m, names),
     pulseId: liveCue.observationId,
     // A live cue flashes by itself; it never takes the graph highlight back from playback.
     origin: "live" as const,

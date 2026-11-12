@@ -1,4 +1,5 @@
 import type { CanonicalValue, Observation, SimulationTime } from "@distlab/contracts";
+import type { Messages } from "./i18n/catalog.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 
@@ -204,21 +205,28 @@ export function correlation(observations: readonly Observation[], observation: O
 }
 
 /** A movement the record itself states. Every field is a stored type, a stored
- * source and target, or text built from them. No edge is resolved here, because
- * link identity belongs to the presentation that draws it.
+ * source and target, or a stored time. No edge is resolved here, because
+ * link identity belongs to the presentation that draws it. Its sentence is
+ * produced at render time by `movementText`, so it never outlives the language.
  */
 export interface Movement {
   readonly observationId: string;
   readonly sequence: number;
   readonly time: SimulationTime;
   readonly kind: MovementKind;
-  /** Stored type's last segment, or the stored phase word. */
-  readonly phase: string;
+  /** The stored observation type: a code, never translated. */
+  readonly type: string;
   readonly relationship: MovementEdge["relationship"];
   readonly from: string;
   readonly to?: string;
-  /** One sentence naming the stored type, route, and virtual time. */
-  readonly text: string;
+}
+
+/** One sentence naming the stored type, route, and virtual time. An unknown type shows its raw code. */
+export function movementText(movement: Movement, m: Messages, names?: ComponentNames): string {
+  // The sentence names components by display name (#103); `from` and `to` keep the stored IDs.
+  const params = { source: displayName(names, movement.from), ...(movement.to !== undefined ? { target: displayName(names, movement.to) } : {}), time: movement.time };
+  const message = Object.hasOwn(m.records.movement, movement.type) ? m.records.movement[movement.type as keyof typeof m.records.movement] : undefined;
+  return message !== undefined ? message(params) : m.records.movementUnknown({ ...params, type: movement.type });
 }
 
 const REQUEST_TYPES: ReadonlySet<string> = new Set([
@@ -237,20 +245,20 @@ const RESPONSE_TYPES: ReadonlySet<string> = new Set([
  * The movement this record states, or null when it travels no link. A record
  * that travels no link stays in Recorded history and is not a movement.
  */
-export function movementOf(observation: Observation, names?: ComponentNames): Movement | null {
-  if (REQUEST_TYPES.has(observation.type)) return leg("request", observation, observation.source, observation.target, "request", names);
-  if (RESPONSE_TYPES.has(observation.type)) return leg("response", observation, observation.source, observation.target, "request", names);
+export function movementOf(observation: Observation): Movement | null {
+  if (REQUEST_TYPES.has(observation.type)) return leg("request", observation, observation.source, observation.target, "request");
+  if (RESPONSE_TYPES.has(observation.type)) return leg("response", observation, observation.source, observation.target, "request");
   if (observation.type === "message.published") {
-    return leg("message", observation, observation.source, storedText(observation, "destination") ?? entityId(observation, "destination"), "publication", names);
+    return leg("message", observation, observation.source, storedText(observation, "destination") ?? entityId(observation, "destination"), "publication");
   }
   if (observation.type === "message.delivered") {
     const consumer = storedText(observation, "consumer") ?? observation.source;
-    return leg("message", observation, entityId(observation, "destination") ?? observation.source, consumer, "subscription", names);
+    return leg("message", observation, entityId(observation, "destination") ?? observation.source, consumer, "subscription");
   }
   if (observation.type === "message.acknowledged") {
     // The acknowledgement leaves the consumer and travels back to the MessageBus.
     const consumer = storedText(observation, "consumer") ?? observation.source;
-    return leg("message", observation, consumer, entityId(observation, "destination"), "subscription", names);
+    return leg("message", observation, consumer, entityId(observation, "destination"), "subscription");
   }
   return null;
 }
@@ -298,9 +306,9 @@ export function attemptOf(observation: Observation): number | string | undefined
 }
 
 /** The attempt as stored, for a label. No attempt stores no suffix. */
-export function attemptLabel(observation: Observation): string {
+export function attemptLabel(observation: Observation, m: Messages): string {
   const attempt = attemptOf(observation);
-  return attempt === undefined ? "" : ` (attempt ${attempt})`;
+  return attempt === undefined ? "" : m.records.attemptSuffix(attempt);
 }
 
 /**
@@ -308,29 +316,25 @@ export function attemptLabel(observation: Observation): string {
  * delivery attempt, a business log's message, a key-value key, a rejection code or reason, and
  * a check's id and verdict. A redacted or omitted payload stores nothing to add.
  */
-export function storedQualifier(observation: Observation): string {
+export function storedQualifier(observation: Observation, m: Messages): string {
+  const q = m.records.qualifier;
+  const detail = (key: string) => { const value = storedText(observation, key); return value === undefined ? "" : q.detail(value); };
+  const code = (key: string) => { const value = storedText(observation, key); return value === undefined ? "" : q.code(value); };
   switch (observation.type) {
-    case "message.delivered": return attemptLabel(observation);
-    case "runtime.log": return suffix(": ", storedText(observation, "message"));
-    case "kv.changed": case "kv.expired": case "kv.condition.failed": return suffix(": ", storedText(observation, "key"));
-    case "database.transaction.rejected": case "service.handler.failed": return parenthesized(storedText(observation, "code"));
-    case "message.nacked": case "message.dead": return parenthesized(storedText(observation, "reason"));
+    case "message.delivered": return attemptLabel(observation, m);
+    case "runtime.log": return detail("message");
+    case "kv.changed": case "kv.expired": case "kv.condition.failed": return detail("key");
+    case "database.transaction.rejected": case "service.handler.failed": return code("code");
+    case "message.nacked": case "message.dead": return code("reason");
     case "scenario.assertion.evaluated": {
       const id = storedText(observation, "assertionId");
       const verdict = storedScalar(observation, "verdict");
-      const result = verdict === "true" ? "passed" : verdict === "false" ? "did not pass" : undefined;
-      return suffix(": ", [id, result].filter(part => part !== undefined).join(" ") || undefined);
+      const passed = verdict === "true" ? true : verdict === "false" ? false : undefined;
+      if (id === undefined) return passed === undefined ? "" : passed ? q.verdictPassed : q.verdictNotPassed;
+      return passed === undefined ? q.checkId(id) : passed ? q.checkPassed(id) : q.checkNotPassed(id);
     }
     default: return "";
   }
-}
-
-function suffix(separator: string, value: string | undefined): string {
-  return value === undefined ? "" : `${separator}${value}`;
-}
-
-function parenthesized(value: string | undefined): string {
-  return value === undefined ? "" : ` (${value})`;
 }
 
 /**
@@ -448,7 +452,7 @@ export type AssertionEvidence =
   | { readonly kind: "none"; readonly assertionId?: string; readonly passed?: boolean }
   | { readonly kind: "rows"; readonly assertionId?: string; readonly passed?: boolean; readonly rows: readonly EvidenceRow[] };
 
-export function assertionEvidence(observation: Observation): AssertionEvidence | undefined {
+export function assertionEvidence(observation: Observation, m: Messages): AssertionEvidence | undefined {
   if (observation.type !== "scenario.assertion.evaluated") return undefined;
   const visibility = payloadVisibility(observation);
   if (visibility !== "visible") return { kind: "unavailable", visibility };
@@ -457,14 +461,14 @@ export function assertionEvidence(observation: Observation): AssertionEvidence |
   const passed = typeof data.verdict === "boolean" ? data.verdict : undefined;
   const common = { ...(assertionId !== undefined ? { assertionId } : {}), ...(passed !== undefined ? { passed } : {}) };
   if (!Object.hasOwn(data, "evidence")) return { kind: "none", ...common };
-  return { kind: "rows", ...common, rows: evidenceRows(data.evidence!) };
+  return { kind: "rows", ...common, rows: evidenceRows(data.evidence!, m) };
 }
 
 /** Stored fields as one line, the form Service state uses: `field: value · field: value`. */
-function fieldText(value: CanonicalValue): string {
+function fieldText(value: CanonicalValue, m: Messages): string {
   if (!isRecord(value)) return value === null || typeof value !== "object" ? String(value) : JSON.stringify(value);
   const entries = Object.entries(value);
-  if (entries.length === 0) return "No stored fields.";
+  if (entries.length === 0) return m.records.noStoredFields;
   return entries.map(([key, item]) => `${key}: ${item !== null && typeof item === "object" ? JSON.stringify(item) : String(item)}`).join(" · ");
 }
 
@@ -473,15 +477,15 @@ function fieldText(value: CanonicalValue): string {
  * keyed by ID) gives one keyed row per entry; an object of scalars (metrics) gives one row; any
  * other object gives one keyed row per field. An empty list or object gives no rows.
  */
-function evidenceRows(evidence: CanonicalValue): readonly EvidenceRow[] {
-  if (Array.isArray(evidence)) return evidence.map(item => ({ text: fieldText(item) }));
-  if (!isRecord(evidence)) return [{ text: fieldText(evidence) }];
+function evidenceRows(evidence: CanonicalValue, m: Messages): readonly EvidenceRow[] {
+  if (Array.isArray(evidence)) return evidence.map(item => ({ text: fieldText(item, m) }));
+  if (!isRecord(evidence)) return [{ text: fieldText(evidence, m) }];
   const entries = Object.entries(evidence);
   if (entries.length === 0) return [];
-  if (entries.every(([, value]) => isRecord(value))) return entries.map(([key, value]) => ({ key, text: fieldText(value) }));
-  if (entries.every(([, value]) => value === null || typeof value !== "object")) return [{ text: fieldText(evidence) }];
+  if (entries.every(([, value]) => isRecord(value))) return entries.map(([key, value]) => ({ key, text: fieldText(value, m) }));
+  if (entries.every(([, value]) => value === null || typeof value !== "object")) return [{ text: fieldText(evidence, m) }];
   return entries.map(([key, value]) => ({
-    key, text: Array.isArray(value) ? (value.length ? value.map(item => fieldText(item)).join("; ") : "None.") : fieldText(value),
+    key, text: Array.isArray(value) ? (value.length ? value.map(item => fieldText(item, m)).join("; ") : m.records.none) : fieldText(value, m),
   }));
 }
 
@@ -525,35 +529,18 @@ function leg(
   from: string | undefined,
   to: string | undefined,
   relationship: MovementEdge["relationship"],
-  names: ComponentNames | undefined,
 ): Movement {
   const source = from && from.length > 0 ? from : observation.source;
   const target = to && to.length > 0 && to !== source ? to : undefined;
-  // The sentence names components by display name; `from` and `to` keep the stored IDs.
-  const sourceName = displayName(names, source);
-  const targetName = target !== undefined ? displayName(names, target) : undefined;
-  const phase = observation.type === "message.published" ? "published"
-    : observation.type === "message.delivered" ? "delivered"
-    : observation.type === "message.acknowledged" ? "acknowledged"
-    : observation.type.endsWith(".timedout") ? "timed out"
-    : observation.type.split(".").at(-1) ?? observation.type;
-  const where = targetName !== undefined ? `from ${sourceName} to ${targetName}` : `at ${sourceName}`;
-  const text = kind === "request" ? `Request ${phase} ${where} at virtual time ${observation.time}.`
-    : kind === "response" ? `Response ${phase} ${where} at virtual time ${observation.time}.`
-    : phase === "acknowledged" && targetName !== undefined ? `Message acknowledged by ${sourceName} on ${targetName} at virtual time ${observation.time}.`
-    : phase === "published" ? `Message published ${where} at virtual time ${observation.time}.`
-    : phase === "delivered" ? `Message delivered ${where} at virtual time ${observation.time}.`
-    : `Message ${phase} ${where} at virtual time ${observation.time}.`;
   return {
     observationId: observation.id,
     sequence: observation.sequence,
     time: observation.time,
     kind,
-    phase,
+    type: observation.type,
     relationship,
     from: source,
     ...(target !== undefined ? { to: target } : {}),
-    text,
   };
 }
 

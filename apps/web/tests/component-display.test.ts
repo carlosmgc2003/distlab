@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ComponentNodeProjection, Observation, RuntimeProjectionSet, ScenarioDefinition } from "@distlab/contracts";
-import { activityAt, activityChanges } from "../src/activity.ts";
+import { activityAt, activityChanges, activityDescription } from "../src/activity.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { componentNames, commerceComponentNames, displayName } from "../src/component-display.ts";
 import type { ComponentNames } from "../src/component-display.ts";
@@ -9,6 +10,8 @@ import { flightSteps } from "../src/flight.ts";
 import { assessments, packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { targetOptions, faultKindOptions } from "../src/break-faults.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
+
+const m = messages("en");
 
 /** The display-name table of issue #103, verbatim. */
 const ISSUE_TABLE: Readonly<Record<string, string>> = {
@@ -76,27 +79,27 @@ test("#103 table: every packaged commerce and Reliable Checkout component has an
 test("#103 resolver: checkout names for the checkout lessons, the table for commerce, IDs for imported sessions and unknown IDs", () => {
   for (const choice of checkoutLessons) {
     const scenario = packagedMetadata(choice);
-    const names = componentNames({ source: "checkout", scenarioName: scenario.name }, projected(scenario));
+    const names = componentNames({ source: "checkout", scenarioName: scenario.name }, projected(scenario), m);
     assert.deepEqual([...names.entries()].sort(), [
       ["customer-app", "Customer App"], ["orders", "Orders"], ["payment-processor", "Payment Processor"], ["payments", "Payments"],
     ], choice.id);
     // Destinations keep their IDs: they are event names.
     assert.equal(displayName(names, "OrderCreated"), "OrderCreated");
     // A checkout starter file is imported with its author's IDs.
-    assert.equal(componentNames({ source: "imported" }, projected(scenario)).size, 0);
+    assert.equal(componentNames({ source: "imported" }, projected(scenario), m).size, 0);
   }
   for (const scenario of commerceDocuments) {
     const components = projected(scenario);
-    const names = componentNames({ source: "commerce" }, components);
+    const names = componentNames({ source: "commerce" }, components, m);
     for (const component of components) {
       assert.equal(displayName(names, component.id), component.kind === "infrastructure" ? component.id : ISSUE_TABLE[component.id], `${scenario.name}: ${component.id}`);
     }
-    const imported = componentNames({ source: "imported" }, components);
+    const imported = componentNames({ source: "imported" }, components, m);
     for (const component of components) assert.equal(displayName(imported, component.id), component.id);
   }
   const unknown = componentNames({ source: "commerce" }, [
     { id: "ledger", kind: "service", label: "ledger" }, { id: "constructor", kind: "service", label: "constructor" },
-  ]);
+  ], m);
   assert.equal(displayName(unknown, "ledger"), "ledger");
   assert.equal(displayName(unknown, "constructor"), "constructor");
   assert.equal(displayName(undefined, "orders"), "orders");
@@ -135,9 +138,9 @@ test("#103 narration and activity: one request, one response, and one message mo
   for (const { lesson, type } of cases) {
     const choice = scenarios.find(item => item.id === lesson)!;
     const projection = await run(lesson);
-    const names = componentNames({ source: "commerce" }, projection.architecture.components);
-    const graph = mapArchitecture(projection.architecture, packagedMetadata(choice).architecture, packagedMetadata(choice).name, names);
-    const steps = flightSteps(projection.history.observations, movementEdges(graph.edges), names);
+    const names = componentNames({ source: "commerce" }, projection.architecture.components, m);
+    const graph = mapArchitecture(projection.architecture, packagedMetadata(choice).architecture, packagedMetadata(choice).name, m, names);
+    const steps = flightSteps(projection.history.observations, movementEdges(graph.edges), m, names);
     const index = steps.findIndex(step => projection.history.observations.find(item => item.id === step.observationId)?.type === type);
     assert.ok(index >= 0, `${lesson} records ${type}`);
     const step = steps[index]!;
@@ -151,34 +154,34 @@ test("#103 narration and activity: one request, one response, and one message mo
       assert.ok(named.some(name => text.includes(name)), `${type}: "${text}" names the movement's components`);
       assertNoRawId(text, names);
     }
-    const activity = activityAt(projection.history.observations, observation.id, names);
-    const lines = [...activity.values()].map(item => item.description);
+    const activity = activityAt(projection.history.observations, observation.id);
+    const lines = [...activity.values()].map(item => activityDescription(item, m, names));
     assert.ok(lines.length > 0, `${type}: some component has activity`);
-    for (const line of [...lines, ...activityChanges(activityAt(projection.history.observations, steps[index - 1]?.observationId, names), activity, names)]) {
+    for (const line of [...lines, ...activityChanges(activityAt(projection.history.observations, steps[index - 1]?.observationId), activity, m, names)]) {
       assertNoRawId(line, names);
       assert.ok([...names.values()].some(name => line.startsWith(name)), `"${line}" starts with a display name`);
     }
     // Without names the same step reads the stored IDs, so the names add no fact.
-    const plain = flightSteps(projection.history.observations, movementEdges(graph.edges))[index]!;
+    const plain = flightSteps(projection.history.observations, movementEdges(graph.edges), m)[index]!;
     assert.equal(plain.announcement.replaceAll(step.from, displayName(names, step.from)).replaceAll(step.to ?? "\u0000", displayName(names, step.to ?? "\u0000")), step.announcement);
   }
 });
 
 test("#103 saga-uncompensated: the first request reads from Customer App to Orders", async () => {
   const projection = await run("saga-uncompensated");
-  const names = componentNames({ source: "commerce" }, projection.architecture.components);
-  const steps = flightSteps(projection.history.observations, [], names);
+  const names = componentNames({ source: "commerce" }, projection.architecture.components, m);
+  const steps = flightSteps(projection.history.observations, [], m, names);
   assert.match(steps[0]!.announcement, /^Request sent from Customer App to Orders at virtual time 0\.$/);
-  const activity = activityAt(projection.history.observations, steps[0]!.observationId, names);
-  assert.match(activity.get("client")!.description, /^Customer App is waiting on Orders/);
+  const activity = activityAt(projection.history.observations, steps[0]!.observationId);
+  assert.match(activityDescription(activity.get("client")!, m, names), /^Customer App is waiting on Orders/);
 });
 
 test("#103 graph and fault targets: titles, accessible names, resource captions, and target labels use names; values keep IDs", () => {
   const choice = scenarios.find(item => item.id === "saga-uncompensated")!;
   const scenario = packagedMetadata(choice);
   const architecture = { components: projected(scenario), links: scenario.architecture.links.map(link => ({ source: link.source, target: link.target })) };
-  const names = componentNames({ source: "commerce" }, architecture.components);
-  const graph = mapArchitecture(architecture, scenario.architecture, scenario.name, names);
+  const names = componentNames({ source: "commerce" }, architecture.components, m);
+  const graph = mapArchitecture(architecture, scenario.architecture, scenario.name, m, names);
   for (const node of graph.nodes) {
     const name = displayName(names, node.id);
     assert.equal(node.data.title, name);
@@ -190,10 +193,22 @@ test("#103 graph and fault targets: titles, accessible names, resource captions,
   assert.equal(database.ariaLabel, "Database owned by Orders");
   assert.equal(database.data.ownerName, "Orders");
   for (const edge of graph.edges) assertNoRawId(String(edge.ariaLabel), names);
-  for (const option of faultKindOptions(choice.policy)) {
-    for (const target of targetOptions(option, scenario.architecture, names)) {
+  for (const option of faultKindOptions(choice.policy, m)) {
+    for (const target of targetOptions(option, scenario.architecture, m, names)) {
       assertNoRawId(target.label, names);
       assert.match(target.value, /^(link|destination|database|component):/);
     }
   }
+});
+
+test("#103 and ADR-007: display names follow the interface language, and IDs never do", () => {
+  const choice = scenarios.find(item => item.id === "saga-uncompensated")!;
+  const components = projected(packagedMetadata(choice));
+  const spanish = componentNames({ source: "commerce" }, components, messages("es"));
+  assert.equal(displayName(spanish, "orders"), "Pedidos");
+  assert.equal(displayName(spanish, "client"), "App del cliente");
+  for (const component of components) if (component.kind === "infrastructure") assert.equal(displayName(spanish, component.id), component.id);
+  const checkout = scenarios.find(item => item.id === "response-lost")!;
+  const names = componentNames({ source: "checkout", scenarioName: packagedMetadata(checkout).name }, projected(packagedMetadata(checkout)), messages("es"));
+  assert.equal(displayName(names, "payment-processor"), "Procesador de pagos");
 });

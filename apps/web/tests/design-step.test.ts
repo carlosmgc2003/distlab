@@ -3,7 +3,8 @@ import test from "node:test";
 import type { RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
 import { mapArchitecture } from "../src/architecture-view.ts";
 import { isEmptySlot } from "../src/design-step.ts";
-import { packagedMetadata, scenarios } from "../src/scenarios.ts";
+import { messages } from "../src/i18n/catalog.ts";
+import { lessonDescription, packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 
 async function load(index: number): Promise<RuntimeProjectionSet> {
@@ -15,11 +16,11 @@ async function load(index: number): Promise<RuntimeProjectionSet> {
 }
 
 test("#112 no lesson says the design step is unavailable: the Design editor serves every lesson with an allowance", () => {
-  for (const choice of scenarios) assert.doesNotMatch(choice.description, /not available in the browser/, choice.id);
+  for (const choice of scenarios) assert.doesNotMatch(lessonDescription(choice, messages("en")), /not available in the browser/, choice.id);
   // The gap lesson still asks for the design edits, which the Architecture section now offers.
   const gap = scenarios.find(choice => choice.id === "outbox-notifications-gap")!;
   assert.ok(gap.policy.architecture, "the gap lesson keeps its architecture allowance");
-  assert.match(gap.description, /Fill the slot, give it a database, and subscribe it\./);
+  assert.match(lessonDescription(gap, messages("en")), /Fill the slot, give it a database, and subscribe it\./);
 });
 
 test("#164 only placeholder models mark an empty slot", () => {
@@ -34,7 +35,7 @@ test("#164 the graph marks the empty notifications slot in words, and no other c
   for (const [index, choice] of scenarios.entries()) {
     const projection = await load(index);
     const metadata = packagedMetadata(choice);
-    const graph = mapArchitecture(projection.architecture, metadata.architecture, metadata.name);
+    const graph = mapArchitecture(projection.architecture, metadata.architecture, metadata.name, messages("en"));
     const empty = graph.nodes.filter(node => node.data.emptySlot === true);
     if (choice.id !== "outbox-notifications-gap") {
       assert.deepEqual(empty, [], choice.id);

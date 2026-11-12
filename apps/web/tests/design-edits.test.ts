@@ -9,7 +9,11 @@ import {
   setBinding, setResource, setSlotModel, setSlotOption, setSubscription, slotControlId, subscriptionControlId,
 } from "../src/design-edits.ts";
 import type { DesignContext, DesignDraft } from "../src/design-edits.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
+
+const m = messages("en");
+const es = messages("es");
 
 const gap = scenarios.find(choice => choice.id === "outbox-notifications-gap")!;
 const gapContext: DesignContext = { allowance: gap.policy.architecture!, architecture: packagedMetadata(gap).architecture, descriptors: commerceDescriptors };
@@ -76,7 +80,7 @@ test("undoing every gesture leaves no edit, and the overlay carries no architect
 });
 
 test("the gap lesson's controls: labels, packaged values, options only for a chosen model, and the edit limit", () => {
-  const packaged = designControls(gapContext, undefined);
+  const packaged = designControls(gapContext, undefined, m);
   assert.deepEqual(packaged.map(control => [control.id, control.label, control.value]), [
     [slotControlId("notifications"), "Model for notifications", "packaged"],
     [resourceControlId("notifications", "database"), "notifications owns a database", false],
@@ -86,7 +90,7 @@ test("the gap lesson's controls: labels, packaged values, options only for a cho
   assert.ok(slot.kind === "slot");
   assert.deepEqual(slot.choices.map(choice => [choice.value, choice.label]), [["packaged", "Empty slot (packaged)"], [MODEL, "commerce.notifications 1.0.0"]]);
 
-  const chosen = designControls(gapContext, run([model, idempotent]));
+  const chosen = designControls(gapContext, run([model, idempotent]), m);
   assert.deepEqual(chosen.map(control => [control.id, control.label, control.value]), [
     [slotControlId("notifications"), "Model for notifications", MODEL],
     [optionControlId("notifications", "idempotent"), "notifications: idempotent", true],
@@ -97,13 +101,13 @@ test("the gap lesson's controls: labels, packaged values, options only for a cho
   // At the limit, a control at its packaged value would add an edit; one already edited, or an option, stays available.
   const limited: DesignContext = { ...gapContext, allowance: { ...gapContext.allowance, maxEdits: 2 } };
   const full = run([model, database]);
-  const available = Object.fromEntries(designControls(limited, full).map(control => [control.id, controlAvailable(limited, full, control)]));
+  const available = Object.fromEntries(designControls(limited, full, m).map(control => [control.id, controlAvailable(limited, full, control)]));
   assert.deepEqual(available, {
     [slotControlId("notifications")]: true, [optionControlId("notifications", "idempotent")]: true,
     [resourceControlId("notifications", "database")]: true, [subscriptionControlId("notifications", "PaymentApproved")]: false,
   });
-  assert.equal(describeDesign(run([model, idempotent, database, subscribe])), "3 design edits · notifications: commerce.notifications 1.0.0");
-  assert.equal(describeDesign(undefined), "");
+  assert.equal(describeDesign(run([model, idempotent, database, subscribe]), m), "3 design edits · notifications: commerce.notifications 1.0.0");
+  assert.equal(describeDesign(undefined, m), "");
 });
 
 // A fixture allowance on notifications-dlq, where a peer, a packaged database, and a packaged subscription exist.
@@ -121,7 +125,7 @@ const fixturePolicy: LessonOverlayPolicy = { ...dlq.policy, architecture: fixtur
 const fixture: DesignContext = { allowance: fixtureAllowance, architecture: dlqDocument.architecture as ScenarioDefinition["architecture"], descriptors: commerceDescriptors };
 
 test("a binding, a detachable resource, and a removable subscription give bindings, detach, and unsubscribe edits; packaged values give none", () => {
-  const controls = designControls(fixture, undefined);
+  const controls = designControls(fixture, undefined, m);
   assert.deepEqual(controls.map(control => [control.id, control.label, control.value]), [
     [bindingControlId("notifications", "provider"), "notifications calls provider on", "messaging"],
     [resourceControlId("orders", "database"), "orders owns a database", true],
@@ -166,7 +170,7 @@ test("diagnostic placement puts each path on its control and anything else in th
     { path: "/architecture/slots/4/model", code: "DUPLICATE" },
     { path: "/architecture/slots/0/component", code: "SOMETHING_NEW" },
     { path: "/faults/0", code: "FAULT" },
-  ], edits, 3);
+  ], edits, 3, m);
   assert.deepEqual(Object.fromEntries(placed.controls), {
     [slotControlId("notifications")]: [
       "This model needs storage that the component does not own. (STORAGE)",
@@ -178,4 +182,32 @@ test("diagnostic placement puts each path on its control and anything else in th
     [subscriptionControlId("notifications", "PaymentApproved")]: ["The model's consumers and the component's subscriptions do not match. (SUBSCRIPTION)"],
   });
   assert.deepEqual(placed.general, ["This lesson allows at most 3 design edits. (OVERLAY_LIMIT)", "Two edits change the same element. (DUPLICATE)"]);
+});
+
+test("the Design editor's labels, summary, and diagnostics follow the language; codes and ids stay as written", () => {
+  const packaged = designControls(gapContext, undefined, es);
+  assert.deepEqual(packaged.map(control => control.label), [
+    "Modelo de notifications", "notifications posee una base de datos", "notifications se suscribe a PaymentApproved",
+  ]);
+  const slot = packaged[0]!;
+  assert.ok(slot.kind === "slot");
+  assert.deepEqual(slot.choices.map(choice => choice.label), ["Slot vacío (empaquetado)", "commerce.notifications 1.0.0"]);
+  assert.deepEqual(designControls(fixture, undefined, es).map(control => control.label), [
+    "notifications llama a provider en", "orders posee una base de datos", "orders se suscribe a NotificationSent",
+  ]);
+  // The same draft, two languages: the draft holds no text.
+  const designed = run([model, idempotent, database, subscribe]);
+  assert.equal(describeDesign(designed, es), "3 cambios de diseño · notifications: commerce.notifications 1.0.0");
+  assert.equal(describeDesign(run([model]), m), "1 design edit · notifications: commerce.notifications 1.0.0");
+  assert.equal(describeDesign(run([model]), es), "1 cambio de diseño · notifications: commerce.notifications 1.0.0");
+  assert.equal(describeDesign(undefined, es), "");
+  const diagnostics = [{ path: "/architecture", code: "OVERLAY_LIMIT" }, { path: "/architecture/slots/9/model", code: "STORAGE" }, { path: "/architecture", code: "SOMETHING_NEW" }];
+  assert.deepEqual(placeDesignDiagnostics(diagnostics, designed, 3, es).general, [
+    "Esta lección permite como máximo 3 cambios de diseño. (OVERLAY_LIMIT)",
+    "Este modelo necesita almacenamiento que el componente no posee. (STORAGE)",
+    "Este cambio no es válido. (SOMETHING_NEW)",
+  ]);
+  assert.deepEqual(placeDesignDiagnostics([{ path: "/architecture", code: "OVERLAY_LIMIT" }], designed, 1, m).general, ["This lesson allows at most 1 design edit. (OVERLAY_LIMIT)"]);
+  // Every diagnostic code has Spanish text, and a code the table does not know shows the generic text plus the code.
+  for (const code of Object.keys(m.designEditor.diagnostics)) assert.notEqual(es.designEditor.diagnostics[code as keyof typeof es.designEditor.diagnostics], m.designEditor.diagnostics[code as keyof typeof m.designEditor.diagnostics], code);
 });

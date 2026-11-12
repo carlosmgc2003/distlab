@@ -3,6 +3,7 @@ import type {
 } from "@distlab/contracts";
 import type { HostSnapshot } from "./host.ts";
 import { incompleteRow, rowOverlay, rowResult } from "./assessment.ts";
+import { applicationError } from "./protocol.ts";
 
 /**
  * The assessment suite runner (docs/spec/assessment.md, "Running a suite").
@@ -37,8 +38,8 @@ const diagnosticsOf = (error: unknown): readonly ScenarioDiagnostic[] => {
   const diagnostics = context && typeof context === "object" && "diagnostics" in context ? context.diagnostics : undefined;
   return Array.isArray(diagnostics) ? diagnostics as ScenarioDiagnostic[] : [];
 };
-const asError = (error: unknown): ApplicationError => ({ code: codeOf(error) ?? "WORKER_UNAVAILABLE",
-  message: error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "The suite could not continue.", context: null });
+const asError = (error: unknown): ApplicationError => applicationError(codeOf(error) ?? "WORKER_UNAVAILABLE",
+  error && typeof error === "object" && "message" in error && typeof error.message === "string" ? error.message : "The suite could not continue.");
 
 /** Loads one row and runs it to its end. A FAILED run is a result, not an error: its unsettled cells read INCOMPLETE. */
 async function runRow(host: SuiteHost, definition: AssessmentDefinition, base: CanonicalValue, row: AssessmentRow, configuration: AssessmentConfiguration)
@@ -94,6 +95,6 @@ export async function reproduceRow(host: SuiteHost, definition: AssessmentDefini
   if (current?.runId === stored.runId && current.status === stored.status) return { status: "reproduced" };
   const outcome = await runRow(host, definition, base, row, configuration);
   if ("error" in outcome) return { status: "failed", error: outcome.error };
-  if ("rejected" in outcome) return { status: "failed", error: { code: "INVALID_OVERLAY", message: "The row's overlay was rejected.", context: outcome.rejected as unknown as CanonicalValue } };
+  if ("rejected" in outcome) return { status: "failed", error: applicationError("INVALID_OVERLAY", "The row's overlay was rejected.", outcome.rejected as unknown as CanonicalValue) };
   return outcome.result.runId === stored.runId ? { status: "reproduced" } : { status: "mismatch", runId: outcome.result.runId };
 }

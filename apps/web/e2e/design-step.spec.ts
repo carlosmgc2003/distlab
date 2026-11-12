@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./support/test.ts";
-import { scenarios } from "../src/scenarios.ts";
+import { lessonDescription, scenarios } from "../src/scenarios.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { lessonChoice, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
 
 // #164 and #112: with the Design editor in the Experiment drawer, no lesson says its design step is
@@ -16,7 +17,7 @@ test("#112 the Lesson chooser shows no \"design step is not available\" notice o
   for (const lesson of scenarios) {
     const choice = lessonChoice(page, lesson.id);
     // The card's accessible description is the lesson description alone.
-    await expect(choice).toHaveAccessibleDescription(lesson.description);
+    await expect(choice).toHaveAccessibleDescription(lessonDescription(lesson, messages("en")));
     await expect(choice).not.toContainText("not available in the browser");
   }
   const results = await new AxeBuilder({ page }).include(".lesson-chooser").analyze();

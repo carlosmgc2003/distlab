@@ -18,7 +18,8 @@ import {
   flightTransport,
   playbackControl,
   playbackStatus,
-  FLIGHT_LEGEND,
+  flightLegend,
+  flightPaceText,
   transportStep,
 } from "../src/flight.ts";
 import { selectionStep } from "../src/timeline.ts";
@@ -27,7 +28,11 @@ import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import type { MovementEdge } from "../src/records.ts";
-import { edgeDirection, movementOf } from "../src/records.ts";
+import { edgeDirection, movementOf, movementText } from "../src/records.ts";
+import { messages } from "../src/i18n/catalog.ts";
+
+const m = messages("en");
+const es = messages("es");
 
 const checkoutEdges: readonly MovementEdge[] = [
   { id: "request:customer-app:orders:0", source: "customer-app", target: "orders", relationship: "request" },
@@ -62,7 +67,7 @@ async function run(index: number): Promise<RuntimeProjectionSet> {
 test("flight steps read the recorded movements in canonical order and change nothing", async () => {
   const projection = await run(0);
   const before = JSON.stringify(projection.history.observations);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   assert.equal(JSON.stringify(projection.history.observations), before);
   // Every step is a stored observation, in stored sequence order, and every movement cue is one step.
   assert.deepEqual(steps.map(step => step.sequence), [...steps.map(step => step.sequence)].sort((a, b) => a - b));
@@ -82,7 +87,7 @@ test("flight steps read the recorded movements in canonical order and change not
 
 test("a step names its link, its route, and only stored fields", async () => {
   const projection = await run(0);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   const request = steps.find(step => step.headline === "Request sent");
   assert.ok(request);
   assert.equal(request.from, "customer-app");
@@ -118,7 +123,7 @@ test("a step names its link, its route, and only stored fields", async () => {
 
 test("a dropped response and a timeout are interrupted movements that stop on the link", async () => {
   const projection = await run(1);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   const dropped = steps.find(step => step.headline === "Response dropped");
   assert.ok(dropped);
   assert.equal(dropped.interrupted, true);
@@ -147,15 +152,15 @@ test("a dropped response and a timeout are interrupted movements that stop on th
 });
 
 test("a redacted payload contributes a visibility statement and no fields", () => {
-  const facts = flightFacts(observation({ id: "a", time: 0, sequence: 1, type: "network.request.sent", source: "a", data: { redacted: true } }));
+  const facts = flightFacts(observation({ id: "a", time: 0, sequence: 1, type: "network.request.sent", source: "a", data: { redacted: true } }), m);
   assert.deepEqual(facts, [{ label: "Stored payload", value: "Redacted; not shown" }]);
-  const omitted = flightFacts(observation({ id: "b", time: 0, sequence: 1, type: "network.request.sent", source: "a" }));
+  const omitted = flightFacts(observation({ id: "b", time: 0, sequence: 1, type: "network.request.sent", source: "a" }), m);
   assert.deepEqual(omitted, [{ label: "Stored payload", value: "Omitted; not shown" }]);
 });
 
 test("recorded transitions, changed rows, and external changes are read from stored fields", async () => {
   const projection = await run(1);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   const acknowledged = steps.find(step => step.headline === "Message acknowledged");
   assert.ok(acknowledged);
   assert.equal(acknowledged.facts.find(fact => fact.label === "Recorded transition")?.value, "IN_FLIGHT → ACKED");
@@ -166,10 +171,10 @@ test("recorded transitions, changed rows, and external changes are read from sto
 
 test("movement edges from the architecture projection drive the same routes", async () => {
   const projection = await run(0);
-  const graph = mapArchitecture(projection.architecture, packagedMetadata(scenarios[0]!).architecture, packagedMetadata(scenarios[0]!).name);
+  const graph = mapArchitecture(projection.architecture, packagedMetadata(scenarios[0]!).architecture, packagedMetadata(scenarios[0]!).name, m);
   const edges = movementEdges(graph.edges);
   assert.equal(edges.length, 4);
-  const steps = flightSteps(projection.history.observations, edges);
+  const steps = flightSteps(projection.history.observations, edges, m);
   assert.ok(steps.length > 0);
   for (const step of steps) {
     if (step.edgeId === undefined) continue;
@@ -188,27 +193,30 @@ test("paces are named, ordered, and default to the slowest", () => {
   assert.equal(flightPace("fast").delayMs, flightDelayMs("fast"));
   // Each named pace states its own interval, so the control never hides its timing.
   for (const pace of FLIGHT_PACES) {
-    assert.equal(pace.note, `one movement every ${pace.delayMs / 1000} seconds`);
+    assert.equal(flightPaceText(pace.id, m).note, `one movement every ${pace.delayMs / 1000} seconds`);
   }
+  assert.deepEqual(FLIGHT_PACES.map(pace => flightPaceText(pace.id, m).label), ["Slow", "Steady", "Fast"]);
+  // Spanish writes the interval with the locale's decimal mark.
+  assert.equal(flightPaceText("steady", es).note, "un movimiento cada 0,9 segundos");
   // The token paints inside the cursor's interval, so a movement arrives before the next one starts.
   assert.ok(Math.round(flightDelayMs("slow") * 0.62) < flightDelayMs("slow"));
 });
 
 test("the legend names every token glyph and shape the graph paints", async () => {
-  const painted = new Set(flightSteps((await run(1)).history.observations, checkoutEdges).map(step => step.glyph));
+  const painted = new Set(flightSteps((await run(1)).history.observations, checkoutEdges, m).map(step => step.glyph));
   for (const glyph of painted) {
-    const entry = FLIGHT_LEGEND.find(item => item.glyph === glyph);
+    const entry = flightLegend(m).find(item => item.glyph === glyph);
     assert.ok(entry, `the legend names ${glyph}`);
     assert.ok(entry.label.length > 0 && entry.detail.length > 0);
   }
-  assert.equal(new Set(FLIGHT_LEGEND.map(item => item.glyph)).size, FLIGHT_LEGEND.length, "each glyph is named once");
+  assert.equal(new Set(flightLegend(m).map(item => item.glyph)).size, flightLegend(m).length, "each glyph is named once");
   // A token only travels to the destination unless the record says the movement stopped.
-  assert.deepEqual([...new Set(FLIGHT_LEGEND.map(item => item.shape))].sort(), ["dashed", "dotted", "solid"]);
+  assert.deepEqual([...new Set(flightLegend(m).map(item => item.shape))].sort(), ["dashed", "dotted", "solid"]);
 });
 
 test("the token follows the measured link path and stops where the record says", async () => {
   const projection = await run(1);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   const style = flightTokenStyle(steps[0]!, "M 0 0 L 10 10", 900);
   assert.equal(style["--flight-path"], 'path("M 0 0 L 10 10")');
   assert.equal(style["--flight-start"], "0%");
@@ -232,48 +240,48 @@ test("the cursor walks recorded movements, waits while recording, and ends at th
 
 test("the transport states one position, one reason, and the two step directions", async () => {
   const projection = await run(0);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
-  const idle = flightTransport(-1, steps.length, "idle", false);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
+  const idle = flightTransport(-1, steps.length, "idle", false, m);
   assert.equal(idle.control.action, "play");
   assert.equal(idle.control.label, "Play replay");
   // With nothing selected, Next selects the first movement and Previous is unavailable (#191).
   assert.equal(idle.previous, false);
   assert.equal(idle.next, true);
-  const playing = flightTransport(0, steps.length, "playing", true);
+  const playing = flightTransport(0, steps.length, "playing", true, m);
   assert.equal(playing.control.action, "unavailable");
   assert.match(playing.reason, /waits at the end while the run records more/);
-  const ended = flightTransport(steps.length - 1, steps.length, "idle", false);
+  const ended = flightTransport(steps.length - 1, steps.length, "idle", false, m);
   assert.equal(ended.control.action, "restart");
   assert.equal(ended.control.label, "Restart replay");
   assert.equal(ended.next, false);
-  const empty = flightTransport(-1, 0, "idle", false);
+  const empty = flightTransport(-1, 0, "idle", false, m);
   assert.equal(empty.control.action, "unavailable");
   assert.match(empty.status, /No visible observations/);
   // The shared control copy states the action and the phase wording.
-  assert.equal(playbackControl(-1, 0, false).action, "unavailable");
-  assert.equal(playbackControl(-1, 4, false).label, "Play replay");
-  assert.equal(playbackControl(1, 4, false).action, "play");
-  assert.equal(playbackControl(3, 4, false).label, "Restart replay");
-  assert.equal(playbackControl(1, 4, true).action, "unavailable");
-  assert.match(playbackStatus("ended", playbackControl(3, 4, false)), /Restart replay/);
-  assert.match(playbackStatus("playing", playbackControl(1, 4, true)), /Pause/);
-  assert.match(playbackStatus("paused", playbackControl(1, 4, false)), /paused/);
+  assert.equal(playbackControl(-1, 0, false, m).action, "unavailable");
+  assert.equal(playbackControl(-1, 4, false, m).label, "Play replay");
+  assert.equal(playbackControl(1, 4, false, m).action, "play");
+  assert.equal(playbackControl(3, 4, false, m).label, "Restart replay");
+  assert.equal(playbackControl(1, 4, true, m).action, "unavailable");
+  assert.match(playbackStatus("ended", playbackControl(3, 4, false, m), m), /Restart replay/);
+  assert.match(playbackStatus("playing", playbackControl(1, 4, true, m), m), /Pause/);
+  assert.match(playbackStatus("paused", playbackControl(1, 4, false, m), m), /paused/);
 
-  const position = flightPosition(steps, 2);
+  const position = flightPosition(steps, 2, m);
   assert.equal(position.text, `Movement 3 of ${steps.length} · virtual time ${steps[2]!.time} · observation #${steps[2]!.sequence}.`);
-  assert.match(flightPosition(steps, -1).text, /^0 of \d+ recorded movements/);
-  assert.match(flightPosition([], -1).text, /No recorded movements/);
-  assert.match(flightPosition(steps, steps.length - 1).detail, /waits for the run to record more/);
+  assert.match(flightPosition(steps, -1, m).text, /^0 of \d+ recorded movements/);
+  assert.match(flightPosition([], -1, m).text, /No recorded movements/);
+  assert.match(flightPosition(steps, steps.length - 1, m).detail, /waits for the run to record more/);
 });
 
 test("recorded virtual-time boundaries are a list of times, not durations", async () => {
   const projection = await run(0);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   const boundaries = flightBoundaries(steps);
   assert.deepEqual(boundaries, [...new Set(steps.map(step => step.time))]);
   assert.ok(boundaries.every(time => typeof time === "number"));
   assert.deepEqual(flightBoundaries([]), []);
-  assert.match(flightPosition(steps, 0).detail, /no duration is stored|Rules mark boundaries only/);
+  assert.match(flightPosition(steps, 0, m).detail, /no duration is stored|Rules mark boundaries only/);
   assert.equal(flightIndexOf(steps, steps[4]!.observationId), 4);
   assert.equal(flightIndexOf(steps, "not-a-record"), -1);
   assert.equal(flightIndexOf(steps, null), -1);
@@ -299,11 +307,11 @@ test("direction: every movement runs from its recorded origin, whichever way the
     d: ["OrderCreated", "payments"], a: ["payments", "OrderCreated"],
   } as const;
   // Against the drawn links: a response and an acknowledgement run against their link.
-  const forward = flightSteps(records, checkoutEdges);
+  const forward = flightSteps(records, checkoutEdges, m);
   assert.deepEqual(Object.fromEntries(forward.map(step => [step.observationId, [step.from, step.to]])), expected);
   assert.deepEqual(Object.fromEntries(forward.map(step => [step.observationId, step.reversed])), { q: false, s: true, p: false, d: false, a: true });
   // Against links drawn the other way, the same records resolve the same origin and flip the direction.
-  const backward = flightSteps(records, reversedEdges(checkoutEdges));
+  const backward = flightSteps(records, reversedEdges(checkoutEdges), m);
   assert.deepEqual(Object.fromEntries(backward.map(step => [step.observationId, [step.from, step.to]])), expected);
   assert.deepEqual(Object.fromEntries(backward.map(step => [step.observationId, step.reversed])), { q: true, s: false, p: true, d: true, a: false });
   // Invariant: the token leaves the link's source when forward and the link's target when reversed.
@@ -318,13 +326,13 @@ test("direction: every movement runs from its recorded origin, whichever way the
   const ack = movementOf(records[4]!)!;
   assert.equal(ack.from, "payments");
   assert.equal(ack.to, "OrderCreated");
-  assert.equal(ack.text, "Message acknowledged by payments on OrderCreated at virtual time 3.");
+  assert.equal(movementText(ack, m), "Message acknowledged by payments on OrderCreated at virtual time 3.");
   assert.equal(edgeDirection(ack, checkoutEdges[2]!), "reverse");
 });
 
 test("a movement that runs against its link animates from the far end and turns its heading", async () => {
   const projection = await run(0);
-  const steps = flightSteps(projection.history.observations, checkoutEdges);
+  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
   const sent = steps.find(step => step.headline === "Response sent" && step.from === "orders")!;
   const received = steps.find(step => step.headline === "Response received" && step.to === "customer-app")!;
   assert.equal(sent.reversed, true);
@@ -350,7 +358,7 @@ test("a movement that runs against its link animates from the far end and turns 
 test("hop pairing: a sent leg and its delivered leg cross the link once, one record per cursor step", async () => {
   for (const index of [0, 1]) {
     const projection = await run(index);
-    const steps = flightSteps(projection.history.observations, checkoutEdges);
+    const steps = flightSteps(projection.history.observations, checkoutEdges, m);
     // The cursor stays one step per stored observation, so history selection and playback agree.
     assert.equal(new Set(steps.map(step => step.observationId)).size, steps.length);
     const hops = new Map<string, typeof steps[number][]>();
@@ -375,14 +383,14 @@ test("hop pairing: a sent leg and its delivered leg cross the link once, one rec
     }
   }
   // A drop and a timeout on the lost-response run close their own hops.
-  const lost = flightSteps((await run(1)).history.observations, checkoutEdges);
+  const lost = flightSteps((await run(1)).history.observations, checkoutEdges, m);
   const timeout = lost.find(step => step.leg === "timeout")!;
   assert.equal(timeout.departure?.observationId, lost.find(step => step.hopId === timeout.hopId && step.leg === "departure")?.observationId);
   // A record with a redacted payload stores no request id and pairs with nothing.
   const redacted = flightSteps([
     observation({ id: "x", time: 0, sequence: 1, type: "network.request.sent", source: "customer-app", target: "orders", data: { redacted: true } }),
     observation({ id: "y", time: 5, sequence: 2, type: "network.request.delivered", source: "customer-app", target: "orders", data: { redacted: true } }),
-  ], checkoutEdges);
+  ], checkoutEdges, m);
   assert.equal(redacted[1]!.departure, undefined);
   assert.equal(redacted[1]!.hopId, undefined);
   // The span still comes from the stored type: the arrival leg still finishes the trip.
@@ -390,15 +398,15 @@ test("hop pairing: a sent leg and its delivered leg cross the link once, one rec
 });
 
 test("a virtual-time jump names the two recorded times and nothing else", async () => {
-  const steps = flightSteps((await run(1)).history.observations, checkoutEdges);
+  const steps = flightSteps((await run(1)).history.observations, checkoutEdges, m);
   const timeout = steps.findIndex(step => step.leg === "timeout");
-  assert.equal(flightJump(steps, timeout), "Virtual time jumped t=55 → t=1025 with no recorded movement in between.");
-  assert.equal(flightPosition(steps, timeout).jump, flightJump(steps, timeout));
+  assert.equal(flightJump(steps, timeout, m), "Virtual time jumped t=55 → t=1025 with no recorded movement in between.");
+  assert.equal(flightPosition(steps, timeout, m).jump, flightJump(steps, timeout, m));
   // No jump at the first movement or between movements at the same virtual time.
-  assert.equal(flightJump(steps, 0), undefined);
+  assert.equal(flightJump(steps, 0, m), undefined);
   const same = steps.findIndex((step, index) => index > 0 && step.time === steps[index - 1]!.time);
-  assert.equal(flightJump(steps, same), undefined);
-  assert.equal(flightPosition(steps, same).jump, undefined);
+  assert.equal(flightJump(steps, same, m), undefined);
+  assert.equal(flightPosition(steps, same, m).jump, undefined);
 });
 
 test("#191 with nothing selected, Next selects the first movement and Previous is unavailable", () => {
@@ -410,10 +418,10 @@ test("#191 with nothing selected, Next selects the first movement and Previous i
   assert.equal(transportStep(0, 13, -1), null);
   assert.equal(transportStep(5, 13, -1), 4);
   assert.equal(transportStep(12, 13, 1), null);
-  const first = flightTransport(0, 13, "paused", false);
+  const first = flightTransport(0, 13, "paused", false, m);
   assert.equal(first.previous, false);
   assert.equal(first.next, true);
-  const later = flightTransport(5, 13, "paused", false);
+  const later = flightTransport(5, 13, "paused", false, m);
   assert.equal(later.previous, true);
   assert.equal(later.next, true);
   // Row navigation in Recorded history is unchanged: with nothing selected, Previous selects the last row.
@@ -422,7 +430,7 @@ test("#191 with nothing selected, Next selects the first movement and Previous i
 });
 
 test("#192 one recorded movement can be played, and restarted once painted", () => {
-  const idle = flightTransport(-1, 1, "idle", false);
+  const idle = flightTransport(-1, 1, "idle", false, m);
   assert.equal(idle.control.action, "play");
   assert.equal(idle.control.label, "Play replay");
   assert.equal(idle.next, true);
@@ -430,13 +438,33 @@ test("#192 one recorded movement can be played, and restarted once painted", () 
   // Play paints the one movement, then the cursor ends there, or waits while the run records.
   assert.deepEqual(flightAdvance(0, 1, "playing", false), { cursor: 0, phase: "ended", waiting: false });
   assert.deepEqual(flightAdvance(0, 1, "playing", true), { cursor: 0, phase: "playing", waiting: true });
-  const ended = flightTransport(0, 1, "ended", false);
+  const ended = flightTransport(0, 1, "ended", false, m);
   assert.equal(ended.control.action, "restart");
   assert.equal(ended.control.label, "Restart replay");
   assert.equal(ended.previous, false);
   assert.equal(ended.next, false);
-  assert.equal(playbackControl(0, 1, false).action, "restart");
-  assert.equal(playbackControl(-1, 1, false).action, "play");
+  assert.equal(playbackControl(0, 1, false, m).action, "restart");
+  assert.equal(playbackControl(-1, 1, false, m).action, "play");
   // Zero movements still leave Play unavailable.
-  assert.equal(flightTransport(-1, 0, "idle", false).control.action, "unavailable");
+  assert.equal(flightTransport(-1, 0, "idle", false, m).control.action, "unavailable");
+});
+
+test("counts and transit sentences are whole phrases per form and per language", async () => {
+  const steps = flightSteps((await run(0)).history.observations, checkoutEdges, m);
+  const one = steps.slice(0, 1);
+  assert.equal(flightPosition(one, -1, m).text, "0 of 1 recorded movement. Nothing selected.");
+  assert.equal(flightPosition(one, -1, es).text, "0 de 1 movimiento registrado. No hay nada seleccionado.");
+  assert.equal(flightPosition(steps, -1, m).text, `0 of ${steps.length} recorded movements. Nothing selected.`);
+  assert.equal(flightPosition(steps, -1, es).text, `0 de ${steps.length} movimientos registrados. No hay nada seleccionado.`);
+  assert.equal(flightPosition(one, -1, m).detail, `The 1 recorded movement is at virtual time ${one[0]!.time}.`);
+  assert.equal(flightPosition(one, -1, es).detail, `El único movimiento registrado ocurre en el tiempo virtual ${one[0]!.time}.`);
+  // The same records, narrated in each language, keep the stored ids and the t= notation.
+  const spanish = flightSteps((await run(0)).history.observations, checkoutEdges, es);
+  assert.equal(spanish.length, steps.length);
+  assert.deepEqual(spanish.map(step => step.observationId), steps.map(step => step.observationId));
+  const departure = spanish.find(step => step.leg === "departure")!;
+  assert.match(departure.transit, /^Salida: el token sale de .+ y espera a mitad del enlace\./);
+  assert.match(departure.route, /Enlace de solicitud|Publicación de MessageBus|Suscripción de MessageBus/);
+  const arrival = spanish.find(step => step.leg === "arrival" && step.departure !== undefined)!;
+  assert.match(arrival.transit, /^Llegada: el token de la salida que partió en el tiempo virtual \d+ \(observación #\d+\) llega a /);
 });

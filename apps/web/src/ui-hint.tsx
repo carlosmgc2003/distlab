@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useMessages } from "./i18n/react.tsx";
 
 const VIEWPORT_MARGIN = 8;
 const GAP = 6;
@@ -43,6 +44,7 @@ export interface HelpHintProps {
  * collapsed, so its text remains available to tests and to text extraction.
  */
 export function HelpHint({ label, children, bodyId, className }: HelpHintProps) {
+  const m = useMessages();
   const generated = useId();
   const id = bodyId ?? `help-${generated}`;
   const wrapperRef = useRef<HTMLSpanElement>(null);
@@ -95,7 +97,7 @@ export function HelpHint({ label, children, bodyId, className }: HelpHintProps) 
     }}>
     <button ref={triggerRef} type="button" className="help-hint-trigger" aria-expanded={open} aria-controls={id}
       onClick={() => setPinned(value => !value)}>
-      <span className="help-hint-icon" aria-hidden="true">i</span>
+      <span className="help-hint-icon" aria-hidden="true">{m.hint.icon}</span>
       <span className="help-hint-label">{label}</span>
     </button>
     <div ref={bodyRef} id={id} className="help-hint-body" role="note" hidden={!open}

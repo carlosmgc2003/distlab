@@ -6,6 +6,8 @@
  * index.html repeats `THEME_STORAGE_KEY` and `resolveTheme` in a small inline script, so the first
  * paint already uses the stored theme. Keep the two in step.
  */
+import type { Messages } from "./i18n/catalog.ts";
+
 export type ThemePreference = "system" | "light" | "dark";
 export type Theme = "light" | "dark";
 
@@ -25,8 +27,8 @@ export function resolveTheme(preference: ThemePreference, systemPrefersDark: boo
 }
 
 /** The option's visible text. System names the theme it currently resolves to, so the choice is never a guess. */
-export function themeOptionLabel(preference: ThemePreference, systemPrefersDark: boolean): string {
-  if (preference === "light") return "Light";
-  if (preference === "dark") return "Dark";
-  return `System (${systemPrefersDark ? "dark" : "light"})`;
+export function themeOptionLabel(preference: ThemePreference, systemPrefersDark: boolean, m: Messages): string {
+  if (preference === "light") return m.theme.light;
+  if (preference === "dark") return m.theme.dark;
+  return m.theme.system(systemPrefersDark);
 }

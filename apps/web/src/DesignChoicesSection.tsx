@@ -1,9 +1,14 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import type { LessonOverlayPolicy, ParameterOverride } from "@distlab/contracts";
-import { choiceCopy, choiceValues, formatChoice, readInteger, setChoice } from "./design-choices.ts";
+import { choiceCopy, choiceErrorText, choiceValues, formatChoice, readInteger, setChoice } from "./design-choices.ts";
+import type { ChoiceError } from "./design-choices.ts";
+import { useMessages } from "./i18n/react.tsx";
 
 /** Why the setup checks can read "not reproduced" under a student's choices. It is in the Experiment drawer's hint (#147). */
-export const DESIGN_CHOICES_HELP = "Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read \"not reproduced\" under your choices. That shows how your change altered the story, not a simulator error.";
+export function DesignChoicesHelp() {
+  const m = useMessages();
+  return <p>{m.designChoices.section.help}</p>;
+}
 
 export interface DesignChoicesSectionProps {
   readonly policy: LessonOverlayPolicy;
@@ -17,7 +22,7 @@ export interface DesignChoicesSectionProps {
   readonly onInvalidChange: (invalid: boolean) => void;
   /** Changes when the drawer discards the draft, so half-typed field text is cleared too. */
   readonly resetToken: number;
-  /** The heading; "Design choices" in the Experiment drawer. */
+  /** The heading; defaults to "Design choices", the Experiment drawer's. */
   readonly title?: string;
 }
 
@@ -28,10 +33,11 @@ export interface DesignChoicesSectionProps {
  * here edits a running simulation, and the seed, workload, and checks stay the lesson's.
  * While it is not editable, the drawer's footer says so; the reasoning is in the drawer's hint (#147).
  */
-export function DesignChoicesSection({ policy, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken, title = "Design choices" }: DesignChoicesSectionProps) {
+export function DesignChoicesSection({ policy, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken, title }: DesignChoicesSectionProps) {
   const ids = useId();
+  const m = useMessages();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
-  const [errors, setErrors] = useState<Readonly<Record<string, string>>>({});
+  const [errors, setErrors] = useState<Readonly<Record<string, ChoiceError>>>({});
   const values = useMemo(() => choiceValues(policy, draft), [policy, draft]);
   const invalid = Object.keys(errors).length > 0;
   useEffect(() => { onInvalidChange(invalid); }, [invalid, onInvalidChange]);
@@ -48,16 +54,16 @@ export function DesignChoicesSection({ policy, draft, onDraftChange, editable, r
   };
 
   return <section className="design-choices" aria-labelledby={`${ids}-heading`}>
-    <h3 id={`${ids}-heading`}>{title}</h3>
+    <h3 id={`${ids}-heading`}>{title ?? m.designChoices.section.title}</h3>
     <div className="design-choices-body">
       <div className="design-choices-grid">
         {policy.parameters.map(parameter => {
           const key = parameter.key;
           const id = `${ids}-${key}`;
-          const { label, hint } = choiceCopy(key, policy.lesson);
+          const { label, hint } = choiceCopy(key, policy.lesson, m);
           const value = values.get(key);
-          const error = errors[key] ?? rejected.get(key);
-          const defaultText = `Lesson default: ${formatChoice(parameter.domain.default)}.`;
+          const error = errors[key] ? choiceErrorText(errors[key], m) : rejected.get(key);
+          const defaultText = m.designChoices.section.lessonDefault(formatChoice(parameter.domain.default, m));
           const describedBy = [`${id}-hint`, error ? `${id}-error` : ""].filter(Boolean).join(" ");
           const domain = parameter.domain;
           return <div key={key} className={`design-choice${value !== domain.default ? " is-changed" : ""}`}>

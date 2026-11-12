@@ -11,6 +11,8 @@ import type {
   ScheduledFault,
   SessionOverlay,
 } from "@distlab/contracts";
+import { byCode } from "./i18n/catalog.ts";
+import type { Messages } from "./i18n/catalog.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 
@@ -39,31 +41,20 @@ export interface FaultKindOption {
   readonly target: "link" | "destination" | "database" | "service" | "external";
 }
 
-const ruleLabels: Readonly<Record<string, string>> = {
-  "network.request/delay": "Delay request",
-  "network.request/drop": "Drop request",
-  "network.request/disconnect": "Disconnect request",
-  "network.response/delay": "Delay response",
-  "network.response/drop": "Drop response",
-  "message.delivery/delay": "Delay message delivery",
-  "message.delivery/drop": "Drop message delivery",
-  "message.delivery/duplicate": "Duplicate message delivery",
-  "database.commit/fail": "Fail database commit",
-};
-const scheduledLabels: Readonly<Record<ScheduledFault["kind"], string>> = {
-  crash: "Crash service",
-  "external-availability": "Change external service availability",
-};
+/** The label of a rule kind, from the catalog; an unknown kind falls back to its effect and point. */
+function ruleLabel(point: FaultPoint, effect: FaultEffect["kind"], m: Messages): string {
+  return byCode(m.faults.ruleLabels, `${point}/${effect}`) ?? m.faults.unknownRule({ effect, point });
+}
 
 /** Only the kinds the lesson allows are offered, in policy order. */
-export function faultKindOptions(policy: LessonOverlayPolicy | undefined): readonly FaultKindOption[] {
+export function faultKindOptions(policy: LessonOverlayPolicy | undefined, m: Messages): readonly FaultKindOption[] {
   if (!policy) return [];
   const rules = policy.faults.rules.flatMap(rule => rule.effects.map((effect): FaultKindOption => ({
-    id: `${rule.point}/${effect}`, label: ruleLabels[`${rule.point}/${effect}`] ?? `${effect} at ${rule.point}`, kind: "rule", point: rule.point, effect,
+    id: `${rule.point}/${effect}`, label: ruleLabel(rule.point, effect, m), kind: "rule", point: rule.point, effect,
     target: rule.point === "message.delivery" ? "destination" : rule.point === "database.commit" ? "database" : "link",
   })));
   const scheduled = policy.faults.scheduled.map((kind): FaultKindOption => ({
-    id: `scheduled/${kind}`, label: scheduledLabels[kind], kind: "scheduled", scheduled: kind, target: kind === "crash" ? "service" : "external",
+    id: `scheduled/${kind}`, label: m.faults.scheduledLabels[kind], kind: "scheduled", scheduled: kind, target: kind === "crash" ? "service" : "external",
   }));
   return [...rules, ...scheduled];
 }
@@ -84,7 +75,7 @@ export interface TargetOption {
  * source to its target and the response travels back, so a response fault names
  * the responder as source, as the packaged lessons do.
  */
-export function targetOptions(option: FaultKindOption | undefined, architecture: ArchitectureDefinition | undefined, names?: ComponentNames): readonly TargetOption[] {
+export function targetOptions(option: FaultKindOption | undefined, architecture: ArchitectureDefinition | undefined, m: Messages, names?: ComponentNames): readonly TargetOption[] {
   if (!option || !architecture) return [];
   // Labels name components by display name (#103); values and graph identity keep the IDs.
   const name = (id: string) => displayName(names, id);
@@ -102,7 +93,7 @@ export function targetOptions(option: FaultKindOption | undefined, architecture:
         graph: { kind: "link", source: item.destination, target: item.consumer },
       }));
     case "database":
-      return architecture.databases.map(item => ({ value: `database:${item.owner}`, label: `Database owned by ${name(item.owner)}`, name: item.owner, graph: { kind: "node", id: databaseNodeId(item.owner) } }));
+      return architecture.databases.map(item => ({ value: `database:${item.owner}`, label: m.architecture.databaseOwnedBy(name(item.owner)), name: item.owner, graph: { kind: "node", id: databaseNodeId(item.owner) } }));
     case "service":
     case "external":
       return architecture.components.filter(item => item.kind === option.target).map(item => ({ value: `component:${item.id}`, label: name(item.id), target: item.id, graph: { kind: "node", id: item.id } }));
@@ -151,9 +142,25 @@ export type DraftEntry =
   | { readonly kind: "rule"; readonly rule: FaultRule }
   | { readonly kind: "scheduled"; readonly action: OverlayScheduledFault };
 
+/** A form field problem as a code and its parameters. The section keeps this, never the finished text (ADR-007). */
+export type FieldError =
+  | { readonly code: "CHOOSE_FAULT" | "CHOOSE_TARGET" | "WHOLE_NUMBER" | "CHOOSE_STATE" | "PROBABILITY" }
+  | { readonly code: "MINIMUM"; readonly minimum: number };
+
+export function fieldErrorText(error: FieldError, m: Messages): string {
+  switch (error.code) {
+    case "CHOOSE_FAULT": return m.faults.errors.chooseFault;
+    case "CHOOSE_TARGET": return m.faults.errors.chooseTarget;
+    case "WHOLE_NUMBER": return m.faults.errors.wholeNumber;
+    case "MINIMUM": return m.faults.errors.minimum(error.minimum);
+    case "CHOOSE_STATE": return m.faults.errors.chooseState;
+    case "PROBABILITY": return m.faults.errors.probability;
+  }
+}
+
 export interface FormResult {
   readonly entry?: DraftEntry;
-  readonly errors: Partial<Record<FormField, string>>;
+  readonly errors: Partial<Record<FormField, FieldError>>;
 }
 
 const wholeNumber = /^(0|[1-9][0-9]*)$/;
@@ -165,22 +172,22 @@ const wholeNumber = /^(0|[1-9][0-9]*)$/;
  * back from the worker as diagnostics on the applied draft.
  */
 export function buildEntry(form: FaultForm, options: readonly FaultKindOption[], targets: readonly TargetOption[], id: string): FormResult {
-  const errors: Partial<Record<FormField, string>> = {};
+  const errors: Partial<Record<FormField, FieldError>> = {};
   const option = options.find(item => item.id === form.kind);
-  if (!option) return { errors: { kind: "Choose a fault this lesson allows." } };
+  if (!option) return { errors: { kind: { code: "CHOOSE_FAULT" } } };
   const target = targets.find(item => item.value === form.target);
-  if (!target) errors.target = "Choose a target.";
+  if (!target) errors.target = { code: "CHOOSE_TARGET" };
   const whole = (field: FormField, { required = false, minimum = 0 } = {}): number | undefined => {
     const text = form[field].trim();
-    if (!text) { if (required) errors[field] = "Enter a whole number."; return undefined; }
-    if (!wholeNumber.test(text) || !Number.isSafeInteger(Number(text))) { errors[field] = "Enter a whole number."; return undefined; }
+    if (!text) { if (required) errors[field] = { code: "WHOLE_NUMBER" }; return undefined; }
+    if (!wholeNumber.test(text) || !Number.isSafeInteger(Number(text))) { errors[field] = { code: "WHOLE_NUMBER" }; return undefined; }
     const value = Number(text);
-    if (value < minimum) { errors[field] = `Enter ${minimum} or more.`; return undefined; }
+    if (value < minimum) { errors[field] = { code: "MINIMUM", minimum }; return undefined; }
     return value;
   };
   if (option.kind === "scheduled") {
     const at = whole("at", { required: true });
-    if (option.scheduled === "external-availability" && !["AVAILABLE", "DEGRADED", "UNAVAILABLE", "RATE_LIMITED"].includes(form.state)) errors.state = "Choose an availability state.";
+    if (option.scheduled === "external-availability" && !["AVAILABLE", "DEGRADED", "UNAVAILABLE", "RATE_LIMITED"].includes(form.state)) errors.state = { code: "CHOOSE_STATE" };
     if (Object.keys(errors).length || at === undefined || !target?.target) return { errors };
     const fault: ScheduledFault = option.scheduled === "crash"
       ? { id: `${id}-fault`, kind: "crash", target: target.target }
@@ -193,7 +200,7 @@ export function buildEntry(form: FaultForm, options: readonly FaultKindOption[],
   const maxApplications = whole("maxApplications", { required: true, minimum: 1 });
   const probabilityText = form.probability.trim();
   const probability = probabilityText === "" ? 1 : Number(probabilityText);
-  if (!/^(0(\.[0-9]+)?|1(\.0+)?|\.[0-9]+)$/.test(probabilityText) && probabilityText !== "") errors.probability = "Enter a probability from 0 to 1.";
+  if (!/^(0(\.[0-9]+)?|1(\.0+)?|\.[0-9]+)$/.test(probabilityText) && probabilityText !== "") errors.probability = { code: "PROBABILITY" };
   let effect: FaultEffect | undefined;
   if (option.effect === "delay") {
     const duration = whole("duration", { required: true });
@@ -252,25 +259,35 @@ export function entryId(entry: DraftEntry): string {
   return entry.kind === "rule" ? entry.rule.id : entry.action.id;
 }
 
-/** Short chip text, for example "Drop response · payment-processor → payments · occurrence 1". */
-export function describeEntry(entry: DraftEntry): string {
+/**
+ * Short chip text, for example "Drop response · payment-processor → payments · occurrence 1". Each fact is its own
+ * message, so a language orders and words them itself; the catalog's separator joins them.
+ */
+export function describeEntry(entry: DraftEntry, m: Messages): string {
+  const copy = m.faults.describe;
   if (entry.kind === "scheduled") {
     const fault = entry.action.fault;
-    return fault.kind === "crash" ? `Crash service · ${fault.target} · at t=${entry.action.at}`
-      : `${fault.target} becomes ${fault.state} · at t=${entry.action.at}`;
+    return [
+      fault.kind === "crash" ? m.faults.scheduledLabels.crash : copy.becomes({ target: fault.target, state: fault.state }),
+      ...(fault.kind === "crash" ? [fault.target] : []),
+      copy.at(entry.action.at),
+    ].join(copy.separator);
   }
   const rule = entry.rule;
-  const label = ruleLabels[`${rule.point}/${rule.effect.kind}`] ?? rule.effect.kind;
-  const where = rule.point === "database.commit" ? `database ${rule.name ?? "any"}`
-    : rule.point === "message.delivery" ? `${rule.name ?? "any destination"} → ${rule.target ?? "any consumer"}`
-    : `${rule.source ?? "any"} → ${rule.target ?? "any"}${rule.name ? ` ${rule.name}` : ""}`;
-  const effect = rule.effect.kind === "delay" ? ` by ${rule.effect.duration}`
-    : rule.effect.kind === "duplicate" ? ` ×${rule.effect.additionalCopies + 1}, ${rule.effect.spacing} apart` : "";
-  const window = rule.until !== undefined ? ` · t=${rule.from}–${rule.until}` : rule.from > 0 ? ` · from t=${rule.from}` : "";
-  const scope = rule.occurrence !== undefined ? ` · occurrence ${rule.occurrence}` : "";
-  const times = rule.maxApplications !== 1 ? ` · up to ${rule.maxApplications}×` : "";
-  const chance = rule.probability !== 1 ? ` · probability ${rule.probability}, uses the session seed` : "";
-  return `${label}${effect} · ${where}${window}${scope}${times}${chance}`;
+  const label = ruleLabel(rule.point, rule.effect.kind, m);
+  const head = rule.effect.kind === "delay" ? copy.delayed({ label, duration: rule.effect.duration })
+    : rule.effect.kind === "duplicate" ? copy.duplicated({ label, copies: rule.effect.additionalCopies + 1, spacing: rule.effect.spacing }) : label;
+  const where = rule.point === "database.commit" ? rule.name === undefined ? copy.anyDatabase : copy.database(rule.name)
+    : rule.point === "message.delivery" ? copy.route({ from: rule.name ?? copy.anyDestination, to: rule.target ?? copy.anyConsumer })
+    : rule.name ? copy.routeNamed({ from: rule.source ?? copy.any, to: rule.target ?? copy.any, name: rule.name })
+    : copy.route({ from: rule.source ?? copy.any, to: rule.target ?? copy.any });
+  return [
+    head, where,
+    ...(rule.until !== undefined ? [copy.window({ from: rule.from, until: rule.until })] : rule.from > 0 ? [copy.from(rule.from)] : []),
+    ...(rule.occurrence !== undefined ? [copy.occurrence(rule.occurrence)] : []),
+    ...(rule.maxApplications !== 1 ? [copy.times(rule.maxApplications)] : []),
+    ...(rule.probability !== 1 ? [copy.probability(rule.probability)] : []),
+  ].join(copy.separator);
 }
 
 /** The one draft overlay: faults, design choices, and design edits (absent when none remains, as the worker normalizes it). */
@@ -311,22 +328,6 @@ export interface EntryDiagnostic {
   readonly message: string;
 }
 
-const diagnosticText: Readonly<Record<string, string>> = {
-  OVERLAY_NOT_ALLOWED: "This lesson does not allow this fault.",
-  OVERLAY_ID_PREFIX: "Student fault IDs must start with student-.",
-  OVERLAY_LIMIT: "This lesson allows fewer faults. Remove one.",
-  FAULT: "This value breaks a fault rule: check the time window, counts, and overlapping duplicate rules.",
-  BEFORE_START: "This time is before the lesson starts.",
-  DUPLICATE: "Another fault already uses this ID.",
-  UNKNOWN_COMPONENT: "This component is not part of the lesson.",
-  REFERENCE: "This target does not exist in the lesson.",
-  TYPE: "This value has the wrong type.",
-  TIME: "This is not a valid virtual time.",
-  REQUIRED: "This value is required.",
-  UNSUPPORTED: "This field is not supported.",
-  STATE: "This state is not supported.",
-};
-
 const fieldOf: Readonly<Record<string, FormField>> = {
   from: "from", until: "until", occurrence: "occurrence", maxApplications: "maxApplications", probability: "probability",
   source: "target", target: "target", name: "endpoint", point: "kind", effect: "kind", kind: "kind",
@@ -334,14 +335,14 @@ const fieldOf: Readonly<Record<string, FormField>> = {
 };
 
 /** Places worker diagnostics, whose paths point into the submitted overlay, on draft entries. */
-export function placeDiagnostics(diagnostics: readonly ScenarioDiagnostic[], overlay: SessionOverlay): { readonly entries: readonly EntryDiagnostic[]; readonly general: readonly string[] } {
+export function placeDiagnostics(diagnostics: readonly ScenarioDiagnostic[], overlay: SessionOverlay, m: Messages): { readonly entries: readonly EntryDiagnostic[]; readonly general: readonly string[] } {
   const entries: EntryDiagnostic[] = [];
   const general: string[] = [];
   for (const item of diagnostics) {
     const match = /^\/(faults|scheduledFaults)\/(\d+)(?:\/(.*))?$/.exec(item.path);
     const entry = match ? (match[1] === "faults" ? overlay.faults[Number(match[2])] : overlay.scheduledFaults[Number(match[2])]) : undefined;
-    const message = `${diagnosticText[item.code] ?? "This value is not valid."} (${item.code})`;
-    if (!match || !entry) { general.push(`${item.path || "/"}: ${message}`); continue; }
+    const message = m.faults.withCode({ text: byCode(m.faults.diagnostics, item.code) ?? m.faults.diagnosticUnknown, code: item.code });
+    if (!match || !entry) { general.push(m.faults.general({ path: item.path, message })); continue; }
     const tokens = (match[3] ?? "").split("/").filter(Boolean).filter(token => token !== "fault" && token !== "effect");
     const field = fieldOf[tokens.at(-1) ?? ""];
     entries.push({ entryId: entry.id, ...(field ? { field } : {}), message });
@@ -355,7 +356,7 @@ export function placeDiagnostics(diagnostics: readonly ScenarioDiagnostic[], ove
  * architecture edit (ADR-005) survives only when the paired lesson's allowance
  * permits the same edit. The others are dropped and listed, never removed silently.
  */
-export function carryOverlay(overlay: SessionOverlay, from: LessonOverlayPolicy | undefined, to: LessonOverlayPolicy | undefined): { readonly overlay: SessionOverlay; readonly dropped: readonly string[] } {
+export function carryOverlay(overlay: SessionOverlay, from: LessonOverlayPolicy | undefined, to: LessonOverlayPolicy | undefined, m: Messages): { readonly overlay: SessionOverlay; readonly dropped: readonly string[] } {
   const dropped: string[] = [];
   const parameters = overlay.parameters.filter(override => {
     const left = from?.parameters.find(item => item.key === override.key);
@@ -371,13 +372,13 @@ export function carryOverlay(overlay: SessionOverlay, from: LessonOverlayPolicy 
     items.filter(item => { const kept = allowed(item); if (!kept) dropped.push(label(item)); return kept; });
   const architecture: ArchitectureEdits = {
     slots: keep(edits.slots, edit => allowance?.slots.some(slot => slot.component === edit.component
-      && slot.models.some(model => model.model === edit.model && model.version === edit.version)) === true, edit => `${edit.component} slot`),
+      && slot.models.some(model => model.model === edit.model && model.version === edit.version)) === true, edit => m.faults.dropped.slot(edit.component)),
     bindings: keep(edits.bindings, edit => allowance?.bindings.some(binding => binding.component === edit.component && binding.peer === edit.peer
-      && binding.candidates.includes(edit.target)) === true, edit => `${edit.component}.${edit.peer} binding`),
+      && binding.candidates.includes(edit.target)) === true, edit => m.faults.dropped.binding({ component: edit.component, peer: edit.peer })),
     resources: keep(edits.resources, edit => allowance?.resources.some(resource => resource.owner === edit.owner && resource.resource === edit.resource) === true,
-      edit => `${edit.owner} ${edit.resource}`),
+      edit => m.faults.dropped.resource({ owner: edit.owner, resource: edit.resource })),
     subscriptions: keep(edits.subscriptions, edit => allowance?.subscriptions.some(subscription => subscription.consumer === edit.consumer
-      && subscription.destination === edit.destination) === true, edit => `${edit.consumer} subscription to ${edit.destination}`),
+      && subscription.destination === edit.destination) === true, edit => m.faults.dropped.subscription({ consumer: edit.consumer, destination: edit.destination })),
   };
   return { overlay: { ...rest, parameters, ...(designEdits(architecture) ? { architecture } : {}) }, dropped };
 }
@@ -392,12 +393,12 @@ export function isEmptyOverlay(overlay: SessionOverlay): boolean {
 }
 
 /** Graph marks for applied faults: a broken-link mark on links and a fault mark on components. */
-export function faultMarks(entries: readonly DraftEntry[], architecture: ArchitectureDefinition | undefined): { readonly links: ReadonlyMap<string, string[]>; readonly nodes: ReadonlyMap<string, string[]> } {
+export function faultMarks(entries: readonly DraftEntry[], architecture: ArchitectureDefinition | undefined, m: Messages): { readonly links: ReadonlyMap<string, string[]>; readonly nodes: ReadonlyMap<string, string[]> } {
   const links = new Map<string, string[]>();
   const nodes = new Map<string, string[]>();
   const add = (map: Map<string, string[]>, key: string, label: string) => map.set(key, [...(map.get(key) ?? []), label]);
   for (const entry of entries) {
-    const label = describeEntry(entry);
+    const label = describeEntry(entry, m);
     if (entry.kind === "scheduled") { add(nodes, entry.action.fault.target, label); continue; }
     const rule = entry.rule;
     if (rule.point === "database.commit") {
