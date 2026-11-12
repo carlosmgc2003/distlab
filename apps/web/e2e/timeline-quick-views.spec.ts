@@ -84,7 +84,7 @@ test("each Show option names the count its quick view keeps", async ({ page }) =
   await completed(page);
   const afterRun = await commands(page);
   const options = await show(page).locator("option").evaluateAll(elements => elements.map(option => ({ value: (option as HTMLOptionElement).value, text: option.textContent ?? "" })));
-  expect(options.map(option => option.value)).toEqual(["all", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes"]);
+  expect(options.map(option => option.value)).toEqual(["all", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "failures"]);
   for (const option of options.slice(1)) {
     const match = /^(.+) \((\d+)\)$/.exec(option.text);
     expect(match, option.text).not.toBeNull();

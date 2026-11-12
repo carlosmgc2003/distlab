@@ -47,10 +47,23 @@ const STORY_TYPES = new Set([
   "message.published", "message.delivered", "message.acknowledged", "message.ack.stale", "message.retry.scheduled",
   "database.transaction.committed", "database.transaction.rolledback", "external.effect.committed",
   "fault.effect.selected", "fault.rule.matched",
+  "database.transaction.rejected", "service.handler.failed", "message.nacked", "message.dead", "kv.condition.failed",
+  "kv.changed", "kv.expired", "runtime.log",
 ]);
 
+/** A check is a milestone for its first stored verdict and each change of it. */
 function expectedMilestones(observations: readonly Observation[]): readonly Observation[] {
-  return observations.filter(observation => STORY_TYPES.has(observation.type) || observation.type.startsWith("fault."));
+  const verdicts = new Map<string, unknown>();
+  return observations.filter(observation => {
+    if (observation.type === "scenario.assertion.evaluated") {
+      const data = observation.data as { assertionId?: string; verdict?: unknown } | undefined;
+      if (typeof data?.assertionId !== "string" || typeof data.verdict !== "boolean") return true;
+      const repeated = verdicts.get(data.assertionId) === data.verdict;
+      verdicts.set(data.assertionId, data.verdict);
+      return !repeated;
+    }
+    return STORY_TYPES.has(observation.type) || observation.type.startsWith("fault.");
+  });
 }
 
 function rowSelector(observation: Observation): string {
