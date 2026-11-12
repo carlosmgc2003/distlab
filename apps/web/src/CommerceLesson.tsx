@@ -3,6 +3,8 @@ import type { CommerceCheck } from "../../../packages/catalogs/src/commerce/scen
 import { lessonChecks } from "./lesson-checks.ts";
 import type { CheckRow, LessonCheckView } from "./lesson-checks.ts";
 import { HelpHint } from "./ui-hint.tsx";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /** What the two lists of lesson checks mean (#96). ③ Investigate shows them behind its one hint (#147). */
 export const INVARIANTS_HELP = "Properties the system must keep whatever its design. VIOLATED is what this run did to the business.";
@@ -17,7 +19,7 @@ function fields(value: CanonicalValue): string {
 }
 
 /** Only authorized student projections are rendered; host/task state stays private. */
-export function CommerceFacts({ projection, componentId }: { projection: RuntimeProjectionSet; componentId: string }) {
+export function CommerceFacts({ projection, componentId, names }: { projection: RuntimeProjectionSet; componentId: string; names?: ComponentNames }) {
   const state = object(projection.components.find(entry => entry.componentId === componentId && entry.visibility === "student")?.state);
   const tables = object(object(state.committed).tables);
   const store = Array.isArray(state.store) ? state.store : [];
@@ -34,7 +36,7 @@ export function CommerceFacts({ projection, componentId }: { projection: Runtime
     {state.role === "external-visible" ? <p>{String(state.availability)} · {fields(state.visible ?? {})}</p> : null}
     {Array.isArray(state.records) ? <ul>{state.records.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : null}
     {Array.isArray(state.deadLetters) ? <div><strong>Dead-letter queue</strong>
-      {state.deadLetters.length ? <ul aria-label={`${componentId} dead-letter queue`}>{state.deadLetters.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : <p>No dead-lettered messages.</p>}
+      {state.deadLetters.length ? <ul aria-label={`${displayName(names, componentId)} dead-letter queue`}>{state.deadLetters.map((row, i) => <li key={i}>{fields(row)}</li>)}</ul> : <p>No dead-lettered messages.</p>}
     </div> : null}
   </div>;
 }
@@ -85,13 +87,13 @@ export function LessonChecks({ view, onShowEvidence }: { view: LessonCheckView; 
 }
 
 /** Every student-visible component's facts, shown in the Service state dialog (#142). Its one hint holds the reasoning (#147). */
-export function ServiceStateGrid({ projection }: { projection: RuntimeProjectionSet }) {
+export function ServiceStateGrid({ projection, names }: { projection: RuntimeProjectionSet; names?: ComponentNames }) {
   const student = projection.components.filter(entry => entry.visibility === "student");
   return <section className="commerce-state" aria-labelledby="service-state-heading">
     <h3 id="service-state-heading">Service knowledge and committed state</h3>
     <HelpHint label="About service state" bodyId="service-state-help">These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.</HelpHint>
-    <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={`${entry.componentId} state`}>
-      <h4>{entry.componentId}</h4><CommerceFacts projection={projection} componentId={entry.componentId} />
+    <div className="commerce-state-grid">{student.map(entry => <section key={entry.componentId} aria-label={`${displayName(names, entry.componentId)} state`}>
+      <h4>{displayName(names, entry.componentId)}</h4><CommerceFacts projection={projection} componentId={entry.componentId} {...(names ? { names } : {})} />
     </section>)}</div>
   </section>;
 }

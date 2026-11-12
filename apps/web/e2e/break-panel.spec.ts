@@ -48,7 +48,7 @@ async function load(page: Page, scenario: string) {
 async function addDropResponse(page: Page) {
   const region = panel(page);
   await region.getByLabel("Fault", { exact: true }).selectOption("network.response/drop");
-  await region.getByLabel("Target", { exact: true }).selectOption({ label: "payment-processor → payments" });
+  await region.getByLabel("Target", { exact: true }).selectOption({ label: "Payment Processor → Payments" });
   await region.getByLabel("Only occurrence number (optional)").fill("1");
   await region.getByRole("button", { name: "Add fault", exact: true }).click();
 }
@@ -106,7 +106,7 @@ test("an invalid fault is reported inline from contract validation and can be fi
   await openExperiment(page);
   const region = panel(page);
   await region.getByLabel("Fault", { exact: true }).selectOption("network.request/delay");
-  await region.getByLabel("Target", { exact: true }).selectOption({ label: "customer-app → orders" });
+  await region.getByLabel("Target", { exact: true }).selectOption({ label: "Customer App → Orders" });
   // Text without a contract value is caught in the field before it reaches the draft.
   await region.getByLabel("Delay duration").fill("soon");
   await region.getByRole("button", { name: "Add fault", exact: true }).click();

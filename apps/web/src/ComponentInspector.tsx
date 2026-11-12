@@ -26,18 +26,18 @@ export function ComponentInspector({ node, children }: {
       {node.data.resources.length ? <ul>{node.data.resources.map(resource => <li key={resource}>{resource}</li>)}</ul> : <p>No database or store declared for this component.</p>}
       </details>
     </> : <>
-      <h4>{`${resourceLabels[node.data.kind]} owned by ${node.data.owner}`}</h4>
+      <h4>{`${resourceLabels[node.data.kind]} owned by ${node.data.ownerName}`}</h4>
       <ResourceFacts node={node} />
     </> : <p>Select a component to inspect its metadata.</p>}
   </aside>;
 }
 
 function ResourceFacts({ node }: { readonly node: ResourceNode }) {
-  const { owner, definition } = node.data;
+  const { ownerName, definition } = node.data;
   const database = "tables" in definition ? definition : undefined;
   const store = "tables" in definition ? undefined : definition;
   return <dl className="resource-facts">
-    <dt>Owner</dt><dd>{owner}</dd>
+    <dt>Owner</dt><dd>{ownerName}</dd>
     {database ? <>
       <dt>Tables</dt><dd>{database.tables.length ? <ul>{database.tables.map(table => <li key={table.name}>{table.name}</li>)}</ul> : "None declared"}</dd>
       <dt>Initial keys</dt><dd>{database.tables.some(table => Object.keys(database.initial[table.name] ?? {}).length > 0)

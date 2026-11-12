@@ -5,10 +5,13 @@ import {
   buildEntry, describeEntry, emptyForm, entryId, faultKindOptions, formFromEntry, nextStudentId, pickTarget, placeDiagnostics, targetOptions,
 } from "./break-faults.ts";
 import type { DraftEntry, FaultForm, FormField } from "./break-faults.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 export interface FaultsSectionProps {
   readonly policy: LessonOverlayPolicy;
   readonly architecture: ArchitectureDefinition;
+  /** The session's component display names, for the target options (#103). */
+  readonly names?: ComponentNames;
   /** The normalized overlay the worker applied, or null when no session is loaded. */
   readonly applied: SessionOverlay | null;
   readonly draft: readonly DraftEntry[];
@@ -64,7 +67,7 @@ export function FaultsHelp({ policy }: { readonly policy: LessonOverlayPolicy })
  * the lesson allows. The drawer's one Apply sends one ordinary `load`; nothing
  * here edits a running simulation.
  */
-export function FaultsSection({ policy, architecture, applied, draft, onDraftChange, pending, editable, rejected, picking, onPickingChange, pick }: FaultsSectionProps) {
+export function FaultsSection({ policy, architecture, names, applied, draft, onDraftChange, pending, editable, rejected, picking, onPickingChange, pick }: FaultsSectionProps) {
   const ids = useId();
   const [form, setForm] = useState<FaultForm>(emptyForm);
   const [errors, setErrors] = useState<Partial<Record<FormField, string>>>({});
@@ -72,7 +75,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
   const [notice, setNotice] = useState("");
   const options = useMemo(() => faultKindOptions(policy), [policy]);
   const option = options.find(item => item.id === form.kind);
-  const targets = useMemo(() => targetOptions(option, architecture), [option, architecture]);
+  const targets = useMemo(() => targetOptions(option, architecture, names), [option, architecture, names]);
   const placed = useMemo(() => rejected ? placeDiagnostics(rejected.diagnostics, rejected.overlay) : { entries: [], general: [] }, [rejected]);
   const appliedIds = new Set(applied ? [...applied.faults.map(rule => rule.id), ...applied.scheduledFaults.map(action => action.id)] : []);
   const remaining = policy.faults.maxEntries - draft.length;
@@ -110,7 +113,7 @@ export function FaultsSection({ policy, architecture, applied, draft, onDraftCha
   const edit = (entry: DraftEntry) => {
     setEditing(entryId(entry));
     setErrors({});
-    setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture)));
+    setForm(formFromEntry(entry, kind => targetOptions(options.find(item => item.id === kind), architecture, names)));
     setNotice(`Editing ${entryId(entry)}. Change the fields, then choose Update fault.`);
     requestAnimationFrame(() => document.getElementById(`${ids}-kind`)?.focus());
   };

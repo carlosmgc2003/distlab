@@ -80,7 +80,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   const requestText = await requestRows.first().innerText();
   await requestRows.first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders at virtual time");
+  await expect(page.locator("#movement-cue")).toContainText("Request sent from Customer App to Orders at virtual time");
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(1);
   await expect(page.locator(".react-flow__node.is-involved")).toHaveCount(2);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
@@ -90,7 +90,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.locator("#timeline-rows button").first()).toContainText("message.delivered");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  await expect(page.locator("#movement-cue")).toContainText("Message delivered from OrderCreated to payments at virtual time");
+  await expect(page.locator("#movement-cue")).toContainText("Message delivered from OrderCreated to Payments at virtual time");
   await expect(page.locator(".react-flow__edge.movement-message")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(0);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
@@ -195,7 +195,7 @@ test("reduced motion keeps the movement text and does not animate the edge", asy
   await filterByType(page, "network.request.sent");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  await expect(page.locator("#movement-cue")).toContainText("Request sent from customer-app to orders");
+  await expect(page.locator("#movement-cue")).toContainText("Request sent from Customer App to Orders");
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(1);
   const animation = await page.locator(".react-flow__edge.movement-request .react-flow__edge-path").evaluate(element => getComputedStyle(element).animationName);
   expect(animation).toBe("none");

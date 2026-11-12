@@ -40,6 +40,7 @@ at a time, so until they land the shipped shell can still differ from it.
 | Recorded history | Only the tab and its panel heading | — |
 | Observation #n | One recorded record | "Step #n"; **Step** is a simulation command |
 | Change the experiment / Apply and restart | The one path that sends the student's edited session overlay | "Apply faults and reload", "Apply choices and reload" |
+| Component display name | How a packaged lesson names a component in every student-facing place: graph, narration, Recorded history, Service state, fault targets (#103). The ID stays in the inspector's `Component ID` row, Raw history, and payloads; imported documents and destinations show IDs | Raw component IDs such as `client`, `kv`, `worker-1` as visible labels |
 
 ### Layout budgets
 
