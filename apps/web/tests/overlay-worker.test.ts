@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalValue, RuntimeProjectionSet, WorkerEvent } from "@distlab/contracts";
-import { checkoutAssessment, checkoutCatalog, commerceAssessment, commerceCatalog, commerceOverlayPolicy, commerceScenario, normalCheckout } from "@distlab/catalogs";
+import { checkoutAssessment, checkoutCatalog, commerceAssessment, commerceCatalog, commerceDescriptors, commerceOverlayPolicy, commerceScenario, normalCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, composeOverlay } from "@distlab/scenario";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
 import { SimulationHost } from "../src/host.ts";
 import { isWorkerEvent } from "../src/protocol.ts";
 import { FakeWorker, projection, session } from "./support.ts";
+import { overlayFromDraft, sameOverlay } from "../src/break-faults.ts";
+import { setResource, setSlotModel, setSlotOption, setSubscription } from "../src/design-edits.ts";
+import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 
 /** The issue's example: drop the first processor response on Normal checkout. */
 const dropResponse = {
@@ -268,4 +271,19 @@ test("the host sends the draft overlay inside load and exposes the applied sessi
   assert.equal(host.getSnapshot().error?.code, "INVALID_OVERLAY");
   assert.equal(host.load({}).constructor, Promise);
   assert.deepEqual(Object.keys(worker.last()).sort(), ["requestId", "scenario", "type", "version"], "an absent overlay is not sent");
+});
+
+test("#112 a gap-lesson load of each draft-built design returns the overlay sent, so the draft is not pending after Apply", async () => {
+  const gap = scenarios.find(choice => choice.id === "outbox-notifications-gap")!;
+  const context = { allowance: gap.policy.architecture!, architecture: packagedMetadata(gap).architecture, descriptors: commerceDescriptors };
+  const base = setSubscription(context, setResource(context, setSlotModel(context, undefined, "notifications", "commerce.notifications@1.0.0"),
+    "notifications", "database", true), "notifications", "PaymentApproved", true);
+  for (const design of [base, setSlotOption(context, base, "notifications", "idempotent", true)]) {
+    const { send } = harness();
+    const sent = overlayFromDraft([], [], design);
+    const [loaded] = await send({ type: "load", scenario: gap.scenario, overlay: sent as unknown as CanonicalValue });
+    assert.ok(loaded?.type === "loaded", JSON.stringify(loaded));
+    assert.deepEqual(JSON.parse(JSON.stringify(loaded.session.overlay)), JSON.parse(JSON.stringify(sent)));
+    assert.ok(sameOverlay(overlayFromDraft([], [], design), loaded.session.overlay));
+  }
 });

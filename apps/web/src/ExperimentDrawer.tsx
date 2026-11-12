@@ -9,14 +9,16 @@ export interface ExperimentDrawerProps {
   readonly onClose: () => void;
   /** True while the draft differs from the applied overlay. */
   readonly pending: boolean;
-  /** True while a design-choice field holds text that is not a value: Apply is withheld. */
+  /** True while a design-choice or design-edit field holds text that is not a value: Apply is withheld. */
   readonly invalid: boolean;
   /** False while a command is outstanding or the simulation runs. */
   readonly editable: boolean;
   /** Sends the whole draft overlay in one ordinary `load`. */
   readonly onApply: () => void;
-  /** Returns both drafts to the applied overlay. */
+  /** Returns every section's draft to the applied overlay. */
   readonly onDiscard: () => void;
+  /** Present only when the lesson's policy has an architecture allowance (#112). */
+  readonly architecture?: ReactNode;
   /** Present only when the lesson's policy declares parameters. */
   readonly designChoices: ReactNode;
   readonly faults: ReactNode;
@@ -32,7 +34,7 @@ export interface ExperimentDrawerProps {
  * readable and its inputs, Apply, and Discard are unavailable, which one footer line states.
  * The sections show their facts and actions; their reasoning is in the drawer's one hint (#147).
  */
-export function ExperimentDrawer({ open, onClose, pending, invalid, editable, onApply, onDiscard, designChoices, faults, help }: ExperimentDrawerProps) {
+export function ExperimentDrawer({ open, onClose, pending, invalid, editable, onApply, onDiscard, architecture, designChoices, faults, help }: ExperimentDrawerProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   // Opening the drawer moves focus to its heading, so keyboard users start at the top of it. A drawer
   // that mounts already open (a new lesson's session) leaves focus where the load put it.
@@ -48,6 +50,7 @@ export function ExperimentDrawer({ open, onClose, pending, invalid, editable, on
       <HelpHint label="About the experiment" bodyId="experiment-help">{help}</HelpHint>
     </div>
     <div className="experiment-drawer-body">
+      {architecture}
       {designChoices}
       {faults}
     </div>
