@@ -22,6 +22,7 @@ import { DESIGN_CHOICES_HELP, DesignChoicesSection } from "./DesignChoicesSectio
 import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoices } from "./design-choices.ts";
 import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
+import { componentNames } from "./component-display.ts";
 import { FlightControls } from "./ArchitecturePlayback.tsx";
 import { useFlightPlayback } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
@@ -113,8 +114,14 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const studentRules = snapshot.session?.overlay.faults;
   const report = useMemo(() => projection && lesson && !commerce
     ? inspectFaults(projection, studentRules?.length ? { ...lesson, faults: [...lesson.faults, ...studentRules] } : lesson) : null, [projection, lesson, commerce, studentRules]);
+  // Component display names (#103): packaged sessions only; an imported document shows its own IDs.
+  // Keyed on the projected components, so a projection update that keeps them keeps the same names.
+  const namingSource = imported ? "imported" : commerce ? "commerce" : "checkout";
+  const componentsKey = JSON.stringify(projection?.architecture.components ?? []);
+  const names = useMemo(() => componentNames(namingSource === "checkout" ? { source: "checkout", scenarioName: lesson?.name } : { source: namingSource },
+    projection?.architecture.components ?? []), [namingSource, lesson?.name, componentsKey]);
   const graph = useMemo(() => projection && lesson
-    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name) : null, [projection, lesson]);
+    ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name, names) : null, [projection, lesson, names]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
   const componentTitles = useMemo(() => graph ? graph.nodes.map(node => ({ id: node.id, title: node.data.title })) : [], [graph]);
   // The session's check labels by assertion ID: the packaged lesson's classification, or the imported document's own labels.
@@ -127,7 +134,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // identity; a live cue never takes the highlight back.
   const release = emphasis?.origin === "selection" ? emphasis.pulseId ?? emphasis.text : undefined;
   const playback = useFlightPlayback(projection?.history.observations ?? [], edges,
-    snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release);
+    snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release, names);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   const applied = snapshot.session?.overlay ?? null;
   const appliedEntries = useMemo(() => applied ? draftFromOverlay(applied) : [], [applied]);
@@ -371,7 +378,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     // Design choices exist only for lessons whose policy declares parameters.
     designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} draft={choiceDraft}
       onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices} onInvalidChange={setChoicesInvalid} resetToken={choicesReset} /> : null}
-    faults={<FaultsSection policy={policy} architecture={lesson.architecture} applied={applied} draft={draft} onDraftChange={setDraft}
+    faults={<FaultsSection policy={policy} architecture={lesson.architecture} names={names} applied={applied} draft={draft} onDraftChange={setDraft}
       pending={faultsPending} editable={editable} rejected={rejectedFaults} picking={picking} onPickingChange={changePicking} pick={pick} />}
     // The drawer's one hint holds both sections' reasoning (#147).
     help={<>{policy.parameters.length ? <p>{DESIGN_CHOICES_HELP}</p> : null}<FaultsHelp policy={policy} /></>} /> : null;
@@ -420,7 +427,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
     setServiceStateOpen(false);
     serviceStateOpener.current?.focus();
   };
-  const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} />
+  const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} names={names} />
     : report ? <DistributedState report={report} onShowEvidence={id => { setServiceStateOpen(false); showEvidence(id); }} /> : null : null;
   const lessonInvestigate = <>
     {/* An imported document's checks lead ③ Investigate, as a packaged lesson's do (#160); the Architecture tab holds only the graph. */}
@@ -545,9 +552,9 @@ export function App({ host }: { readonly host: SimulationHost }) {
           <FlightControls playback={playback} />
           <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
             {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
-            {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})}
+            {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})} names={names}
             {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
-            {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
+            {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} names={names} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
         </section>
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>

@@ -5,6 +5,8 @@ import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } 
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
 import { flightTokenStyle, handleFor, mapArchitecture, resourceLabels, symbolLabels, type NodeSymbol } from "./architecture-view.ts";
 import { EMPTY_SLOT_LABEL } from "./design-step.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
 import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
@@ -224,7 +226,7 @@ const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<Reso
       <path d="M8 11l49-8 50 8-50 9z M8 11v34l49 8 50-8V11 M8 24l49 9 50-9 M8 36l49 9 50-9" />
     </svg>}
     <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
-    <span className="resource-title">{resourceLabels[data.kind]} owned by {data.owner}</span>
+    <span className="resource-title">{resourceLabels[data.kind]} owned by {data.ownerName}</span>
     {Array.isArray(data.faults) && data.faults.length ? <FaultBadge faults={data.faults as string[]} /> : null}
     </div>
   </>;
@@ -600,10 +602,12 @@ export interface GraphFaultMarks {
   readonly nodes: ReadonlyMap<string, readonly string[]>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick }: {
+export function ArchitectureView({ architecture, metadata, scenarioName, names, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
+  /** The session's component display names (#103). */
+  readonly names?: ComponentNames;
   readonly emphasis?: GraphEmphasis;
   readonly movementText?: string;
   readonly inspectorFacts?: (componentId: string) => ReactNode;
@@ -620,7 +624,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
   pickRef.current = onPick;
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
-  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName), [architectureKey, metadata, scenarioName]);
+  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, ...(names ? [names] : [])), [architectureKey, metadata, scenarioName, names]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Layout follows structure only: ids and labels, never playback state or badges.
   const layoutKey = useMemo(() => JSON.stringify([
@@ -648,7 +652,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
     // Activity is shown only while the cursor stands on a record, and only from records at or before it.
-    const activity = flight ? activityOf(playback.activity, node.id) : undefined;
+    const activity = flight ? activityOf(playback.activity, node.id, graph.names) : undefined;
     const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : ""].filter(Boolean).join(" ");
     const size = sizes?.get(node.id);
     return {
@@ -781,7 +785,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, emphasi
     </div>
     <details className="connections">
       <summary>Connections ({graph.edges.length})</summary>
-      <ul>{graph.edges.map(edge => <li key={edge.id}>{edge.source} → {edge.target}: {String(edge.label)}</li>)}</ul>
+      <ul>{graph.edges.map(edge => <li key={edge.id}>{displayName(graph.names, edge.source)} → {displayName(graph.names, edge.target)}: {String(edge.label)}</li>)}</ul>
     </details>
   </>;
 }

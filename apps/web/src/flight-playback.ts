@@ -13,6 +13,7 @@ import { activityAt, activityChanges } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
 import type { Observation } from "@distlab/contracts";
+import type { ComponentNames } from "./component-display.ts";
 
 /** How often the host timer rechecks while the cursor waits for the run to record more movements. */
 const TAIL_POLL_MS = 200;
@@ -59,8 +60,10 @@ export function useFlightPlayback(
   recording: boolean,
   /** Changes when Recorded history takes over the graph highlight. */
   release: string | undefined,
+  /** The session's component display names, for the narration and activity lines (#103). */
+  names?: ComponentNames,
 ): FlightPlayback {
-  const steps = useMemo(() => flightSteps(observations, edges), [observations, edges]);
+  const steps = useMemo(() => flightSteps(observations, edges, names), [observations, edges, names]);
   // One record holds the cursor and the phase, so a single transition can never
   // paint a cursor the phase does not belong to.
   const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle", paint: 0 });
@@ -77,10 +80,10 @@ export function useFlightPlayback(
 
   const step = cursor.index >= 0 ? steps[cursor.index] : undefined;
   const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
-  const activity = useMemo(() => activityAt(observations, step?.observationId), [observations, step?.observationId]);
+  const activity = useMemo(() => activityAt(observations, step?.observationId, names), [observations, step?.observationId, names]);
   const changes = useMemo(
-    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity),
-    [observations, previousId, activity, step],
+    () => step === undefined ? [] : activityChanges(activityAt(observations, previousId, names), activity, names),
+    [observations, previousId, activity, step, names],
   );
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current

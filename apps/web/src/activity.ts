@@ -1,5 +1,7 @@
 import type { Observation, SimulationTime } from "@distlab/contracts";
 import { orderObservations, storedScalar, storedText } from "./records.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Component activity at the playback cursor, read only from stored records at
@@ -52,7 +54,12 @@ interface Open<T> { readonly owner: string; readonly value: T }
  * `cursorId`. With no cursor, or a cursor id this history does not hold, the
  * result is empty and every component reads as idle.
  */
-export function activityAt(observations: readonly Observation[], cursorId: string | null | undefined): ReadonlyMap<string, ComponentActivity> {
+export function activityAt(
+  observations: readonly Observation[],
+  cursorId: string | null | undefined,
+  /** Display names for the descriptions (#103); IDs stay in `componentId` and `target`. */
+  names?: ComponentNames,
+): ReadonlyMap<string, ComponentActivity> {
   const result = new Map<string, ComponentActivity>();
   if (cursorId === null || cursorId === undefined) return result;
   const ordered = orderObservations(observations);
@@ -132,14 +139,14 @@ export function activityAt(observations: readonly Observation[], cursorId: strin
     const work = [...owned(requests, componentId), ...owned(transactions, componentId), ...owned(deliveries, componentId)];
     const state: ActivityState = componentWaits.length > 0 ? "waiting" : work.length > 0 ? "processing" : "idle";
     const cue = timedOut?.owner === componentId ? { target: timedOut.target, time: timedOut.time } : undefined;
-    result.set(componentId, describe(componentId, state, componentWaits, work, cue));
+    result.set(componentId, describe(componentId, state, componentWaits, work, cue, names));
   }
   return result;
 }
 
 /** The activity of one component, or idle when no record at the cursor gives it any. */
-export function activityOf(activity: ReadonlyMap<string, ComponentActivity>, componentId: string): ComponentActivity {
-  return activity.get(componentId) ?? describe(componentId, "idle", [], [], undefined);
+export function activityOf(activity: ReadonlyMap<string, ComponentActivity>, componentId: string, names?: ComponentNames): ComponentActivity {
+  return activity.get(componentId) ?? describe(componentId, "idle", [], [], undefined, names);
 }
 
 /**
@@ -149,12 +156,13 @@ export function activityOf(activity: ReadonlyMap<string, ComponentActivity>, com
 export function activityChanges(
   before: ReadonlyMap<string, ComponentActivity>,
   after: ReadonlyMap<string, ComponentActivity>,
+  names?: ComponentNames,
 ): readonly string[] {
   const ids = [...new Set([...before.keys(), ...after.keys()])].sort();
   const changes: string[] = [];
   for (const id of ids) {
-    const previous = activityOf(before, id);
-    const next = activityOf(after, id);
+    const previous = activityOf(before, id, names);
+    const next = activityOf(after, id, names);
     // A timeout at the cursor is announced even when the state word stays the same.
     if (previous.description !== next.description || next.timedOut !== undefined) changes.push(next.description);
   }
@@ -167,20 +175,22 @@ function describe(
   waits: readonly ActivityWait[],
   work: readonly ActivityWork[],
   timedOut: ComponentActivity["timedOut"],
+  names: ComponentNames | undefined,
 ): ComponentActivity {
+  const name = displayName(names, componentId);
   const deadlines = waits.flatMap(wait => wait.deadline !== undefined ? [wait.deadline] : []);
   const earliest = deadlines.length > 0 ? Math.min(...deadlines) : undefined;
   const label = `${STATE_WORDS[state]}${state === "waiting" && earliest !== undefined ? ` · deadline t=${earliest}` : ""}`;
   const parts: string[] = [];
   if (waits.length > 0) {
-    const targets = [...new Set(waits.map(wait => wait.target))].join(", ");
+    const targets = [...new Set(waits.map(wait => displayName(names, wait.target)))].join(", ");
     parts.push(`waiting on ${targets}${earliest !== undefined ? ` with a recorded deadline at virtual time ${earliest}` : " with no recorded deadline"}`);
   }
   if (work.length > 0) parts.push(`processing ${workText(work)}`);
-  const timeout = timedOut !== undefined ? ` Its request to ${timedOut.target} timed out at virtual time ${timedOut.time}.` : "";
+  const timeout = timedOut !== undefined ? ` Its request to ${displayName(names, timedOut.target)} timed out at virtual time ${timedOut.time}.` : "";
   const description = parts.length > 0
-    ? `${componentId} is ${parts.join(" and ")}.${timeout}`
-    : `${componentId} is idle.${timeout}`;
+    ? `${name} is ${parts.join(" and ")}.${timeout}`
+    : `${name} is idle.${timeout}`;
   return { componentId, state, waits, work, ...(timedOut !== undefined ? { timedOut } : {}), label, description };
 }
 

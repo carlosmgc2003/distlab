@@ -12,6 +12,8 @@ import {
   storedQualifier,
 } from "./records.ts";
 import type { MilestoneType, Movement, MovementEdge, MovementKind } from "./records.ts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 export interface GraphEmphasis {
   readonly nodeIds: readonly string[];
@@ -106,15 +108,15 @@ export function changeEvidence(observation: Observation): readonly ChangeEvidenc
 }
 
 /** Selection highlight, or the movement cue when the observation travels a link. */
-export function emphasisFor(observation: Observation, edges: readonly MovementEdge[]): GraphEmphasis {
-  const movement = movementOf(observation);
+export function emphasisFor(observation: Observation, edges: readonly MovementEdge[], names?: ComponentNames): GraphEmphasis {
+  const movement = movementOf(observation, names);
   // A selected movement carries its sentence: the reader is told what moved, where, and when.
   if (movement) return { ...emphasisOf(movement, edges), text: movement.text, pulseId: movement.observationId, origin: "selection" };
   const involved = observation.target !== undefined && observation.target !== observation.source
     ? [observation.source, observation.target] : [observation.source];
   const link = observation.target !== undefined ? edgeBetween(edges, observation.source, observation.target) : undefined;
   const where = observation.target !== undefined && observation.target !== observation.source
-    ? `${observation.source} to ${observation.target}` : observation.source;
+    ? `${displayName(names, observation.source)} to ${displayName(names, observation.target)}` : displayName(names, observation.source);
   return {
     nodeIds: involved,
     ...(link !== undefined ? { edgeId: link.id } : {}),

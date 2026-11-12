@@ -1,4 +1,6 @@
 import type { CanonicalValue, Observation, SimulationTime } from "@distlab/contracts";
+import { displayName } from "./component-display.ts";
+import type { ComponentNames } from "./component-display.ts";
 
 /**
  * Record reading. One place decides what a stored record *is*, using only its
@@ -235,20 +237,20 @@ const RESPONSE_TYPES: ReadonlySet<string> = new Set([
  * The movement this record states, or null when it travels no link. A record
  * that travels no link stays in Recorded history and is not a movement.
  */
-export function movementOf(observation: Observation): Movement | null {
-  if (REQUEST_TYPES.has(observation.type)) return leg("request", observation, observation.source, observation.target, "request");
-  if (RESPONSE_TYPES.has(observation.type)) return leg("response", observation, observation.source, observation.target, "request");
+export function movementOf(observation: Observation, names?: ComponentNames): Movement | null {
+  if (REQUEST_TYPES.has(observation.type)) return leg("request", observation, observation.source, observation.target, "request", names);
+  if (RESPONSE_TYPES.has(observation.type)) return leg("response", observation, observation.source, observation.target, "request", names);
   if (observation.type === "message.published") {
-    return leg("message", observation, observation.source, storedText(observation, "destination") ?? entityId(observation, "destination"), "publication");
+    return leg("message", observation, observation.source, storedText(observation, "destination") ?? entityId(observation, "destination"), "publication", names);
   }
   if (observation.type === "message.delivered") {
     const consumer = storedText(observation, "consumer") ?? observation.source;
-    return leg("message", observation, entityId(observation, "destination") ?? observation.source, consumer, "subscription");
+    return leg("message", observation, entityId(observation, "destination") ?? observation.source, consumer, "subscription", names);
   }
   if (observation.type === "message.acknowledged") {
     // The acknowledgement leaves the consumer and travels back to the MessageBus.
     const consumer = storedText(observation, "consumer") ?? observation.source;
-    return leg("message", observation, consumer, entityId(observation, "destination"), "subscription");
+    return leg("message", observation, consumer, entityId(observation, "destination"), "subscription", names);
   }
   return null;
 }
@@ -523,18 +525,22 @@ function leg(
   from: string | undefined,
   to: string | undefined,
   relationship: MovementEdge["relationship"],
+  names: ComponentNames | undefined,
 ): Movement {
   const source = from && from.length > 0 ? from : observation.source;
   const target = to && to.length > 0 && to !== source ? to : undefined;
+  // The sentence names components by display name; `from` and `to` keep the stored IDs.
+  const sourceName = displayName(names, source);
+  const targetName = target !== undefined ? displayName(names, target) : undefined;
   const phase = observation.type === "message.published" ? "published"
     : observation.type === "message.delivered" ? "delivered"
     : observation.type === "message.acknowledged" ? "acknowledged"
     : observation.type.endsWith(".timedout") ? "timed out"
     : observation.type.split(".").at(-1) ?? observation.type;
-  const where = target !== undefined ? `from ${source} to ${target}` : `at ${source}`;
+  const where = targetName !== undefined ? `from ${sourceName} to ${targetName}` : `at ${sourceName}`;
   const text = kind === "request" ? `Request ${phase} ${where} at virtual time ${observation.time}.`
     : kind === "response" ? `Response ${phase} ${where} at virtual time ${observation.time}.`
-    : phase === "acknowledged" && target !== undefined ? `Message acknowledged by ${source} on ${target} at virtual time ${observation.time}.`
+    : phase === "acknowledged" && targetName !== undefined ? `Message acknowledged by ${sourceName} on ${targetName} at virtual time ${observation.time}.`
     : phase === "published" ? `Message published ${where} at virtual time ${observation.time}.`
     : phase === "delivered" ? `Message delivered ${where} at virtual time ${observation.time}.`
     : `Message ${phase} ${where} at virtual time ${observation.time}.`;
