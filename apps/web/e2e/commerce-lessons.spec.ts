@@ -76,11 +76,10 @@ for (const name of commerceLessonNames) {
     await page.screenshot({ path: testInfo.outputPath(`${name}-state.png`) });
     await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
     await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
-    // Story keeps only the documented milestones, so a commerce run teaches on its network,
-    // message, transaction, and fault records. runtime.log is not a milestone; its records
-    // stay in Learning and Raw.
+    // Story keeps only the documented milestones; a commerce run's business logs and check results are among them.
     const legend = page.getByRole("list", { name: "Milestone categories, shapes, and counts" });
-    await expect(legend).not.toContainText("Business event");
+    await expect(legend).toContainText("Business log");
+    await expect(legend).toContainText("Check result");
     await expect(legend.locator("li")).not.toHaveCount(0);
     await expect(legend).toContainText(/Request|Response|Transaction commit|Fault|Timeout/);
     await expect(page.getByRole("region", { name: "Story diagram", exact: true })).toBeVisible();
@@ -200,13 +199,13 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
     await expect(invariants.getByRole("listitem").filter({ hasText: "An expired cart cannot be checked out" })).toContainText("HOLDS");
   }
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
-  // Raw renders a window of rows, so narrow it to the expiry records with the Type filter.
+  await viewButton(page, "Story table").click();
+  // Each expiry is a Story milestone named by its stored key.
   await filterByType(page, "kv.expired");
-  const rows = page.locator("#timeline-rows");
-  await expect(page.locator(".timeline-count")).toHaveText(/^3 of \d+ observations/);
-  await expect(rows).toContainText("cart");
-  await expect(rows).toContainText("catalog");
+  const rows = page.locator("#timeline-rows .story-table tbody tr");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.filter({ hasText: "Key-value entry expired: cart:cart-1" })).toHaveCount(1);
+  await expect(rows.filter({ hasText: "Key-value entry expired: price:sku-1" })).toContainText("catalog");
 });
 
 test("the inventory pair shows stock with its version and each client's outcome, and the rejected commit in history", async ({ page }) => {
@@ -232,10 +231,10 @@ test("the inventory pair shows stock with its version and each client's outcome,
   }
   // The optimistic run is loaded: its rejected commit is in Recorded history.
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await filterByType(page, "database.transaction.rejected");
-  await expect(page.locator(".timeline-count")).toHaveText(/^1 of \d+ observations/);
-  await page.locator("#timeline-rows").getByRole("button", { name: /database.transaction.rejected inventory/ }).click();
+  await expect(page.locator("#timeline-rows .story-table tbody tr")).toHaveCount(1);
+  await page.locator("#timeline-rows").getByRole("button", { name: "Transaction rejected (TRANSACTION_CONFLICT)", exact: true }).click();
   await expect(page.locator("#inspection-panel")).toContainText("TRANSACTION_CONFLICT");
 });
 
@@ -269,8 +268,8 @@ test("the lease pair draws the key-value node as a shared store and shows the le
   }
   // The store removes each lease by itself: two expiries in Recorded history.
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await viewButton(page, "Story table").click();
   await filterByType(page, "kv.expired");
-  await expect(page.locator(".timeline-count")).toHaveText(/^2 of \d+ observations/);
+  await expect(page.locator("#timeline-rows .story-table tbody tr")).toHaveCount(2);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

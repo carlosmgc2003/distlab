@@ -68,11 +68,11 @@ test("one quick view reaches the dropped response and the timeout in the faulted
   expect(await commands(page)).toEqual(afterRun);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
 
-  // Raw reads the same canonical rows as the Story milestone table.
-  await viewButton(page, "Raw").click();
-  const types = await page.locator("#timeline-rows button").allInnerTexts();
-  expect(types.length).toBe(4);
-  for (const text of types) expect(text).toMatch(/network\.response\.dropped|network\.request\.timedout|fault\./);
+  // The Story table lists the same milestones as the diagram.
+  await viewButton(page, "Story table").click();
+  const labels = await page.locator(".story-table button[data-observation-id]").allInnerTexts();
+  expect(labels.length).toBe(4);
+  for (const text of labels) expect(text).toMatch(/^(Response dropped|Request timed out|Fault .+)$/);
   expect(await commands(page)).toEqual(afterRun);
 });
 
@@ -84,7 +84,7 @@ test("each Show option names the count its quick view keeps", async ({ page }) =
   await completed(page);
   const afterRun = await commands(page);
   const options = await show(page).locator("option").evaluateAll(elements => elements.map(option => ({ value: (option as HTMLOptionElement).value, text: option.textContent ?? "" })));
-  expect(options.map(option => option.value)).toEqual(["all", "key-events", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "assertions"]);
+  expect(options.map(option => option.value)).toEqual(["all", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes"]);
   for (const option of options.slice(1)) {
     const match = /^(.+) \((\d+)\)$/.exec(option.text);
     expect(match, option.text).not.toBeNull();
@@ -113,10 +113,9 @@ test("quick views and advanced filters compose through removable chips", async (
   await expect(chips).toContainText("Component exactly Payments (payments)");
   // A component matches its source or its target, so both faulted records of Payments remain.
   await expect(page.locator("#timeline-quick-count")).toContainText("shows 2 of 267 recorded observations");
-  await viewButton(page, "Raw").click();
-  const types = await page.locator("#timeline-rows button").allInnerTexts();
-  assert.deepEqual(types.map(text => /network\.[a-z.]+|fault\.[a-z.]+/.exec(text)?.[0]).sort(),
-    ["network.request.timedout", "network.response.dropped"]);
+  await viewButton(page, "Story table").click();
+  const labels = await page.locator(".story-table button[data-observation-id]").allInnerTexts();
+  assert.deepEqual([...labels].sort(), ["Request timed out", "Response dropped"]);
 
   // Switching the quick view keeps the component criterion.
   await show(page).selectOption("requests-and-responses");
@@ -145,7 +144,7 @@ test("an empty result names the active quick view and the canonical filters, and
   const afterRun = await commands(page);
 
   await show(page).selectOption("faults-and-timeouts");
-  await show(page).selectOption("key-events");
+  await show(page).selectOption("messages");
   await component(page).selectOption("orders");
   await show(page).selectOption("faults-and-timeouts");
   await page.getByRole("button", { name: "Clear all filters" }).click();
@@ -176,14 +175,12 @@ test("quick views are keyboard operable and stay reachable at 200% zoom", async 
   await show(page).focus();
   await expect(show(page)).toBeFocused();
   await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
   await expect(show(page)).toHaveValue("faults-and-timeouts");
   await expect(page.getByRole("list", { name: "Active filters" })).toContainText("Quick view Faults & timeouts");
   await expect(page.locator("#timeline-feedback")).toContainText("Quick view Faults & timeouts applied");
   await page.keyboard.press("Home");
   await expect(show(page)).toHaveValue("all");
   await expect(page.getByRole("list", { name: "Active filters" })).toHaveCount(0);
-  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await expect(show(page)).toHaveValue("faults-and-timeouts");
   expect(await commands(page)).toEqual(afterRun);
@@ -197,9 +194,9 @@ test("quick views are keyboard operable and stay reachable at 200% zoom", async 
   await show(page).selectOption("all");
   await expect(show(page)).toHaveValue("all");
   await show(page).selectOption("faults-and-timeouts");
-  await viewButton(page, "Raw").click();
-  await expect(page.locator("#timeline-rows")).toContainText("network.response.dropped");
-  await expect(page.locator("#timeline-rows")).toContainText("network.request.timedout");
+  await viewButton(page, "Story table").click();
+  await expect(page.locator("#timeline-rows")).toContainText("Response dropped");
+  await expect(page.locator("#timeline-rows")).toContainText("Request timed out");
   await expect(page.locator(".timeline-empty")).toHaveCount(0);
   expect(await commands(page)).toEqual(afterRun);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

@@ -18,11 +18,8 @@ import {
 } from "../src/records.ts";
 import type { MovementEdge } from "../src/records.ts";
 import {
-  boundaryCopy,
   changeEvidence,
   emphasisFor,
-  learningTimeline,
-  movementMessage,
   movementPulseClass,
   payloadCopy,
   recordLabel,
@@ -31,7 +28,6 @@ import {
   terminalCopy,
   terminalMark,
   traceFilterMessage,
-  visibleRowRange,
 } from "../src/timeline.ts";
 import { filterObservations, parseTimelineFilter } from "./filter-oracle.ts";
 import { emptyTimelineDraft, narrowToTrace, parseTimelineQuery, queryTimeline, readerFilter, revealTimelineObservation, timelineSuggestions, visibleChoices } from "../src/timeline-query.ts";
@@ -63,19 +59,10 @@ function observation(input: {
 
 const runs = new Map<string, Promise<{ projection: RuntimeProjectionSet; query: (filter: ObservationFilter) => readonly Observation[] }>>();
 
-test("learning timeline collapses only contiguous unchanged bookkeeping and preserves raw members", async () => {
+test("the response-lost checkout records each teaching fact once and the retried delivery attempt", async () => {
   for (const [scenario, choice] of [[normalCheckout, scenarios[0]!], [responseLostCheckout, scenarios[1]!]] as const) {
     const { projection } = await completed(scenario, choice);
     const observations = projection.history.observations;
-    const items = learningTimeline(observations);
-    const grouped = items.filter(item => item.kind === "group");
-    assert.deepEqual(items.flatMap(item => item.kind === "group" ? item.observations : [item.observation]), orderObservations(observations));
-    assert.ok(items.length < observations.length);
-    for (const item of grouped) {
-      assert.ok(item.observations.length > 1);
-      assert.ok(item.observations.every((member, index) => index === 0 || member.sequence === item.observations[index - 1]!.sequence + 1));
-    }
-    assert.ok(grouped.some(item => item.summary === "Initial engine queue setup"));
     if (choice.id === "response-lost") {
       for (const type of ["external.effect.committed", "network.response.dropped", "network.request.timedout"]) {
         assert.equal(observations.filter(item => item.type === type).length, 1);
@@ -84,21 +71,6 @@ test("learning timeline collapses only contiguous unchanged bookkeeping and pres
       assert.ok(attempts.some(item => (item.data as Record<string, unknown> | undefined)?.attempt === 2));
     }
   }
-});
-
-test("same-time operations, duplicate delivery, retries, and changed assertion results remain separate", () => {
-  const rows = [
-    observation({ id: "write", time: 4, sequence: 1, type: "database.write.committed", source: "orders" }),
-    observation({ id: "request", time: 4, sequence: 2, type: "network.request.sent", source: "customer-app", target: "orders" }),
-    observation({ id: "delivery-1", time: 4, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } }),
-    observation({ id: "delivery-2", time: 4, sequence: 4, type: "message.delivered", source: "payments", data: { attempt: 2 } }),
-    observation({ id: "assertion-fail", time: 4, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: false, evidence: { count: 0 } } }),
-    observation({ id: "assertion-pass", time: 4, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "a", verdict: true, evidence: { count: 1 } } }),
-  ];
-  const items = learningTimeline(rows);
-  assert.deepEqual(items.flatMap(item => item.kind === "group" ? item.observations.map(member => member.id) : [item.observation.id]), rows.map(item => item.id));
-  // Two identical assertion records with different verdicts never collapse into one group.
-  assert.ok(items.every(item => item.kind !== "group"));
 });
 
 function completed(scenario: typeof normalCheckout, choice: (typeof scenarios)[number]) {
@@ -133,24 +105,9 @@ test("timeline keeps sequence order when virtual times are equal", () => {
   assert.equal(JSON.stringify(rows), before);
 });
 
-test("learning timeline groups only adjacent bookkeeping and preserves attempts and changed outcomes", () => {
-  const rows = [
-    observation({ id: "schedule-1", time: 0, sequence: 1, type: "scheduler.event.scheduled", source: "simulation" }),
-    observation({ id: "schedule-2", time: 0, sequence: 2, type: "scheduler.event.scheduled", source: "simulation" }),
-    observation({ id: "delivery-1", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } }),
-    observation({ id: "delivery-2", time: 1, sequence: 4, type: "message.delivered", source: "payments", data: { attempt: 2 } }),
-    observation({ id: "assertion-1", time: 2, sequence: 5, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: false } }),
-    observation({ id: "assertion-2", time: 2, sequence: 6, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: false } }),
-    observation({ id: "assertion-change", time: 3, sequence: 7, type: "scenario.assertion.evaluated", source: "simulation", data: { passed: true } }),
-    observation({ id: "unrelated", time: 3, sequence: 8, type: "message.published", source: "orders" }),
-  ];
-  const projection = learningTimeline(rows);
-  assert.deepEqual(projection.map(item => item.kind === "group" ? item.observations.map(member => member.id) : item.observation.id), [
-    ["schedule-1", "schedule-2"], "delivery-1", "delivery-2", ["assertion-1", "assertion-2"], "assertion-change", "unrelated",
-  ]);
-  assert.equal(recordLabel(rows[2]!), "Message delivered (attempt 1)");
-  assert.deepEqual(projection.flatMap(item => item.kind === "group" ? item.observations : [item.observation]).map(item => item.id),
-    orderObservations(rows).map(item => item.id));
+test("a delivery's label names its stored attempt", () => {
+  const delivery = observation({ id: "delivery-1", time: 1, sequence: 3, type: "message.delivered", source: "payments", data: { attempt: 1 } });
+  assert.equal(recordLabel(delivery), "Message delivered (attempt 1)");
 });
 
 test("filters match headless history queries and reject invalid virtual-time bounds", async () => {
@@ -318,9 +275,6 @@ test("playback, filters, and reset stay on the UI copy of history", () => {
   assert.deepEqual(rows, copy);
   assert.equal(continuesHistory(rows, [...rows, observation({ id: "b", time: 1, sequence: 1, type: "clock.advanced", source: "simulation" })]), true);
   assert.equal(continuesHistory([...rows, observation({ id: "b", time: 1, sequence: 1, type: "clock.advanced", source: "simulation" })], rows), false);
-  const window = visibleRowRange(100_000, 10_000, 320, 44);
-  assert.ok(window.end - window.start < 30);
-  assert.equal(window.start >= 0 && window.end <= 100_000, true);
   const incomplete = terminalMark("FAILED", { code: "SIMULATION_FAILED", message: "failed", context: { code: "HISTORY_LIMIT_EXCEEDED", historyComplete: false, time: 4, lastObservationId: "observation-9" } });
   assert.ok(incomplete);
   assert.match(terminalCopy(incomplete), /HISTORY_LIMIT_EXCEEDED/);
@@ -342,10 +296,6 @@ test("previous and next follow whether the visible selection can change", () => 
   assert.equal(selectionStep(0, 3, -1), null);
   assert.equal(selectionStep(2, 3, 1), null);
   assert.equal(selectionStep(1, 3, 1), 2);
-  assert.match(boundaryCopy(0, 1), /Previous and Next cannot move/);
-  assert.match(boundaryCopy(2, 3), /Next cannot move/);
-  assert.match(boundaryCopy(0, 3), /Previous cannot move/);
-  assert.match(boundaryCopy(-1, 0), /No visible observations/);
   const rows = [observation({ id: "a", time: 0, sequence: 0, type: "simulation.created", source: "simulation" })];
   assert.equal(JSON.stringify(rows), JSON.stringify(structuredClone(rows)));
 });
@@ -410,8 +360,6 @@ test("navigation clears only the filters that hide the destination", () => {
   const opened = narrowToTrace(emptyTimelineDraft, "trace-9");
   assert.equal(opened.cleared.length, 0);
   assert.match(traceFilterMessage("trace-9", opened), /The timeline now shows trace trace-9\.$/);
-  assert.match(movementMessage(cause, 0, 1), /Selected Observation #174:/);
-  assert.match(movementMessage(cause, 0, 1), /cannot move/);
   assert.deepEqual(cause, before);
 });
 

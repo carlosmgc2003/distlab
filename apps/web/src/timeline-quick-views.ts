@@ -1,15 +1,14 @@
 import type { Observation } from "@distlab/contracts";
-import { orderObservations, recordKind, recordKinds } from "./records.ts";
+import { orderObservations, recordKind } from "./records.ts";
 import type { RecordKind } from "./records.ts";
 import type { ComponentTitle } from "./timeline-query.ts";
 
 export type QuickViewId =
-  | "key-events"
   | "faults-and-timeouts"
   | "requests-and-responses"
   | "messages"
   | "state-changes"
-  | "assertions";
+  | "failures";
 
 export interface QuickView {
   readonly id: QuickViewId;
@@ -17,7 +16,6 @@ export interface QuickView {
   /** Plain sentence naming the stored records this view keeps. It never claims to change a run. */
   readonly keeps: string;
   readonly kinds: readonly RecordKind[];
-  readonly types: readonly string[];
 }
 
 /**
@@ -25,32 +23,29 @@ export interface QuickView {
  * which recorded observations the timeline displays; it is not an
  * ExecutionHistoryReader filter and never changes the run, virtual time, or history.
  * Categories are the teaching categories of the Story view, so a label means the
- * same thing in both places.
+ * same thing in both places. Recorded history shows only teaching milestones, so
+ * every quick view is a set of milestone categories.
  */
 export const QUICK_VIEWS: readonly QuickView[] = [
   {
-    id: "key-events", label: "Key events", keeps: "the teaching milestones of the Story view",
-    kinds: recordKinds, types: [],
-  },
-  {
     id: "faults-and-timeouts", label: "Faults & timeouts", keeps: "fault rules, fault effects, dropped messages, and timeouts",
-    kinds: ["fault", "drop", "timeout"], types: [],
+    kinds: ["fault", "drop", "timeout"],
   },
   {
     id: "requests-and-responses", label: "Requests & responses", keeps: "recorded network requests and responses, including dropped and timed out ones",
-    kinds: ["request", "response", "drop", "timeout"], types: [],
+    kinds: ["request", "response", "drop", "timeout"],
   },
   {
     id: "messages", label: "Messages", keeps: "published, delivered, acknowledged, and retried messages",
-    kinds: ["message", "retry"], types: [],
+    kinds: ["message", "retry"],
   },
   {
-    id: "state-changes", label: "State changes", keeps: "committed and rolled back transactions and committed external effects",
-    kinds: ["commit", "rollback", "external"], types: [],
+    id: "state-changes", label: "State changes", keeps: "committed and rolled back transactions, committed external effects, and key-value changes and expiries",
+    kinds: ["commit", "rollback", "external", "kv"],
   },
   {
-    id: "assertions", label: "Assertions", keeps: "scenario assertion evaluations and their stored verdicts",
-    kinds: [], types: ["scenario.assertion.evaluated"],
+    id: "failures", label: "Rejections & failures", keeps: "rejected transactions and key-value conditions, failed handlers, and rejected and dead-lettered messages",
+    kinds: ["failure"],
   },
 ];
 
@@ -70,7 +65,6 @@ export function quickViewLabel(id: QuickViewId): string {
 export function matchesQuickView(id: QuickViewId | null, observation: Observation): boolean {
   if (id === null) return true;
   const view = quickViewById(id);
-  if (view.types.includes(observation.type)) return true;
   const kind = recordKind(observation);
   return kind !== undefined && view.kinds.includes(kind);
 }

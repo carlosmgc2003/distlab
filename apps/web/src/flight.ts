@@ -465,7 +465,7 @@ export function flightTransport(cursor: number, count: number, phase: PlaybackPh
 /**
  * The movement a Replay step selects, or null when that direction is unavailable. With nothing
  * selected, Next selects the first movement and Previous is unavailable (#191): a replay starts at
- * the start of the story. Row navigation in Recorded history keeps `selectionStep`, which wraps.
+ * the start of the story. `selectionStep` alone wraps from no selection to the last movement.
  */
 export function transportStep(index: number, count: number, delta: -1 | 1): number | null {
   if (index < 0 && delta < 0) return null;

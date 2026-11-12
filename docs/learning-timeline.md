@@ -1,9 +1,15 @@
 # Learning Timeline
 
-The timeline has three read-only views over the same canonical execution
-history. Story is the initial teaching view; Learning and Raw keep every
-record. Explanations about how to read a view are shown on demand from a hint
-pill rather than as permanent paragraphs.
+Recorded history is one read-only teaching view, Story, over the canonical
+execution history. Story has two presentations of the same milestones: the
+Story diagram, shown first, and the Story table. Explanations about how to read
+the view are shown on demand from a hint pill rather than as permanent
+paragraphs.
+
+Recorded history does not list every record. Records that are not teaching
+milestones, such as scheduler bookkeeping, stay in the history the worker
+published and are read in Observation detail when an evidence link, a causation
+link, or a trace leads to them.
 
 ## Story view
 
@@ -22,13 +28,24 @@ explain the lesson:
 - `database.transaction.committed`, `database.transaction.rolledback`
 - `external.effect.committed`
 - `fault.rule.matched`, `fault.effect.selected`, and any other `fault.*` record
+- `database.transaction.rejected`, `kv.condition.failed`, `service.handler.failed`
+- `message.nacked`, `message.dead`
+- `kv.changed`, `kv.expired`
+- `runtime.log`, the business logs a lesson's models write, such as a saga's
+  compensation or a lease check
+- `scenario.assertion.evaluated`, only the first result of each check and each
+  change of that result
 
-Everything else — scheduler and clock bookkeeping, assertion evaluations,
-transaction starts, staged writes, row reads, handler and lifecycle records,
-component actions, and simulation lifecycle records — stays in Learning and
-Raw. Story never adds, drops, reorders, or merges observations: a milestone
-holds the same `Observation` object as Raw, and its column position is its
-position in canonical `Observation.sequence` order.
+A check is evaluated at every boundary, so an evaluation that repeats the
+previous stored verdict of the same check is not a milestone. A check
+evaluation without a stored check id or verdict is always a milestone.
+
+Everything else — scheduler and clock bookkeeping, transaction starts, staged
+writes, row reads, key-value reads, handler starts and completions, lifecycle
+records, component actions, and simulation lifecycle records — is not listed.
+Story never adds, reorders, or merges observations: a milestone holds the same
+stored `Observation` object the worker published, and its column position is
+its position in canonical `Observation.sequence` order.
 
 The view has two representations of the same milestones:
 
@@ -36,7 +53,13 @@ The view has two representations of the same milestones:
   milestone, and the lane is the stored `source` of that observation, in
   first-recorded-milestone order;
 - a table. Each row is one milestone and its row header is a button that selects
-  that exact observation.
+  that exact observation. When the selected observation is not a milestone,
+  for example a check evaluation opened from an evidence link, the table also
+  lists it at its sequence position as an "Other record" row named by its
+  stored type. The row is there only while that observation is selected.
+
+Revealing an observation, from an evidence link, a causation link, or a trace,
+shows the Story table so the revealed observation always has a row to focus.
 
 Selecting a milestone in the strip and selecting its row select the same
 observation, so both produce the same Observation detail and the same
@@ -50,14 +73,16 @@ architecture emphasis and movement text.
   where a milestone is recorded at a different virtual time than the previous
   one, and the marker is a rule, not a length. No duration, latency, or elapsed
   time is implied between milestones, and none is stored.
-- Labels describe the stored type and stored fields only, such as the stored
-  `attempt` on a delivery. They do not add causation, ordering, or outcome.
+- Labels describe the stored type and stored fields only: the stored `attempt`
+  on a delivery, the stored `message` of a business log, the stored `key` of a
+  key-value record, the stored `code` or `reason` of a rejection, and the
+  stored check id and verdict of a check. A redacted or omitted payload adds
+  nothing to the label. Labels do not add causation, ordering, or outcome.
 - Story selection, filtering, and playback are UI state. They send no worker
   command, do not advance virtual time, and do not modify projections or
-  history. Playback over the visible canonical list keeps its existing
-  behaviour in Raw.
+  history.
 - When the current filters select records that are not milestones, Story says
-  so and points to Learning and Raw instead of inventing a milestone.
+  so and asks to remove a filter instead of inventing a milestone.
 
 ### Accessibility
 
@@ -78,15 +103,17 @@ virtual time, or change randomness, component state, or history. Each label
 names the stored records it keeps, and each view uses the same teaching
 categories as the Story milestones:
 
-- **Key events** — every Story milestone category.
 - **Faults & timeouts** — `fault.*` records, dropped messages, and timeouts.
 - **Requests & responses** — recorded network requests and responses, including
   dropped and timed out ones.
 - **Messages** — published, delivered, acknowledged, and retried messages.
-- **State changes** — committed and rolled back transactions and committed
-  external effects.
-- **Assertions** — `scenario.assertion.evaluated` records and their stored
-  verdicts.
+- **State changes** — committed and rolled back transactions, committed
+  external effects, and key-value changes and expiries.
+- **Rejections & failures** — rejected transactions and key-value conditions,
+  failed handlers, and rejected and dead-lettered messages.
+
+Every quick view is a set of milestone categories, because Recorded history
+lists milestones only.
 
 Each filter dimension has one control (#145). **Show** chooses the quick view
 and lists each one with its count. **Component** chooses one recorded component
@@ -143,34 +170,14 @@ active, and the rows keep a minimum height. Observation detail is docked as the
 panel's right column in every view (#146), so it never covers the rows, the
 toolbar, or the tabs; with nothing selected it reads "Select an observation to
 see its detail." While a filter is active, one count beside the filter row says
-how many rows are shown ("22 of 267 shown").
+how many milestones are shown out of the run's milestones ("4 of 22 milestones
+shown").
 
 The selection is stated once on screen, in the detail header: "Observation
 #‹sequence› · ‹label› · t=‹time›", then source → target. Recorded history has
-one polite live region, read and not shown, that announces each selection with
-its position among the visible rows ("Selected Observation #114: … Visible
-observation 3 of 22."), filter changes, and quick views.
+one polite live region, read and not shown, that announces each selection
+("Selected Observation #114: …"), filter changes, and quick views.
 
-## Learning view
-
-Learning view gives stored observation types short labels and collapses only
-adjacent implementation bookkeeping:
-
-- contiguous startup `scheduler.*` and `clock.*` records before the first simulation event form an engine queue-setup group; later scheduling records stay visible;
-- adjacent `scenario.assertion.evaluated` records form a group only when their stored data is unchanged.
-
-A group shows its member count and inclusive original sequence and virtual-time
-bounds. Opening it exposes each original ID, sequence, virtual time, and type in
-canonical order. Selecting a member through evidence also opens its group. No
-business delivery, retry, external side effect, commit, rollback, fault, or
-changed assertion is collapsed. In particular, delivery attempts stay as
-distinct observations.
-
-## Raw view
-
-Raw view shows every filtered canonical observation in sequence order. All
-three views use the same filters and selection; none of them modifies history,
-exports, virtual time, scheduling, randomness, or causal data.
-
-The labels, groups, and milestones state only what is stored. They do not infer
-elapsed time or causal links.
+None of the presentations modifies history, exports, virtual time, scheduling,
+randomness, or causal data. The labels and milestones state only what is
+stored. They do not infer elapsed time or causal links.
