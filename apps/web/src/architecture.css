@@ -535,6 +535,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
 .language-switcher select { font: inherit; font-size: 0.8125rem; padding: 2px 4px; }
+.workspace-empty > .language-switcher { float: right; margin: 0 0 8px 12px; }
+.lesson-chooser-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 /* Natural width, not a fixed cap: with wider system fonts (DejaVu Sans on Linux CI) a fixed cap
    would wrap the lesson trigger and Open scenario file… at the desktop baselines. */
 .scenario-picker { flex: 0 1 auto; }

@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { LanguageSwitcher } from "./LanguageSwitcher.tsx";
 import { lessonPairs } from "./lesson-pairs.ts";
 import { groupConcepts, lessonMatches, lessonTopics, topicSections, type TopicFilter } from "./lesson-topics.ts";
 import type { PackagedScenario } from "./scenarios.ts";
@@ -54,7 +55,7 @@ export function LessonChooser({ open, lessons, assessments = [], current, busy, 
 
   return <dialog ref={dialog} className="lesson-chooser" role="dialog" aria-modal="true" aria-labelledby="lesson-chooser-title"
     onClose={() => { if (expected.current) onClose(); }}>
-    <h2 id="lesson-chooser-title">Choose a lesson</h2>
+    <div className="lesson-chooser-heading"><h2 id="lesson-chooser-title">Choose a lesson</h2><LanguageSwitcher /></div>
     {discardsDraft ? <p className="lesson-chooser-discard">Choosing a lesson discards your unapplied design choices and faults.</p> : null}
     <div className="lesson-chooser-filters">
       <div className="lesson-topic-filter" role="group" aria-label="Topic">

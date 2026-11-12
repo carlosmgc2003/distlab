@@ -504,7 +504,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // execution, and the run summary. Errors get their own row under it, only while one exists.
   return <main className="app-shell">
     <header className="command-toolbar top-bar">
-      <div className="brand"><h1>DistLab</h1><LanguageSwitcher /></div>
+      <div className="brand"><h1>DistLab</h1></div>
       {/* A scenario file may also be dropped here. Open and drop are available only when Load is. */}
       <div className="scenario-picker"
         onDragOver={event => { if (!busy && event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
@@ -569,6 +569,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />
     </div> : <div className="investigation-workspace">
       <section className="workspace-empty" tabIndex={-1}>
+        {/* The language is chosen here and in the Lesson chooser, not in the one-row top bar (#144, ADR-007). */}
+        <LanguageSwitcher />
         <p className="eyebrow">A deterministic laboratory for distributed systems</p>
         <h2>What can one component know about the others?</h2>
         <p>Distributed systems fail partially: a response is lost, a copy falls behind, two writers race, a slow dependency drags its callers down. Each lesson runs a small system of services on a virtual clock with a fixed seed, so every run replays exactly. Most lessons pair a flawed design with its correction under the same faults.</p>
