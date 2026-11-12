@@ -603,20 +603,25 @@ delivered. A design that fills the slot without a database is rejected with
 `STORAGE` at `/architecture/slots/0/model`. A design without the subscription is
 rejected with `SUBSCRIPTION` at the same slot path, because the missing
 subscription is reported at the consumer the slot replaced (#131). Each design has its own `runId`, and Reset replays it.
-The browser's Design editor (#112) will offer these edits; until then the
-worker accepts them in a `load` overlay, and catalog tests run the fixture
-designs above.
+In the browser, the Experiment drawer's **Architecture** section (#112) offers
+these edits: `Model for notifications` (`Empty slot (packaged)` or
+`commerce.notifications 1.0.0`, with `notifications: idempotent` once the model is
+chosen), `notifications owns a database`, and `notifications subscribes to
+PaymentApproved`, with a `‹n› of 3 design edits` line. **Apply and restart**
+sends them in the same `load` overlay as design choices and faults. A rejected
+design shows each diagnostic on the control its path points to, so both
+rejections above appear on `Model for notifications`, and the draft is kept.
+After Apply, the Run identity line adds `3 design edits · notifications:
+commerce.notifications 1.0.0`. Catalog tests run the fixture designs above, and
+`apps/web/tests/design-edits.test.ts` builds them through the browser's draft
+functions.
 
-Until the Design editor exists, the browser says so (#164). The Lesson chooser
-card and ① Goal of every lesson whose overlay policy allows architecture edits
-add: "The design step is not available in the browser yet. You can run the
-lesson with the empty slot and see what is missing." The `notifications` node
+The packaged lesson still runs with the empty slot (#164). The `notifications` node
 carries an **Empty slot** badge and a dashed outline, its accessible name ends
 in "empty slot", and the Component inspector explains that no model fills it.
 A component is an empty slot when its declared model is a placeholder
-(`placeholder: true` in its data-only descriptor). Setting
-`DESIGN_EDITOR_AVAILABLE` in `apps/web/src/design-step.ts` removes the notice;
-the empty-slot marks stay, because they describe the architecture.
+(`placeholder: true` in its data-only descriptor). The marks describe the
+architecture, so they stay until a design that fills the slot is applied.
 
 ## 10. Leases and fencing tokens
 
