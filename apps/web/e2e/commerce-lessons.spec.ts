@@ -250,7 +250,7 @@ test("the lease pair draws the key-value node as a shared store and shows the le
     await expect(status).toHaveText("READY");
     // Both workers point at one store node: no service box and no separate store beside it.
     const kv = page.locator('.react-flow__node[data-id="kv"]');
-    await expect(kv).toHaveAccessibleName("kv, Shared key-value store");
+    await expect(kv).toHaveAccessibleName("Key-Value Store, Shared key-value store");
     await expect(kv).toHaveClass(/symbol-kvstore/);
     await expect(kv).toContainText("Shared key-value store");
     await expect(page.locator('.react-flow__node[data-id="resource:kv:kv"]')).toHaveCount(0);

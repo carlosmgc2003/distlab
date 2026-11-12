@@ -90,7 +90,7 @@ test("stepping checkout shows ordered timeline rows, trace detail, and movement 
   await expect(page.locator("#timeline-rows button").first()).toContainText("message.delivered");
   await page.locator("#timeline-rows button").first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  await expect(page.locator("#movement-cue")).toContainText("Message delivered from OrderCreated to payments at virtual time");
+  await expect(page.locator("#movement-cue")).toContainText("Message delivered from OrderCreated to Payments at virtual time");
   await expect(page.locator(".react-flow__edge.movement-message")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.movement-request")).toHaveCount(0);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();

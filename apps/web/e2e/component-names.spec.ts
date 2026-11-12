@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./support/test.ts";
@@ -72,7 +72,7 @@ test("#103 saga-uncompensated: narration, the Component filter, and Service stat
   await expect(status(page)).toHaveText("READY");
   await graphLaidOut(page);
   const node = (id: string) => page.locator(`.react-flow__node[data-id="${id}"]`);
-  for (const [id, name] of [["client", "Customer App"], ["orders", "Orders"], ["inventory", "Inventory"], ["payments", "Payments"], ["carrier", "Shipping Carrier"]]) {
+  for (const [id, name] of [["client", "Customer App"], ["orders", "Orders"], ["inventory", "Inventory"], ["payments", "Payments"], ["carrier", "Shipping Carrier"]] as const) {
     await expect(node(id).locator(".node-content strong")).toHaveText(name);
   }
   await expect(page.locator('.react-flow__node[data-id="resource:db:orders"] .resource-title')).toHaveText("Database owned by Orders");
@@ -83,7 +83,8 @@ test("#103 saga-uncompensated: narration, the Component filter, and Service stat
   await expect(status(page)).toHaveText("COMPLETED");
   await page.getByRole("button", { name: "Next movement", exact: true }).click();
   await expect(narration(page)).toContainText("Request sent from Customer App to Orders at virtual time 0. Customer App is waiting on Orders");
-  await expect(narration(page)).not.toContainText("client");
+  // The trace id is a stored fact and keeps its ID; no sentence names `client` as a component.
+  await expect(narration(page)).not.toContainText(/(^|[\s(])client([\s.,)]|$)/);
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-saga-narration.png") });
 
   // The Component inspector of Orders is headed by the name and keeps the ID as a fact.
@@ -115,7 +116,8 @@ test("#103 a session imported from a commerce lesson's starter file shows its co
   await loadLesson(page, "saga-uncompensated");
   await expect(status(page)).toHaveText("READY");
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Save as scenario file", exact: true }).click()]);
-  await page.getByLabel("Scenario file", { exact: true }).setInputFiles({ name: download.suggestedFilename(), mimeType: "application/json", path: (await download.path())! });
+  const text = readFileSync((await download.path())!, "utf8");
+  await page.getByLabel("Scenario file", { exact: true }).setInputFiles({ name: download.suggestedFilename(), mimeType: "application/json", buffer: Buffer.from(text, "utf8") });
   await expect(page.getByLabel("Imported scenario", { exact: true })).toBeVisible();
   await expect(status(page)).toHaveText("READY");
   await graphLaidOut(page);
