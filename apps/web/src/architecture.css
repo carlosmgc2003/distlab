@@ -575,6 +575,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .top-bar .run-status { max-width: 11rem; margin: 0; white-space: normal; line-height: 1.15; }
 .top-bar .run-metrics > div { flex-direction: column; align-items: flex-start; gap: 0; }
 .top-bar .run-metrics dt { font-size: .7rem; line-height: 1.1; color: var(--text-secondary); font-weight: 600; }
+/* ADR-007: Spanish metric labels are longer; they wrap onto two short lines beside the 44px buttons, so the bar stays one row. */
+:root:lang(es) .top-bar .run-metrics dt { white-space: normal; max-width: 4.5rem; }
 .top-bar .run-metrics dd { margin: 0; line-height: 1.2; font-weight: 650; }
 .top-bar-alerts { flex: none; display: flex; flex-direction: column; gap: 6px; }
 .top-bar-alerts p { margin: 0; }
