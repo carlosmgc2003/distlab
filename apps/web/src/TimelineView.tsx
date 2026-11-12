@@ -240,7 +240,7 @@ function StoryView({ presentation, milestones, rows, lanes, legend, summary, det
         </li>)}
       </ul>
       {presentation === "diagram" ? <div className="story-strip" role="region" aria-label="Story diagram" tabIndex={0}>
-        <div className="story-grid" style={{ gridTemplateColumns: gridColumns, gridTemplateRows: `auto repeat(${lanes.length}, minmax(5rem, 1fr))` }}>
+        <div className="story-grid" style={{ gridTemplateColumns: gridColumns, gridTemplateRows: `auto repeat(${lanes.length}, minmax(3.5rem, 1fr))` }}>
           <div className="story-corner">Component</div>
           {milestones.map(milestone => <div key={`time-${milestone.observation.id}`} className="story-time"
             data-boundary={milestone.timeBoundary ? "true" : "false"}>
