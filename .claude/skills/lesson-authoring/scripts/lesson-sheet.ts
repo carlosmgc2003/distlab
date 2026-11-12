@@ -13,11 +13,25 @@
  *   node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts retry-unsafe
  *   node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts retry-unsafe --set timeout=40
  *   node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts notifications-dlq --matrix
+ *   node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts cqrs-delayed \
+ *     --fault '{"point":"message.delivery","source":"orders","target":"reporting","name":"OrderUpdated","effect":{"kind":"drop"}}'
+ *   node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts cqrs-delayed \
+ *     --fault '{"kind":"crash","target":"reporting","at":20,"restart":5}'
  *
  * Options:
  *   --list            every packaged lesson with its topic and Compare partner
  *   --set key=value   apply a design choice (repeatable); the sheet then describes that run
- *   --matrix          run every combination of the design choices' domain edges and print the verdicts
+ *   --fault '<json>'  add a student fault (repeatable), as the Experiment drawer's Faults section would. A fault rule
+ *                     has `point` and `effect` (and usually `source`, `target`, `name`); `id`, `from`, `probability`,
+ *                     and `maxApplications` default to student-N, 0, 1, and 1. Effects: {"kind":"drop"},
+ *                     {"kind":"delay","duration":30}, {"kind":"disconnect"}, {"kind":"fail"},
+ *                     {"kind":"duplicate","additionalCopies":1,"spacing":3}. A scheduled fault has `kind`
+ *                     ("crash" or "external-availability" with `state`), `target`, `at`, and for a crash an
+ *                     optional `restart` after that many virtual milliseconds. The lesson's policy decides what
+ *                     is allowed, exactly as in the browser.
+ *   --matrix          run every combination of the design choices' domain edges and defaults, and print the verdicts
+ *   --sweep key       run every value of one integer design choice (other choices as given by --set) and print
+ *                     the ranges over which the outcome stays the same: where the story changes
  *   --lang es         render Story labels and the matrix in another interface language (default en)
  *   --story N         print at most N Story milestones (default: all)
  */
@@ -35,8 +49,9 @@ import { storyMilestones } from "../../../../apps/web/src/story-timeline.ts";
 
 const args = process.argv.slice(2);
 const option = (name: string) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : undefined; };
-const lessonId = args.find((arg, index) => !arg.startsWith("--") && !["--set", "--lang", "--story"].includes(args[index - 1] ?? ""));
+const lessonId = args.find((arg, index) => !arg.startsWith("--") && !["--set", "--fault", "--sweep", "--lang", "--story"].includes(args[index - 1] ?? ""));
 const sets = args.flatMap((arg, index) => arg === "--set" && args[index + 1] ? [args[index + 1]!] : []);
+const faultTexts = args.flatMap((arg, index) => arg === "--fault" && args[index + 1] ? [args[index + 1]!] : []);
 const lang = option("--lang") ?? "en";
 const storyLimit = option("--story") === undefined ? Infinity : Number(option("--story"));
 
@@ -48,8 +63,11 @@ const say = (line = "") => out.push(line);
 const json = (value: unknown) => JSON.stringify(value);
 const cell = (text: string) => text.replaceAll("|", "\\|");
 
+interface StudentFaults { readonly faults: readonly Record<string, unknown>[]; readonly scheduledFaults: readonly Record<string, unknown>[] }
+const NO_FAULTS: StudentFaults = { faults: [], scheduledFaults: [] };
+
 const usage = () => {
-  console.error("Usage: node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts <lesson> [--set key=value]... [--matrix] [--lang es] [--story N]\n       ... lesson-sheet.ts --list");
+  console.error("Usage: node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts <lesson> [--set key=value]... [--fault '<json>']... [--matrix] [--sweep key] [--lang es] [--story N]\n       ... lesson-sheet.ts --list");
   process.exitCode = 1;
 };
 
@@ -72,13 +90,30 @@ function engineOf(lesson: PackagedScenario) {
     : { engine: new DeterministicScenarioEngine({ catalog: checkoutCatalog, assessment: checkoutAssessment }), catalog: checkoutCatalog };
 }
 
-/** Runs the lesson with design-choice overrides, as one `load` with that overlay would. */
-async function run(lesson: PackagedScenario, parameters: readonly { key: string; value: CanonicalValue }[]) {
+/** Reads `--fault` values into the overlay's two lists, filling the defaults the Faults section fills. */
+function parseFaults(texts: readonly string[]): StudentFaults {
+  const faults: Record<string, unknown>[] = [], scheduledFaults: Record<string, unknown>[] = [];
+  texts.forEach((text, index) => {
+    let input: Record<string, unknown>;
+    try { input = JSON.parse(text) as Record<string, unknown>; } catch { throw new Error(`--fault ${text}: not JSON.`); }
+    const id = typeof input.id === "string" ? input.id : `student-${index + 1}`;
+    if (typeof input.point === "string") faults.push({ from: 0, probability: 1, maxApplications: 1, ...input, id });
+    else if (typeof input.kind === "string" && typeof input.target === "string" && typeof input.at === "number") {
+      const { at, restart, ...fault } = input;
+      scheduledFaults.push({ id, at, kind: "fault", fault: { ...fault, id: `${id}-fault` }, ...(typeof restart === "number" ? { restart: { after: restart } } : {}) });
+    } else throw new Error(`--fault ${text}: a fault rule needs "point" and "effect"; a scheduled fault needs "kind", "target", and "at".`);
+  });
+  return { faults, scheduledFaults };
+}
+
+/** Runs the lesson with design-choice overrides and student faults, as one `load` with that overlay would. */
+async function run(lesson: PackagedScenario, parameters: readonly { key: string; value: CanonicalValue }[], student: StudentFaults = NO_FAULTS) {
   const { engine, catalog } = engineOf(lesson);
   const packaged = lesson.scenario as CanonicalValue;
   let document = packaged;
-  if (parameters.length) {
-    const composed = composeOverlay(packaged, lesson.policy, { version: 1, parameters: [...parameters] } as unknown as CanonicalValue, value => engine.validate(value), catalog);
+  if (parameters.length || student.faults.length || student.scheduledFaults.length) {
+    const overlay = { version: 1, parameters: [...parameters], faults: student.faults, scheduledFaults: student.scheduledFaults };
+    const composed = composeOverlay(packaged, lesson.policy, overlay as unknown as CanonicalValue, value => engine.validate(value), catalog);
     if (!composed.ok) throw new Error(`The overlay was rejected (${composed.code}): ${json(composed.diagnostics)}`);
     document = composed.document;
   }
@@ -129,7 +164,9 @@ function verdict(kind: "invariant" | "expectation" | undefined, status: string):
 async function sheet(lesson: PackagedScenario) {
   const findings: string[] = [];
   const overrides = sets.map(text => parseSet(lesson.policy, text));
-  const { document, result } = await run(lesson, overrides);
+  const student = parseFaults(faultTexts);
+  const changed = overrides.length + student.faults.length + student.scheduledFaults.length > 0;
+  const { document, result } = await run(lesson, overrides, student);
   const commerce = lesson.family === "commerce";
   const checks = lesson.family === "commerce" ? lesson.checks : [];
   const classification = lessonClassification(lesson.id);
@@ -138,6 +175,8 @@ async function sheet(lesson: PackagedScenario) {
   say(`# Lesson sheet: ${lesson.id}`);
   say();
   say(`Document \`${document.name}\`, seed \`${document.seed}\`, catalog \`${lesson.catalog.id}@${lesson.catalog.version}\`.${overrides.length ? ` **Design choices applied: ${overrides.map(item => `${item.key}=${item.value}`).join(", ")}.**` : ""}`);
+  for (const fault of [...student.faults, ...student.scheduledFaults]) say(`\n**Student fault applied:** \`${json(fault)}\``);
+  if (changed) say("\nThis sheet describes the changed experiment. The checks and the copy are still the packaged lesson's.");
   say();
 
   say("## What the student reads");
@@ -247,7 +286,7 @@ async function sheet(lesson: PackagedScenario) {
     const english = check ? check.label : "(checkout: no classification)";
     const spanish = check ? checkLabel(lesson.id, check.id, check.label, es) : "";
     if (check && spanish === check.label) findings.push(`Check \`${check.id}\` has no Spanish label in \`i18n/es/content.ts\`.`);
-    if (check?.kind === "expectation" && stored?.status !== "PASS" && !overrides.length) findings.push(`Scenario expectation \`${check.id}\` is ${stored?.status} in the packaged run: the lesson does not reproduce its own setup.`);
+    if (check?.kind === "expectation" && stored?.status !== "PASS" && !changed) findings.push(`Scenario expectation \`${check.id}\` is ${stored?.status} in the packaged run: the lesson does not reproduce its own setup.`);
     if (check?.kind === "invariant" && assertion.mode !== "always") deadlines.push(check.id);
     say(`| ${check?.kind ?? "—"} | \`${assertion.id}\` | ${mode} | **${verdict(check?.kind, stored?.status ?? "PENDING")}** at t=${stored?.time} | ${cell(english)} | ${cell(spanish)} |`);
   }
@@ -266,7 +305,7 @@ async function sheet(lesson: PackagedScenario) {
   const copy = [lessonDescription(lesson, en), ...checks.map(check => check.label)].join(" ");
   const named = [...new Set([...copy.matchAll(/\bt=(\d+)/g)].map(match => Number(match[1])))];
   const unrecorded = named.filter(time => !times.has(time));
-  if (unrecorded.length && !overrides.length) findings.push(`The description or a check label names ${unrecorded.map(time => `t=${time}`).join(", ")}, and the packaged run records nothing at ${unrecorded.length > 1 ? "those times" : "that time"}. Check each by hand: a check time is legitimate, a stale number is not.`);
+  if (unrecorded.length && !changed) findings.push(`The description or a check label names ${unrecorded.map(time => `t=${time}`).join(", ")}, and the packaged run records nothing at ${unrecorded.length > 1 ? "those times" : "that time"}. Check each by hand: a check time is legitimate, a stale number is not.`);
 
   const partner = scenarios.find(item => item.id === lesson.compare);
   if (partner) {
@@ -292,7 +331,7 @@ async function sheet(lesson: PackagedScenario) {
       say(`| \`${check.id}\` | ${mine} | ${theirs} |`);
     }
     say();
-    if (commerce && !contrast && !overrides.length) findings.push(`No invariant reads differently in \`${partner.id}\`: Compare shows no VIOLATED → HOLDS contrast.`);
+    if (commerce && !contrast && !changed) findings.push(`No invariant reads differently in \`${partner.id}\`: Compare shows no VIOLATED → HOLDS contrast.`);
   }
 
   if (args.includes("--matrix")) {
@@ -318,6 +357,35 @@ async function sheet(lesson: PackagedScenario) {
       }
       say();
       if (outcomes.size === 1) findings.push("Every combination of design choices gives the same invariant verdicts: no choice changes what the student finds.");
+    }
+    say();
+  }
+
+  const sweepKey = option("--sweep");
+  if (sweepKey !== undefined) {
+    say(`## Sweep of \`${sweepKey}\``);
+    say();
+    const parameter = lesson.policy.parameters.find(item => item.key === sweepKey);
+    if (!parameter || parameter.domain.type !== "integer") say(`\`${sweepKey}\` is not an integer design choice of this lesson.`);
+    else {
+      const { minimum, maximum } = parameter.domain;
+      const fixed = overrides.filter(item => item.key !== sweepKey);
+      say(`Every value from ${minimum} to ${maximum}${fixed.length ? `, with ${fixed.map(item => `${item.key}=${item.value}`).join(", ")}` : ""}. A row is a range of values with the same end status and verdicts; the end time is that of the range's first value.`);
+      say();
+      say(`| \`${sweepKey}\` | End | ${invariants.map(check => `\`${check.id}\``).join(" | ")} | Setup reproduced |`);
+      say(`| --- | --- | ${invariants.map(() => "---").join(" | ")} | --- |`);
+      const expectations = checks.filter(check => check.kind === "expectation");
+      let range: { from: number; to: number; key: string; row: string } | undefined;
+      const flush = () => { if (range) say(`| ${range.from === range.to ? range.from : `${range.from}–${range.to}`}${range.from <= Number(parameter.domain.default) && Number(parameter.domain.default) <= range.to ? " (default)" : ""} | ${range.row} |`); };
+      for (let value = minimum; value <= maximum; value++) {
+        const outcome = await run(lesson, value === parameter.domain.default ? fixed : [...fixed, { key: sweepKey, value }], student);
+        const cells = invariants.map(check => verdict("invariant", outcome.result.results.find(item => item.id === check.id)?.status ?? "PENDING"));
+        const reproduced = expectations.filter(check => outcome.result.results.find(item => item.id === check.id)?.status === "PASS").length;
+        const key = [outcome.result.status, ...cells, reproduced].join();
+        if (range && range.key === key) range.to = value;
+        else { flush(); range = { from: value, to: value, key, row: `${outcome.result.status} t=${outcome.result.time} | ${cells.join(" | ")} | ${reproduced} of ${expectations.length}` }; }
+      }
+      flush();
     }
     say();
   }

@@ -1,6 +1,6 @@
 /**
- * Lesson screenshots: what a student sees when a packaged lesson is loaded, after Run, and in
- * Recorded history, at one of the supported baselines and in one interface language.
+ * Lesson screenshots: what a student sees of a packaged lesson, from its card in the Lesson chooser
+ * to the evidence of a check, at one of the supported baselines and in one interface language.
  *
  * Read-only. It drives the production build the way the browser tests do, with selectors that do
  * not depend on the language. It serves `apps/web/dist` itself unless `--url` names a running app.
@@ -18,7 +18,16 @@
  *   --out <dir>      output directory (default: lesson-shots/ under the system temp directory)
  *   --url <base>     use an app that is already running, such as `npm run dev` on http://127.0.0.1:5173
  *
- * It writes ‹lesson›-‹lang›-1-ready.png, -2-completed.png, -3-graph.png, and -4-history.png, and prints their paths.
+ * It writes nine images named ‹lesson›-‹lang›-‹n›-‹what›.png and prints their paths:
+ *   1-chooser        the lesson's card in the Lesson chooser
+ *   2-ready          the lesson loaded: ① Goal and the graph
+ *   3-completed      after Run: the verdicts in ③ Investigate
+ *   4-graph          the canvas alone
+ *   5-service-state  the Service state dialog
+ *   6-history        Recorded history, Story diagram (its first columns)
+ *   7-story-table    Recorded history, Story table (its first rows; lesson-sheet.ts prints all of them)
+ *   8-evidence       Show evidence on the first violated check, or on the first check
+ *   9-experiment     the Experiment drawer: the lesson's design choices and the faults it allows
  * If Chromium is not installed for the project's Playwright, set PLAYWRIGHT_CHROMIUM_EXECUTABLE or
  * run `npm run browser:install`.
  */
@@ -78,21 +87,51 @@ try {
   };
   await page.goto(`${server.url}/?lang=${lang}`);
   await page.locator(".lesson-trigger").click();
-  await page.locator(`[data-lesson-id="${lessonId}"]`).click();
+  const card = page.locator(`[data-lesson-id="${lessonId}"]`);
+  await card.scrollIntoViewIfNeeded();
+  await shot("1-chooser");
+  await card.click();
   // The graph is laid out by ELK after React Flow measures it; until then the canvas is aria-busy.
   const canvas = page.locator(".graph-canvas");
   await canvas.waitFor({ state: "visible" });
   await page.waitForFunction(() => document.querySelector(".graph-canvas")?.getAttribute("aria-busy") !== "true" && document.querySelectorAll(".react-flow__node").length > 0);
   await page.waitForTimeout(400);
-  await shot("1-ready");
+  await shot("2-ready");
   await page.locator(".control-buttons button").first().click();
   await page.locator(".run-status").filter({ hasText: m.simulationControls.status.COMPLETED! }).waitFor({ timeout: 30_000 });
   await page.waitForTimeout(600);
-  await shot("2-completed");
-  await shot("3-graph", ".graph-canvas");
+  await shot("3-completed");
+  await shot("4-graph", ".graph-canvas");
+  const serviceState = page.locator(".show-service-state");
+  if (await serviceState.count()) {
+    await serviceState.click();
+    await page.locator(".service-state-dialog").waitFor({ state: "visible" });
+    await shot("5-service-state");
+    await page.locator(".service-state-close").click();
+  }
   await page.locator("#tab-history").click();
   await page.waitForTimeout(600);
-  await shot("4-history");
+  await shot("6-history");
+  await page.locator(".timeline-view-switch button").nth(1).click();
+  await page.waitForTimeout(400);
+  await shot("7-story-table");
+  // Show evidence: a commerce check's button, or a checkout lesson's evidence link.
+  const violated = page.locator(".lesson-check.is-violated button");
+  const evidence = (await violated.count()) ? violated.first() : page.locator(".lesson-check button, .evidence-links button").first();
+  if (await evidence.count()) {
+    await evidence.click();
+    await page.waitForTimeout(600);
+    await shot("8-evidence");
+  }
+  const experiment = page.locator(".experiment-trigger");
+  if (await experiment.count()) {
+    await page.locator("#tab-architecture").click();
+    await experiment.scrollIntoViewIfNeeded();
+    if (await experiment.getAttribute("aria-expanded") !== "true") await experiment.click();
+    await page.locator("#experiment-drawer").waitFor({ state: "visible" });
+    await page.waitForTimeout(400);
+    await shot("9-experiment");
+  }
 } finally {
   await browser.close();
   server.stop();

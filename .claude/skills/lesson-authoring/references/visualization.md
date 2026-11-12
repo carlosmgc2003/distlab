@@ -21,16 +21,28 @@ node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-s
 node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-shot.ts <lesson> --lang es --out <dir>
 ```
 
-Four images per run: `1-ready` (the lesson loaded, ① Goal visible),
-`2-completed` (after Run, the verdicts in ③ Investigate), `3-graph` (the
-canvas alone), `4-history` (the Story diagram). The default viewport is
-1366×768, the smaller of the two supported baselines and the one where
-problems show; `--size 1534x897` is the other. Use `--scale 2` for an image
-that goes into a pull request. The Spanish run matters for layout: Spanish
-strings are longer.
+Nine images per run:
 
-Open the images and look. Then read the sheet's Story list, which is the Story
-table as text.
+| Image | Shows |
+| --- | --- |
+| `1-chooser` | The lesson's card in the Lesson chooser, in its topic, beside its partner |
+| `2-ready` | The lesson loaded: ① Goal and the graph |
+| `3-completed` | After Run: the outcome line and verdicts in ③ Investigate |
+| `4-graph` | The canvas alone |
+| `5-service-state` | The Service state dialog |
+| `6-history` | Recorded history, Story diagram: lanes and the first columns |
+| `7-story-table` | Recorded history, Story table: the first rows |
+| `8-evidence` | *Show evidence* on the first violated check (or the first check): the selected record and its evidence |
+| `9-experiment` | The Experiment drawer: each design choice with its label, hint, and lesson default, and the faults the lesson allows |
+
+The default viewport is 1366×768, the smaller of the two supported baselines
+and the one where problems show; `--size 1534x897` is the other. Use `--scale
+2` for an image that goes into a pull request. The Spanish run matters for
+layout: Spanish strings are longer.
+
+Open the images and look. The two history images show where the Story starts,
+not the whole run: read the sheet's Story list, which is the Story table as
+text, for the rest, and say in a review which claims come from it.
 
 ## The graph
 

@@ -37,6 +37,15 @@ and row fields, or `maximum` rows for `always`), `commerce.metrics`,
 `commerce.charges`, `commerce.unconfirmed-charges`, `commerce.notifications`,
 `commerce.final-orders`. Their parameters are in `docs/modules/catalogs.md`.
 
+Design-choice targets: ADR-004 lets a parameter target any component
+configuration field, link policy field, destination field, or client action
+data. Whether a configuration field is a descriptor `option` or `lessonData`
+is a separate question that matters for slots (ADR-005): a slot edit replaces
+the configuration with options, so a model with lesson data cannot fill a slot.
+A parameter on a `lessonData` field is allowed and changes no descriptor. Moving
+a field from `lessonData` to `options` changes what the model is; do not do it
+to add a design choice, and ask if you think it is needed.
+
 Storage rule: a cache, counter, expiring marker, or lease uses a
 `KeyValueStore` (the service's own, or `commerce.kv-server` when several
 services share it). State that must commit with a business row (an idempotency
@@ -96,6 +105,7 @@ update it knowingly, and read what it protects first.
 | `packages/catalogs/tests/document.test.ts` | The number of packaged documents |
 | `apps/web/tests/content-translations.test.ts` | The number of distinct check ids and of concepts; the lesson-specific check keys |
 | `apps/web/tests/lesson-topics.test.ts` | Every topic's groups, in order |
+| `apps/web/tests/commerce-worker.test.ts` | Per-family facts of the student projection, and for some lessons the exact list of design-choice keys |
 | `apps/web/tests/lesson-pairs.test.ts`, `component-display.test.ts` | The number of packaged lessons; the display-name table |
 | `apps/web/e2e/lesson-chooser.spec.ts` | The chooser's lesson count |
 
@@ -107,7 +117,7 @@ update it knowingly, and read what it protects first.
 | Check label | Unchanged | Spanish `content.checks`; the guide if it quotes the label |
 | Check time, new or removed check, invariant ↔ expectation | Changed (assertions are part of the document) | `commerceChecks`, every lesson of the family for an invariant, Spanish label, guide, catalogs.md, `violated` / `safety` lists |
 | Latency, timeout, delay, workload time, fault | Changed | Every time quoted in descriptions, check labels, the guide, catalogs.md; the paired lesson |
-| New design choice | Unchanged while its default is the packaged value | Copy in both languages, guide table, overlay tests |
+| New design choice | Unchanged while its default is the packaged value | Copy in both languages; the guide's *Design choices* table and the lesson section's **Design choices** paragraph; `docs/modules/catalogs.md` when the target is not a descriptor option; an overlay test for what the values do; any test that pins the lesson's parameter keys (`rg -n "parameters.map" apps/web/tests packages/catalogs/tests`) |
 | Model behavior or log | Changed for every lesson using the model | Those lessons' tests and guide sections |
 
 Golden digests (`npm run golden:0x`) belong to the kernel and must not move

@@ -10,10 +10,11 @@ one distributed-systems idea fail and then hold. This skill reviews lessons and
 writes them: what the student reads, what the simulation runs, and what the
 screen shows.
 
-Read `CONTEXT.md` first if you have not: it fixes the vocabulary used below
-(packaged lesson, lesson check, business invariant, scenario expectation,
-design choice, session overlay, slot). Use those words exactly, in code, copy,
-and conversation.
+Read these sections of `CONTEXT.md` first if you have not: *Session overlays*,
+*Lesson checks*, *Architecture editor*, and *Scenario documents*. They fix the
+vocabulary used below (packaged lesson, lesson check, business invariant,
+scenario expectation, design choice, session overlay, slot). Use those words
+exactly, in code, copy, and conversation.
 
 ## What a lesson is made of
 
@@ -58,15 +59,29 @@ node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-s
 node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts retry-unsafe
 node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts retry-unsafe --set timeout=40
 node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts notifications-dlq --matrix
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts lease-unfenced --sweep lease-ttl
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts saga-compensated \
+  --fault '{"point":"network.request","source":"orders","target":"payments","name":"POST /compensate","effect":{"kind":"drop"}}'
 ```
 
 The sheet shows the copy, the architecture with display names, the packaged
 faults and workload, the design choices with their labels, the Story milestones
 exactly as the Story table lists them, the business logs, each check's verdict
 and time, the document difference against the Compare partner, and a short list
-of automatic findings. `--matrix` runs every combination of the design choices'
-domain edges, which is how you learn whether a choice changes anything. The
-script reads and runs; it never edits.
+of automatic findings. The script reads and runs; it never edits.
+
+Four options run the experiments a student can run:
+
+- `--set key=value` applies a design choice.
+- `--matrix` runs every combination of the design choices' domain edges and
+  defaults, which is how you learn whether a choice changes anything.
+- `--sweep key` runs every value of one integer choice and prints the ranges
+  over which the outcome stays the same. The values that teach are usually
+  interior: the threshold where the story flips, not the edges.
+- `--fault '<json>'` adds a student fault, checked against the lesson's policy
+  exactly as the Experiment drawer's would be. The script's header lists the
+  shapes. This is how you find out whether a fault breaks the fix, and whether
+  any verdict reads HOLDS over a state that violates it.
 
 Its findings cover wiring and consistency only. They are a starting list, not
 the review.
@@ -76,13 +91,20 @@ To see the screen, build and capture it:
 ```sh
 npm run build
 node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-shot.ts lease-unfenced --out <scratch dir>
-node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-shot.ts lease-unfenced --lang es --size 1534x897 --out <scratch dir>
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-shot.ts lease-unfenced --lang es --out <scratch dir>
 ```
 
-It writes four images: loaded, after Run, the graph alone, and Recorded
-history. Look at them; do not describe a screen you have not seen. `npm run
-lesson -- <name>` remains the plain headless run, and `--step` walks it one
-scheduler event at a time.
+It writes nine images at 1366×768, the baseline where problems show: the
+lesson's card in the chooser, the lesson loaded, after Run, the graph alone,
+the Service state dialog, the Story diagram, the Story table, the evidence of
+the first violated check, and the Experiment drawer with the design choices and
+allowed faults. Capture Spanish too: its strings are longer. Look
+at the images; do not describe a screen you have not seen, and say so in the
+report when a claim comes from the sheet instead of an image. The history
+images show only the first milestones; the sheet prints all of them.
+
+`npm run lesson -- <name>` remains the plain headless run, and `--step` walks
+it one scheduler event at a time.
 
 ## What makes a lesson teach
 
@@ -125,7 +147,7 @@ design.
 ## Review
 
 1. Print the sheet for every lesson of the group, with `--matrix` when the
-   group has design choices. Capture the screen when the review covers
+   group has design choices and `--sweep` for each integer one. Capture the screen when the review covers
    visualization.
 2. Read the group's section in `docs/commerce-lessons.md` and its row in
    `docs/modules/catalogs.md`. Compare each stated time, count, and final state
@@ -133,12 +155,23 @@ design.
 3. Read the models (`packages/catalogs/src/commerce/<family>.ts`) far enough to
    know what the student's Story is made of: which logs exist, what the rows
    and replies contain.
-4. Judge the group against [didactics](references/didactics.md), surface by
+4. Be the student. With `--fault`, try the two or three faults the policy
+   allows that go at the lesson's idea: lose or delay the message the fix
+   depends on, fail the commit, crash the service that holds the state. Note
+   which ones break the fix and teach something, and whether every verdict
+   still says what its label says.
+5. Judge the group against [didactics](references/didactics.md), surface by
    surface, and the graph and Story against
    [visualization](references/visualization.md).
-5. Write the report.
+6. For each change you will propose, look up what it costs in
+   [touchpoints](references/touchpoints.md#what-a-change-costs), and check its
+   list of existing predicates before proposing a new check.
+7. Write the report.
 
-Report in the user's language, in this shape:
+A lesson with no Compare partner is still a group, of one. Review it the same
+way; the pair questions become "what can the student change here?".
+
+Report in the user's language, headings and tags included, in this shape:
 
 ```markdown
 # Review: <group>
@@ -147,7 +180,7 @@ Report in the user's language, in this shape:
 
 ## Findings
 For each, most important first:
-- **<short title>** (content | configuration | visualization; blocks learning | misleads | polish)
+- **<short title>** (content | configuration | visualization; misleads | blocks learning | weakens | polish)
   What the student meets, with the evidence (a quoted string, a time from the sheet, a file and line).
   What to change, concretely. Say when the fix is a judgment call for the maintainer.
 
@@ -155,8 +188,17 @@ For each, most important first:
 What to keep, briefly, so a rewrite does not lose it.
 
 ## Proposed changes
-The edits you would make, grouped by surface, with the files. Mark which change packaged exports or digests.
+The edits you would make, grouped by surface, with the files. Mark which change packaged exports and `runId`.
+
+## Beyond this group
+Things you met here that belong to the whole catalog or to the product, each in a line or two.
 ```
+
+The scale: **misleads** when the lesson states or shows something false (a
+stale number, a verdict that contradicts its label); **blocks learning** when a
+student cannot get the idea from it; **weakens** when the lesson works and the
+student gets less than they could (the result announced in advance, nothing to
+decide); **polish** for the rest.
 
 Separate what is wrong (a stale number, an untranslated label, a pair that
 differs in its workload) from what is a matter of taste (a better title). The
@@ -211,10 +253,10 @@ several documents, and most of the value is decided in the brief.
    copy in English and Spanish, pairs, topic and concepts, component names;
    then the guide and the counts in prose. The full list, with the guard that
    fails when a step is missed, is in [touchpoints](references/touchpoints.md).
-5. **Tune the story.** Run the sheet and the matrix. Adjust latencies, delays,
-   and check times until the key moments fall on distinct virtual times, the
-   run ends soon after the last one, and every design-choice value gives a run
-   worth reading.
+5. **Tune the story.** Run the sheet, the matrix, and a sweep of each integer
+   choice. Adjust latencies, delays, and check times until the key moments fall
+   on distinct virtual times, the run ends soon after the last one, and every
+   design-choice value gives a run worth reading.
 6. **Look at it.** Capture the screen at 1366×768 in both languages.
 7. Verify, then write the guide section last, from the final sheet.
 

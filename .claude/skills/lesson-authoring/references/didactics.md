@@ -117,9 +117,10 @@ every domain edge to catch that.
 **Expectations pin the story.** A scenario expectation confirms that the run
 reproduced the setup: the moment of inconsistency, the fault taking effect, the
 state just before the decisive event. It is past tense, names the packaged
-values, and ends with its time: "Inventory was reserved when the shipment
-failed (t=30)". Choose the two or three moments without which this would be a
-different lesson. An expectation that restates an invariant, or that would
+values, and by the catalog's convention ends with its time: "Inventory was
+reserved when the shipment failed (t=30)". (The headless runner and the guide
+show the label alone; the browser also appends "(checked at t=30)".) Choose the
+two or three moments without which this would be a different lesson. An expectation that restates an invariant, or that would
 still pass in any run, pins nothing.
 
 Expectations may differ within a pair (`durable-outbox` reads differently in
@@ -134,7 +135,17 @@ boolean or an internal count.
 **A lesson with nothing violated** (`cqrs-delayed`) teaches that a temporary
 disagreement is correct behavior. That is a legitimate lesson, and then the
 expectations carry the story (PAID against PENDING at t=10) and the invariant
-is the convergence. It should still have something to try.
+is the convergence. It should still have something to try. When it has not,
+recommend in this order, cheapest first: an experiment in the guide that uses a
+student fault the policy already allows; a design choice that moves the story;
+a partner lesson only when the idea needs a second design, and with RFC 0001's
+order of work in mind.
+
+**The label and the predicate say the same thing.** A check labelled "the read
+model converges to the write model" must compare the two models, not test one
+of them for the packaged value. Under a student's fault the two readings come
+apart, and the verdict then contradicts its own sentence. Read each predicate's
+parameters against its label.
 
 ## The system and its timeline
 
@@ -219,8 +230,13 @@ only some combinations keep every invariant. Prefer that shape when a family
 has two independent decisions.
 
 Domains: a boolean, an integer with inclusive bounds, or a choice of strings.
-Bound an integer to values that all give a run worth reading, and check both
-edges. A parameter targets a component configuration field, a link policy
+Bound an integer to values that all give a run worth reading. The matrix runs
+only the edges and the default; `--sweep key` runs every value and shows where
+the outcome changes. That threshold is the teaching value (a cached price that
+lives 23 ms is gone before checkout reads it, one that lives 24 ms is not), so
+name it in the guide with the reason. Include values on both sides of the
+default even when one side only repeats the story: a student who cannot try
+"longer" cannot find out that longer changes nothing. A parameter targets a component configuration field, a link policy
 field, a destination field, or a client action's data, by stable identity.
 
 **Student faults.** The policy offers only fault points the architecture has
@@ -253,9 +269,17 @@ charged the old price", not "pricing may be inconsistent". Do not explain the
 simulator to the student ("the projection", "the worker session"): the
 evaluation found that copy exact about the tool and unhelpful to the reader.
 
-Every number in every text must be one the sheet prints. When a time in the
-copy is a check time or a fault bound rather than a recorded event, the sheet
-flags it for a look; confirm it against the document.
+Every number in every text must be one the sheet prints. The sheet flags a
+time named in the copy at which the run recorded nothing (often a fault bound,
+sometimes a stale number). It cannot tell a time that is recorded but wrong for
+the sentence, so read each one against the Story list: prefer the times of the
+story's events to the times of its checks.
+
+Name a component by its display name in that language
+(`apps/web/src/i18n/<lang>/components.ts`), because that is what the graph, the
+Story lanes, and Service state show. Much of the existing Spanish copy says
+"Orders" where the Spanish screen says "Pedidos"; raise that once, as a
+catalog-wide finding, rather than per lesson.
 
 The in-app text for one lesson is the description, the check labels, and the
 design-choice copy. The pattern explanation and the "what to look for" prompts
