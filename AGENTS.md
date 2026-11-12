@@ -42,6 +42,7 @@ npm run lesson -- saga-compensated --step  # interactive event stepping
 npm run --silent lesson -- outbox-idempotent --json # full state/history export
 npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
 npm run scenario -- check examples/scenarios/processor-response-lost.json # check an ADR-006 scenario document
+node --experimental-strip-types apps/web/tests/i18n-scan.ts  # list user-visible English outside the catalogs
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included
@@ -103,6 +104,18 @@ pure, async ELK layered layout over measured node sizes, and ELK runs in its
 own presentation worker, never in the simulation worker. Positions and edge
 routes never enter projections, worker commands, or history
 (`docs/spec/architecture-visualization.md`, Phase 5).
+Interface text follows `docs/spec/adr/007-localization.md`. Every user-visible
+string lives in the message catalogs in `apps/web/src/i18n/` (`en/` is the
+source, every other locale is typed `typeof en`), one area per screen. Pure
+modules that produce text take `m: Messages` as their last parameter; components
+call `useMessages()`. Write one message per sentence, with `f.plural`, `f.list`,
+and `f.number` for counts, joins, and numbers, and `<Rich>` for inline markup;
+never splice fragments, and never compare or store display text where a code
+will do. The worker never imports a catalog. Component IDs, endpoint names,
+observation types, codes, business data, and `t=` are never translated. The
+English Playwright suite runs with `locale: "en-US"`; `e2e/i18n.spec.ts` covers
+other locales. The scanner budget in `apps/web/tests/i18n.test.ts` may only go
+down.
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns

@@ -90,7 +90,47 @@ test("I18N-AC-7: bound messages are memoized and frozen per locale", () => {
  * number when you move its strings into `src/i18n/`; never raise it. Run
  * `node --experimental-strip-types tests/i18n-scan.ts <file>` to list what is left.
  */
-const HARD_CODED_BUDGET: Readonly<Record<string, number>> = {};
+// Measured when the catalogs were introduced; extraction lowers these toward zero.
+const HARD_CODED_BUDGET: Readonly<Record<string, number>> = {
+  "src/TimelineView.tsx": 145,
+  "src/flight.ts": 90,
+  "src/App.tsx": 71,
+  "src/FaultInspectionView.tsx": 69,
+  "src/FaultsSection.tsx": 52,
+  "src/ArchitectureView.tsx": 51,
+  "src/timeline-query.ts": 47,
+  "src/scenario-file.ts": 45,
+  "src/scenarios.ts": 45,
+  "src/design-choices.ts": 44,
+  "src/timeline.ts": 41,
+  "src/AssessmentView.tsx": 40,
+  "src/story-timeline.ts": 36,
+  "src/break-faults.ts": 35,
+  "src/SimulationControls.tsx": 21,
+  "src/CommerceLesson.tsx": 20,
+  "src/ComponentInspector.tsx": 20,
+  "src/architecture-view.ts": 19,
+  "src/timeline-quick-views.ts": 19,
+  "src/ArchitecturePlayback.tsx": 18,
+  "src/fault-inspection.ts": 16,
+  "src/lesson-topics.ts": 15,
+  "src/LessonChooser.tsx": 14,
+  "src/ImportedScenario.tsx": 13,
+  "src/activity.ts": 9,
+  "src/worker/adapter.ts": 9,
+  "src/records.ts": 8,
+  "src/ExperimentDrawer.tsx": 7,
+  "src/review-navigation.ts": 7,
+  "src/checkout-display.ts": 6,
+  "src/host.ts": 6,
+  "src/LessonPanel.tsx": 5,
+  "src/DesignChoicesSection.tsx": 3,
+  "src/design-step.ts": 3,
+  "src/ServiceStateDialog.tsx": 2,
+  "src/assessment-runner.ts": 2,
+  "src/assessment.ts": 2,
+  "src/ui-hint.tsx": 1,
+};
 
 test("I18N-AC-8: hard-coded user-visible strings do not grow (scanner budget)", () => {
   const counts = new Map<string, number>();

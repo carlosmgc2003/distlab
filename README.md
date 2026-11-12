@@ -45,7 +45,7 @@ DistLab models the semantics that matter for learning rather than emulating spec
 - [Vision](docs/vision.md) describes the educational problem, target audience, reference domain, and intended product experience.
 - [Architecture](docs/architecture.md) defines the simulation model, runtime components, state boundaries, and architectural guarantees.
 - [Commerce lessons](docs/commerce-lessons.md) explains executable timeout/idempotency, Saga, outbox, CQRS, and circuit-breaker comparisons, including timeline inspection and replay.
-- [Glossary](docs/glossary.md) establishes the terminology used throughout the project.
+- [Glossary](docs/glossary.md) establishes the terminology used throughout the project, including the Spanish interface terms.
 - [Shared simulation contracts](docs/spec/contracts.md) defines common values, identities, capabilities, and correlation rules. The TypeScript encoding is [`packages/contracts`](packages/contracts) (`@distlab/contracts`).
 - [Component specifications](docs/spec/) covers the simulation core, scheduler, virtual clock, observability, and the following runtime and application models:
   - [Virtual Network](docs/spec/virtual-network.md) and [Message Bus](docs/spec/message-bus.md)
@@ -189,6 +189,12 @@ file lists each problem with its JSON path. An imported run's header says
 **Save as scenario file** downloads the chosen packaged lesson as a starter
 document (for example `retry-idempotent-copy.json`) that an instructor can edit
 and open again; the browser builds it from data-only modules, with no network.
+The interface is available in English and Spanish ([ADR-007](docs/spec/adr/007-localization.md)).
+It follows the browser's language, the picker in the top bar, or `?lang=es`;
+`?lang=en-XA` shows the pseudo-locale used to find untranslated text. Message
+catalogs live in `apps/web/src/i18n/`, one area per screen;
+`node --experimental-strip-types apps/web/tests/i18n-scan.ts` lists any
+user-visible English left outside them.
 `npm run build` produces the static site in `apps/web/dist`, including its worker
 bundle; no backend is required. Linux CI images may also need
 `npm exec -w @distlab/web -- playwright install --with-deps chromium`.

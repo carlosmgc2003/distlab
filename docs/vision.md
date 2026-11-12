@@ -1278,6 +1278,8 @@ The implementation should favor:
 - deterministic algorithms
 - local persistence when needed
 - zero required external infrastructure
+- an interface in the student's language (English and Spanish), with the
+  simulation itself language-neutral ([ADR-007](spec/adr/007-localization.md))
 
 The browser should be sufficient to:
 
