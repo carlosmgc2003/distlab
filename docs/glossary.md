@@ -420,3 +420,8 @@ endpoint, payload, span, checkout.
 | order / payment / shipment / inventory / notification | pedido / pago / envío / inventario / notificación |
 | trace / redacted / omitted | traza / oculto / omitido |
 | Payment Processor (display name) | Procesador de pagos |
+| session overlay (the student's changes) / overlay policy (a scenario-file field) | cambios de la sesión / política de overlay |
+| scenario digest | huella (digest) |
+| passed / failed (imported scenario checks) | SUPERADA / NO SUPERADA |
+| Story / Story table / Learning / Raw (history views) | Diagrama de historia / Tabla de historia / Aprendizaje / Sin procesar |
+| exact / prefix / contains (filter match) | Exacto / Prefijo / Contiene |
