@@ -39,7 +39,7 @@ async function commandTypes(page: Page): Promise<string[]> {
   return page.evaluate(() => window.navigationEvidence.commands.map(command => command.type));
 }
 
-test("single dropped response disables both boundaries and evidence navigation keeps the destination", async ({ page }) => {
+test("a single dropped response is selected from the Story table and evidence navigation keeps the destination", async ({ page }) => {
   test.setTimeout(90_000);
   await observeWorker(page);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -51,39 +51,27 @@ test("single dropped response disables both boundaries and evidence navigation k
   await expect(status).toHaveText("COMPLETED");
   const commands = await commandTypes(page);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // This test walks canonical rows; the Story view is covered in story-timeline.spec.ts.
-  await viewButton(page, "Raw").click();
+  await viewButton(page, "Story table").click();
 
   await filterByType(page, "not.a.real.type");
   await expect(page.getByText("No observations match every active filter.")).toBeVisible();
-  await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
 
   await page.getByRole("button", { name: "Clear all filters", exact: true }).click();
   await expect(page.getByRole("group", { name: "Active filters and reset" })).not.toBeVisible();
   await filterByType(page, "network.response.dropped");
-  await expect(page.locator(".timeline-count")).toContainText(/^1 of /);
-  await expect(page.locator("#timeline-boundary")).toContainText("Next and Previous select it.");
-  await page.locator("#timeline-rows").focus();
-  await page.keyboard.press("ArrowDown");
+  const tableRows = page.locator(".story-table tbody tr");
+  await expect(tableRows).toHaveCount(1);
+  await tableRows.getByRole("button").click();
 
-  const selected = page.locator("#timeline-rows button[aria-pressed='true']");
+  const selected = page.locator(".story-table tr[data-selected='true']");
   await expect(selected).toHaveCount(1);
-  await expect(selected).toContainText("network.response.dropped");
-  const selectedText = await selected.innerText();
-  const selectedSequence = selectedText.match(/#(\d+)/)?.[1];
+  await expect(selected).toContainText("Response dropped");
+  const selectedSequence = (await selected.innerText()).match(/#(\d+)/)?.[1];
   expect(selectedSequence).toBeDefined();
-  await expect(selected).toBeFocused();
+  await expect(selected.getByRole("button")).toBeFocused();
   await expect(selected).toBeInViewport();
-  await expect(selected).toHaveCSS("outline-style", "solid");
-  await expect(page.locator("#timeline-boundary")).toContainText("Previous and Next cannot move.");
   await expect(page.locator("#timeline-feedback")).toContainText(`Selected Observation #${selectedSequence}:`);
   await expect(page.locator("#inspection-panel")).toContainText("network.response.dropped");
-  const sequence = await selected.innerText();
-  await page.keyboard.press("ArrowDown");
-  expect(await selected.innerText()).toBe(sequence);
-  await expect(page.locator("#timeline-feedback")).toContainText("Previous and Next cannot move.");
-  await page.keyboard.press("ArrowUp");
-  expect(await selected.innerText()).toBe(sequence);
 
   await page.locator("#inspection-panel").getByText("Related evidence", { exact: true }).click();
   await page.getByRole("button", { name: "Show this trace" }).click();
@@ -96,14 +84,16 @@ test("single dropped response disables both boundaries and evidence navigation k
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.locator("#timeline-feedback")).toContainText("type filter was cleared");
-  await expect(selected).toContainText("network.response.dropped");
+  await expect(selected).toContainText("Response dropped");
   await expect(selected).toBeVisible();
 
+  // A cause is revealed in the Story table even when it is not a teaching milestone.
   await page.getByRole("button", { name: /Select causing observation/ }).click();
   await expect(selected).toBeVisible();
+  await expect(selected.getByRole("button")).toBeFocused();
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeInViewport();
   await expect(page.locator("#timeline-feedback")).toContainText(/Selected Observation #/);
-  await expect(selected).not.toContainText("network.response.dropped");
+  await expect(selected).not.toContainText("Response dropped");
 
   await openMoreFilters(page);
   await dialog.getByLabel("Virtual time from", { exact: true }).fill("999999");
@@ -118,10 +108,13 @@ test("single dropped response disables both boundaries and evidence navigation k
   await filterByType(page, "network.response.dropped");
   await page.locator("#timeline-rows").evaluate(node => { node.scrollTop = 0; });
   await page.evaluate(() => window.scrollTo(0, 0));
+  await viewButton(page, "Story diagram").click();
   // The evidence links sit in the Lesson panel's ③ Investigate section, visible on both tabs.
   await page.getByRole("complementary", { name: "Lesson", exact: true }).locator(".execution-overview")
     .getByRole("button", { name: "Show processor authorization", exact: true }).click();
-  await expect(selected).toContainText("external.effect.committed");
+  // Evidence always opens the Story table, where the revealed record has a row.
+  await expect(viewButton(page, "Story table")).toHaveAttribute("aria-pressed", "true");
+  await expect(selected).toContainText("External side effect committed");
   await expect(selected).toBeVisible();
   await expect(page.getByRole("heading", { name: "Observation detail" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Observation detail" })).toContainText("external.effect.committed");
@@ -133,16 +126,7 @@ test("single dropped response disables both boundaries and evidence navigation k
   await openMoreFilters(page);
   await dialog.getByRole("button", { name: "Clear", exact: true }).click();
   await applyMoreFilters(page);
-  await expect(page.locator(".timeline-count")).toContainText(/^[0-9]{2,} of /);
-  await page.locator("#timeline-rows").focus();
-  await page.keyboard.press("Home");
-  await expect(page.locator("#timeline-boundary")).toContainText("Previous cannot move.");
-  await page.keyboard.press("End");
-  await expect(page.locator("#timeline-boundary")).toContainText("Next cannot move.");
-  const atEnd = await selected.innerText();
-  await page.keyboard.press("ArrowDown");
-  expect(await selected.innerText()).toBe(atEnd);
-  await expect(page.locator("#timeline-feedback")).toContainText("Next cannot move.");
+  expect(await tableRows.count()).toBeGreaterThan(1);
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(await commandTypes(page)).toEqual(commands);
@@ -186,22 +170,15 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   await expect(page.getByText("No observations have been recorded for this run.")).toBeVisible();
-  await expect(page.locator("#timeline-boundary")).toHaveText("No visible observations.");
   await expect(button("Run")).toBeEnabled();
   await expect(button("Step")).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
   await expect(button("Pause")).toBeDisabled();
 
   await emit("READY", history, "projection.updated", false);
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
-  await expect(page.locator(".timeline-count")).toContainText("3 of 3");
-  await page.locator("#timeline-rows").focus();
-  await page.keyboard.press("Home");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#1");
-  await expect(page.locator("#timeline-boundary")).toContainText("Previous cannot move.");
-  await page.keyboard.press("End");
-  await expect(page.locator("#timeline-rows button[aria-pressed='true']")).toContainText("#3");
-  await expect(page.locator("#timeline-boundary")).toContainText("Next cannot move.");
+  // Engine bookkeeping is recorded but is not a teaching milestone, so the Story says so.
+  await expect(page.locator(".timeline-count")).toContainText("0 teaching milestones from 3 recorded observations.");
+  await expect(page.getByText("None of the visible records is a teaching milestone.")).toBeVisible();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   // Focus lands only on a shown node: wait until the graph is laid out and fitted again.
   await graphLaidOut(page);

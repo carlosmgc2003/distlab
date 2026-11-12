@@ -331,7 +331,7 @@ test("selecting a record in Recorded history takes the graph highlight back", as
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   // Selecting a movement milestone in the Story table is a reader choice, not a live cue.
   await viewButton(page, "Story table").click();
-  await page.locator(".story-table button").first().click();
+  await page.locator(".story-table button").filter({ hasText: "Request sent" }).first().click();
   await expect(page.locator(".story-table button[aria-pressed='true']")).toHaveCount(1);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
   // The reader's choice wins: the replay cursor stands down and the graph shows the selection.

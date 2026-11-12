@@ -113,7 +113,7 @@ test("the dark theme passes accessibility checks on the lesson surfaces, and the
   await axe();
 
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  for (const view of ["Story diagram", "Story table", "Learning", "Raw"]) {
+  for (const view of ["Story diagram", "Story table"]) {
     await page.getByRole("button", { name: view, exact: true }).click();
     await axe();
   }

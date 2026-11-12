@@ -4,21 +4,16 @@ import type {
   Observation,
 } from "@distlab/contracts";
 import {
-  attemptLabel,
   edgeBetween,
   edgeFor,
   movementOf,
-  orderObservations,
   payloadVisibility,
   recordedChanges,
+  storedQualifier,
 } from "./records.ts";
 import type { MilestoneType, Movement, MovementEdge, MovementKind } from "./records.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
-
-/** Fixed row geometry so the timeline window stays bounded at the history baseline. */
-export const TIMELINE_ROW_HEIGHT = 44;
-export const TIMELINE_VIEWPORT = 320;
 
 export interface GraphEmphasis {
   readonly nodeIds: readonly string[];
@@ -51,8 +46,8 @@ export interface TerminalMark {
 }
 
 /**
- * Wording for one stored record, shared by the detail heading, the Learning row,
- * and architecture playback so the three never name the same record differently.
+ * Wording for one stored record, shared by the detail heading and architecture
+ * playback so the two never name the same record differently.
  *
  * Typed by `MilestoneType`: a milestone without a label is a compile error, not
  * a raw type string shown to a student. Records that are not milestones state
@@ -76,6 +71,15 @@ const RECORD_LABELS: Readonly<Record<MilestoneType, string>> = {
   "external.effect.committed": "External side effect committed",
   "fault.rule.matched": "Fault rule matched",
   "fault.effect.selected": "Fault effect selected",
+  "database.transaction.rejected": "Database transaction rejected",
+  "service.handler.failed": "Handler failed",
+  "message.nacked": "Message rejected (NACK)",
+  "message.dead": "Message dead-lettered",
+  "kv.condition.failed": "Key-value condition failed",
+  "kv.changed": "Key-value entry changed",
+  "kv.expired": "Key-value entry expired",
+  "runtime.log": "Log",
+  "scenario.assertion.evaluated": "Check",
 };
 
 /** Wording for a fault record the milestone table does not name individually. */
@@ -91,93 +95,7 @@ export function recordLabel(observation: Observation): string {
   const base = (RECORD_LABELS as Readonly<Record<string, string | undefined>>)[observation.type]
     ?? (observation.type.startsWith("fault.") ? OTHER_FAULT_LABEL : undefined);
   if (base === undefined) return observation.type;
-  return observation.type === "message.delivered" ? `${base}${attemptLabel(observation)}` : base;
-}
-
-/**
- * A read-only teaching projection. Only adjacent scheduler/clock bookkeeping and
- * byte-for-byte unchanged assertion evaluations collapse; every other record,
- * including deliveries, retries, effects, and faults, remains its own item.
- */
-export type LearningTimelineItem =
-  | { readonly kind: "observation"; readonly observation: Observation; readonly summary: string }
-  | { readonly kind: "group"; readonly id: string; readonly summary: string; readonly observations: readonly Observation[] };
-
-export function learningTimeline(observations: readonly Observation[]): readonly LearningTimelineItem[] {
-  const ordered = orderObservations(observations);
-  const firstStartedEvent = ordered.findIndex(observation => observation.type === "simulation.event.started");
-  const items: LearningTimelineItem[] = [];
-  for (let index = 0; index < ordered.length;) {
-    const first = ordered[index]!;
-    // Startup queue construction is the only scheduler bookkeeping that is
-    // collapsed. Later scheduling is part of the execution story and remains
-    // individually inspectable.
-    const setup = firstStartedEvent < 0 || index < firstStartedEvent;
-    const groupKind = collapsibleKind(first, setup);
-    if (!groupKind) {
-      items.push({ kind: "observation", observation: first, summary: recordLabel(first) });
-      index += 1;
-      continue;
-    }
-    const members = [first];
-    let cursor = index + 1;
-    while (cursor < ordered.length && sameCollapsedContext(first, ordered[cursor]!, groupKind, firstStartedEvent, cursor)) {
-      members.push(ordered[cursor]!);
-      cursor += 1;
-    }
-    if (members.length === 1) items.push({ kind: "observation", observation: first, summary: recordLabel(first) });
-    else items.push({
-      kind: "group",
-      id: `learning:${groupKind}:${members[0]!.id}`,
-      summary: groupKind === "setup" ? "Initial engine queue setup" : "Unchanged assertion evaluations",
-      observations: members,
-    });
-    index = cursor;
-  }
-  return items;
-}
-
-function collapsibleKind(observation: Observation, setup: boolean): "setup" | "assertion" | undefined {
-  if (setup && (observation.type.startsWith("scheduler.") || observation.type.startsWith("clock."))) return "setup";
-  if (observation.type === "scenario.assertion.evaluated") return "assertion";
-  return undefined;
-}
-
-function sameCollapsedContext(
-  first: Observation,
-  candidate: Observation,
-  kind: "setup" | "assertion",
-  firstStartedEvent: number,
-  candidateIndex: number,
-): boolean {
-  const candidateSetup = firstStartedEvent < 0 || candidateIndex < firstStartedEvent;
-  if (collapsibleKind(candidate, candidateSetup) !== kind) return false;
-  // Assertions collapse only when their stored result and correlation context
-  // are unchanged. Never merge records merely because their timestamps match.
-  return kind === "setup" || (stableValue(first.data) === stableValue(candidate.data)
-    && first.source === candidate.source && first.target === candidate.target
-    && first.traceId === candidate.traceId && first.eventId === candidate.eventId);
-}
-
-function stableValue(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableValue).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableValue(item)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-export interface VisibleRowRange {
-  readonly start: number;
-  readonly end: number;
-}
-
-export function visibleRowRange(count: number, scrollTop: number, viewport: number, rowHeight: number, overscan = 6): VisibleRowRange {
-  if (count <= 0 || viewport <= 0 || rowHeight <= 0) return { start: 0, end: 0 };
-  const start = Math.max(0, Math.floor(Math.max(0, scrollTop) / rowHeight) - overscan);
-  const end = Math.min(count, Math.ceil((Math.max(0, scrollTop) + viewport) / rowHeight) + overscan);
-  return { start, end: Math.max(start, end) };
+  return `${base}${storedQualifier(observation)}`;
 }
 
 /** Reads only stored before/after fields. Redacted and omitted payloads contribute no evidence. */
@@ -230,21 +148,6 @@ export function selectionStep(index: number, count: number, delta: -1 | 1): numb
   return next;
 }
 
-/** The position among visible rows. It is part of the live announcement only, never visible text (#146). */
-export function boundaryCopy(index: number, count: number): string {
-  if (count <= 0) return "No visible observations.";
-  if (index < 0) {
-    return count === 1
-      ? "1 visible observation. Next and Previous select it."
-      : `${count} visible observations. Next selects the first. Previous selects the last.`;
-  }
-  const position = `Visible observation ${index + 1} of ${count}.`;
-  if (count === 1) return `${position} Previous and Next cannot move.`;
-  if (index === 0) return `${position} Previous cannot move.`;
-  if (index === count - 1) return `${position} Next cannot move.`;
-  return position;
-}
-
 /**
  * The review position, naming the stored type. It is announced through Recorded history's one
  * polite live region and never shown: the docked detail's header is the visible statement (#146).
@@ -259,10 +162,6 @@ export function revealMessage(cleared: readonly string[], observation: Observati
   const labels = listLabels(cleared);
   const verb = cleared.length === 1 ? "filter was" : "filters were";
   return `${selected} The ${labels} ${verb} cleared so this observation is visible.`;
-}
-
-export function movementMessage(observation: Observation, index: number, count: number): string {
-  return `${selectionMessage(observation)} ${boundaryCopy(index, count)}`;
 }
 
 export function traceFilterMessage(traceId: string, change: { readonly changed: boolean; readonly cleared: readonly string[] }): string {

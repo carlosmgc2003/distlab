@@ -8,12 +8,10 @@ import { viewButton } from "./support/history.ts";
  * rows, the history toolbar, or the tabs, and it is the one visible statement of the selection.
  */
 
-const views = ["Story diagram", "Story table", "Learning", "Raw"] as const;
+const views = ["Story diagram", "Story table"] as const;
 const firstRow: Readonly<Record<(typeof views)[number], string>> = {
   "Story diagram": "#timeline-rows .story-milestone",
   "Story table": "#timeline-rows .story-table button[data-observation-id]",
-  Learning: "#timeline-rows button[data-observation-id]",
-  Raw: "#timeline-rows button[data-observation-id]",
 };
 
 async function completedHistory(page: Page) {
@@ -98,18 +96,17 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1534, height: 897
 
 test("a selection is announced once, by one live region", async ({ page }) => {
   await completedHistory(page);
-  await viewButton(page, "Raw").click();
+  await viewButton(page, "Story table").click();
   await recordLiveRegions(page);
-  const rows = page.locator("#timeline-rows button[data-observation-id]");
+  const rows = page.locator("#timeline-rows .story-table button[data-observation-id]");
   await rows.nth(1).click();
   const sequence = /#(\d+)/.exec(await page.locator("#inspection-panel .detail-header").innerText())![1]!;
   const mentions = async () => (await page.evaluate(() => (window as unknown as { liveTexts: { region: string; text: string }[] }).liveTexts))
     .filter(entry => new RegExp(`#${sequence}(?!\\d)`).test(entry.text));
   await expect.poll(mentions).toHaveLength(1);
   expect((await mentions())[0]!.region).toBe("timeline-feedback");
-  // Arrow keys move the selection; each move is announced once more, by the same region.
-  await rows.nth(1).focus();
-  await page.keyboard.press("ArrowDown");
+  // Each further selection is announced once more, by the same region.
+  await rows.nth(2).click();
   const next = /#(\d+)/.exec(await page.locator("#inspection-panel .detail-header").innerText())![1]!;
   expect(next).not.toBe(sequence);
   const announced = (await page.evaluate(() => (window as unknown as { liveTexts: { region: string; text: string }[] }).liveTexts))
@@ -122,7 +119,7 @@ test("an active filter shows its result count once, next to the filter row", asy
   await expect(page.locator(".timeline-shown")).toHaveCount(0);
   await page.getByLabel("Show", { exact: true }).selectOption("faults-and-timeouts");
   const shown = page.locator(".story-filter-bar .timeline-shown");
-  await expect(shown).toHaveText(/^\d+ of \d+ shown$/);
+  await expect(shown).toHaveText(/^\d+ of \d+ milestones shown$/);
   const [count, total] = (await shown.innerText()).match(/\d+/g)!;
   expect(await visibleTextOutsideRows(page, `\\b${count} of ${total}\\b`)).toHaveLength(1);
   await expect(page.getByText(/Visible observation \d+ of \d+/)).toBeHidden();

@@ -77,9 +77,9 @@ test("with no filter active the toolbar is two short rows with no disclosure and
     - document.querySelector("#timeline-heading")!.getBoundingClientRect().top);
   expect(gap).toBeLessThanOrEqual(110);
   await expect(page.getByRole("group", { name: "Active filters and reset" })).toBeHidden();
-  // Disclosures in the panel belong to the rows area (Learning groups, the floating detail), never the toolbar.
+  // Disclosures in the panel belong to the rows area, never the toolbar.
   expect(await page.locator("#timeline-panel details").evaluateAll(elements => elements.every(element => element.closest(".timeline-rows-frame") !== null))).toBe(true);
-  await expect(page.getByRole("group", { name: "Timeline view", exact: true }).getByRole("button")).toHaveText(["Story diagram", "Story table", "Learning", "Raw"]);
+  await expect(page.getByRole("group", { name: "Timeline view", exact: true }).getByRole("button")).toHaveText(["Story diagram", "Story table"]);
   await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
   await viewButton(page, "Story table").click();
   await expect(viewButton(page, "Story table")).toHaveAttribute("aria-pressed", "true");
@@ -90,9 +90,11 @@ test("with no filter active the toolbar is two short rows with no disclosure and
 
 test("More filters moves focus in and back, discards on Escape and Cancel, and narrows on Apply", async ({ page }) => {
   await completedHistory(page);
-  await viewButton(page, "Raw").click();
+  await viewButton(page, "Story table").click();
   const trigger = moreFiltersTrigger(page);
-  const total = (await page.locator(".timeline-count").innerText()).match(/of (\d+)/)![1];
+  const tableRows = page.locator(".story-table tbody tr");
+  const total = await tableRows.count();
+  expect(total).toBeGreaterThan(0);
 
   const dialog = await openMoreFilters(page);
   await expect(dialog).toHaveAttribute("aria-modal", "true");
@@ -101,7 +103,7 @@ test("More filters moves focus in and back, discards on Escape and Cancel, and n
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(trigger).toBeFocused();
-  await expect(page.locator(".timeline-count")).toContainText(`${total} of ${total}`);
+  await expect(tableRows).toHaveCount(total);
   await expect(page.getByRole("list", { name: "Active filters" })).toHaveCount(0);
 
   await openMoreFilters(page);
@@ -116,9 +118,9 @@ test("More filters moves focus in and back, discards on Escape and Cancel, and n
   await applyMoreFilters(page);
   await expect(trigger).toBeFocused();
   await expect(page.getByRole("list", { name: "Active filters" })).toContainText("Type exactly network.response.dropped");
-  const rows = await page.locator("#timeline-rows button").allInnerTexts();
+  const rows = await page.locator(".story-table tbody th button").allInnerTexts();
   expect(rows.length).toBeGreaterThan(0);
-  for (const row of rows) expect(row).toContain("network.response.dropped");
+  for (const row of rows) expect(row).toBe("Response dropped");
 
   // Reopening shows the applied draft; Clear and Apply remove it.
   await openMoreFilters(page);
@@ -127,7 +129,7 @@ test("More filters moves focus in and back, discards on Escape and Cancel, and n
   await dialog.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(dialog.getByLabel("Type", { exact: true })).toHaveValue("");
   await applyMoreFilters(page);
-  await expect(page.locator(".timeline-count")).toContainText(`${total} of ${total}`);
+  await expect(tableRows).toHaveCount(total);
   await expect(moreFilters(page)).toBeHidden();
 });
 
@@ -135,7 +137,7 @@ test("changing the view or the filters sends no worker command and keeps virtual
   await completedHistory(page);
   const before = await commands(page);
   const time = await virtualTime(page);
-  for (const name of ["Story table", "Learning", "Raw", "Story diagram"] as const) await viewButton(page, name).click();
+  for (const name of ["Story table", "Story diagram"] as const) await viewButton(page, name).click();
   await page.getByLabel("Show", { exact: true }).selectOption("messages");
   await page.getByLabel("Component", { exact: true }).selectOption("orders");
   await openMoreFilters(page);

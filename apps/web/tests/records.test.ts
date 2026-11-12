@@ -49,8 +49,6 @@ function observation(overrides: { readonly type: string; readonly source: string
  * oversight: an entry here without a decision fails the test.
  */
 const DOCUMENTED_DEVIATIONS: Readonly<Record<string, string>> = {
-  // Removed: the document does not list runtime.log as a milestone. Those records stay in Learning and Raw.
-  "runtime.log": "removed: the document does not list it as a milestone",
   // Unresolved: the document omits the request timeout that the checkout lesson is about.
   "network.request.timedout": "pending: the document does not list it and the lesson needs it",
 };
@@ -76,10 +74,13 @@ test("the milestone table matches the documented Story milestone set", () => {
   );
   assert.deepEqual(
     documented.filter(type => !table.has(type)),
-    Object.keys(DOCUMENTED_DEVIATIONS).filter(type => !table.has(type) && type !== "runtime.log"),
+    Object.keys(DOCUMENTED_DEVIATIONS).filter(type => !table.has(type)),
     "a documented milestone the table omits needs a recorded decision",
   );
-  assert.ok(!table.has("runtime.log"), "runtime.log is not a documented milestone");
+  // Recorded history lists milestones only, so the records lessons teach with are milestones.
+  for (const type of ["runtime.log", "kv.expired", "database.transaction.rejected", "message.dead", "scenario.assertion.evaluated"]) {
+    assert.ok(table.has(type), `${type} is a documented milestone`);
+  }
 });
 
 test("every milestone has wording in each view that names it", () => {
@@ -103,7 +104,7 @@ test("the canonical transaction rollback type is worded and the removed alias is
 });
 
 test("records outside the milestone set state their stored type and never a milestone", () => {
-  for (const type of ["runtime.log", "service.lifecycle.changed", "database.write.staged", "scheduler.event.scheduled"]) {
+  for (const type of ["kv.read", "service.lifecycle.changed", "database.write.staged", "scheduler.event.scheduled"]) {
     const record = observation({ type, source: "orders" });
     assert.equal(recordKind(record), undefined, type);
     assert.equal(storyLabel(record), undefined, type);
@@ -112,6 +113,36 @@ test("records outside the milestone set state their stored type and never a mile
   // Every fault record stays a milestone, including ones the table does not name.
   assert.equal(recordKind(observation({ type: "fault.custom.rule", source: "faults" })), "fault");
   assert.equal(recordLabel(observation({ type: "fault.custom.rule", source: "faults" })), "Fault recorded");
+});
+
+test("labels add only stored fields: a log's message, a key, a rejection code, and a check's verdict", () => {
+  const cases: readonly (readonly [Observation, string, string])[] = [
+    [observation({ type: "runtime.log", source: "orders", data: { level: "info", message: "saga.compensation" } }), "Log: saga.compensation", "Log: saga.compensation"],
+    [observation({ type: "kv.expired", source: "kv", data: { key: "lock:report", expiresAt: 12 } }), "Key-value entry expired: lock:report", "Key-value entry expired: lock:report"],
+    [observation({ type: "database.transaction.rejected", source: "inventory", data: { transactionId: "t", code: "TRANSACTION_CONFLICT" } }), "Database transaction rejected (TRANSACTION_CONFLICT)", "Transaction rejected (TRANSACTION_CONFLICT)"],
+    [observation({ type: "message.dead", source: "bus", data: { reason: "RETRY_EXHAUSTED", attempts: 3 } }), "Message dead-lettered (RETRY_EXHAUSTED)", "Message dead-lettered (RETRY_EXHAUSTED)"],
+    [observation({ type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "one-charge", verdict: false } }), "Check: one-charge did not pass", "Check: one-charge did not pass"],
+  ];
+  for (const [record, detail, story] of cases) {
+    assert.equal(recordLabel(record), detail);
+    assert.equal(storyLabel(record), story);
+  }
+  // A redacted payload adds nothing.
+  assert.equal(recordLabel(observation({ type: "runtime.log", source: "orders", data: { redacted: true } })), "Log");
+});
+
+test("a check is a milestone for its first result and each change, never for an unchanged repeat", () => {
+  const check = (id: string, sequence: number, assertionId: string, verdict: boolean) =>
+    observation({ id, sequence, time: sequence, type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId, verdict } });
+  const rows = [
+    check("a1", 1, "a", false), check("b1", 2, "b", true), check("a2", 3, "a", false),
+    check("a3", 4, "a", true), check("b2", 5, "b", true), check("a4", 6, "a", true),
+    observation({ id: "x", sequence: 7, time: 7, type: "scenario.assertion.evaluated", source: "simulation", data: { redacted: true } }),
+    observation({ id: "y", sequence: 8, time: 8, type: "scenario.assertion.evaluated", source: "simulation", data: { redacted: true } }),
+  ];
+  assert.deepEqual(storyMilestones(rows).map(item => item.observation.id), ["a1", "b1", "a3", "x", "y"],
+    "a record without a readable check id or verdict is never treated as a repeat");
+  assert.ok(storyMilestones(rows).every(item => item.kind === "check"));
 });
 
 test("a selection emphasis names the movement, the link, and the components", () => {
@@ -220,13 +251,15 @@ test("traces and causation are read from stored ids only", () => {
 });
 
 test("every teaching category is listed once, in legend order", () => {
-  assert.equal(recordKinds.length, 10);
+  assert.equal(recordKinds.length, 14);
   assert.equal(new Set(recordKinds).size, recordKinds.length);
   const story = storyMilestones([
     observation({ id: "a", sequence: 1, type: "network.request.sent", source: "customer-app", target: "orders" }),
     observation({ id: "b", sequence: 2, type: "runtime.log", source: "orders" }),
+    observation({ id: "c", sequence: 3, type: "scheduler.event.scheduled", source: "simulation" }),
   ]);
-  assert.deepEqual(story.map(milestone => milestone.observation.id), ["a"]);
+  assert.deepEqual(story.map(milestone => milestone.observation.id), ["a", "b"]);
+  assert.deepEqual(story.map(milestone => milestone.kind), ["request", "log"]);
 });
 
 test("#165 an assertion record's stored evidence reads as rows, from stored fields only", () => {

@@ -25,11 +25,14 @@ async function observeCommands(page: Page) {
   });
 }
 
+/** Visible records out of recorded records, as the Story's read-only count states them. */
 async function countPair(page: Page) {
   const text = await page.locator(".timeline-count").innerText();
-  const match = /(\d+) of (\d+)/.exec(text);
-  expect(match).not.toBeNull();
-  return { shown: Number(match?.[1]), total: Number(match?.[2]) };
+  const filtered = /Filters show (\d+) of (\d+) observations/.exec(text);
+  if (filtered) return { shown: Number(filtered[1]), total: Number(filtered[2]) };
+  const recorded = /from (\d+) recorded observations/.exec(text);
+  expect(recorded).not.toBeNull();
+  return { shown: Number(recorded?.[1]), total: Number(recorded?.[1]) };
 }
 
 test("discoverable filters suggest the current run and keep partial matching explicit", async ({ page }) => {
@@ -42,8 +45,8 @@ test("discoverable filters suggest the current run and keep partial matching exp
   await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // These assertions read canonical rows; the teaching Story view has its own spec.
-  await viewButton(page, "Raw").click();
+  await viewButton(page, "Story table").click();
+  const tableLabels = page.locator(".story-table button[data-observation-id]");
   const active = page.getByRole("list", { name: "Active filters" });
   const dialog = moreFilters(page);
   const typeInput = dialog.getByLabel("Type", { exact: true });
@@ -69,10 +72,10 @@ test("discoverable filters suggest the current run and keep partial matching exp
   const afterRun = await page.getByRole("option").allTextContents();
   expect(afterRun).not.toEqual(beforeRun);
   // Nothing narrows the rows until Apply.
-  await expect(page.locator(".timeline-count")).toHaveText(/^(\d+) of \1 observations in virtual-time order\.$/);
+  await expect(page.locator(".timeline-count")).not.toContainText("Filters show");
   await typeInput.press("Escape");
   await applyMoreFilters(page);
-  await expect(page.locator(".timeline-count")).toHaveText(/^0 of \d+ observations in virtual-time order\.$/);
+  await expect(page.locator(".timeline-count")).toContainText(/Filters show 0 of \d+ observations/);
   await expect(page.locator(".timeline-empty")).toContainText("network.response.dropped");
   await expect(page.locator(".timeline-empty")).toContainText("clear all filters");
 
@@ -83,9 +86,9 @@ test("discoverable filters suggest the current run and keep partial matching exp
   const prefixed = await countPair(page);
   expect(prefixed.shown).toBeGreaterThan(1);
   expect(prefixed.shown).toBeLessThan(prefixed.total);
-  const visibleRows = await page.locator("#timeline-rows button").allInnerTexts();
+  const visibleRows = await tableLabels.allInnerTexts();
   expect(visibleRows.length).toBeGreaterThan(0);
-  for (const row of visibleRows) expect(row).toContain("network.");
+  for (const row of visibleRows) expect(row).toMatch(/^(Request|Response) /);
 
   await openMoreFilters(page);
   await typeInput.fill("network.response.dropped");
@@ -100,11 +103,11 @@ test("discoverable filters suggest the current run and keep partial matching exp
   const exact = await countPair(page);
   expect(exact.shown).toBeGreaterThan(0);
   expect(exact.shown).toBeLessThan(prefixed.shown);
-  const exactRows = await page.locator("#timeline-rows button").allInnerTexts();
+  const exactRows = await tableLabels.allInnerTexts();
   expect(exactRows.length).toBeGreaterThan(0);
-  for (const row of exactRows) expect(row).toContain("network.response.dropped");
+  for (const row of exactRows) expect(row).toBe("Response dropped");
 
-  const selected = page.locator("#timeline-rows button").first();
+  const selected = tableLabels.first();
   await selected.click();
   await expect(selected).toHaveAttribute("aria-pressed", "true");
   await page.locator("#inspection-panel").getByText("Record fields & filter shortcuts", { exact: true }).click();
@@ -113,7 +116,7 @@ test("discoverable filters suggest the current run and keep partial matching exp
   const component = page.getByLabel("Component", { exact: true });
   await expect(component).toHaveValue("payment-processor");
   await expect(active).toContainText("Payment Processor (payment-processor)");
-  const observationId = await page.locator("#timeline-rows button[aria-pressed='true']").getAttribute("data-observation-id");
+  const observationId = await page.locator(".story-table button[aria-pressed='true']").getAttribute("data-observation-id");
   await page.locator("#inspection-panel").getByText("Technical record", { exact: true }).click();
   await page.getByRole("button", { name: "Copy observation id" }).click();
   await expect(page.getByRole("button", { name: "Copied observation id" })).toBeVisible();

@@ -171,7 +171,8 @@ Rules that keep the regions distinct:
 
 ### Recorded history
 
-- One view switch: **Story diagram**, **Story table**, **Learning**, **Raw**.
+- One view switch: **Story diagram** and **Story table**, two presentations of
+  the same teaching milestones. Recorded history lists milestones only.
 - One control per filter dimension: **Show** (quick views with counts),
   **Component**, and **More filters…**, a modal dialog for advanced filters.
 - Active filters appear as chips only while a filter is active.

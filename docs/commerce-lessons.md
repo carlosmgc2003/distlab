@@ -64,10 +64,12 @@ history at its `scenario.assertion.evaluated` record. Observation detail shows
 the check's label, whether it passed at that boundary, and the rows its
 predicate stored as evidence, such as both payment rows of a double charge
 (#165). It reads the stored record only and never re-evaluates the check. The
-record stays in the Raw view, the one view that lists every record ungrouped.
-**Recorded history → Story** includes business logs such as compensation and
-breaker transitions, as well as network, DB, and fault milestones. The Story
-diagram and Story table views select the same underlying observations.
+Story table lists the record even when it repeats an earlier result, and only
+while it is selected. **Recorded history → Story** includes business logs such
+as compensation and breaker transitions, key-value changes and expiries,
+rejected transactions, NACKed and dead-lettered messages, check results, and
+the network, DB, and fault milestones. The Story diagram and Story table views
+select the same underlying observations.
 
 **Compare** loads the paired experiment with equivalent inputs and a fresh worker
 session (it does not retain a side-by-side result or change rules during a run).
