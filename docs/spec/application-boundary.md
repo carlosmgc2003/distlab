@@ -305,7 +305,7 @@ and it takes effect at an event boundary.
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
 | Open scenario file | Read a local file and load it | Replace the session | Unavailable | Replace the session | Replace the session | After `INVALID_DOCUMENT` the diagnostics stay listed, and choosing a file loads again |
 | Save as scenario file | Download the chosen packaged lesson as a starter document | Download it. The session is unchanged | Download it. The session is unchanged | Download it. The session is unchanged | Download it. The session is unchanged | Download it. Not offered while an imported session is loaded |
-| Break and design choices (draft overlay) | Not shown | Edit the draft. Apply sends `load` with the packaged document, or the imported document's text, and the draft, which replaces the session. An imported document without `overlayPolicy` shows that it accepts no student changes | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
+| Design edits, design choices, and faults (draft overlay) | Not shown | Edit the draft. The Architecture section appears only when the session's policy has an architecture allowance. Apply sends `load` with the packaged document, or the imported document's text, and the draft, which replaces the session. An imported document without `overlayPolicy` shows that it accepts no student changes | Unavailable. The applied overlay stays visible read-only | Edit the draft. Apply replaces the session and starts from the start time | Edit the draft. Apply replaces the session | After `INVALID_OVERLAY` the draft stays editable with inline diagnostics, and Apply loads again. After `SIMULATION_FAILED` Apply replaces the session |
 | Fit, zoom, and pan | Not shown | Change the local viewport | Change the local viewport | Change the local viewport | Change the local viewport | Not shown when the failure withholds the projection |
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
 | Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
@@ -348,7 +348,11 @@ their declared behavior options; they never author handlers. Architecture
 edits travel in the session overlay and are governed by the lesson's
 architecture allowance, so the host rule above is unchanged. The first
 increment edits lesson-declared slots, peer bindings, owned resources, and
-subscriptions (#108 to #112). These remain deferred:
+subscriptions (#108 to #112). The browser's Design editor is the Experiment
+drawer's **Architecture** section (#112): form controls, one per allowance
+entry, that join the one draft overlay. It offers only what the allowance and the
+data-only descriptors declare, and the worker's load is the validation. Drawing
+the draft as a preview on the graph is #203. These remain deferred:
 
 - adding components with student-chosen IDs and removing components (the
   sandbox increment, whose rules ADR-005 already fixes)

@@ -161,7 +161,8 @@ export function App({ host }: { readonly host: SimulationHost }) {
   const designContext = useMemo((): DesignContext | undefined => policy?.architecture && lesson
     ? { allowance: policy.architecture, architecture: lesson.architecture, descriptors: commerce ? commerceDescriptors : checkoutDescriptors } : undefined, [policy, lesson, commerce]);
   const faultsPending = useMemo(() => {
-    const faults = overlayFromDraft(draft, applied?.parameters ?? []);
+    // Only the faults differ here: the applied choices and design edits stand in for their own drafts.
+    const faults = overlayFromDraft(draft, applied?.parameters ?? [], applied?.architecture);
     return applied ? !sameOverlay(faults, applied) : !isEmptyOverlay(faults);
   }, [draft, applied]);
   // The lesson line names the loaded experiment. The run status itself is announced once, by the

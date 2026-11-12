@@ -17,7 +17,10 @@ base lesson (`validateAssessmentDefinition`, [Assessment](docs/spec/assessment.m
 experiment…**) lets a student add deterministic faults to a loaded lesson before Run, as a session
 overlay that the lesson's policy allows ([ADR-004](docs/spec/adr/004-session-overlays.md)), and
 change the settings a lesson declares (idempotency, timeout, compensation, outbox, circuit breaker)
-as parameter overrides in the same overlay. One **Apply and restart** sends both. Golden scenarios 01, 02, 04, 05, 06, and 07
+as parameter overrides in the same overlay. In a lesson whose policy allows architecture edits,
+its **Architecture** section also fills a slot with a catalog model and attaches the resources and
+subscriptions the model needs ([ADR-005](docs/spec/adr/005-architecture-editor.md)). One **Apply and
+restart** sends all of them. Golden scenarios 01, 02, 04, 05, 06, and 07
 are loaded through one headless harness (`packages/kernel/examples/harness.ts`).
 
 ## Goals

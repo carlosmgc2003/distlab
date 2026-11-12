@@ -111,6 +111,9 @@ reader needs before changing code, and the vocabulary used when discussing them.
   resulting design, not the gestures. The lesson's **architecture allowance**
   says which edits are allowed. The worker is the only validator; the editor's
   draft **preview** is presentation and is never sent.
+- In visible UI text one architecture edit is a **design edit**: the
+  Experiment drawer's Architecture section counts "‹n› of ‹max› design edits".
+  Do not confuse it with a **design choice**, which is a parameter override.
 
 ## Scenario documents
 
