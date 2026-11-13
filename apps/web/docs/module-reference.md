@@ -57,7 +57,8 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Responsibility:** mount the React application and own its browser lifetime.
 - **Imports and boundaries:** `react-dom/client`, `App.tsx`, and
   `browser-host.ts`; runtime construction remains behind the worker URL.
-- **State and protocol:** creates one host and React root. `pagehide` disposes
+- **State and protocol:** creates one host and React root, and reads the
+  page's lesson link once with `readLessonLink` for `App`. `pagehide` disposes
   the host; Vite hot-module disposal removes the listener, unmounts the root,
   and disposes the host.
 - **Presentation/runtime separation:** starts the UI and transport lifetime;
@@ -126,6 +127,22 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
 - **Presentation/runtime separation:** transport shape validation does not
   normalize scenarios, construct runtime components, or authorize new inputs.
 
+## `lesson-link.ts`
+
+[Source](../src/lesson-link.ts)
+
+- **Responsibility:** direct links to a packaged lesson (`?lesson=<id>`) or
+  assessment (`?assessment=<id>`), so an instructor can send students straight
+  to one.
+- **Imports and boundaries:** the packaged lesson and assessment lists from
+  `scenarios.ts`. Pure: callers pass the search string and location.
+- **State and protocol:** `readLessonLink` returns the packaged target, an
+  unknown name as written, or nothing. `lessonLinkSearch` rewrites the address
+  bar's search for the loaded target and keeps every other parameter.
+  `lessonLinkUrl` builds the link to share, without `lang`, so each student's
+  browser chooses the language. A link names a packaged document only: it never
+  carries an overlay, a seed, or a scenario file.
+
 ## `scenarios.ts`
 
 [Source](../src/scenarios.ts)
@@ -173,7 +190,13 @@ The governing context is [CONTEXT.md](../../../CONTEXT.md),
   packaged scenario discards the imported file. **Save as scenario file**, in
   the Lesson panel's ④ Experiment and offered only for a loaded packaged lesson,
   downloads `starterFile` for that lesson through a Blob URL; it sends no
-  command. The Lesson panel's collapsed state is shell state, so it survives tab
+  command. **Copy link to this lesson**, beside it, writes `lessonLinkUrl` to
+  the clipboard, or shows the link to copy by hand when the clipboard refuses;
+  it sends no command. A lesson link the page opened with loads its lesson or
+  assessment once on mount, through the same path as the Lesson chooser, and an
+  unknown name is reported on the welcome screen. The address bar follows the
+  loaded packaged lesson or assessment with `history.replaceState`, keeping
+  other parameters such as `lang`. The Lesson panel's collapsed state is shell state, so it survives tab
   switches and lesson loads. ③ Investigate opens with the outcome summary
   (`outcomeSummary` for a packaged commerce lesson, `runOutcome` for checkout),
   then `LessonChecks` or the checkout evidence links, then the questions, then

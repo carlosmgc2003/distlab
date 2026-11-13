@@ -54,6 +54,9 @@ export const app: typeof source = {
   changeExperiment: "Cambiá el experimento…",
   unappliedChanges: "cambios sin aplicar",
   saveStarter: "Guardar como archivo de escenario",
+  copyLessonLink: "Copiar el enlace a esta lección",
+  lessonLinkCopied: "Enlace copiado. Quien lo abra empieza en esta lección.",
+  lessonLinkNotCopied: (url: string, _f: Fmt) => `No se pudo copiar el enlace. Copialo a mano: ${url}`,
   advancedDiagnostics: "Diagnóstico avanzado",
   engineCounters: "Contadores del motor",
   randomDraws: "Sorteos aleatorios",
@@ -74,5 +77,6 @@ export const app: typeof source = {
     stepChoose: "<choose>Elegí una lección</choose>, o abrí el archivo de escenario de un docente.",
     stepPredict: "Predecí el resultado, después ejecutá la simulación y seguí cada mensaje entre componentes.",
     stepExplain: "Explicá el resultado a partir del historial registrado y después compará con el diseño emparejado.",
+    unknownLink: (value: string, f: Fmt) => `Este enlace nombra una lección que DistLab no tiene: ${f.quote(value)}. Elegí una de las lecciones de abajo.`,
   },
 };

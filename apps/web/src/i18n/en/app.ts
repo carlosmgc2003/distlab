@@ -55,6 +55,10 @@ export const app = {
   changeExperiment: "Change the experiment…",
   unappliedChanges: "unapplied changes",
   saveStarter: "Save as scenario file",
+  /** A direct link to the loaded packaged lesson, for an instructor to share (lesson-link.ts). */
+  copyLessonLink: "Copy link to this lesson",
+  lessonLinkCopied: "Link copied. Students who open it start on this lesson.",
+  lessonLinkNotCopied: (url: string, _f: Fmt) => `The link could not be copied. Copy it by hand: ${url}`,
   advancedDiagnostics: "Advanced diagnostics",
   engineCounters: "Engine counters",
   randomDraws: "Random draws",
@@ -76,5 +80,7 @@ export const app = {
     stepChoose: "<choose>Choose a lesson</choose>, or open an instructor’s scenario file.",
     stepPredict: "Predict the outcome, then run the simulation and follow each message between components.",
     stepExplain: "Explain the result from the recorded history, then compare it with the paired design.",
+    /** The page was opened with a lesson link whose name matches no packaged lesson. */
+    unknownLink: (value: string, f: Fmt) => `This link names a lesson DistLab does not have: ${f.quote(value)}. Choose one of the lessons below.`,
   },
 };

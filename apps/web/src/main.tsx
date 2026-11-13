@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { createBrowserHost } from "./browser-host.ts";
+import { readLessonLink } from "./lesson-link.ts";
 import { detectLocale, LOCALE_STORAGE_KEY } from "./i18n/locales.ts";
 import { applyDocumentLocale, LocaleProvider } from "./i18n/react.tsx";
 
@@ -14,7 +15,9 @@ applyDocumentLocale(locale);
 
 const host = createBrowserHost();
 const root = createRoot(document.getElementById("root")!);
-root.render(<LocaleProvider initial={locale}><App host={host} /></LocaleProvider>);
+// A shared lesson link (`?lesson=<id>`) opens that lesson directly.
+const initialLink = readLessonLink(window.location.search);
+root.render(<LocaleProvider initial={locale}><App host={host} initialLink={initialLink} /></LocaleProvider>);
 const close = () => host.dispose();
 window.addEventListener("pagehide", close);
 if (import.meta.hot) import.meta.hot.dispose(() => {

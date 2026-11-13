@@ -44,6 +44,8 @@ import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, Assessment
 import type { SimulationHost } from "./host.ts";
 import { assessmentTitle, assessments, experimentLabel, experimentShorthand, lessonCheckLabels, lessonCopy, lessonDescription, packagedMetadata, scenarios, starterSource } from "./scenarios.ts";
 import { invariantLabel } from "./assessment.ts";
+import { lessonLinkSearch, lessonLinkUrl } from "./lesson-link.ts";
+import type { LessonLink, LessonLinkTarget } from "./lesson-link.ts";
 import { terminalCopy, terminalMark } from "./timeline.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 
@@ -62,7 +64,11 @@ function carryText(carried: { readonly faults: number; readonly choices: readonl
   return m.app.carry.notice(m.fmt.list(clauses));
 }
 
-export function App({ host }: { readonly host: SimulationHost }) {
+/**
+ * `initialLink` is the lesson link the page was opened with (`lesson-link.ts`). A packaged
+ * target is loaded once on mount, exactly as if it were chosen in the Lesson chooser.
+ */
+export function App({ host, initialLink = null }: { readonly host: SimulationHost; readonly initialLink?: LessonLink }) {
   const m = useMessages();
   const snapshot = useSyncExternalStore(host.subscribe, host.getSnapshot);
   // The color theme is presentation state, held once so the selector keeps it wherever it renders.
@@ -118,6 +124,10 @@ export function App({ host }: { readonly host: SimulationHost }) {
   // A file rejected before it was read (ADR-006 step 1). Nothing was sent, so the session is unchanged.
   const [unreadFile, setUnreadFile] = useState<{ readonly name: string; readonly diagnostics: readonly ScenarioDiagnostic[] } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // A lesson link that names no packaged lesson is reported on the welcome screen until something loads.
+  const [unknownLink, setUnknownLink] = useState<string | null>(initialLink?.kind === "unknown" ? initialLink.value : null);
+  // The outcome of Copy link, for the lesson it was copied from: copied, or the link to copy by hand.
+  const [linkCopy, setLinkCopy] = useState<{ readonly id: string; readonly url: string; readonly copied: boolean } | null>(null);
   const onGraphPick = useCallback((value: GraphPick) => setPick(current => ({ pick: value, token: (current?.token ?? 0) + 1 })), []);
   const onEmphasis = useCallback((value: GraphEmphasis | undefined) => { setEmphasis(value); }, []);
   useEffect(() => { if (snapshot.document) setImportedDocument(snapshot.document); }, [snapshot.document]);
@@ -363,12 +373,15 @@ export function App({ host }: { readonly host: SimulationHost }) {
    * before the first run. Each suite row is then an ordinary load of the same document (D-7).
    */
   const chooseAssessment = (id: string) => {
-    if (busy) return;
-    const choice = assessments.find(item => item.id === id);
-    if (!choice) return;
+    if (busy || !assessments.some(item => item.id === id)) return;
     chooserOpener.current = null;
     focusTriggerWhenIdle.current = true;
     setChooserOpen(false);
+    openAssessment(id);
+  };
+  const openAssessment = (id: string) => {
+    const choice = assessments.find(item => item.id === id);
+    if (busy || !choice) return;
     setAssessment(choice);
     suite.reset();
     setLoadedChoice(null);
@@ -377,6 +390,35 @@ export function App({ host }: { readonly host: SimulationHost }) {
     startDraft();
     setTab("assessment");
     void host.load(choice.scenario).catch(() => {});
+  };
+  // A lesson link opens its lesson once, with no overlay: the same load as choosing it (lesson-link.ts).
+  const linkOpened = useRef(false);
+  useEffect(() => {
+    if (linkOpened.current) return;
+    linkOpened.current = true;
+    if (initialLink?.kind === "lesson") replaceSession(initialLink.id);
+    else if (initialLink?.kind === "assessment") openAssessment(initialLink.id);
+  }, []);
+  // The address bar names what is loaded, so it is always a link to share. It is replaced, never
+  // pushed: a lesson change adds no browser history entry. Before any load it is left as opened.
+  const linkTarget: LessonLinkTarget | null | undefined = assessment ? { kind: "assessment", id: assessment.id }
+    : imported ? null : loadedChoice ? { kind: "lesson", id: loadedChoice.id } : undefined;
+  const linkKey = linkTarget === undefined ? undefined : linkTarget ? `${linkTarget.kind}:${linkTarget.id}` : "none";
+  useEffect(() => {
+    if (linkTarget === undefined) return;
+    setUnknownLink(null);
+    const search = lessonLinkSearch(window.location.search, linkTarget);
+    if (search !== window.location.search) window.history.replaceState(window.history.state, "", `${window.location.pathname}${search}${window.location.hash}`);
+  }, [linkKey]);
+  /** Copies the loaded packaged lesson's link. Where the clipboard is refused, the link is shown to copy by hand. */
+  const copyLessonLink = async () => {
+    if (!loadedChoice) return;
+    const id = loadedChoice.id;
+    const url = lessonLinkUrl(window.location, { kind: "lesson", id });
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopy({ id, url, copied: true });
+    } catch { setLinkCopy({ id, url, copied: false }); }
   };
   const triggerLabel = assessment ? m.app.assessmentLabel(assessmentTitle(assessment, m)) : imported ? m.app.lessonLabel(importedScenario?.presentation.title ?? importedFile.name)
     : loadedChoice ? m.app.lessonLabel(experimentLabel(loadedChoice, m)) : m.lessonChooser.title;
@@ -510,6 +552,11 @@ export function App({ host }: { readonly host: SimulationHost }) {
     </button> : null}
     {/* An instructor's authoring aid. It is offered only for a packaged lesson, never for an imported document. */}
     {imported || !loadedChoice ? null : <button type="button" className="save-starter" onClick={saveStarter}>{m.app.saveStarter}</button>}
+    {/* A direct link to this packaged lesson, for an instructor to share. It sends no command. */}
+    {imported || !loadedChoice ? null : <button type="button" className="copy-lesson-link" onClick={() => { void copyLessonLink(); }}>{m.app.copyLessonLink}</button>}
+    {linkCopy && !imported && linkCopy.id === loadedChoice?.id ? <p className="lesson-link-status" role="status">
+      {linkCopy.copied ? m.app.lessonLinkCopied : m.app.lessonLinkNotCopied(linkCopy.url)}
+    </p> : null}
     {/* Engine counters stay here; Distributed state moved to the Service state dialog (#142). */}
     {projection && report ? <details className="raw-state advanced-diagnostics">
       <summary>{m.app.advancedDiagnostics}</summary>
@@ -622,6 +669,7 @@ export function App({ host }: { readonly host: SimulationHost }) {
         <LanguageSwitcher />
         <p className="eyebrow">{m.app.welcome.eyebrow}</p>
         <h2>{m.app.welcome.heading}</h2>
+        {unknownLink ? <p className="unknown-lesson-link" role="alert">{m.app.welcome.unknownLink(unknownLink)}</p> : null}
         <p>{m.app.welcome.intro}</p>
         <h3 className="empty-topics-title">{m.app.welcome.topics}</h3>
         <ul className="empty-topics">
