@@ -43,6 +43,8 @@ npm run --silent lesson -- outbox-idempotent --json # full state/history export
 npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
 npm run scenario -- check examples/scenarios/processor-response-lost.json # check an ADR-006 scenario document
 node --experimental-strip-types apps/web/tests/i18n-scan.ts  # list user-visible English outside the catalogs
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts retry-unsafe # lesson copy beside its recorded run
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-shot.ts retry-unsafe  # lesson screenshots from the production build
 git diff --check                  # find whitespace and conflict-marker problems
 rg '^#{1,6} ' AGENTS.md docs/     # review Markdown heading structure
 git status --short                # confirm the intended files are included
@@ -160,6 +162,16 @@ the issue, what to verify, and what the pull request must contain
 
 Cloud sessions install dependencies through the SessionStart hook in
 `.claude/hooks/session-start.sh`, which runs `npm ci` only when a manifest changes.
+
+### Lesson authoring
+
+Reviewing, adjusting, or creating a lesson (its teaching content, its
+configuration, and what the screen shows) follows the `lesson-authoring` skill
+in `.claude/skills/lesson-authoring/`. Claude Code loads it by itself; any other
+agent reads its `SKILL.md` first. Its two read-only scripts print a lesson's
+copy in both languages beside what the run recorded (`lesson-sheet.ts`, after
+`npm run build:packages`) and capture the lesson on screen (`lesson-shot.ts`,
+after `npm run build`).
 
 ### Issue tracker
 
