@@ -27,6 +27,7 @@ family prefix is load-bearing: `commerceScenario`, `commerceChecks`,
 | Descriptor | `src/commerce/descriptors.ts` | Only for new behavior. A data-only `ModelDescriptor`: kind, endpoints or operations, consumers, publishes, peers with defaults, storage, options. Lesson data that is not a behavior option goes in `lessonData`. Add it to `commerceDescriptors`. | `descriptors.test.ts`: each model equals its descriptor; declared peers, storage, and subscriptions match every packaged document |
 | Model | `src/commerce/<family>.ts` | `{ ...descriptor, checks: {}, instantiate }`. Read peers with `peer()`. Mutable state inside `instantiate`. Business logs with `ctx.log.write(level, "<noun>.<event>", data)`. Register it in `models` in `src/commerce/index.ts`. | `tests/boundaries.test.ts` keeps factories out of the main thread |
 | Predicate | `src/commerce/index.ts`, `commerceAssessment` | Only when no existing predicate states the invariant. A stable `commerce.<name>` id added to the `find` list, a comment that states the property in one sentence, and evidence a student can read. A predicate used with `always` must pass before the first write. | Catalog tests for the lesson; document the predicate in `docs/modules/catalogs.md` |
+| Revision | `src/commerce/scenarios.ts`, `commerceRevisions` (`checkoutLesson` in `src/scenarios.ts` for the two checkout lessons) | The lesson revision: `revised(1, "<today, YYYY-MM-DD>")` for a new lesson. For a changed lesson, the next number and the date of the change. | The `Record<CommerceLessonName, …>` type; `tests/revisions.test.ts` REV-2 fails when a lesson's run, checks, or policy change at the same revision, and prints the fingerprint to record |
 | Tests | `tests/commerce.test.ts`, `tests/overlay.test.ts` | See [Pinned lists and counts](#pinned-lists-and-counts), plus behavior assertions for what the lesson is about (the log sequence, the final rows). | — |
 
 Existing predicates, before writing a new one: `commerce.rows` (exact count
@@ -80,7 +81,7 @@ stop: derive from the declared model, the kind, or the policy instead.
 
 | Document | What changes |
 | --- | --- |
-| `docs/commerce-lessons.md` | The lesson's section: **Pattern**, **Problem**, **Topology**, **Initial state**, **Injected fault**, **Expected timeline**, **Expected checks** table (one row per lesson with its `npm run lesson` command), what the browser shows, **Design choices**, **Concept** with the limits. Also the *Design choices* and *Faults* tables near the top, and the opening count. |
+| `docs/commerce-lessons.md` | The lesson's row in the *Lesson versions* table (REV-3 compares it with the catalog data). The lesson's section: **Pattern**, **Problem**, **Topology**, **Initial state**, **Injected fault**, **Expected timeline**, **Expected checks** table (one row per lesson with its `npm run lesson` command), what the browser shows, **Design choices**, **Concept** with the limits. Also the *Design choices* and *Faults* tables near the top, and the opening count. |
 | `docs/modules/catalogs.md` | Source map row for a new file, the models table, the *Packaged commerce documents* table row, the safety or deadline invariant lists, the expectations paragraph, any new predicate, and the counts. |
 | `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/spec/architecture-visualization.md` | The lesson and model counts in prose. |
 | `docs/glossary.md` | A new domain term, and its Spanish term under "Spanish Terms". |
@@ -103,6 +104,7 @@ update it knowingly, and read what it protects first.
 | `packages/catalogs/tests/overlay.test.ts` | The pairs, and the design choices that turn each lesson into its partner (setting them must give the partner's invariant verdicts) |
 | `packages/catalogs/tests/descriptors.test.ts` | The number of peer rebindings across packaged documents, which grows with every declared peer a new document uses |
 | `packages/catalogs/tests/document.test.ts` | The number of packaged documents |
+| `packages/catalogs/tests/revisions.test.ts` | Each lesson's revision and the fingerprint of its recorded run, checks, and policy |
 | `apps/web/tests/content-translations.test.ts` | The number of distinct check ids and of concepts; the lesson-specific check keys |
 | `apps/web/tests/lesson-topics.test.ts` | Every topic's groups, in order |
 | `apps/web/tests/commerce-worker.test.ts` | Per-family facts of the student projection, and for some lessons the exact list of design-choice keys |
@@ -110,6 +112,14 @@ update it knowingly, and read what it protects first.
 | `apps/web/e2e/lesson-chooser.spec.ts` | The chooser's lesson count |
 
 ## What a change costs
+
+Every row below also costs a **new lesson revision**: the next `revision`, the
+date of the change, the lesson's row in the guide's *Lesson versions* table,
+and, when the fingerprint moved, the new fingerprint in
+`tests/revisions.test.ts`. The first two rows do not move the fingerprint, so
+nothing reminds you; a change to a model moves it for every lesson that uses
+the model. The student sees the revision on the lesson's card and under ① Goal,
+which is why it must move when the lesson does.
 
 | Change | Exports and `runId` | Also update |
 | --- | --- | --- |

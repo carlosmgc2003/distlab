@@ -2,6 +2,7 @@ import type { lessons as source } from "../en/lessons.ts";
 
 /** Spanish messages for the `lessons` area. Typed by the English source, so keys and parameters must match. */
 export const lessons: typeof source = {
+  revision: (p, f) => `Versión ${f.number(p.revision)} · actualizada el ${f.date(p.updated)}`,
   /** Packaged commerce lessons, by lesson name. Every `commerceLessonNames` entry needs one (scenarios.ts fails to typecheck without it). */
   commerce: {
     "retry-unsafe": { title: "Reintento sin idempotencia", description: "Un timeout no prueba que un pago haya fallado. Esperá dos pagos después del reintento." },

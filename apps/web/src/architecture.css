@@ -129,6 +129,9 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .lesson-choice-title { font-weight: 650; }
 .lesson-choice-description { color: var(--text-secondary); font-size: .8rem; line-height: 1.4; }
 .lesson-choice:disabled .lesson-choice-description { color: var(--text-disabled); }
+/* The lesson revision: its version and last update, quieter than the description it follows. */
+.lesson-choice-revision, .lesson-goal-revision { color: var(--text-secondary); font-size: .75rem; line-height: 1.4; }
+.lesson-choice:disabled .lesson-choice-revision { color: var(--text-disabled); }
 .lesson-choice[aria-current="true"] { background: var(--selection-bg); border: 2px solid var(--selection-border); }
 .lesson-choice-current { justify-self: start; padding: 0 6px; border: 1px solid var(--selection-border); border-radius: 999px; font-size: .7rem; font-weight: 650; }
 .lesson-chooser-footer { display: flex; justify-content: flex-end; margin-top: 12px; }

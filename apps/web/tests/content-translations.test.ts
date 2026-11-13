@@ -7,7 +7,7 @@ import { messages } from "../src/i18n/catalog.ts";
 import { en as sourceCatalog } from "../src/i18n/en/index.ts";
 import { es as spanishCatalog } from "../src/i18n/es/index.ts";
 import { checkKey, checkLabel } from "../src/lesson-checks.ts";
-import { assessments, lessonDescription, lessonTitle, scenarios } from "../src/scenarios.ts";
+import { assessments, lessonDescription, lessonRevisionText, lessonTitle, scenarios } from "../src/scenarios.ts";
 import { invariantLabel, requirementText, rowLabel } from "../src/assessment.ts";
 import { lessonClassification } from "../src/lesson-topics.ts";
 import { lessonTopics } from "../src/lesson-topics.ts";
@@ -91,4 +91,18 @@ test("CONTENT-6: lesson copy written in apps/web has an entry for every packaged
     assert.ok(lessonTitle(choice, es).length > 0);
     assert.notEqual(lessonTitle(choice, es), lessonTitle(choice, en), choice.id);
   }
+});
+
+test("CONTENT-7: every packaged lesson shows its revision, with the date in the active language", () => {
+  for (const choice of scenarios) {
+    const { revision, updated } = choice.revision;
+    assert.ok(Number.isSafeInteger(revision) && revision >= 1, choice.id);
+    assert.equal(lessonRevisionText(choice, en), `Version ${revision} · updated ${en.fmt.date(updated)}`, choice.id);
+    assert.equal(lessonRevisionText(choice, es), `Versión ${revision} · actualizada el ${es.fmt.date(updated)}`, choice.id);
+    // The date is formatted, never shown as the ISO text the catalog stores.
+    assert.ok(!lessonRevisionText(choice, en).includes(updated), choice.id);
+  }
+  const cqrs = scenarios.find(choice => choice.id === "cqrs-delayed")!;
+  assert.equal(lessonRevisionText(cqrs, en), "Version 1 · updated Nov 13, 2026");
+  assert.equal(lessonRevisionText(cqrs, es), "Versión 1 · actualizada el 13 nov 2026");
 });

@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import type { WorkerCommand } from "@distlab/contracts";
 import { commerceScenario } from "@distlab/catalogs";
 import { scenarios } from "../src/scenarios.ts";
+import { messages } from "../src/i18n/catalog.ts";
 import { lessonChoice, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
 import { choicesSection, experimentDrawer, openExperiment } from "./support/experiment.ts";
 
@@ -210,4 +211,28 @@ test("a topic on the empty workspace opens the chooser on that topic", async ({ 
   await expect(chooser.locator(":focus")).toHaveAttribute("data-lesson-id", "cqrs-delayed");
   await page.keyboard.press("Escape");
   await expect(empty.getByRole("button", { name: "Replication and consistency" })).toBeFocused();
+});
+
+test("a lesson shows its version and last update on its card and under Goal, in the interface language", async ({ page }) => {
+  const english = messages("en"), spanish = messages("es");
+  for (const id of ["retry-unsafe", "normal"]) {
+    const lesson = scenarios.find(item => item.id === id)!;
+    const text = english.lessons.revision(lesson.revision);
+    expect(text).toMatch(/^Version \d+ · updated [A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+    await page.goto("/");
+    await lessonTrigger(page).click();
+    const card = lessonChoice(page, id);
+    await expect(card.locator(".lesson-choice-revision")).toHaveText(text);
+    // The revision is read after the description, as part of the choice's accessible description.
+    await expect(card).toHaveAccessibleDescription(new RegExp(`${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+    await card.click();
+    await expect(status(page)).toHaveText("READY");
+    await expect(page.locator(".lesson-goal-revision")).toHaveText(text);
+  }
+  // Spanish: the same data, with the date in Spanish.
+  const lesson = scenarios.find(item => item.id === "retry-unsafe")!;
+  await page.goto("/?lang=es");
+  await page.locator(".lesson-trigger").click();
+  await expect(page.locator('[data-lesson-id="retry-unsafe"] .lesson-choice-revision')).toHaveText(spanish.lessons.revision(lesson.revision));
+  expect(spanish.lessons.revision(lesson.revision)).toMatch(/^Versión \d+ · actualizada el \d{1,2} [a-z]{3,4} \d{4}$/);
 });

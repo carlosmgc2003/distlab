@@ -41,7 +41,7 @@ import { composeOverlay, DeterministicScenarioEngine, openHarness } from "@distl
 import { byCode, messages } from "../../../../apps/web/src/i18n/catalog.ts";
 import type { Messages } from "../../../../apps/web/src/i18n/catalog.ts";
 import { isLocale } from "../../../../apps/web/src/i18n/locales.ts";
-import { lessonDescription, lessonTitle, scenarios } from "../../../../apps/web/src/scenarios.ts";
+import { lessonDescription, lessonRevisionText, lessonTitle, scenarios } from "../../../../apps/web/src/scenarios.ts";
 import type { PackagedScenario } from "../../../../apps/web/src/scenarios.ts";
 import { lessonClassification } from "../../../../apps/web/src/lesson-topics.ts";
 import { checkLabel } from "../../../../apps/web/src/lesson-checks.ts";
@@ -185,6 +185,7 @@ async function sheet(lesson: PackagedScenario) {
   say("| --- | --- | --- |");
   say(`| Title | ${cell(lessonTitle(lesson, en))} | ${cell(lessonTitle(lesson, es))} |`);
   say(`| ① Goal and chooser card | ${cell(lessonDescription(lesson, en))} | ${cell(lessonDescription(lesson, es))} |`);
+  say(`| Lesson revision | ${cell(lessonRevisionText(lesson, en))} | ${cell(lessonRevisionText(lesson, es))} |`);
   if (classification) {
     say(`| Topic | ${cell(en.lessons.topics[classification.topic].title)} | ${cell(es.lessons.topics[classification.topic].title)} |`);
     say(`| Concepts | ${classification.concepts.map(id => en.lessons.concepts[id]).join(", ")} | ${classification.concepts.map(id => es.lessons.concepts[id]).join(", ")} |`);

@@ -84,6 +84,23 @@ reader needs before changing code, and the vocabulary used when discussing them.
 - Students never see a bare PASS or FAIL. `apps/web/src/lesson-checks.ts` maps
   stored verdicts only; it never re-evaluates a predicate.
 
+## Lesson revisions
+
+- A **lesson revision** is a packaged lesson's own version counter and the date
+  of its last change (`revision`, `updated`). Students read it as "Version 2 ·
+  updated Nov 13, 2026" on the lesson's card and under ① Goal.
+- It is data about the lesson, kept beside the documents in the data-only
+  catalog modules. It is **not** the `@1` of the document's name, which stays the
+  lesson's identity, and it never enters a document, a projection, a worker
+  command, history, or `runId`.
+- Say *revision* in code and *version* in interface text. Do not use *version*
+  alone for it in code: `version` already names the document format, a model's
+  version, and a catalog's version.
+- A lesson gets the next revision and a new date whenever it changes for a
+  student. `packages/catalogs/tests/revisions.test.ts` holds a fingerprint of
+  each lesson's recorded run, checks, and policy, and fails when one changes
+  without a new revision.
+
 ## Assessment
 
 - An **assessment** runs one student design against a fixed suite of fault

@@ -71,7 +71,7 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `checkoutCatalogV11`, `checkoutAssessmentV11` | `mvp.checkout@1.1.0`: the same models, with the `1.1.0` checkout assessment whose checks name their components (#148). |
 | `checkoutScenario(variant)` | Returns a `CanonicalValue` document for `"normal"` or `"response-lost"`. |
 | `normalCheckout`, `responseLostCheckout` | Preconstructed checkout documents. |
-| `checkoutLesson` | Read-only title and explanation strings indexed by checkout variant. |
+| `checkoutLesson` | Read-only title and explanation strings indexed by checkout variant, with each lesson's `revision` and `updated` date. |
 | `checkoutDescriptors`, `commerceDescriptors` | Data-only `ModelDescriptor` lists, one per registered model version. |
 | `commerceCatalog` | `ScenarioCatalog` with ID `commerce.lessons`, version `1.0.0`. |
 | `commerceAssessment` | `ScenarioAssessment` with version `1.0.0`. |
@@ -79,6 +79,8 @@ Boundary](../spec/application-boundary.md#packaged-scenario-hosting).
 | `checkoutCatalogReference`, `commerceCatalogReference` | Data-only `CatalogReference` of each packaged lesson's hosted catalog, exported from the two `scenarios.ts` modules. |
 | `hostedCatalogs` | `HostedCatalogRegistry` pairing `checkoutCatalog` with `checkoutAssessment` and `commerceCatalog` with `commerceAssessment`; its `reservedNames` are every packaged scenario name. |
 | `commerceLessonNames` | Ordered tuple of the twenty-one supported commerce-catalog names. |
+| `commerceRevision(name)` | The lesson's `LessonRevision`: its `revision` counter and the ISO date it was last `updated`. |
+| `LessonRevision` | Type-only shape of a lesson revision. |
 | `CommerceLessonName` | Type-only union derived from that tuple. |
 
 Both catalogs implement `find(name, version)` with an exact model-name/version
@@ -416,6 +418,30 @@ not one of the packaged lessons the worker accepts or the Lesson chooser lists
 until the assessment view. `tests/reliable-checkout.test.ts` validates every
 packaged definition (ASSESS-AC-2) and pins the expected-outcomes matrix
 (ASSESS-AC-4).
+
+### Lesson revisions
+
+Every packaged lesson has a **lesson revision**: a `revision` counter and an
+`updated` date (ISO `YYYY-MM-DD`). `commerceRevision(name)` returns it for a
+commerce-catalog lesson, and each `checkoutLesson` entry carries it for the two
+checkout lessons. It is data about the lesson for people: the browser shows it,
+the headless runner prints it, and the guide lists it. It is not the `@1` of the
+document's name, and it is not part of any document, export, or `runId`.
+
+Raise `revision` by one and set `updated` to the date of the change whenever a
+lesson changes for a student: its document, its checks or their labels, its
+overlay policy, the behavior of a model it uses, or its title, description, or
+guide section. Every lesson started at revision 1 when revisions were
+introduced, dated by its last change before then.
+
+The [revision tests](../../packages/catalogs/tests/revisions.test.ts) keep it
+honest. REV-2 holds, per lesson, a fingerprint of the packaged run's digest
+together with its checks and policy (for a checkout lesson, its copy and
+policy), and fails when a fingerprint changes while the revision does not; the
+failure message gives the new fingerprint to record. REV-3 keeps the *Lesson
+versions* table of the [lesson guide](../commerce-lessons.md#lesson-versions)
+equal to the data. A change that the fingerprint cannot see, such as a title in
+`apps/web`, needs the new revision by hand.
 
 ## Headless example and verification
 

@@ -6,8 +6,8 @@ import { checkLabel, contentText } from "./lesson-checks.ts";
 import type { StarterSource } from "./starter-file.ts";
 import { checkoutCatalogReference, checkoutLesson, checkoutOverlayPolicy, normalCheckout, responseLostCheckout } from "../../../packages/catalogs/src/scenarios.ts";
 
-import { commerceCatalogReference, commerceChecks, commerceLessonNames, commerceOverlayPolicy, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
-import type { CommerceLessonName } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import { commerceCatalogReference, commerceChecks, commerceLessonNames, commerceOverlayPolicy, commerceRevision, commerceScenario } from "../../../packages/catalogs/src/commerce/scenarios.ts";
+import type { CommerceLessonName, LessonRevision } from "../../../packages/catalogs/src/commerce/scenarios.ts";
 import { reliableCheckoutAssessment, reliableCheckoutChecks, reliableCheckoutOverlayPolicy, reliableCheckoutScenario } from "../../../packages/catalogs/src/commerce/reliable-checkout.ts";
 
 export { checkoutLesson };
@@ -46,10 +46,12 @@ const commercePairs = {
  * worker never accepts a policy from the main thread. Each lesson names its hosted
  * catalog, so a starter scenario file can be built from this data alone (ADR-006).
  */
+const checkoutRevision = (id: "normal" | "response-lost"): LessonRevision => ({ revision: checkoutLesson[id].revision, updated: checkoutLesson[id].updated });
+
 export const scenarios = [
-  { id: "normal", family: "checkout", catalog: checkoutCatalogReference, compare: "response-lost", scenario: detached(normalCheckout), policy: checkoutOverlayPolicy("normal") as LessonOverlayPolicy },
-  { id: "response-lost", family: "checkout", catalog: checkoutCatalogReference, compare: "normal", scenario: detached(responseLostCheckout), policy: checkoutOverlayPolicy("response-lost") as LessonOverlayPolicy },
-  ...commerceLessonNames.map(id => ({ id, family: "commerce" as const, catalog: commerceCatalogReference, compare: commercePairs[id], scenario: detached(commerceScenario(id)), policy: commerceOverlayPolicy(id), checks: commerceChecks(id) })),
+  { id: "normal", family: "checkout", catalog: checkoutCatalogReference, compare: "response-lost", scenario: detached(normalCheckout), policy: checkoutOverlayPolicy("normal") as LessonOverlayPolicy, revision: checkoutRevision("normal") },
+  { id: "response-lost", family: "checkout", catalog: checkoutCatalogReference, compare: "normal", scenario: detached(responseLostCheckout), policy: checkoutOverlayPolicy("response-lost") as LessonOverlayPolicy, revision: checkoutRevision("response-lost") },
+  ...commerceLessonNames.map(id => ({ id, family: "commerce" as const, catalog: commerceCatalogReference, compare: commercePairs[id], scenario: detached(commerceScenario(id)), policy: commerceOverlayPolicy(id), checks: commerceChecks(id), revision: commerceRevision(id) })),
 ] as const;
 
 export type PackagedScenario = (typeof scenarios)[number];
@@ -71,6 +73,14 @@ export function lessonTitle(choice: PackagedScenario, m: Messages): string {
 export function lessonDescription(choice: PackagedScenario, m: Messages): string {
   return choice.family === "commerce" ? m.lessons.commerce[choice.id].description
     : contentText(m.content.checkoutExplanations, choice.id, checkoutLesson[choice.id].explanation, m);
+}
+
+/**
+ * A packaged lesson's revision in the active language: "Version 2 · updated Nov 13, 2026". The revision is catalog
+ * data about the lesson; it is not the document's `@1` name and takes no part in a session's identity.
+ */
+export function lessonRevisionText(choice: PackagedScenario, m: Messages): string {
+  return m.lessons.revision(choice.revision);
 }
 
 /** Labels name the recorded fault input. They do not choose a hidden runtime branch. */

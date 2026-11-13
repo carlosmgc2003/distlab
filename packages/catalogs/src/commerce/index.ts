@@ -13,9 +13,9 @@ import { kvServerModel, leaseStorageModel, leaseWorkerModel } from "./lease.js";
 import { titleReplicaModel } from "./clock.js";
 import { placeholderExternalModel, placeholderServiceModel } from "./placeholder.js";
 import { reliableInventoryModel, reliableNotificationsModel, reliableOrdersModel, reliablePaymentsModel, reliableProcessorModel } from "./reliable.js";
-export { commerceCatalogReference, commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy } from "./scenarios.js";
+export { commerceCatalogReference, commerceChecks, commerceScenario, commerceLessonNames, commerceOverlayPolicy, commerceRevision } from "./scenarios.js";
 export { commerceDescriptors } from "./descriptors.js";
-export type { CommerceCheck, CommerceLessonName } from "./scenarios.js";
+export type { CommerceCheck, CommerceLessonName, LessonRevision } from "./scenarios.js";
 export {
   assessmentDefinitions, reliableCheckoutAssessment, reliableCheckoutChecks, reliableCheckoutName, reliableCheckoutOverlayPolicy,
   reliableCheckoutScenario, reliableCheckoutTimes,

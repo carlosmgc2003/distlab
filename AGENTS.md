@@ -116,13 +116,20 @@ string lives in the message catalogs in `apps/web/src/i18n/` (`en/` is the
 source, every other locale is typed `typeof en`), one area per screen. Pure
 modules that produce text take `m: Messages` as their last parameter; components
 call `useMessages()`. Write one message per sentence, with `f.plural`, `f.list`,
-and `f.number` for counts, joins, and numbers, and `<Rich>` for inline markup;
+`f.number`, and `f.date` for counts, joins, numbers, and calendar dates, and `<Rich>` for inline markup;
 never splice fragments, and never compare or store display text where a code
 will do. The worker never imports a catalog. Component IDs, endpoint names,
 observation types, codes, business data, and `t=` are never translated. The
 English Playwright suite runs with `locale: "en-US"`; `e2e/i18n.spec.ts` covers
 other locales. The scanner budget in `apps/web/tests/i18n.test.ts` may only go
 down.
+Every packaged lesson has a lesson revision: a `revision` counter and an
+`updated` date beside the documents in the data-only catalog modules, shown to
+students as "Version". A change to a lesson's document, checks, policy, model
+behavior, or copy raises the revision and the date in the same pull request;
+`packages/catalogs/tests/revisions.test.ts` fails otherwise and says what to
+record. The revision is not the document's `@1` name and never enters a
+document, a projection, or history.
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns

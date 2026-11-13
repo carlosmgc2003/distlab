@@ -32,6 +32,54 @@ export const commerceLessonNames = [
 ] as const;
 export type CommerceLessonName = typeof commerceLessonNames[number];
 
+/**
+ * A lesson revision: the lesson's own version counter and the date of its last
+ * change. It is presentation data about the lesson, shown to students as
+ * "Version"; it is not the document's `@1` name, which stays the lesson's
+ * identity, and it never enters a document, a projection, or history.
+ *
+ * Raise `revision` by one and set `updated` to the date of the change (ISO
+ * `YYYY-MM-DD`) whenever the lesson changes for a student: its document, its
+ * checks or their labels, its overlay policy, the behavior of a model it uses,
+ * or its title, description, or guide section. `tests/revisions.test.ts` fails
+ * when a lesson's recorded run, checks, or policy change without a new revision.
+ */
+export interface LessonRevision {
+  readonly revision: number;
+  readonly updated: string;
+}
+
+const revised = (revision: number, updated: string): LessonRevision => Object.freeze({ revision, updated });
+
+/** Every packaged commerce-catalog lesson's revision. A lesson without an entry fails to typecheck. */
+const commerceRevisions: Readonly<Record<CommerceLessonName, LessonRevision>> = {
+  "retry-unsafe": revised(1, "2026-11-09"),
+  "retry-idempotent": revised(1, "2026-11-09"),
+  "saga-uncompensated": revised(1, "2026-11-01"),
+  "saga-compensated": revised(1, "2026-11-01"),
+  "dual-write": revised(1, "2026-11-01"),
+  "outbox-unsafe-consumer": revised(1, "2026-11-01"),
+  "outbox-idempotent": revised(1, "2026-11-01"),
+  "outbox-notifications-gap": revised(1, "2026-11-04"),
+  "cqrs-delayed": revised(1, "2026-11-13"),
+  "cascade-unprotected": revised(1, "2026-11-09"),
+  "cascade-breaker": revised(1, "2026-11-09"),
+  "notifications-unbounded": revised(1, "2026-11-10"),
+  "notifications-dlq": revised(1, "2026-11-10"),
+  "cache-stale-price": revised(1, "2026-11-12"),
+  "cache-invalidated": revised(1, "2026-11-12"),
+  "inventory-oversell": revised(1, "2026-11-09"),
+  "inventory-optimistic": revised(1, "2026-11-09"),
+  "lease-unfenced": revised(1, "2026-11-11"),
+  "lease-fenced": revised(1, "2026-11-11"),
+  "clock-last-write-wins": revised(1, "2026-11-11"),
+  "clock-lamport": revised(1, "2026-11-11"),
+};
+
+export function commerceRevision(name: CommerceLessonName): LessonRevision {
+  return commerceRevisions[name];
+}
+
 /** Data-only documents; paired experiments deliberately share a seed and faults. */
 export function commerceScenario(name: CommerceLessonName): CanonicalValue {
   if (name.startsWith("cascade-")) return circuitScenario(name);
