@@ -6,6 +6,7 @@ import {
   DEFAULT_FLIGHT_PACE,
   FLIGHT_PACES,
   flightAdvance,
+  flightBackground,
   flightBoundaries,
   flightDelayMs,
   flightFacts,
@@ -20,8 +21,10 @@ import {
   playbackStatus,
   flightLegend,
   flightPaceText,
+  replayKeyAction,
   transportStep,
 } from "../src/flight.ts";
+import type { ComponentActivity } from "../src/activity.ts";
 import { selectionStep } from "../src/timeline.ts";
 import { flightTokenStyle } from "../src/architecture-view.ts";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
@@ -467,4 +470,41 @@ test("counts and transit sentences are whole phrases per form and per language",
   assert.match(departure.route, /Enlace de solicitud|Publicación de MessageBus|Suscripción de MessageBus/);
   const arrival = spanish.find(step => step.leg === "arrival" && step.departure !== undefined)!;
   assert.match(arrival.transit, /^Llegada: el token de la salida que partió en el tiempo virtual \d+ \(observación #\d+\) llega a /);
+});
+
+test("the background of a movement is every component that is neither an end of it nor busy at the cursor", () => {
+  const ids = ["client", "orders", "payments", "carrier", "topic"];
+  const activity = new Map<string, ComponentActivity>([
+    // Waiting on an earlier request: still part of the story, so it stays in front.
+    ["client", { componentId: "client", state: "waiting", waits: [{ target: "orders" }], work: [] }],
+    ["payments", { componentId: "payments", state: "idle", waits: [], work: [] }],
+    // Idle again, but this record is its timeout: it stays in front.
+    ["carrier", { componentId: "carrier", state: "idle", waits: [], work: [], timedOut: { target: "orders", time: simulationTime(5) } }],
+  ]);
+  // No movement painted: nothing is in the background, so a graph with no cursor is drawn as before.
+  assert.deepEqual([...flightBackground(ids, undefined, activity)], []);
+  // `topic` has no recorded activity at all, which reads as idle.
+  assert.deepEqual([...flightBackground(ids, { nodeIds: ["orders", "payments"] }, activity)], ["topic"]);
+  assert.deepEqual([...flightBackground(ids, { nodeIds: ["orders"] }, activity)], ["payments", "topic"]);
+  // An end of the movement is never in the background, even when it is idle.
+  assert.deepEqual([...flightBackground(ids, { nodeIds: ["payments", "topic"] }, activity)], ["orders"]);
+});
+
+test("Left and Right step one movement and Space plays or pauses, unless a control or a chord owns the key", () => {
+  const free = { modified: false, repeat: false, arrowsClaimed: false, spaceClaimed: false };
+  assert.equal(replayKeyAction({ ...free, key: "ArrowLeft" }), "previous");
+  assert.equal(replayKeyAction({ ...free, key: "ArrowRight" }), "next");
+  assert.equal(replayKeyAction({ ...free, key: " " }), "toggle");
+  // Holding an arrow walks the movements; holding Space must not flip play and pause.
+  assert.equal(replayKeyAction({ ...free, key: "ArrowRight", repeat: true }), "next");
+  assert.equal(replayKeyAction({ ...free, key: " ", repeat: true }), null);
+  // A field, a select, a tab list, or a dialog keeps its arrows; a button or a component node keeps Space.
+  assert.equal(replayKeyAction({ ...free, key: "ArrowRight", arrowsClaimed: true }), null);
+  assert.equal(replayKeyAction({ ...free, key: "ArrowLeft", arrowsClaimed: true }), null);
+  assert.equal(replayKeyAction({ ...free, key: " ", spaceClaimed: true }), null);
+  // A button does not use the arrows, so they still step while focus rests on a toolbar button.
+  assert.equal(replayKeyAction({ ...free, key: "ArrowRight", spaceClaimed: true }), "next");
+  // Browser chords and every other key are left alone.
+  assert.equal(replayKeyAction({ ...free, key: "ArrowLeft", modified: true }), null);
+  for (const key of ["ArrowUp", "ArrowDown", "Enter", "Escape", "a", "Home"]) assert.equal(replayKeyAction({ ...free, key }), null);
 });

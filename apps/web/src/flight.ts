@@ -18,6 +18,7 @@ import type { Messages } from "./i18n/catalog.ts";
 import { recordLabel, selectionStep } from "./timeline.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
+import type { ComponentActivity } from "./activity.ts";
 
 /**
  * Presentation-only reading of recorded movements. Every value here is copied
@@ -431,6 +432,58 @@ export function transportStep(index: number, count: number, delta: -1 | 1): numb
 
 function selectionAvailability(index: number, count: number): { readonly previous: boolean; readonly next: boolean } {
   return { previous: transportStep(index, count, -1) !== null, next: transportStep(index, count, 1) !== null };
+}
+
+/**
+ * The components a painted movement leaves in the background: not an end of the movement, and
+ * with no recorded work, wait, or timeout at the cursor. The graph draws them fainter, so the eye
+ * goes to the movement and to whoever is still busy. With no movement painted, nothing is in the
+ * background. Presentation only: it reads the step and the activity already read from records.
+ */
+export function flightBackground(
+  componentIds: readonly string[],
+  step: Pick<FlightStep, "nodeIds"> | undefined,
+  activity: ReadonlyMap<string, ComponentActivity>,
+): ReadonlySet<string> {
+  const background = new Set<string>();
+  if (step === undefined) return background;
+  for (const id of componentIds) {
+    if (step.nodeIds.includes(id)) continue;
+    const current = activity.get(id);
+    if (current !== undefined && (current.state !== "idle" || current.timedOut !== undefined)) continue;
+    background.add(id);
+  }
+  return background;
+}
+
+export type ReplayKeyAction = "previous" | "next" | "toggle";
+
+/** The keys the Replay toolbar answers to, as `KeyboardEvent.key` values. Key names are not translated. */
+export const REPLAY_KEYS = { previous: "ArrowLeft", next: "ArrowRight", toggle: " " } as const satisfies Record<ReplayKeyAction, string>;
+
+export interface ReplayKeyPress {
+  readonly key: string;
+  /** True when Alt, Control, Meta, or Shift is held: those chords belong to the browser. */
+  readonly modified: boolean;
+  /** True for an auto-repeated key. Holding Space must not flip play and pause over and over. */
+  readonly repeat: boolean;
+  /** True when focus is in a control that uses the arrow keys itself: a field, a select, a tab list, a dialog. */
+  readonly arrowsClaimed: boolean;
+  /** True when focus is on anything Space already activates: a button, a link, a component node. */
+  readonly spaceClaimed: boolean;
+}
+
+/**
+ * The Replay action a key press asks for, or null when the key is not Replay's to take.
+ * Left and Right step one recorded movement; Space plays or pauses. A key a focused control
+ * already uses keeps its own meaning, so no existing gesture changes.
+ */
+export function replayKeyAction(press: ReplayKeyPress): ReplayKeyAction | null {
+  if (press.modified) return null;
+  if (press.key === REPLAY_KEYS.previous) return press.arrowsClaimed ? null : "previous";
+  if (press.key === REPLAY_KEYS.next) return press.arrowsClaimed ? null : "next";
+  if (press.key === REPLAY_KEYS.toggle) return press.spaceClaimed || press.repeat ? null : "toggle";
+  return null;
 }
 
 export interface FlightLegendEntry {

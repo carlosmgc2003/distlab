@@ -8,6 +8,7 @@
 | Refines | [RFC 0001](0001-course-ready-design-module.md), P2 "One timeline". It answers that RFC's decision 3. |
 | Related issues | #136, #103, #189, #190, #191, #192, #193 |
 | Decides | How a student runs and watches a lesson. It changes no contract and no worker command. |
+| Amended | 2026-11-13, [Amendment 1: time to read](#amendment-1-time-to-read). It changes P3, adds P8 and P9, and adds decisions 8 to 10. Not yet reviewed. |
 
 ## Summary
 
@@ -131,6 +132,7 @@ lesson loads.
 
 - **On** (the default): `Run` plays the run. The playhead advances one
   milestone at a time at the chosen speed, and the graph paints each one.
+  Amendment 1 proposes that it also stops at each key moment (P8).
 - **Off**: `Run` executes and places the playhead at the end. The graph shows
   the end state and the outcome appears at once. **Speed** is unavailable.
 
@@ -199,6 +201,140 @@ is 7.5 minutes at **Slow** (evaluation F6).
   checks, and "next fault" and "next failed check" jumps.
 - Milestones recorded at the same virtual time are painted together, so sixteen
   requests piling up on one service look like a pile.
+
+## Amendment 1: time to read
+
+Added on 2026-11-13, after the maintainer reported that a replayed step does not
+stay long enough to be read. P8 and P9 are proposed and not decided. They are
+stated in the terms of this RFC, so they apply to the playhead of P1.
+
+### The problem P1 to P7 leave open
+
+P3 advances the playhead "at the chosen speed". A fixed interval cannot be
+right, measured on `retry-unsafe` in Spanish:
+
+- **Slow** paints one movement every 1.8 seconds (`FLIGHT_PACES` in
+  `flight.ts`).
+- The narration of one movement was about 85 visible words. At 200 words per
+  minute that is about 25 seconds of reading.
+- Evaluation F6 found the same interval too slow: `cascade-unprotected` takes
+  7.5 minutes at **Slow**.
+
+One speed is too fast to read and too slow to watch. No value between them
+fixes both, because watching a run and reading one step are different
+activities. P4 makes the count larger: it replaces 269 movements with 523
+milestones in `cascade-unprotected`.
+
+The narration is also generic. **What to look for** is one question per stored
+record type, so it is the same in every lesson. It cannot say what this lesson
+wants the student to notice at this record.
+
+### Built with this amendment
+
+These three changes are presentation over the present Replay. They do not
+depend on P1 to P7, and they carry over to the playhead unchanged.
+
+- **The narration has three levels.** The stored label and the route, then
+  **What to look for**, then **Recorded details**, which is folded and holds
+  every other line. A movement now shows about 25 words. See "Architecture
+  playback and message flight" in `docs/ui-visual-system.md`.
+- **The graph has a background.** A component that is no end of the painted
+  movement and has no recorded work or wait is drawn fainter, with its store
+  and links.
+- **Replay answers to the keyboard.** Left and Right step one movement, and
+  Space plays or pauses.
+
+With P2, the keys follow the one control group: Left is `Back`, Right is
+`Step`, and Space is `Run` or `Pause`.
+
+### P8. Play stops at key moments
+
+While `Run` plays, the playhead stops by itself at a **key moment** and waits.
+`Run` then reads `Continue`, and Space continues. Between two key moments the
+routine milestones advance at the chosen speed, as P3 says. `Step` and `Back`
+do not change: they move one milestone and never play.
+
+A key moment is a milestone where the outcome of the run is decided. It is a
+pure function of the stored record, like the milestone set itself:
+
+| Key moment | Milestone kinds |
+| --- | --- |
+| Something did not arrive | `drop`, `timeout`, `failure` |
+| Something is tried again | `retry` |
+| State changed | `commit`, `rollback`, `external` |
+| A fault acted | `fault`, once per applied effect: the rule match, the selected effect, and the drop or delay it causes are one stop |
+| A check changed its result | `check`, for a change of result. The first evaluation of a check is not a stop |
+
+Requests, responses, messages, key-value reads, and logs are routine.
+
+Raw counts in the packaged lessons, before the fault records of one effect are
+merged and before first evaluations of checks are removed, so each is an upper
+bound:
+
+| Lesson | Movements today | Milestones (P4) | Key moments, at most |
+| --- | --- | --- | --- |
+| `retry-unsafe` | 9 | 19 | 8 |
+| `saga-compensated` | 23 | 46 | 17 |
+| `cache-stale-price` | 36 | 65 | 9 |
+| `cascade-breaker` | 215 | 419 | 17 |
+| `cascade-unprotected` | 269 | 523 | 59 |
+
+So a short lesson is close to step by step, which is what a first reading
+needs, and a long lesson plays its routine traffic and stops where it matters.
+One definition serves three places: the stops of P8, and the scrubber marks and
+"next" jumps of P7.
+
+A toggle, **Stop at key moments**, sits beside **Animation** and is on by
+default. Off gives the continuous play of P3. It is UI state.
+
+Rejected: a longer **Slow**, or an interval computed from the length of the
+text. Reading speed differs between students and between languages, and a
+student also looks at the graph. Any timer is wrong for someone, and it makes
+F6 worse.
+
+### P9. Lesson notes at key moments
+
+A lesson may attach a **lesson note** to a record of its packaged run: one
+sentence, shown at level 2 of the narration above the generic question, under
+the heading **In this lesson**. Example, on the second commit of
+`retry-unsafe`: "Payments now stores `payment-2` for the same `order-1`.
+Compare it with the first commit."
+
+A note is authored teaching content, like the goal or a check label. It is not
+a reading of the record, so it is marked as the lesson's voice and kept apart
+from stored facts. The pattern question stays and keeps its rule: it never
+states an outcome.
+
+- **Anchor.** A note names its record by stored type, source component, and
+  occurrence, for example the second `database.transaction.committed` from
+  `payments`. It never names an observation ID or a sequence number, which
+  change with the configuration.
+- **Where it lives.** The anchor is data in the catalog module, beside the
+  lesson's document. The sentence is in `apps/web/src/i18n/*/lessons.ts`. Adding
+  or changing a note raises the lesson revision.
+- **Proof.** A catalog test runs each packaged lesson and requires every anchor
+  to match exactly one record. `lesson-sheet.ts` prints each note beside its
+  record, and the `lesson-authoring` skill gains a section on writing them.
+- **A stop.** A record with a lesson note is a key moment for P8.
+
+The open question is the session overlay. With a design choice or a fault
+applied, the run differs, and a note written for the packaged run can be false:
+with idempotency on there is no second commit, and an anchor can then match a
+record that means something else.
+
+| Option | Rule | Cost |
+| --- | --- | --- |
+| A. Packaged run only | Notes are shown while no overlay is applied | The catalog test proves every note. A student who experiments has no notes, and has already read them on the packaged run |
+| B. Pointers only | Notes are shown whenever the anchor matches, and must point ("look at the payments table") and never claim | Nothing proves a pointer still points at the right thing in a changed run |
+| C. Conditions | A note carries a condition on stored fields | A small rule language to specify, test, and teach to authors |
+
+Recommendation: A, with the wording rule of B as style guidance.
+
+### Order of work, amended
+
+P8 follows P4, because a commit and a check are not steps until then. P9 is
+independent of P1 to P7 and can be built on the present Replay, where a note on
+a record that travels no link waits for P4 to be shown.
 
 ## How the guarantees hold
 
@@ -298,10 +434,17 @@ and #192 are closed as superseded. Items 2 and 5 remain either way.
    packaged run takes 1.6 seconds. An imported document is bounded by
    `ScenarioDocumentLimits`, not by time.
 7. Is "playhead" the name?
+8. P8: does `Run` stop at key moments by default, and is the set in P8 the
+   right one?
+9. P9: are lesson notes accepted as authored content beside the narration?
+10. P9: option A, B, or C for notes under a session overlay? And do notes stay
+    in the catalog, or may an instructor's scenario document carry them?
 
 ## ADR impact
 
-None for P1 to P5 and P7: they are presentation over published records. P6
+None for P1 to P5, P7, and P8: they are presentation over published records.
+P9 needs none while notes stay in the catalog. Notes in a scenario document
+would amend ADR-006. P6
 option C adds a projection field and needs an ADR. P6 option B needs the
 mapping from a record to an event boundary stated in a specification before it
 is built.

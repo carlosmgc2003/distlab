@@ -68,7 +68,7 @@ export const architecture: typeof source = {
     controlsHelpLabel: "Controles del grafo",
     controlsHelp: "Seleccioná un componente para inspeccionarlo. Navegá con Tab hasta un componente y presioná Enter o Espacio. Arrastrá el lienzo o usá los botones de flecha para desplazar la vista; usá los botones de zoom y de ajuste para cambiarla.",
     paceHelpLabel: "Velocidad de reproducción",
-    paceHelp: "La velocidad de reproducción cambia qué tan rápido el navegador pinta los movimientos registrados. No cambia el tiempo virtual, el historial registrado ni la ejecución. Cada movimiento que ves ya estaba registrado antes de pintarse.",
+    paceHelp: "La velocidad de reproducción cambia qué tan rápido el navegador pinta los movimientos registrados. No cambia el tiempo virtual, el historial registrado ni la ejecución. Cada movimiento que ves ya estaba registrado antes de pintarse. Para leer a tu ritmo, usá Movimiento anterior y Movimiento siguiente, o las teclas Flecha izquierda y Flecha derecha; Espacio reproduce o pausa.",
     nodeKeyboardHint: "Presioná Enter o Espacio para inspeccionar este componente. Presioná Esc para borrar la selección.",
     controlPanel: "Panel de control",
     zoomIn: "Acercar",

@@ -136,7 +136,7 @@ export const playback = {
     previous: "Previous movement",
     next: "Next movement",
     speed: "Speed",
-    help: "These controls move a browser cursor over movements the run has already recorded. They send no simulation command, do not change virtual time, and do not record observations.",
+    help: "These controls move a browser cursor over movements the run has already recorded. They send no simulation command, do not change virtual time, and do not record observations. From the keyboard, Left arrow and Right arrow move one movement, and Space plays or pauses.",
   },
   /** The narration of the painted movement (ArchitecturePlayback.tsx). */
   narration: {
@@ -144,6 +144,7 @@ export const playback = {
     region: "Recorded movement",
     noFields: "This record stores no further fields for narration.",
     lookFor: "What to look for",
+    details: "Recorded details",
     trace: (id: string, _f: Fmt) => `Trace ${id}`,
     activityRegion: "Component activity",
     activityHeading: "Component activity at this record",

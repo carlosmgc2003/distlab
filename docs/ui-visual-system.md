@@ -231,17 +231,34 @@ execution**.
 - While the run is still recording, the cursor waits at the recorded end for the
   next movement instead of stopping. When the run has finished, the transport
   ends with the last movement still painted and offers `Restart replay`.
+- The transport answers to the keyboard while the Architecture tab is shown:
+  Left arrow is `Previous movement`, Right arrow is `Next movement`, and Space
+  plays or pauses. A key that a focused control already uses keeps its meaning:
+  a field, a select, the tab list, and an open dialog keep their arrows, and a
+  button, a link, and a component node keep Space. The two step buttons show
+  their key, and every button states it in `aria-keyshortcuts`. A key moves the
+  browser cursor only, exactly as the button does.
 
-The narration beside the graph is a presentation mapping over stored fields:
+The narration beside the graph is a presentation mapping over stored fields. It
+reads in three levels, so a reader stepping through a run reads two short lines
+per movement and opens the rest when a movement deserves it:
 
-| Line | Reads |
-| --- | --- |
-| Heading | The stored plain-language label for the record type |
-| Route | Stored `source`, `target`, and the presentation relationship of the link |
-| Stored fields | Stored endpoint, deadline, status, attempt, destination, consumer, fault rule, reason, recorded transitions, changed row names, and the stored external change |
-| Stored body fields | Stored body field *names*; narration never restates payload values |
-| What to look for | One question about the pattern the stored record belongs to |
-| Trace | The stored trace id |
+| Level | Line | Reads |
+| --- | --- | --- |
+| 1. What and where | Heading | The stored plain-language label for the record type |
+| 1. What and where | Route | Stored `source`, `target`, and the presentation relationship of the link |
+| 2. What to look for | Question | One question about the pattern the stored record belongs to |
+| 2. What to look for | Not recorded | For a drop or a timeout only: what the record does not state |
+| 3. Recorded details | Transit | The part of the hop this record paints, and the departure it pairs with |
+| 3. Recorded details | Stored fields | Stored endpoint, deadline, status, attempt, destination, consumer, fault rule, reason, recorded transitions, changed row names, and the stored external change |
+| 3. Recorded details | Stored body fields | Stored body field *names*; narration never restates payload values |
+| 3. Recorded details | Trace | The stored trace id |
+| 3. Recorded details | Component activity | The activity the graph already shows as badges, as sentences |
+
+Levels 1 and 2 are always shown. **Recorded details** is a disclosure that
+starts closed and then stays as the reader left it, from movement to movement
+and when Replay starts again. Nothing was removed from the narration: level 3
+holds every line that was shown before.
 
 A redacted or omitted payload contributes one visibility statement and nothing
 else. Pattern questions ask what to look for and never state an outcome, so a
@@ -255,6 +272,16 @@ states only that the record says the movement did not arrive. The sending and
 receiving components carry a text badge on the graph, and the legend names every
 token. The token is decorative: the narration, the playback position, and the
 `Request and message movement` region carry the same movement as text.
+
+While a movement is painted, the graph has a foreground and a background. A
+component is in the background when it is neither end of the movement and the
+records at or before the cursor leave it with no work, no wait, and no timeout.
+Its shape is drawn at reduced opacity, with its owned store and every link that
+touches it. A component that is still waiting or processing stays in front,
+because it is part of the story. Only the drawing fades: names, category
+labels, and badges keep their own colors, so contrast does not change, and
+hovering, focusing, or inspecting a background component draws it in full. With
+no movement painted, nothing is in the background.
 
 Both ends of a painted movement stay on screen. When the sending or receiving
 component is outside the canvas, the graph pans just enough to show both, at the

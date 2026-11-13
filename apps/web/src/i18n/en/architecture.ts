@@ -73,7 +73,7 @@ export const architecture = {
     controlsHelpLabel: "Graph controls",
     controlsHelp: "Select a component to inspect it. Tab to a component, then press Enter or Space. Drag the canvas or use the arrow buttons to pan; use the zoom and fit buttons to change the view.",
     paceHelpLabel: "Playback speed",
-    paceHelp: "Playback speed changes how fast the browser paints recorded movements. It does not change virtual time, the recorded history, or the run. Every movement you see was already recorded before it was painted.",
+    paceHelp: "Playback speed changes how fast the browser paints recorded movements. It does not change virtual time, the recorded history, or the run. Every movement you see was already recorded before it was painted. To read at your own pace, use Previous movement and Next movement, or the Left and Right arrow keys; Space plays or pauses.",
     /** The keys are named as the physical keys are labelled. */
     nodeKeyboardHint: "Press Enter or Space to inspect this component. Press Escape to clear selection.",
     controlPanel: "Control Panel",

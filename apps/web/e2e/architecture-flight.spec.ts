@@ -1,10 +1,11 @@
+import AxeBuilder from "@axe-core/playwright";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import type { WorkerCommand, WorkerEvent } from "@distlab/contracts";
-import { graphLaidOut, loadLesson } from "./support/lesson.ts";
+import { graphLaidOut, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
 import { MIN_NAME_PX, expectLegibleView, graphView } from "./support/graph.ts";
 import { viewButton } from "./support/history.ts";
 
@@ -642,4 +643,143 @@ test("one recorded movement can be played and restarted (#192)", async ({ page }
   await expect(position(page)).toContainText("Movement 1 of 1 ");
   await expect(page.getByRole("button", { name: "Restart replay" })).toBeEnabled();
   expect(new Set(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type)))).toEqual(new Set(["load", "step"]));
+});
+
+test("a movement reads in two short lines, and the rest of the record waits under Recorded details", async ({ page }) => {
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await runCheckout(page);
+  await stepTo(page, "Request sent");
+  const details = narration(page).locator("details.flight-details");
+  // What was recorded and where, then the question: that is all a movement shows by default.
+  await expect(narration(page).locator("h4")).toBeVisible();
+  await expect(narration(page).locator(".flight-route")).toHaveText("Customer App → Orders · Request link");
+  await expect(narration(page).locator(".flight-pattern")).toContainText("What to look for");
+  await expect(details.locator("summary")).toHaveText("Recorded details");
+  await expect(details).not.toHaveAttribute("open");
+  for (const folded of [".flight-transit", ".flight-facts", ".flight-trace", ".flight-activity"]) await expect(details.locator(folded)).toBeHidden();
+  const visible = (await narration(page).locator("h4, .flight-route, .flight-pattern").allInnerTexts()).join(" ").split(/\s+/).length;
+  expect(visible, "the default narration is short enough to read at a glance").toBeLessThan(40);
+
+  // Opening it shows everything the narration showed before, and it stays open from movement to movement.
+  await details.locator("summary").click();
+  await expect(details.locator(".flight-transit")).toContainText("Departure: the token leaves Customer App");
+  await expect(details.locator(".flight-facts")).toContainText("POST /orders");
+  await expect(details.locator(".flight-activity")).toContainText("Customer App is waiting on Orders");
+  await page.getByRole("button", { name: "Next movement" }).click();
+  await expect(position(page)).toContainText("Movement 2 of 13 ");
+  await expect(details).toHaveAttribute("open");
+  await expect(details.locator(".flight-transit")).toContainText("Arrival:");
+
+  // What a drop does not say is part of the question, so it is never folded away.
+  await details.locator("summary").click();
+  await expect(details).not.toHaveAttribute("open");
+  await stepTo(page, "Response dropped");
+  await expect(narration(page).locator(".flight-interrupted")).toBeVisible();
+  await expect(details.locator(".flight-facts")).toBeHidden();
+  // Closed is remembered as well, including after Recorded history takes the highlight and Replay starts again.
+  await page.getByRole("tab", { name: "Recorded history" }).click();
+  await page.getByRole("tab", { name: "Architecture" }).click();
+  await expect(details).not.toHaveAttribute("open");
+});
+
+test("Left and Right step one movement and Space plays or pauses, and no control loses a key it already uses", async ({ page }) => {
+  await observeWorker(page);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await runCheckout(page);
+  const commands = await page.evaluate(() => window.workerEvidence.commands.length);
+  await expect(page.getByRole("button", { name: "Previous movement" })).toHaveAttribute("aria-keyshortcuts", "ArrowLeft");
+  await expect(page.getByRole("button", { name: "Next movement" })).toHaveAttribute("aria-keyshortcuts", "ArrowRight");
+  await expect(page.getByRole("button", { name: "Play replay" })).toHaveAttribute("aria-keyshortcuts", "Space");
+
+  // With nothing selected, Left is unavailable like the Previous button (#191), and Right selects the first movement.
+  await page.keyboard.press("ArrowLeft");
+  await expect(position(page)).toContainText("0 of 13 recorded movements");
+  await page.keyboard.press("ArrowRight");
+  await expect(position(page)).toContainText("Movement 1 of 13 ");
+  await page.keyboard.press("ArrowRight");
+  await expect(position(page)).toContainText("Movement 2 of 13 ");
+  await page.keyboard.press("ArrowLeft");
+  await expect(position(page)).toContainText("Movement 1 of 13 ");
+  // The arrows keep stepping while focus rests on a toolbar button, which does not use them.
+  await page.getByRole("button", { name: "Next movement" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(position(page)).toContainText("Movement 2 of 13 ");
+
+  // Space plays and pauses from neutral ground.
+  await position(page).click();
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "Pause replay" })).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "Play replay" })).toBeVisible();
+  const paused = await position(page).innerText();
+
+  // A component node keeps Space for inspecting, and Replay stays paused.
+  const orders = page.getByRole("button", { name: "Orders, Internal service", exact: true });
+  await orders.focus();
+  await page.keyboard.press("Space");
+  await expect(orders).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Play replay" })).toBeVisible();
+  // The inspector is a focusable scroll region, so Space scrolls it and does not start Replay.
+  await page.locator("#component-inspector").focus();
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "Play replay" })).toBeVisible();
+  // The Speed select keeps its arrows.
+  await page.getByLabel("Speed").focus();
+  await page.keyboard.press("ArrowRight");
+  expect(await position(page).innerText()).toBe(paused);
+  // The tab list keeps its arrows, and Replay does not answer while the graph is off screen.
+  await page.getByRole("tab", { name: "Architecture" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("ArrowRight");
+  await page.getByRole("tab", { name: "Architecture" }).click();
+  expect(await position(page).innerText()).toBe(paused);
+  // An open dialog takes every key.
+  await lessonTrigger(page).click();
+  await expect(lessonChooser(page)).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Escape");
+  await expect(lessonChooser(page)).toBeHidden();
+  expect(await position(page).innerText()).toBe(paused);
+
+  // Like the toolbar, the keys only move a browser cursor: no worker command was sent.
+  expect(await page.evaluate(() => window.workerEvidence.commands.length)).toBe(commands);
+});
+
+test("Replay draws idle bystanders fainter with their stores and links, and keeps every label readable", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await runCheckout(page);
+  const faint = page.locator(".react-flow__node.is-background");
+  const faintIds = async () => (await faint.evaluateAll(nodes => nodes.map(node => node.getAttribute("data-id")))).sort();
+  const shapeOpacity = (id: string) => page.locator(`${nodeSelector(id)} :is(.node-shape, .resource-body svg)`).evaluate(element => getComputedStyle(element).opacity);
+  // No cursor, no background: the graph is drawn as it always was.
+  await expect(faint).toHaveCount(0);
+  await expect(page.locator(".react-flow__edge.is-background")).toHaveCount(0);
+
+  // Customer App → Orders: Payments, its database, the processor, and the topic have no part in it.
+  await stepTo(page, "Request sent");
+  expect(await faintIds()).toEqual(["OrderCreated", "payment-processor", "payments", "resource:db:payments"]);
+  await expect(page.locator(".react-flow__edge.is-movement.is-background")).toHaveCount(0);
+  // The fade is a short transition, so the resting value is polled.
+  await expect.poll(() => shapeOpacity("payments")).toBe("0.4");
+  await expect.poll(() => shapeOpacity("resource:db:payments")).toBe("0.4");
+  expect(await shapeOpacity("orders")).toBe("1");
+  // Only the drawing fades. The name keeps the color it has on a component in front.
+  const titleColor = (id: string) => page.locator(`${nodeSelector(id)} .node-content strong`).first().evaluate(element => getComputedStyle(element).color);
+  expect(await titleColor("payments")).toBe(await titleColor("orders"));
+  expect((await new AxeBuilder({ page }).include(".panel-architecture").analyze()).violations).toEqual([]);
+
+  // Payments → Payment Processor: Customer App is no end of it, but it is still waiting, so it stays in front.
+  await page.getByRole("button", { name: "Next movement" }).click();
+  for (let step = 0; step < 4; step += 1) await page.getByRole("button", { name: "Next movement" }).click();
+  await expect(position(page)).toContainText("Movement 6 of 13 ");
+  await expect(narration(page).locator(".flight-route")).toHaveText("Payments → Payment Processor · Request link");
+  await expect(page.locator(`${nodeSelector("customer-app")} .activity-badge`)).toContainText("Waiting");
+  expect(await faintIds()).toEqual(["OrderCreated", "orders", "resource:db:orders"]);
+
+  // Inspecting a faint component draws it in full again.
+  await page.getByRole("button", { name: "Orders, Internal service", exact: true }).click();
+  await expect.poll(() => shapeOpacity("orders")).toBe("1");
 });

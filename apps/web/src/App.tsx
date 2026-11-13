@@ -33,7 +33,7 @@ import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDe
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { componentNames } from "./component-display.ts";
 import { FlightControls } from "./ArchitecturePlayback.tsx";
-import { useFlightPlayback } from "./flight-playback.ts";
+import { useFlightPlayback, useReplayKeys } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
@@ -168,6 +168,8 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   const release = emphasis?.origin === "selection" ? emphasis.pulseId ?? emphasis.text : undefined;
   const playback = useFlightPlayback(projection?.history.observations ?? [], edges,
     snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release, names);
+  // Replay answers to the keyboard only while the graph it drives is on screen.
+  useReplayKeys(playback, tab === "architecture" && projection !== undefined);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   const applied = snapshot.session?.overlay ?? null;
   const appliedEntries = useMemo(() => applied ? draftFromOverlay(applied) : [], [applied]);

@@ -309,11 +309,18 @@ on narrow canvases. Replay never shares a row with `Run`, `Pause`, `Step`, and
 the primary action paint. Replay shows only in the Architecture tab, because the
 graph it animates is the graph it belongs to. A movement that arrived leaves the
 link highlighted, and the sending and receiving components carry a text badge.
-Beside the graph, a narration names the stored label, the route, and the
-record's stored fields — endpoint, deadline, status, delivery attempt,
+Beside the graph, a narration reads in three levels so one movement takes two
+short lines: the stored label and the route, then one question about the
+pattern that record belongs to, then **Recorded details**, folded until the
+reader opens it and kept as they left it from movement to movement. The details
+hold the record's stored fields — endpoint, deadline, status, delivery attempt,
 destination, consumer, fault rule, reason, recorded transitions, changed rows,
-and the stored external change — followed by one question about the pattern that
-record belongs to. Payload *field names* are shown instead of payload values, a
+and the stored external change — with the trace and the component activity.
+A component that is no end of the painted movement and has no recorded work or
+wait is drawn fainter, with its store and its links, so the eye goes to the
+movement; its labels keep their contrast. From the keyboard, the Left and Right
+arrow keys do what `Previous movement` and `Next movement` do, and Space plays
+or pauses, wherever a focused control does not already use that key. Payload *field names* are shown instead of payload values, a
 redacted or omitted payload contributes only a visibility statement, and a
 pattern question never asserts an outcome, so a dropped response is never
 described as a failed operation. Speed changes only how fast the browser paints

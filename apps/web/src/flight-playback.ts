@@ -6,6 +6,7 @@ import {
   flightPosition,
   flightSteps,
   flightTransport,
+  replayKeyAction,
   transportStep,
 } from "./flight.ts";
 import type { FlightPace, FlightPosition, FlightStep, FlightTransport, PlaybackPhase } from "./flight.ts";
@@ -135,4 +136,49 @@ export function useFlightPlayback(
     activityChanges: changes,
     play, pause, restart, previous, next, setPace,
   };
+}
+
+/** Controls that use the arrow keys themselves. Inside one, an arrow keeps its own meaning. */
+const ARROW_OWNERS = "input, select, textarea, [contenteditable], [role='tablist'], [role='radiogroup'], [role='listbox'], [role='menu'], [role='slider'], dialog, [role='dialog'], [popover], .graph-legend";
+/**
+ * Everything Space already activates or scrolls, so Space plays or pauses only from neutral ground.
+ * `[tabindex='0']` covers the component nodes and the focusable scroll regions, such as the inspector.
+ */
+const SPACE_OWNERS = `${ARROW_OWNERS}, button, a[href], summary, [role='button'], [tabindex='0']`;
+
+/**
+ * Replay from the keyboard: Left and Right step one recorded movement, Space plays or pauses.
+ *
+ * Like the toolbar, a key only moves the browser cursor over recorded movements. A key that a
+ * focused control already uses is left to that control, and nothing is handled while a modal
+ * dialog is open or while `active` is false (the graph is not on screen).
+ */
+export function useReplayKeys(playback: FlightPlayback, active: boolean): void {
+  const { play, pause, restart, previous, next, phase } = playback;
+  const toggle = playback.transport.control.action;
+  const available = playback.steps.length > 0;
+  useEffect(() => {
+    if (!active || !available) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || document.querySelector("dialog[open]")) return;
+      const target = event.target instanceof Element ? event.target : null;
+      const action = replayKeyAction({
+        key: event.key,
+        modified: event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
+        repeat: event.repeat,
+        arrowsClaimed: target?.closest(ARROW_OWNERS) != null,
+        spaceClaimed: target?.closest(SPACE_OWNERS) != null,
+      });
+      if (action === null) return;
+      // Space would scroll the page, and an arrow would scroll a panel sideways.
+      event.preventDefault();
+      if (action === "previous") previous();
+      else if (action === "next") next();
+      else if (phase === "playing") pause();
+      else if (toggle === "restart") restart();
+      else if (toggle === "play") play();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [active, available, play, pause, restart, previous, next, phase, toggle]);
 }
