@@ -114,25 +114,34 @@ function outboxScenario(name: CommerceLessonName): CanonicalValue {
   } as CanonicalValue;
 }
 
+/**
+ * A read model kept up to date by events (CQRS). The customer marks order-1 as
+ * paid at t=0; Orders commits PAID at t=1 and publishes `OrderUpdated`, which the
+ * topic delivers to Reporting 41 ms later, at t=42. The customer reads the order
+ * from both services at t=10 (PAID and PENDING) and again at t=50 (PAID and
+ * PAID). No fault is injected: the delivery delay is the destination's own, and
+ * it is the lesson's design choice.
+ */
 function cqrsScenario(name: CommerceLessonName): CanonicalValue {
   const initial = { orders: { "order-1": { status: "PENDING", version: 0 } } };
+  const read = (id: string, at: number, service: string) => request(id, at, service, "GET /order");
   return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
     architecture: {
       components: [component("client", "client", "client"), component("orders", "order-write"), component("reporting", "order-read")],
       links: [link("client", "orders"), link("client", "reporting")], databases: [database("orders", ["orders"], initial), database("reporting", ["orders"], initial)], stores: [],
-      destinations: [{ id: "OrderUpdated", kind: "topic", deliveryDelay: 1, ackTimeout: 10, retryDelay: 1, maxAttempts: 3, capacity: 100 }],
+      destinations: [{ id: "OrderUpdated", kind: "topic", deliveryDelay: 41, ackTimeout: 10, retryDelay: 1, maxAttempts: 3, capacity: 100 }],
       subscriptions: [{ destination: "OrderUpdated", consumer: "reporting" }],
-    }, external: [], faults: [fault("delayed-order-update", "message.delivery", "orders", "reporting", "OrderUpdated", { kind: "delay", duration: 40 })],
+    }, external: [], faults: [],
     actions: [
       ...["orders", "reporting"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
       request("mark-paid", 0, "orders", "POST /paid"),
-      request("early-write", 10, "orders", "GET /order"), request("early-read", 10, "reporting", "GET /order"),
-      request("late-write", 50, "orders", "GET /order"), request("late-read", 50, "reporting", "GET /order"),
+      read("early-orders", 10, "orders"), read("early-reporting", 10, "reporting"),
+      read("late-orders", 50, "orders"), read("late-reporting", 50, "reporting"),
     ], assertions: [
       assertion("write-paid", 10, "orders", "orders", 1, "order-1", { status: "PAID" }),
       assertion("read-stale", 10, "reporting", "orders", 1, "order-1", { status: "PENDING" }),
       assertion("write-remains-paid", 60, "orders", "orders", 1, "order-1", { status: "PAID" }),
-      assertion("read-converged", 60, "reporting", "orders", 1, "order-1", { status: "PAID" }),
+      { id: "read-converged", predicate: "commerce.converged", mode: "at", at: 60, parameters: { owners: ["orders", "reporting"], table: "orders", key: "order-1", field: "status" } },
     ],
   } as CanonicalValue;
 }
@@ -373,9 +382,9 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
     case "cqrs":
       return [
         expectation("write-paid", "Orders recorded the payment (t=10)"),
-        expectation("read-stale", "Reporting still showed PENDING while the update was delayed (t=10)"),
-        invariant("write-remains-paid", "The write model keeps the payment"),
-        invariant("read-converged", "The read model converges to the write model"),
+        expectation("read-stale", "Reporting still showed PENDING while the update was on its way (t=10)"),
+        invariant("write-remains-paid", "Orders records the payment and keeps it"),
+        invariant("read-converged", "Reporting ends up showing the same order status as Orders"),
       ];
     case "notifications":
       return [
@@ -494,7 +503,8 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
       // The slot's own behavior option belongs to the slot edit; no parameter targets a slot component.
       return [flag("outbox", true, "payments", "outbox")];
     case "cqrs-delayed":
-      return [];
+      // Up to 55 ms the update still arrives before the convergence deadline at t=60.
+      return [{ key: "delivery-delay", domain: { type: "integer", default: 41, minimum: 1, maximum: 55 }, targets: [{ kind: "destination", destination: "OrderUpdated", field: "deliveryDelay" }] }];
     case "cascade-unprotected":
     case "cascade-breaker":
       return [flag("circuit-breaker", name === "cascade-breaker", "payments", "breaker")];

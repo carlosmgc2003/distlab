@@ -10,7 +10,7 @@ export const lessons = {
     "outbox-unsafe-consumer": { title: "Outbox: duplicate consumer effects", description: "The durable outbox recovers publication, but duplicate delivery creates two notifications." },
     "outbox-idempotent": { title: "Outbox: idempotent consumer", description: "Two deliveries produce one notification: outbox and inbox solve different problems." },
     "outbox-notifications-gap": { title: "Outbox: design the notifications consumer", description: "Payments' outbox publishes PaymentApproved, but Notifications is an empty slot: nothing receives the event, so no notification is created. Fill the slot, give it a database, and subscribe it." },
-    "cqrs-delayed": { title: "CQRS: delayed read model", description: "At t=10 Orders is PAID while Reporting is PENDING. At t=60 both are PAID." },
+    "cqrs-delayed": { title: "CQRS: delayed read model", description: "The Customer App marks order-1 as paid in Orders. Reporting keeps its own copy of the order and updates it from the OrderUpdated event, which takes 41 ms to arrive. What does each service answer when it is asked at t=10, and at t=50?" },
     "cascade-unprotected": { title: "Cascading failure: unprotected", description: "A slow risk provider causes 13 dependency timeouts and a peak of 10 waiting payment requests." },
     "cascade-breaker": { title: "Cascading failure: circuit breaker", description: "Follow CLOSED → OPEN → HALF_OPEN → CLOSED. Risk calls fall from 16 to 5; rejected calls are not successes." },
     "notifications-unbounded": { title: "Notifications: retry until it works", description: "The Messaging Provider is unreachable until t=80. Orders waits for the notification, so the order stays PENDING while the send is retried 6 times." },

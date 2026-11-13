@@ -321,9 +321,9 @@ for (const name of commerceLessonNames) {
     assert.ok(result.results.length > 0);
     // Unsafe lessons violate their invariants; every lesson reproduces its setup.
     assert.deepEqual(result.results.filter(r => r.status !== "PASS").map(r => `${r.id} ${r.status}`), violated[name].map(id => `${id} FAIL`), JSON.stringify(result.results));
-    // The cache, inventory, and clock pairs need no injected fault: ordinary timing (and, for clocks, a configured skew) tells their story.
+    // The cache, inventory, clock, and CQRS lessons need no injected fault: ordinary timing (a configured skew for clocks, the topic's delivery delay for CQRS) tells their story.
     const faulted = result.history.observations.some(o => o.type === "fault.effect.selected" || o.type === "fault.applied");
-    assert.equal(faulted, !name.startsWith("cache-") && !name.startsWith("inventory-") && !name.startsWith("clock-"), name);
+    assert.equal(faulted, !name.startsWith("cache-") && !name.startsWith("inventory-") && !name.startsWith("clock-") && !name.startsWith("cqrs-"), name);
     const fresh = openHarness(engine.create(document));
     await fresh.run();
     assert.ok(compareExports(result, fresh.inspect()));
@@ -371,6 +371,11 @@ for (const name of commerceLessonNames) {
     if (name === "cqrs-delayed") {
       assert.deepEqual(logs(result, "cqrs.projection-read").map(entry => entry.status), ["PENDING", "PAID"]);
       assert.deepEqual(logs(result, "cqrs.write-read").map(entry => entry.status), ["PAID", "PAID"]);
+      // Reporting applies the one update when the topic delivers it, 41 ms after Orders published it at t=1.
+      assert.deepEqual(result.history.observations.filter(o => o.type === "runtime.log" && object(o.data!).message === "cqrs.projection-updated").map(o => o.time), [42]);
+      // The customer's stored answers keep the disagreement after both databases agree.
+      assert.deepEqual(logs(result, "client.result").map(entry => [entry.label, object(entry.result!).status]),
+        [["mark-paid", "PAID"], ["early-orders", "PAID"], ["early-reporting", "PENDING"], ["late-orders", "PAID"], ["late-reporting", "PAID"]]);
     }
     if (name.startsWith("cascade-")) {
       const responses = logs(result, "client.result").map(entry => object(entry.result!));
