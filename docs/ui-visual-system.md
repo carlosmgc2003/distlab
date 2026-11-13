@@ -147,6 +147,14 @@ Rules that keep the regions distinct:
   opened it. The trigger reads **Choose a lesson** before any load and
   `Lesson: ‹title›` after one, and is unavailable while a command is outstanding
   or the simulation runs.
+- A lesson link, `?lesson=<id>` or `?assessment=<id>`, opens the page on that
+  packaged lesson or assessment with no chooser: the same load as choosing it.
+  The address bar always names the loaded lesson, so it is a link to share; it
+  is replaced, so changing lessons adds no browser history entry. **Copy link
+  to this lesson**, beside **Save as scenario file** in ④ Experiment, copies
+  that link without the interface language and confirms it in a status line, or
+  shows the link to copy by hand. A name with no packaged lesson is reported on
+  the welcome screen.
 - **Show service state**, at the end of ③ Investigate, opens the Service state
   dialog, named "Service state at t=‹virtual time›": the commerce per-service
   facts or checkout's Distributed state. Escape and **Close** return focus to the

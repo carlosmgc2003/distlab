@@ -50,6 +50,9 @@ Assertion evidence includes the relevant database rows.
 
 In the browser, run `npm run dev`, press **Choose a lesson**, and choose a lesson
 in the Lesson chooser. Use **Step**, **Run**, and **Reset** as with checkout.
+To send students straight to one lesson, share its link: the address bar names
+the loaded lesson (`?lesson=retry-unsafe`), and **Copy link to this lesson** in
+the Lesson panel's ④ Experiment copies it.
 **Show service state** in the Lesson panel's ③ Investigate opens the **Service
 state** dialog: committed service state, client outcomes, and live KV entries
 with their expiry time for every service, side by side. Selecting a component

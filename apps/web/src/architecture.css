@@ -211,7 +211,9 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .lesson-step .execution-overview { display: grid; gap: 4px; }
 .lesson-step .execution-overview p { margin: 0; }
 .lesson-step .evidence-links { margin: 4px 0; }
-.lesson-step .save-starter { margin-top: 8px; }
+.lesson-step .save-starter, .lesson-step .copy-lesson-link { margin-top: 8px; }
+/* A link the clipboard refused is shown whole, so it can be selected and copied by hand. */
+.lesson-step .lesson-link-status { overflow-wrap: anywhere; }
 .lesson-step .advanced-diagnostics { margin-top: 8px; }
 .lesson-step .advanced-diagnostics .raw-state-body { max-height: none; }
 .panel-architecture, .panel-history { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: hidden; }
@@ -656,6 +658,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .workspace-empty { max-width: 48rem; margin: auto; padding: 40px; background: var(--surface-panel); border: 1px solid var(--border-subtle); border-radius: 16px; line-height: 1.7; }
 .workspace-empty h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); line-height: 1.2; }
 .workspace-empty p, .workspace-empty li { color: var(--text-secondary); }
+.workspace-empty .unknown-lesson-link { padding: 8px 12px; border-radius: 8px; color: var(--status-warning); background: var(--status-warning-bg); }
 .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; font-weight: 700; }
 @media (max-width: 850px) {
   body { overflow: auto; }
