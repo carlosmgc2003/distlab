@@ -431,6 +431,45 @@ test("the fenced lease stays safe when a student delays the lock's own calls, an
   assert.deepEqual(longLease.history.observations.filter(item => item.type === "kv.condition.failed").map(item => item.time), [17]);
 });
 
+test("the cached price lifetime decides whether the old price is still cached when checkout reads it", async () => {
+  const stale = lessons.find(item => item.id === "cache-stale-price")!, invalidated = lessons.find(item => item.id === "cache-invalidated")!;
+  const facts = (result: HarnessExport) => {
+    const logs = result.history.observations.filter(item => item.type === "runtime.log").map(item => item.data as unknown as { message: string; data: Record<string, CanonicalValue> });
+    return {
+      status: result.status,
+      // Catalog's price reads in order (the customer's view at t=1, then the checkout's at t=24), and the price order-1 was charged.
+      reads: logs.filter(log => log.message.startsWith("price.cache-")).map(log => log.message),
+      charged: logs.find(log => log.message === "order.placed")!.data.price,
+      expired: result.history.observations.filter(item => item.type === "kv.expired" && item.source === "catalog").map(item => item.time),
+      verdicts: result.results.map(item => `${item.id} ${item.status}`),
+    };
+  };
+  const lifetime = (lesson: Lesson, value: number) => run(lesson, { version: 1, parameters: [{ key: "price-ttl", value }] });
+  const setup = ["price-raised PASS", "expired-cart-rejected PASS"];
+  // 15 ms: the price cached at t=1 expires at t=16, after the change at t=11 and before the checkout's read at t=24.
+  // The old price was cached for 5 ms after the change, and no request read it.
+  assert.deepEqual(facts(await lifetime(stale, 15)), {
+    status: "COMPLETED", reads: ["price.cache-miss", "price.cache-miss"], charged: 1200, expired: [16, 39],
+    verdicts: [...setup, "order-priced-at-checkout PASS", "no-expired-cart-checkout PASS"],
+  });
+  // 23 ms is the longest lifetime that ends by the read at t=24; at 24 ms the entry is live then and expires at t=25.
+  assert.deepEqual(facts(await lifetime(stale, 23)).reads, ["price.cache-miss", "price.cache-miss"]);
+  assert.deepEqual(facts(await lifetime(stale, 24)), {
+    status: "COMPLETED", reads: ["price.cache-miss", "price.cache-hit"], charged: 1000, expired: [25],
+    verdicts: [...setup, "order-priced-at-checkout FAIL", "no-expired-cart-checkout PASS"],
+  });
+  // A longer lifetime only keeps the old price cached longer: the violation is the packaged one, at t=25.
+  assert.deepEqual(facts(await lifetime(stale, 200)), {
+    status: "COMPLETED", reads: ["price.cache-miss", "price.cache-hit"], charged: 1000, expired: [201],
+    verdicts: [...setup, "order-priced-at-checkout FAIL", "no-expired-cart-checkout PASS"],
+  });
+  // With invalidation the price change deletes the entry, so no lifetime leaves the old price for the checkout.
+  for (const value of [1, 24, 200]) {
+    const result = facts(await lifetime(invalidated, value));
+    assert.deepEqual([result.charged, result.verdicts], [1200, [...setup, "order-priced-at-checkout PASS", "no-expired-cart-checkout PASS"]], `price-ttl=${value}`);
+  }
+});
+
 test("#163 fresh, reset, and stepped runs agree on the verdicts of a changed experiment", async () => {
   const lesson = lessons.find(item => item.id === "retry-unsafe")!;
   for (const overlay of [{ version: 1, parameters: [{ key: "timeout", value: 40 }] }, delayedRetry]) {

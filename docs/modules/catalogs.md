@@ -120,7 +120,11 @@ reads `forward` and `compensated` rows from configuration; they are lesson data,
 not behavior options, because no `LessonParameterDomain` describes a row. The
 cache models' `ttl` is lesson data too. Their descriptors declare these fields
 in `lessonData` (#122), so a lesson cannot offer them as slot models, whose
-configuration a slot edit replaces with options. The individual commerce model
+configuration a slot edit replaces with options. The cache lessons offer
+Catalog's `ttl` as the `price-ttl` design choice (integer, 1–200, default 100):
+a lesson parameter targets a configuration field
+([ADR-004](../spec/adr/004-session-overlays.md)), so the field stays lesson
+data in the descriptor. Cart's `ttl` is not offered. The individual commerce model
 constants and helpers are not re-exported by the package root.
 
 ## Checkout models

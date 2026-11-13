@@ -507,7 +507,11 @@ function commerceParameters(name: CommerceLessonName): readonly LessonParameter[
       ];
     case "cache-stale-price":
     case "cache-invalidated":
-      return [flag("cache-invalidation", name === "cache-invalidated", "catalog", "invalidate")];
+      return [
+        flag("cache-invalidation", name === "cache-invalidated", "catalog", "invalidate"),
+        // Catalog's price TTL only; the cart TTL is the business rule of the second story and stays packaged.
+        { key: "price-ttl", domain: { type: "integer", default: 100, minimum: 1, maximum: 200 }, targets: [{ kind: "component", component: "catalog", field: "ttl" }] },
+      ];
     case "inventory-oversell":
     case "inventory-optimistic":
       return [flag("optimistic-concurrency", name === "inventory-optimistic", "inventory", "optimistic")];

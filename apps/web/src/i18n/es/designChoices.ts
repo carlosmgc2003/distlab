@@ -18,6 +18,7 @@ export const designChoices: typeof source = {
     "logical-clock": { label: "Relojes de Lamport", hint: "Las dos regiones marcan las ediciones con un contador de Lamport en lugar de usar sus relojes de pared." },
     "clock-skew": { label: "Desfase de reloj en eu", hint: "Cuánto se adelanta el reloj de pared de la región eu respecto del tiempo virtual (negativo: se atrasa)." },
     "cache-invalidation": { label: "Invalidar la caché al cambiar el precio", hint: "Catalog elimina el precio cacheado cuando el back office lo cambia, en lugar de dejarlo vivir hasta que venza su TTL." },
+    "price-ttl": { label: "Duración del precio en caché", hint: "El TTL que Catalog le pone al precio que guarda en caché. El almacén clave-valor elimina la entrada cuando vence, y la próxima lectura toma el precio de la base de datos." },
   },
   lessonChoices: {
     "reliable-checkout@1": {

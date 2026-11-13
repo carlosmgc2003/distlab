@@ -99,7 +99,7 @@ Setting every choice back to its default gives the packaged run exactly.
 | `outbox-notifications-gap` | `outbox` (payments `outbox`); the notifications slot is a design edit, not a choice |
 | `cascade-*` | `circuit-breaker` (payments `breaker`) |
 | `notifications-*` | `decoupled-confirmation` (orders `decoupled`), `max-attempts` 1–50 (`OrderPlaced` destination `maxAttempts`) |
-| `cache-*` | `cache-invalidation` (catalog `invalidate`) |
+| `cache-*` | `cache-invalidation` (catalog `invalidate`), `price-ttl` 1–200 (catalog `ttl`) |
 | `inventory-*` | `optimistic-concurrency` (inventory `optimistic`) |
 
 Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
@@ -491,6 +491,19 @@ after expiry the entries are gone from state, and Recorded history keeps each
 `kv.expired` record. Orders' rows show the price used, its version, and whether
 it came from the cache or the database. The headless timeline prints
 `kv.expired` too.
+
+**Design choices:** *Invalidate cache on price change* switches the pair.
+*Cached price lifetime* (1–200 ms, default 100) is the TTL Catalog sets on a
+price it caches. The cart TTL is not a choice. Checkout's price request reaches
+Catalog at t=24, so in `cache-stale-price` a lifetime of 24 ms or more leaves
+the price cached at t=1 live for that read, and order-1 is charged 1000. At
+23 ms or less the entry has expired by then. At 15 ms it expires at t=16: the
+checkout misses the cache, order-1 is charged 1200, and "An order is priced
+with the catalog price valid at checkout" HOLDS without invalidation. That
+verdict is about this run. Catalog still held the old price from t=11 to t=16,
+and no request read it. A lifetime above 100 ms changes only when the entry
+expires (t=201 at 200 ms). With invalidation on, the invariant holds at every
+lifetime, and the price read at t=24 is cached again for the chosen lifetime.
 
 **Concept:** a TTL bounds how long a cache can be stale; it does not make it
 correct. Invalidation on write removes the stale entry at the price change. A
