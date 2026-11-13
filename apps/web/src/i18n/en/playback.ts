@@ -129,6 +129,8 @@ export const playback = {
     "⊘": { label: "Token: dropped", detail: "the record says this movement never arrived; the token stops on the link" },
     "◷": { label: "Token: timed out", detail: "the record says the caller's deadline passed; the token rests at the caller" },
   },
+  /** The legend entry for a token that rests on its link (ArchitectureView.tsx). */
+  legendInTransit: { label: "Token: still in transit", detail: "it left earlier, and no record up to this movement says it arrived or was dropped; a number counts the ones waiting on the same link" },
   /** The Replay toolbar (ArchitecturePlayback.tsx). */
   toolbar: {
     label: "Replay",
@@ -145,6 +147,9 @@ export const playback = {
     noFields: "This record stores no further fields for narration.",
     lookFor: "What to look for",
     details: "Recorded details",
+    inTransitRoute: (p: { glyph: string; from: string; to?: string }, _f: Fmt) => p.to !== undefined ? `${p.glyph} ${p.from} → ${p.to}` : `${p.glyph} ${p.from}`,
+    inTransit: (routes: readonly string[], f: Fmt) => `Still in transit: ${f.list(routes)}.`,
+    inTransitMany: (count: number, f: Fmt) => `Still in transit: ${f.number(count)} other movements.`,
     trace: (id: string, _f: Fmt) => `Trace ${id}`,
     activityRegion: "Component activity",
     activityHeading: "Component activity at this record",

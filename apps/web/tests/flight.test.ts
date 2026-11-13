@@ -11,11 +11,14 @@ import {
   flightDelayMs,
   flightFacts,
   flightIndexOf,
+  flightInTransit,
+  flightInTransitText,
   flightJump,
   flightPace,
   flightPosition,
   flightSteps,
   flightStop,
+  flightTransitGroups,
   flightTransport,
   playbackControl,
   playbackStatus,
@@ -26,7 +29,7 @@ import {
 } from "../src/flight.ts";
 import type { ComponentActivity } from "../src/activity.ts";
 import { selectionStep } from "../src/timeline.ts";
-import { flightTokenStyle } from "../src/architecture-view.ts";
+import { flightTokenStyle, transitTokenStyle } from "../src/architecture-view.ts";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { WorkerAdapter } from "../src/worker/adapter.ts";
@@ -488,6 +491,74 @@ test("the background of a movement is every component that is neither an end of 
   assert.deepEqual([...flightBackground(ids, { nodeIds: ["orders"] }, activity)], ["payments", "topic"]);
   // An end of the movement is never in the background, even when it is idle.
   assert.deepEqual([...flightBackground(ids, { nodeIds: ["payments", "topic"] }, activity)], ["orders"]);
+  // Neither is an end of a hop still in transit: a request is on its way to `payments`.
+  assert.deepEqual([...flightBackground(ids, { nodeIds: ["orders"] }, activity, [{ nodeIds: ["client", "payments"] }])], ["topic"]);
+});
+
+test("cqrs-delayed: two requests sent at the same virtual time are both on their links until each arrives", async () => {
+  const index = scenarios.findIndex(lesson => lesson.id === "cqrs-delayed");
+  const projection = await run(index);
+  const metadata = packagedMetadata(scenarios[index]!);
+  const edges = movementEdges(mapArchitecture(projection.architecture, metadata.architecture, metadata.name, m).edges);
+  const steps = flightSteps(projection.history.observations, edges, m);
+  // The client reads Orders and Reports at once: two departures, recorded one after the other at one virtual time.
+  const second = steps.findIndex((step, at) => at > 0 && step.leg === "departure" && step.from === "client" && step.to === "reporting"
+    && steps[at - 1]!.leg === "departure" && steps[at - 1]!.from === "client" && steps[at - 1]!.time === step.time);
+  assert.ok(second > 0, "the lesson records the two reads back to back");
+  const first = steps[second - 1]!;
+  assert.equal(first.to, "orders");
+
+  // With no cursor, and on a movement with nothing sent before it, nothing is in transit.
+  assert.deepEqual(flightInTransit(steps, -1), []);
+  assert.deepEqual(flightInTransit(steps, 0), []);
+  // On the first read, the cursor's own token is the only one. On the second, the first is still on its link.
+  assert.deepEqual(flightInTransit(steps, second - 1), []);
+  assert.deepEqual(flightInTransit(steps, second).map(step => step.observationId), [first.observationId]);
+  assert.equal(flightInTransitText(flightInTransit(steps, second), m), "Still in transit: REQ client → orders.");
+  assert.equal(flightInTransitText(flightInTransit(steps, second), es), "Sigue en viaje: REQ client → orders.");
+  assert.equal(flightInTransitText([], m), undefined);
+  // A component with a request on its way is not in the background.
+  assert.ok(!flightBackground(["client", "orders", "reporting"], steps[second], new Map(), flightInTransit(steps, second)).has("orders"));
+
+  // Every hop leaves the list at its own arrival or drop and not before, and nothing is read past the cursor.
+  for (let cursor = 0; cursor < steps.length; cursor += 1) {
+    const listed = new Set(flightInTransit(steps, cursor).map(step => step.hopId));
+    for (let at = 0; at < cursor; at += 1) {
+      const step = steps[at]!;
+      if (step.leg !== "departure" || step.hopId === undefined) continue;
+      const ended = steps.slice(at + 1, cursor + 1).some(later => later.hopId === step.hopId && (later.leg === "arrival" || later.leg === "interrupted"));
+      assert.equal(listed.has(step.hopId), !ended, `movement ${cursor + 1}: ${step.hopId}`);
+    }
+    assert.ok(!listed.has(steps[cursor]!.hopId ?? "none") || steps[cursor]!.leg !== "departure", "the cursor's own departure is not listed");
+  }
+  // Both reads arrive, so the run ends with nothing in transit.
+  assert.deepEqual(flightInTransit(steps, steps.length - 1), []);
+});
+
+test("hops in transit are grouped per link, kind, and direction, and a caller's timeout does not end one", () => {
+  const leg = (id: string, hop: string, kind: "departure" | "arrival" | "timeout", edgeId: string | undefined, reversed = false) => ({
+    observationId: id, hopId: hop, leg: kind, kind: "request", glyph: "REQ", from: "a", to: "b", nodeIds: ["a", "b"], reversed,
+    ...(edgeId !== undefined ? { edgeId } : {}),
+  }) as unknown as Parameters<typeof flightInTransit>[0][number];
+  const steps = [
+    leg("s1", "request:1", "departure", "e1"), leg("s2", "request:2", "departure", "e1"), leg("s3", "request:3", "departure", "e2"),
+    leg("t1", "request:1", "timeout", "e1"), leg("s4", "request:4", "departure", undefined), leg("d2", "request:2", "arrival", "e1"),
+    leg("s5", "request:5", "departure", "e1"),
+  ];
+  // The timeout of request 1 is the caller's record: the request is still not recorded as arrived or dropped.
+  assert.deepEqual(flightInTransit(steps, 4).map(step => step.observationId), ["s1", "s2", "s3"]);
+  const groups = flightTransitGroups(flightInTransit(steps, 4));
+  // Two requests wait on e1: one token, the latest departure, with a count. A hop on no drawn link is left out.
+  assert.deepEqual([...groups.keys()], ["e1", "e2"]);
+  assert.deepEqual(groups.get("e1")!.map(group => [group.step.observationId, group.count]), [["s2", 2]]);
+  assert.deepEqual(groups.get("e2")!.map(group => [group.step.observationId, group.count]), [["s3", 1]]);
+  // More than three are counted, not named.
+  const many = [...steps.slice(0, 3), leg("s6", "request:6", "departure", "e1"), leg("s7", "request:7", "departure", "e1"), leg("s8", "request:8", "departure", "e1")];
+  assert.equal(flightInTransitText(flightInTransit(many, 5), m), "Still in transit: 5 other movements.");
+  assert.equal(flightInTransitText(flightInTransit(many, 5), es), "Siguen en viaje otros 5 movimientos.");
+  // A resting token sits just behind mid-link, measured from its own origin.
+  assert.equal(transitTokenStyle({ reversed: false }, "M0 0")["--flight-end"], "42%");
+  assert.equal(transitTokenStyle({ reversed: true }, "M0 0")["--flight-end"], "58%");
 });
 
 test("Left and Right step one movement and Space plays or pauses, unless a control or a chord owns the key", () => {

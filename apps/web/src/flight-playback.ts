@@ -3,6 +3,7 @@ import {
   DEFAULT_FLIGHT_PACE,
   flightAdvance,
   flightDelayMs,
+  flightInTransit,
   flightPosition,
   flightSteps,
   flightTransport,
@@ -41,6 +42,8 @@ export interface FlightPlayback {
   readonly activity: ReadonlyMap<string, ComponentActivity>;
   /** Activity that differs from the previous movement, one sentence per component. */
   readonly activityChanges: readonly string[];
+  /** Hops that left before the cursor's movement and have no arrival or drop recorded at or before it. */
+  readonly inTransit: readonly FlightStep[];
   readonly play: () => void;
   readonly pause: () => void;
   readonly restart: () => void;
@@ -89,6 +92,7 @@ export function useFlightPlayback(
     () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity, m, names),
     [observations, previousId, activity, step, m, names],
   );
+  const inTransit = useMemo(() => flightInTransit(steps, cursor.index), [steps, cursor.index]);
   const play = useCallback(() => {
     setCursor(current => current.phase === "playing" ? current
       : steps.length === 0 ? current
@@ -134,6 +138,7 @@ export function useFlightPlayback(
     transport: flightTransport(cursor.index, steps.length, cursor.phase, recording, m),
     activity,
     activityChanges: changes,
+    inTransit,
     play, pause, restart, previous, next, setPace,
   };
 }

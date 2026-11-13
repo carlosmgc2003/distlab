@@ -90,10 +90,10 @@ cursor and paint a movement token on a measured link path, and it must not
 advance virtual time, record observations, or send worker commands. Narration
 reads stored observation fields only, and a redacted or omitted payload is never
 reconstructed. A token travels from the record's origin to its destination even
-when that runs against the drawn link. The Replay keys (`useReplayKeys`) and
-the Replay background (`flightBackground`) follow the same rule: a key moves the
-playback cursor only, and the background is read from the step and the activity
-at the cursor. Component activity in
+when that runs against the drawn link. The Replay keys (`useReplayKeys`), the
+hops in transit (`flightInTransit`), and the Replay background
+(`flightBackground`) follow the same rule: a key moves the playback cursor only,
+and the other two are read from records at or before the cursor. Component activity in
 `apps/web/src/activity.ts` is pure: it reads records at or before the cursor and
 nothing after it. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
 edits a draft overlay as UI state in up to three sections: Architecture

@@ -247,6 +247,7 @@ per movement and opens the rest when a movement deserves it:
 | --- | --- | --- |
 | 1. What and where | Heading | The stored plain-language label for the record type |
 | 1. What and where | Route | Stored `source`, `target`, and the presentation relationship of the link |
+| 1. What and where | Still in transit | Shown only when a hop left earlier and has not arrived: the glyph and route of each, or their count above three |
 | 2. What to look for | Question | One question about the pattern the stored record belongs to |
 | 2. What to look for | Not recorded | For a drop or a timeout only: what the record does not state |
 | 3. Recorded details | Transit | The part of the hop this record paints, and the departure it pairs with |
@@ -273,8 +274,22 @@ receiving components carry a text badge on the graph, and the legend names every
 token. The token is decorative: the narration, the playback position, and the
 `Request and message movement` region carry the same movement as text.
 
+Replay stands on one record at a time, but several hops can be on their links at
+once: a client that reads two services at the same virtual time records two
+`*.sent`, one after the other. A hop is **in transit** at the cursor when its
+departure is recorded before the cursor's movement and no arrival or drop of the
+same stored request id is recorded at or before it. Each one keeps a resting
+token on its link, just behind mid-link, with a dashed outline and no travel, so
+it reads as lighter than the cursor's own token. Several hops of one kind
+waiting on one link in one direction are one token with a count, `×3`. A
+caller's timeout does not end a transit: that record says the caller stopped
+waiting, not what became of the request. The narration says the same in words,
+and the legend names the resting token. Nothing after the cursor is read, so
+stepping back shows the same picture.
+
 While a movement is painted, the graph has a foreground and a background. A
-component is in the background when it is neither end of the movement and the
+component is in the background when it is neither end of the movement nor of a
+hop in transit, and the
 records at or before the cursor leave it with no work, no wait, and no timeout.
 Its shape is drawn at reduced opacity, with its owned store and every link that
 touches it. A component that is still waiting or processing stays in front,

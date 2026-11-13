@@ -257,6 +257,7 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .flight-activity ul { margin: 2px 0 0; padding: 0; list-style: none; }
 .flight-activity li, .flight-activity p { margin: 2px 0 0; overflow-wrap: anywhere; }
 .flight-jump { display: inline; margin-left: 4px; padding: 0 6px; border: 1px dashed var(--status-warning); border-radius: 4px; background: var(--status-warning-bg); color: var(--text-primary); font-weight: 600; }
+.flight-in-transit { margin: 0 0 6px; padding: 2px 6px; border-left: 2px dashed var(--flight-request); font-size: .8rem; overflow-wrap: anywhere; }
 .flight-route { margin: 0 0 6px; color: var(--text-secondary); font-size: .8rem; overflow-wrap: anywhere; }
 .flight-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 12px; margin: 0 0 8px; font-size: .8rem; }
 .flight-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-bottom: 3px; border-bottom: 1px solid var(--border-faint); }
@@ -525,6 +526,14 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .flight-token.flight-message .flight-token-core { stroke: var(--flight-message); stroke-dasharray: 4 2; }
 .flight-token.shape-dotted .flight-token-core { stroke: var(--status-error); stroke-dasharray: 1.5 2.5; }
 .flight-token.shape-dotted .flight-token-halo { fill: var(--status-error); }
+/* A hop still in transit: it left earlier and no record at the cursor says it arrived or was
+   dropped. It rests on its link, lighter than the cursor's own token and never animated. */
+.transit-token { offset-path: var(--flight-path); offset-distance: var(--flight-end, 42%); offset-rotate: 0deg; }
+.transit-token-core { fill: var(--surface-panel); stroke: var(--flight-request); stroke-width: 1.5; stroke-dasharray: 3 2; }
+.transit-token.flight-response .transit-token-core { stroke: var(--flight-response); }
+.transit-token .flight-token-glyph { opacity: .8; }
+.transit-token-count { fill: var(--text-primary); stroke: var(--surface-panel); stroke-width: 2.5; paint-order: stroke; font-size: 9px; font-weight: 800; }
+.token-sample.is-transit { border-style: dashed; border-width: 1.5px; }
 /* Every token rests where its leg ends until the cursor moves: a departure waits
    mid-link, an arrival rests at the destination, a drop rests on the link. */
 .flight-token, .flight-heading { animation: flight-travel var(--flight-duration, 900ms) cubic-bezier(.35, .05, .25, 1) 1 forwards, flight-life var(--flight-duration, 900ms) linear 1 forwards; }

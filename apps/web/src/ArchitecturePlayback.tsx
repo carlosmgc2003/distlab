@@ -61,7 +61,9 @@ export function FlightReadout({ position }: { readonly position: FlightPosition 
  *
  * Every line is a presentation mapping over stored observation fields, plus one pattern question.
  */
-export function FlightNarration({ step, activity, changes, names, detailsOpen, onDetailsToggle }: {
+export function FlightNarration({ step, activity, changes, names, detailsOpen, onDetailsToggle, inTransit }: {
+  /** One sentence naming the hops still in transit at the cursor, when there are any. */
+  readonly inTransit?: string;
   readonly step: FlightStep;
   /** The session's component display names (#103), for the activity lines. */
   readonly names?: ComponentNames;
@@ -85,6 +87,8 @@ export function FlightNarration({ step, activity, changes, names, detailsOpen, o
     {/* Level 1: what was recorded, and between which components. */}
     <h4><span className="flight-glyph" aria-hidden="true">{step.glyph}</span> {step.headline}</h4>
     <p className="flight-route">{step.route}</p>
+    {/* Replay shows one record at a time, so what left earlier and has not arrived is said here and drawn on its link. */}
+    {inTransit !== undefined ? <p className="flight-in-transit">{inTransit}</p> : null}
     {/* Level 2: the question, and for a movement that did not arrive, what the record does not say. */}
     <p className="flight-pattern"><strong>{m.playback.narration.lookFor}</strong> {step.pattern}</p>
     {step.leg === "timeout"

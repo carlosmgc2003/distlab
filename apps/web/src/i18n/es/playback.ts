@@ -126,6 +126,7 @@ export const playback: typeof source = {
     "⊘": { label: "Token: descartado", detail: "el registro dice que este movimiento nunca llegó; el token se detiene en el enlace" },
     "◷": { label: "Token: con timeout", detail: "el registro dice que venció el plazo de quien llama; el token queda en quien llama" },
   },
+  legendInTransit: { label: "Token: sigue en viaje", detail: "salió antes, y ningún registro hasta este movimiento dice que llegó o que se descartó; un número cuenta los que esperan en el mismo enlace" },
   toolbar: {
     label: "Reproducción",
     group: "Reproducción de movimientos registrados",
@@ -140,6 +141,12 @@ export const playback: typeof source = {
     noFields: "Este registro no guarda más campos para la narración.",
     lookFor: "Qué mirar",
     details: "Detalles registrados",
+    inTransitRoute: (p: { glyph: string; from: string; to?: string }, _f: Fmt) => p.to !== undefined ? `${p.glyph} ${p.from} → ${p.to}` : `${p.glyph} ${p.from}`,
+    inTransit: (routes: readonly string[], f: Fmt) => f.plural(routes.length, {
+      one: `Sigue en viaje: ${f.list(routes)}.`,
+      other: `Siguen en viaje: ${f.list(routes)}.`,
+    }),
+    inTransitMany: (count: number, f: Fmt) => `Siguen en viaje otros ${f.number(count)} movimientos.`,
     trace: (id: string, _f: Fmt) => `Traza ${id}`,
     activityRegion: "Actividad de los componentes",
     activityHeading: "Actividad de los componentes en este registro",

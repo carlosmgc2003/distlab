@@ -318,7 +318,10 @@ destination, consumer, fault rule, reason, recorded transitions, changed rows,
 and the stored external change — with the trace and the component activity.
 A component that is no end of the painted movement and has no recorded work or
 wait is drawn fainter, with its store and its links, so the eye goes to the
-movement; its labels keep their contrast. From the keyboard, the Left and Right
+movement; its labels keep their contrast. A hop that left earlier and has no
+arrival or drop recorded yet keeps a resting token on its link, and the
+narration names it, so two requests sent at the same virtual time are seen
+together. From the keyboard, the Left and Right
 arrow keys do what `Previous movement` and `Next movement` do, and Space plays
 or pauses, wherever a focused control does not already use that key. Payload *field names* are shown instead of payload values, a
 redacted or omitted payload contributes only a visibility statement, and a

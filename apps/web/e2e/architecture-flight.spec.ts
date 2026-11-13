@@ -777,9 +777,80 @@ test("Replay draws idle bystanders fainter with their stores and links, and keep
   await expect(position(page)).toContainText("Movement 6 of 13 ");
   await expect(narration(page).locator(".flight-route")).toHaveText("Payments → Payment Processor · Request link");
   await expect(page.locator(`${nodeSelector("customer-app")} .activity-badge`)).toContainText("Waiting");
-  expect(await faintIds()).toEqual(["OrderCreated", "orders", "resource:db:orders"]);
+  // Orders stays in front too: its response to Customer App left earlier and has not arrived.
+  await expect(page.locator("[data-flight-transit]")).toHaveCount(1);
+  expect(await faintIds()).toEqual(["OrderCreated"]);
+  // Once that response is received, Orders has no part in what follows and fades.
+  await stepTo(page, "Response sent");
+  await expect(narration(page).locator(".flight-route")).toHaveText("Payment Processor → Payments · Request link");
+  await expect(page.locator("[data-flight-transit]")).toHaveCount(0);
+  expect(await faintIds()).toEqual(["OrderCreated", "customer-app", "orders", "resource:db:orders"]);
 
   // Inspecting a faint component draws it in full again.
   await page.getByRole("button", { name: "Orders, Internal service", exact: true }).click();
   await expect.poll(() => shapeOpacity("orders")).toBe("1");
+});
+
+test("two requests sent at the same virtual time stay on their links together until each arrives", async ({ page }) => {
+  await observeWorker(page);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await page.goto("/");
+  await loadLesson(page, "cqrs-delayed");
+  await graphLaidOut(page);
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  const commands = await page.evaluate(() => window.workerEvidence.commands.length);
+  const next = page.getByRole("button", { name: "Next movement" });
+  const resting = page.locator("[data-flight-transit]");
+  const inTransit = narration(page).locator(".flight-in-transit");
+  const goTo = async (movement: number) => {
+    for (let attempt = 0; attempt < 30 && !(await position(page).innerText()).startsWith(`Movement ${movement} of 23 `); attempt += 1) await next.click();
+    await expect(position(page)).toContainText(`Movement ${movement} of 23 `);
+  };
+
+  // Movement 6: the read of Orders leaves. Nothing left before it, so nothing else is on a link.
+  await goTo(6);
+  await expect(narration(page).locator(".flight-route")).toHaveText("Customer App → Orders · Request link");
+  await expect(resting).toHaveCount(0);
+  await expect(inTransit).toHaveCount(0);
+
+  // Movement 7, same virtual time: the read of Reporting leaves, and the read of Orders is still on its link.
+  await goTo(7);
+  await expect(position(page)).toContainText("virtual time 10");
+  await expect(narration(page).locator(".flight-route")).toHaveText("Customer App → Reporting · Request link");
+  await expect(inTransit).toHaveText("Still in transit: REQ Customer App → Orders.");
+  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
+  await expect(resting).toHaveCount(1);
+  // The resting token sits on the link to Orders, not on the link the cursor paints, and it does not travel.
+  const restingEdge = await resting.evaluate(token => token.closest(".react-flow__edge")?.getAttribute("data-id") ?? "");
+  const paintedEdge = await page.locator("[data-flight-token]").evaluate(token => token.closest(".react-flow__edge")?.getAttribute("data-id") ?? "");
+  expect(restingEdge).toContain("orders");
+  expect(paintedEdge).toContain("reporting");
+  expect(await resting.evaluate(token => getComputedStyle(token).animationName)).toBe("none");
+  expect(await resting.evaluate(token => getComputedStyle(token).getPropertyValue("--flight-end").trim())).toBe("42%");
+  // Orders has a request on its way, so it is not drawn in the background.
+  await expect(page.locator(nodeSelector("orders"))).not.toHaveClass(/is-background/);
+  await expect(page.locator(nodeSelector("client"))).toContainText("Waiting");
+
+  // Movement 8: that read arrives at Orders, and now the read of Reporting is the one still in transit.
+  await goTo(8);
+  await expect(narration(page).locator(".flight-route")).toHaveText("Customer App → Orders · Request link");
+  await expect(inTransit).toHaveText("Still in transit: REQ Customer App → Reporting.");
+  expect(await resting.evaluate(token => token.closest(".react-flow__edge")?.getAttribute("data-id") ?? "")).toContain("reporting");
+
+  // Movement 9: both have arrived.
+  await goTo(9);
+  await expect(resting).toHaveCount(0);
+  await expect(inTransit).toHaveCount(0);
+
+  // Going back shows the same picture: it is read from the records at the cursor, not remembered.
+  await page.getByRole("button", { name: "Previous movement" }).click();
+  await page.getByRole("button", { name: "Previous movement" }).click();
+  await expect(position(page)).toContainText("Movement 7 of 23 ");
+  await expect(inTransit).toHaveText("Still in transit: REQ Customer App → Orders.");
+  await expect(resting).toHaveCount(1);
+  // The legend names the resting token.
+  await page.getByRole("button", { name: "Show legend" }).click();
+  await expect(page.locator(".graph-legend")).toContainText("Token: still in transit");
+  expect(await page.evaluate(() => window.workerEvidence.commands.length)).toBe(commands);
 });

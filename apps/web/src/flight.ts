@@ -435,20 +435,84 @@ function selectionAvailability(index: number, count: number): { readonly previou
 }
 
 /**
- * The components a painted movement leaves in the background: not an end of the movement, and
- * with no recorded work, wait, or timeout at the cursor. The graph draws them fainter, so the eye
- * goes to the movement and to whoever is still busy. With no movement painted, nothing is in the
- * background. Presentation only: it reads the step and the activity already read from records.
+ * The hops still on their link at the cursor: every departure recorded before the cursor's
+ * movement whose arrival or drop is not recorded at or before it. Two requests sent at the same
+ * virtual time are two records, so the cursor stands on one while the other is still in transit.
+ *
+ * Only an arrival or a drop ends a transit. A caller's timeout does not: that record says the
+ * caller stopped waiting, not what happened to the request. The cursor's own movement is not
+ * listed, and a MessageBus record is a whole trip, so it is never in transit. Nothing after the
+ * cursor is read.
+ */
+export function flightInTransit(steps: readonly FlightStep[], cursor: number): readonly FlightStep[] {
+  if (cursor < 0) return [];
+  const open = new Map<string, FlightStep>();
+  const last = Math.min(cursor, steps.length - 1);
+  for (let index = 0; index <= last; index += 1) {
+    const step = steps[index]!;
+    if (step.hopId === undefined) continue;
+    if (step.leg === "departure") { if (index < last) open.set(step.hopId, step); }
+    else if (step.leg === "arrival" || step.leg === "interrupted") open.delete(step.hopId);
+  }
+  return [...open.values()];
+}
+
+export interface FlightTransitGroup {
+  /** The most recent departure of the group: the token the graph draws. */
+  readonly step: FlightStep;
+  /** How many hops of this kind wait on this link in this direction. */
+  readonly count: number;
+}
+
+/**
+ * In-transit hops grouped by link, kind, and direction, so sixteen requests waiting on one link
+ * are one token with a count. Hops whose link the graph does not draw are left out.
+ */
+export function flightTransitGroups(inTransit: readonly FlightStep[]): ReadonlyMap<string, readonly FlightTransitGroup[]> {
+  const groups = new Map<string, Map<string, FlightTransitGroup>>();
+  for (const step of inTransit) {
+    if (step.edgeId === undefined) continue;
+    const onEdge = groups.get(step.edgeId) ?? new Map<string, FlightTransitGroup>();
+    const key = `${step.kind}:${step.reversed ? "reverse" : "forward"}`;
+    onEdge.set(key, { step, count: (onEdge.get(key)?.count ?? 0) + 1 });
+    groups.set(step.edgeId, onEdge);
+  }
+  return new Map([...groups].map(([edgeId, onEdge]) => [edgeId, [...onEdge.values()]]));
+}
+
+/** The glyph the legend shows on its sample of a token still in transit. */
+export const TRANSIT_SAMPLE_GLYPH: FlightGlyph = "REQ";
+
+/** At most this many in-transit routes are named in the narration; beyond it, the count is stated. */
+export const IN_TRANSIT_NAMED = 3;
+
+/** One sentence naming what else is on a link at the cursor, or undefined when nothing is. */
+export function flightInTransitText(inTransit: readonly FlightStep[], m: Messages, names?: ComponentNames): string | undefined {
+  if (inTransit.length === 0) return undefined;
+  if (inTransit.length > IN_TRANSIT_NAMED) return m.playback.narration.inTransitMany(inTransit.length);
+  return m.playback.narration.inTransit(inTransit.map(step => m.playback.narration.inTransitRoute({
+    glyph: step.glyph, from: displayName(names, step.from), ...(step.to !== undefined ? { to: displayName(names, step.to) } : {}),
+  })));
+}
+
+/**
+ * The components a painted movement leaves in the background: not an end of the movement or of
+ * a hop still in transit, and with no recorded work, wait, or timeout at the cursor. The graph
+ * draws them fainter, so the eye goes to the movement and to whoever is still busy. With no
+ * movement painted, nothing is in the background. Presentation only: it reads the step and the
+ * activity already read from records.
  */
 export function flightBackground(
   componentIds: readonly string[],
   step: Pick<FlightStep, "nodeIds"> | undefined,
   activity: ReadonlyMap<string, ComponentActivity>,
+  inTransit: readonly Pick<FlightStep, "nodeIds">[] = [],
 ): ReadonlySet<string> {
   const background = new Set<string>();
   if (step === undefined) return background;
+  const travelling = new Set(inTransit.flatMap(item => item.nodeIds));
   for (const id of componentIds) {
-    if (step.nodeIds.includes(id)) continue;
+    if (step.nodeIds.includes(id) || travelling.has(id)) continue;
     const current = activity.get(id);
     if (current !== undefined && (current.state !== "idle" || current.timedOut !== undefined)) continue;
     background.add(id);

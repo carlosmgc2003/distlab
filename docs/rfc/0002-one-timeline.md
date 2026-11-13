@@ -243,6 +243,13 @@ depend on P1 to P7, and they carry over to the playhead unchanged.
   and links.
 - **Replay answers to the keyboard.** Left and Right step one movement, and
   Space plays or pauses.
+- **Hops in transit stay on the graph.** Replay stands on one record, so of two
+  requests sent at the same virtual time only one was drawn, and the other
+  seemed to vanish. A hop that left before the cursor's movement and has no
+  arrival or drop recorded keeps a resting token on its link, with a count when
+  several wait, and the narration names it. This is a first part of P7's
+  "painted together": the pile on a link is visible as a count. Milestones are
+  still stepped one at a time.
 
 With P2, the keys follow the one control group: Left is `Back`, Right is
 `Step`, and Space is `Run` or `Pause`.
