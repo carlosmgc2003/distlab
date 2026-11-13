@@ -2,13 +2,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed. The direction is set (see [Decisions already taken](#decisions-already-taken)); the details are not decided. |
+| Status | Accepted on 2026-11-13. Every decision is recorded in [Decisions](#decisions). P1 to P9 are not built yet, except the parts listed under [Built with this amendment](#built-with-this-amendment). |
 | Date | 2026-11-11 |
 | Evidence | [Student evaluation, ITBA 73.40](../evaluations/2026-11-itba-73-40/README.md), F5 and F6; measurements in [Problem](#problem) |
 | Refines | [RFC 0001](0001-course-ready-design-module.md), P2 "One timeline". It answers that RFC's decision 3. |
 | Related issues | #136, #103, #189, #190, #191, #192, #193 |
 | Decides | How a student runs and watches a lesson. It changes no contract and no worker command. |
-| Amended | 2026-11-13, [Amendment 1: time to read](#amendment-1-time-to-read). It changes P3, adds P8 and P9, and adds decisions 8 to 10. Not yet reviewed. |
+| Amended | 2026-11-13, [Amendment 1: time to read](#amendment-1-time-to-read). It changes P3, adds P8 and P9, and adds decisions 8 to 10. Accepted with the rest on 2026-11-13. |
 
 ## Summary
 
@@ -27,6 +27,8 @@ a separate concept, goes away.
 ## Decisions already taken
 
 The maintainer set these on 2026-11-11. The rest of this RFC follows from them.
+The ten decisions the RFC then asked for were taken on 2026-11-13 and are in
+[Decisions](#decisions).
 
 1. **No run on load.** Loading a lesson leaves it `READY`. The student decides
    when to run.
@@ -132,7 +134,7 @@ lesson loads.
 
 - **On** (the default): `Run` plays the run. The playhead advances one
   milestone at a time at the chosen speed, and the graph paints each one.
-  Amendment 1 proposes that it also stops at each key moment (P8).
+  It also stops at each key moment (P8).
 - **Off**: `Run` executes and places the playhead at the end. The graph shows
   the end state and the outcome appears at once. **Speed** is unavailable.
 
@@ -180,8 +182,8 @@ earlier record that is a contradiction.
 First step, presentation only: when the playhead is not at the end, these
 regions say that they show the end of the run, and at which virtual time.
 
-A real answer needs a decision, because no projection holds earlier component
-state. Three options:
+A real answer needed a decision, because no projection holds earlier component
+state. Three options were considered:
 
 | Option | How | Cost |
 | --- | --- | --- |
@@ -189,8 +191,11 @@ state. Three options:
 | B. A second session | The host loads the same document and overlay in a second worker and runs it with `run { maxEvents }` to the boundary of the record under the playhead | No protocol change, and exact because runs are deterministic. Needs a stated way to map a record to an event boundary; costs one re-run per position |
 | C. Worker frames | The worker publishes component state per event boundary | Exact and immediate. A new projection field, so an ADR |
 
-Recommendation: B, on demand, when the student opens Service state or selects a
-component with the playhead before the end.
+Decided: B, on demand, when the student opens Service state or selects a
+component with the playhead before the end. The first step above ships first.
+Before B is built, a specification states how a record maps to an event
+boundary, because `run { maxEvents }` counts events and the playhead names a
+record.
 
 ### P7. Long runs
 
@@ -205,8 +210,9 @@ is 7.5 minutes at **Slow** (evaluation F6).
 ## Amendment 1: time to read
 
 Added on 2026-11-13, after the maintainer reported that a replayed step does not
-stay long enough to be read. P8 and P9 are proposed and not decided. They are
-stated in the terms of this RFC, so they apply to the playhead of P1.
+stay long enough to be read. P8 and P9 were accepted on 2026-11-13 (decisions 8
+to 10). They are stated in the terms of this RFC, so they apply to the playhead
+of P1.
 
 ### The problem P1 to P7 leave open
 
@@ -294,6 +300,12 @@ One definition serves three places: the stops of P8, and the scrubber marks and
 A toggle, **Stop at key moments**, sits beside **Animation** and is on by
 default. Off gives the continuous play of P3. It is UI state.
 
+Decided: stopping is on by default, and the set is the one in the table above.
+A set limited to what goes wrong was rejected, because the second charge of
+`retry-unsafe` is a commit and would not stop. A set declared by each lesson
+was rejected as author work in every lesson; a lesson note (P9) covers the
+record a lesson wants to add.
+
 Rejected: a longer **Slow**, or an interval computed from the length of the
 text. Reading speed differs between students and between languages, and a
 student also looks at the graph. Any timer is wrong for someone, and it makes
@@ -324,7 +336,7 @@ states an outcome.
   record, and the `lesson-authoring` skill gains a section on writing them.
 - **A stop.** A record with a lesson note is a key moment for P8.
 
-The open question is the session overlay. With a design choice or a fault
+The session overlay needed a decision. With a design choice or a fault
 applied, the run differs, and a note written for the packaged run can be false:
 with idempotency on there is no second commit, and an anchor can then match a
 record that means something else.
@@ -335,13 +347,14 @@ record that means something else.
 | B. Pointers only | Notes are shown whenever the anchor matches, and must point ("look at the payments table") and never claim | Nothing proves a pointer still points at the right thing in a changed run |
 | C. Conditions | A note carries a condition on stored fields | A small rule language to specify, test, and teach to authors |
 
-Recommendation: A, with the wording rule of B as style guidance.
-
-### Order of work, amended
+Decided: A, with the wording rule of B as style guidance for authors. Notes
+live in the catalog only. A scenario document carries none, so ADR-006 does not
+change, and an imported session shows no lesson notes.
 
 P8 follows P4, because a commit and a check are not steps until then. P9 is
 independent of P1 to P7 and can be built on the present Replay, where a note on
-a record that travels no link waits for P4 to be shown.
+a record that travels no link waits for P4 to be shown. Both have their place
+in [Order of work](#order-of-work).
 
 ## How the guarantees hold
 
@@ -357,11 +370,12 @@ a record that travels no link waits for P4 to be shown.
 
 ## What changes
 
-Stated guarantees that this RFC reverses or rewrites, if accepted:
+Stated guarantees that this RFC reverses or rewrites. Each document changes in
+the pull request that builds the behavior, not before:
 
 - `CONTEXT.md`: "Presentation playback" and "Review navigation" become one
-  term, and the rule that they share no seam is removed. "Playhead" is a
-  proposed name; `CONTEXT.md` decides it.
+  term, **playhead** (decision 7), and the rule that they share no seam is
+  removed.
 - `docs/ui-visual-system.md`: the rule about two control groups in two regions,
   the Replay vocabulary row, the run summary rule, and the "Architecture
   playback and message flight" section.
@@ -400,18 +414,27 @@ specifies today, so their issues ask for a change to that specification.
 5. **The status contradicts itself** for a moment (#193): "COMPLETED · Run in
    progress…".
 
-P1 to P5 remove 3, 4, and the live cue behind 1. If this RFC is accepted, #191
-and #192 are closed as superseded. Items 2 and 5 remain either way.
+All five were fixed before the RFC was accepted: items 1, 2, and 5 in #196, and
+items 3 and 4 in #201. P1 to P5 still remove the live cue behind item 1.
 
 ## Order of work
 
-1. Defects 1, 2, and 5 (#189, #190, #193).
-2. P1 to P4 together: one position, one control group, the Animation toggle,
+1. Defects 1 to 5. Done (#196, #201).
+2. The narration levels, the Replay background, the Replay keys, and hops in
+   transit. Done (#220).
+3. P1 to P4 together: one position, one control group, the Animation toggle,
    milestone steps. This is the smallest change that removes the two
-   timelines, and it cannot be split without leaving a mixed interface.
-3. P5: Recorded history and ③ Investigate read the playhead.
-4. P6, first step. Then the decision on A, B, or C.
-5. P7.
+   timelines, and it cannot be split without leaving a mixed interface. Event
+   stepping leaves the browser and the event counts move to **Advanced
+   diagnostics** in the same change (decisions 2 and 3).
+4. P5: Recorded history and ③ Investigate read the playhead, and the outcome
+   waits for the playhead to reach the end (decision 4).
+5. P8: Play stops at key moments. It needs the milestone steps of P4.
+6. P6, first step. Then the specification of the record-to-boundary mapping,
+   then option B.
+7. P9: lesson notes. Independent of 3 to 6; it can be built earlier for
+   records that travel a link.
+8. P7.
 
 ## Alternatives considered
 
@@ -427,31 +450,29 @@ and #192 are closed as superseded. Items 2 and 5 remain either way.
   0001 decision 3). Not needed: with P1 the student's `Step` moves the
   playhead and sends nothing.
 
-## Decisions requested
+## Decisions
 
-1. Is the first `Run` or `Step` allowed to execute the whole run in the worker,
-   with the controls then moving the playhead? P1 depends on it.
-2. Does event-by-event stepping leave the browser, or stay behind **Advanced
-   diagnostics** for instructors?
-3. Do the processed and pending event counts move out of the top bar?
-4. P5: is the outcome withheld until the playhead reaches the end, or shown as
-   soon as the worker finishes?
-5. P6: option A, B, or C for state at the playhead?
-6. Does a long run need a student control that stops the worker? The longest
-   packaged run takes 1.6 seconds. An imported document is bounded by
-   `ScenarioDocumentLimits`, not by time.
-7. Is "playhead" the name?
-8. P8: does `Run` stop at key moments by default, and is the set in P8 the
-   right one?
-9. P9: are lesson notes accepted as authored content beside the narration?
-10. P9: option A, B, or C for notes under a session overlay? And do notes stay
-    in the catalog, or may an instructor's scenario document carry them?
+Taken by the maintainer on 2026-11-13. Each row is the question the RFC asked
+and the answer.
+
+| # | Question | Decision |
+| --- | --- | --- |
+| 1 | P1: is the first `Run` or `Step` allowed to execute the whole run in the worker, with the controls then moving the playhead? | Yes. The controls then send nothing to the worker. |
+| 2 | Does event-by-event stepping leave the browser, or stay behind **Advanced diagnostics** for instructors? | It leaves the browser. `npm run lesson -- <name> --step` keeps it, and `step` and `pause` stay in the protocol. |
+| 3 | Do the processed and pending event counts move out of the top bar? | Yes, to **Advanced diagnostics**. The top bar states the playhead: milestone number, milestone count, and the virtual time of its record. |
+| 4 | P5: is the outcome withheld until the playhead reaches the end, or shown as soon as the worker finishes? | Withheld until the playhead first reaches the end, then announced once. With **Animation** off that is at once. Moving back does not hide it. |
+| 5 | P6: option A, B, or C for state at the playhead? | B, a second session on demand, after the first step and after the record-to-boundary mapping is specified. |
+| 6 | Does a long run need a student control that stops the worker? | No, not now. The longest packaged run takes 1.6 seconds. If an imported document proves slow, that is a separate issue. `Reset` stays available. |
+| 7 | Is "playhead" the name? | Yes. |
+| 8 | P8: does `Run` stop at key moments by default, and is the set in P8 the right one? | Yes to both. **Stop at key moments** is on by default and can be turned off. |
+| 9 | P9: are lesson notes accepted as authored content beside the narration? | Yes. |
+| 10 | P9: option A, B, or C for notes under a session overlay? And do notes stay in the catalog, or may an instructor's scenario document carry them? | A: notes are shown only while no overlay is applied. They stay in the catalog. |
 
 ## ADR impact
 
-None for P1 to P5, P7, and P8: they are presentation over published records.
-P9 needs none while notes stay in the catalog. Notes in a scenario document
-would amend ADR-006. P6
-option C adds a projection field and needs an ADR. P6 option B needs the
-mapping from a record to an event boundary stated in a specification before it
-is built.
+None. P1 to P5, P7, and P8 are presentation over published records. P9 keeps
+its notes in the catalog, so ADR-006 does not change. P6 option B adds no
+contract and no command, but the mapping from a record to an event boundary is
+stated in a specification before it is built. The options not chosen would have
+needed one: P6 option C adds a projection field, and lesson notes in a scenario
+document would amend ADR-006.
