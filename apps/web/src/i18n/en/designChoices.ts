@@ -18,6 +18,7 @@ export const designChoices = {
     "logical-clock": { label: "Lamport clocks", hint: "Both regions stamp edits with a Lamport counter instead of their wall clocks." },
     "clock-skew": { label: "Clock skew in eu", hint: "How far region eu's wall clock runs ahead of virtual time (negative: behind)." },
     "cache-invalidation": { label: "Invalidate cache on price change", hint: "Catalog deletes the cached price when the back office changes it, instead of letting it live until its TTL ends." },
+    "price-ttl": { label: "Cached price lifetime", hint: "The TTL Catalog sets on a price it caches. The key-value store removes the entry when it ends, and the next read takes the price from the database." },
   },
   /** Copy for a lesson (by packaged scenario name) where a key means something different there. */
   lessonChoices: {

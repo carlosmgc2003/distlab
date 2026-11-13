@@ -112,8 +112,8 @@ test("cache: the student projection shows live KV entries with their absolute ex
   assert.deepEqual(latest().history.observations.filter(o => o.type === "kv.expired").map(o => [o.time, o.source]), [[31, "cart"], [31, "cart"], [101, "catalog"]]);
   const order = (state("orders").committed as Record<string, Record<string, Record<string, Record<string, CanonicalValue>>>>).tables!.orders!["order-1"];
   assert.deepEqual([order!.price, order!.priceSource], [1000, "cache"]);
-  // The cache pair offers only the switch that distinguishes it.
-  assert.deepEqual(scenarios.find(s => s.id === "cache-stale-price")!.policy.parameters.map(p => p.key), ["cache-invalidation"]);
+  // The cache pair offers the switch that distinguishes it and the cached price's lifetime; the cart TTL stays packaged.
+  assert.deepEqual(scenarios.find(s => s.id === "cache-stale-price")!.policy.parameters.map(p => p.key), ["cache-invalidation", "price-ttl"]);
 });
 
 test("inventory: the student projection shows stock with its version, the reservations, and each client's outcome", async () => {
