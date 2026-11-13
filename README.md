@@ -48,6 +48,7 @@ DistLab models the semantics that matter for learning rather than emulating spec
 - [Vision](docs/vision.md) describes the educational problem, target audience, reference domain, and intended product experience.
 - [Architecture](docs/architecture.md) defines the simulation model, runtime components, state boundaries, and architectural guarantees.
 - [Commerce lessons](docs/commerce-lessons.md) explains executable timeout/idempotency, Saga, outbox, CQRS, and circuit-breaker comparisons, including timeline inspection and replay.
+- The [lesson-authoring skill](.claude/skills/lesson-authoring/SKILL.md) guides an agent, or a person, through reviewing, adjusting, and creating lessons: teaching content, configuration, and visualization.
 - [Glossary](docs/glossary.md) establishes the terminology used throughout the project, including the Spanish interface terms.
 - [Shared simulation contracts](docs/spec/contracts.md) defines common values, identities, capabilities, and correlation rules. The TypeScript encoding is [`packages/contracts`](packages/contracts) (`@distlab/contracts`).
 - [Component specifications](docs/spec/) covers the simulation core, scheduler, virtual clock, observability, and the following runtime and application models:
@@ -171,6 +172,8 @@ npm run lesson -- saga-compensated --step  # interactive event stepping
 npm run --silent lesson -- outbox-idempotent --json # full state/history export
 npm run lesson -- outbox-notifications-gap --replay # empty design slot, replay check
 npm run scenario -- check examples/scenarios/processor-response-lost.json # check a scenario document
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-sheet.ts retry-unsafe # lesson copy beside its recorded run
+node --experimental-strip-types .claude/skills/lesson-authoring/scripts/lesson-shot.ts retry-unsafe  # lesson screenshots (after npm run build)
 npm exec -w @distlab/web -- playwright test checkout-lesson.spec.ts # focused lesson E2E
 ```
 
