@@ -458,6 +458,26 @@ cross as little as ELK can manage.
   reader's own pan and zoom are kept. The pan animates for 250 ms, and changes
   at once under `prefers-reduced-motion: reduce`. The playback readout keeps one
   height from movement to movement, so stepping does not resize the canvas.
+- **Hops in transit.** `flightInTransit` in `flight.ts` lists every departure
+  recorded before the cursor's movement whose arrival or drop, paired by the
+  stored request id, is not recorded at or before the cursor. A timeout does
+  not end a transit, a MessageBus record is a whole trip and is never in
+  transit, and the cursor's own movement is not listed. `flightTransitGroups`
+  groups them by link, kind, and direction; each group is one resting token
+  at 42 % of the link from its origin (`TRANSIT_REST`), never animated, with a
+  count when the group holds more than one. Resting tokens carry
+  `data-flight-transit`, not `data-flight-token`: exactly one token is the
+  cursor's. Like the token, they are decorative, and the narration carries the
+  same fact as text.
+- **Replay background.** While Replay paints a movement, `flightBackground` in
+  `flight.ts` names the components that are neither end of it nor of a hop in
+  transit, and have no recorded work, wait, or timeout at the cursor. The graph adds `is-background`
+  to those nodes, to the stores they own, and to every link with such an end,
+  and draws their shapes and paths at 40 % opacity. Text is not faded. Hover,
+  focus, and inspection restore a node. The set is a pure function of the step
+  and of the activity already read from records at or before the cursor; it
+  never enters layout, projections, commands, or history, and it is empty when
+  no movement is painted.
 - **Routes.** `ElkEdge` draws `startPoint → bendPoints → endPoint` with
   slightly rounded corners and puts the label where ELK placed it. ELK
   reports a section's points relative to the edge's container; `elkLayout`

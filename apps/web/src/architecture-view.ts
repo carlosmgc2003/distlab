@@ -8,7 +8,7 @@ import { componentNames, displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 import { kvServerDescriptor } from "../../../packages/catalogs/src/commerce/descriptors.ts";
 import type { ComponentActivity } from "./activity.ts";
-import type { FlightPace, FlightStep } from "./flight.ts";
+import type { FlightPace, FlightStep, FlightTransitGroup } from "./flight.ts";
 import type { MovementEdge } from "./records.ts";
 import type { Messages } from "./i18n/catalog.ts";
 import type { EdgeRoute, LinkKind } from "./layout/elk-layout.ts";
@@ -64,6 +64,8 @@ export type ArchitectureEdge = Edge<{
   route?: EdgeRoute;
   /** The recorded movement currently painted on this link, if any. */
   flight?: FlightStep;
+  /** Hops still waiting on this link at the cursor, one group per kind and direction. */
+  transit?: readonly FlightTransitGroup[];
   /** The chosen playback pace, so the token paints over the same interval the cursor waits. */
   pace?: FlightPace;
   /** Changes on every Restart, so the token of a movement painted again starts its leg anew. */
@@ -328,5 +330,16 @@ export function flightTokenStyle(step: FlightStep, path: string, durationMs: num
     "--flight-end": along(step.span.end),
     "--flight-rotate": step.reversed ? "auto 180deg" : "auto",
     "--flight-duration": `${Math.max(durationMs, 1)}ms`,
+  };
+}
+
+/** Where a hop still in transit rests, as a share of its link from its origin: just behind mid-link, where a departure stops. */
+export const TRANSIT_REST = 42;
+
+/** CSS for a token that rests on its link without travelling. It reads the departure's direction and nothing else. */
+export function transitTokenStyle(step: Pick<FlightStep, "reversed">, path: string): Record<string, string> {
+  return {
+    "--flight-path": `path("${path}")`,
+    "--flight-end": `${step.reversed ? 100 - TRANSIT_REST : TRANSIT_REST}%`,
   };
 }

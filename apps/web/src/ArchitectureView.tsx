@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useNodesInitialized, useReactFlow, useStore } from "@xyflow/react";
 import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { flightTokenStyle, handleFor, mapArchitecture, resourceTitle, symbolLabel, type NodeSymbol } from "./architecture-view.ts";
+import { flightTokenStyle, handleFor, mapArchitecture, resourceTitle, symbolLabel, transitTokenStyle, type NodeSymbol } from "./architecture-view.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
@@ -11,7 +11,8 @@ import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
 import type { FlightPlayback } from "./flight-playback.ts";
-import { flightDelayMs, flightLegend } from "./flight.ts";
+import { TRANSIT_SAMPLE_GLYPH, flightBackground, flightDelayMs, flightInTransitText, flightLegend, flightTransitGroups } from "./flight.ts";
+import type { FlightTransitGroup } from "./flight.ts";
 import { ACTIVITY_SYMBOLS, activityDescription, activityLabel, activityOf } from "./activity.ts";
 import { ComponentInspector } from "./ComponentInspector.tsx";
 import { HelpHint } from "./ui-hint.tsx";
@@ -178,7 +179,10 @@ function ArchitectureLegend({ open, onToggle }: { readonly open: boolean; readon
       <ul>{flightLegend(m).map(entry => <li key={entry.glyph}>
         <span className={`token-sample shape-${entry.shape}`} aria-hidden="true">{entry.glyph}</span>
         <span>{entry.label}<span className="sr-only">, {entry.detail}</span></span>
-      </li>)}</ul>
+      </li>)}
+        <li><span className="token-sample is-transit" aria-hidden="true">{TRANSIT_SAMPLE_GLYPH}</span>
+          <span>{m.playback.legendInTransit.label}<span className="sr-only">, {m.playback.legendInTransit.detail}</span></span></li>
+      </ul>
     </section>
     <section aria-labelledby="legend-activity-heading">
       <h4 id="legend-activity-heading">{copy.activity}</h4>
@@ -269,6 +273,26 @@ function FlightToken({ flight, path, readable, durationMs }: {
   </g>;
 }
 
+/**
+ * A hop that left earlier and has no arrival or drop recorded at the cursor. It rests on its link
+ * without travelling, drawn lighter than the cursor's own token, with a count when several wait.
+ */
+function TransitToken({ group, path, readable }: {
+  readonly group: FlightTransitGroup;
+  readonly path: string;
+  readonly readable: number;
+}) {
+  const { step, count } = group;
+  return <g aria-hidden="true" className={`transit-token flight-${step.kind}`} data-flight-transit={step.observationId}
+    data-transit-count={count} style={transitTokenStyle(step, path) as CSSProperties}>
+    <g transform={`scale(${readable})`}>
+      <rect className="transit-token-core" x={-16} y={-8} width={32} height={16} rx={8} />
+      <text className="flight-token-glyph" dy="3.2">{step.glyph}</text>
+      {count > 1 ? <text className="transit-token-count" x={18} y={-9}>×{count}</text> : null}
+    </g>
+  </g>;
+}
+
 /** A student fault from the applied overlay targets this element. */
 function FaultBadge({ faults }: { readonly faults: readonly string[] }) {
   const m = useMessages();
@@ -321,6 +345,8 @@ const ElkEdge = memo(function ElkEdge(props: EdgeProps<ArchitectureEdge | Owners
       {...(style !== undefined ? { style } : {})}
       {...(markerEnd !== undefined ? { markerEnd } : {})} {...(markerStart !== undefined ? { markerStart } : {})} />
     {/* Keyed by observation: each recorded movement mounts its own token, so its CSS animation always starts from the leg's start. */}
+    {/* Hops still in transit rest under the cursor's own token. */}
+    {movement?.transit?.map(group => <TransitToken key={`${group.step.kind}:${group.step.reversed}`} group={group} path={path} readable={readable} />)}
     {flight ? <FlightToken key={`${flight.observationId}:${movement?.paint ?? 0}`} flight={flight} path={path} readable={readable} durationMs={Math.round(flightDelayMs(pace ?? "slow") * 0.62)} /> : null}
   </>;
 });
@@ -668,13 +694,18 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
     : emphasis;
+  // Replay draws the components its movement leaves idle fainter, so the eye goes to the movement.
+  // A component with a hop still travelling to or from it is part of the moment, so it stays in front.
+  const background = useMemo(() => flightBackground(graph.nodes.map(node => node.id), flight, playback.activity, playback.inTransit),
+    [graph.nodes, flight, playback.activity, playback.inTransit]);
+  const transit = useMemo(() => flightTransitGroups(playback.inTransit), [playback.inTransit]);
   const componentNodes = useMemo(() => graph.nodes.map(node => {
     const involved = painted?.nodeIds.includes(node.id) === true;
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
     // Activity is shown only while the cursor stands on a record, and only from records at or before it.
     const activity = flight ? activityOf(playback.activity, node.id) : undefined;
-    const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : ""].filter(Boolean).join(" ");
+    const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : "", background.has(node.id) ? "is-background" : ""].filter(Boolean).join(" ");
     const size = sizes?.get(node.id);
     return {
       ...node,
@@ -694,15 +725,17 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
         ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
       },
     };
-  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, faultMarks, laidOut, sizes, m]);
+  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, background, faultMarks, laidOut, sizes, m]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
     position: laidOut?.positions.get(node.id) ?? node.position,
     ...(sizes?.get(node.id) ? { measured: sizes.get(node.id)! } : {}),
-    ...(faultMarks?.nodes.get(node.id)?.length ? { data: { ...node.data, faults: faultMarks.nodes.get(node.id)! }, className: `${node.className ?? ""} has-fault` } : {}),
+    ...(faultMarks?.nodes.get(node.id)?.length ? { data: { ...node.data, faults: faultMarks.nodes.get(node.id)! } } : {}),
+    // An owned store follows its owner into the background.
+    className: [node.className ?? "", faultMarks?.nodes.get(node.id)?.length ? "has-fault" : "", background.has(node.data.owner) ? "is-background" : ""].filter(Boolean).join(" "),
     selected: node.id === selectedId,
     domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
-  })), [graph.resourceNodes, selectedId, faultMarks, laidOut, sizes]);
+  })), [graph.resourceNodes, selectedId, faultMarks, background, laidOut, sizes]);
   const nodes = useMemo(() => [...componentNodes, ...resourceNodes], [componentNodes, resourceNodes]);
   const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(routed => {
     const route = laidOut?.routes.get(routed.id);
@@ -713,14 +746,20 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
       ariaLabel: m.architecture.view.fault.link({ label: edge.ariaLabel ?? "", faults: marks }),
       style: { ...edge.style, stroke: "var(--status-error)", strokeDasharray: "10 4 2 4" },
     } : edge;
-    const styled = emphasize(marked, painted);
-    if (!flight || flight.edgeId === undefined || styled.id !== flight.edgeId) return styled;
-    return { ...styled, data: { ...styled.data!, flight, pace: playback.pace, paint: playback.paint } };
-  }), [graph.edges, painted, flight, playback.pace, playback.paint, faultMarks, laidOut, m]);
+    const emphasized = emphasize(marked, painted);
+    // A link with an end in the background carries nothing at this record.
+    const styled: ArchitectureEdge = background.has(edge.source) || background.has(edge.target)
+      ? { ...emphasized, className: `${emphasized.className ?? ""} is-background`.trim() } : emphasized;
+    const waiting = transit.get(styled.id);
+    const carrying: ArchitectureEdge = waiting && styled.data ? { ...styled, data: { ...styled.data, transit: waiting } } : styled;
+    if (!flight || flight.edgeId === undefined || carrying.id !== flight.edgeId) return carrying;
+    return { ...carrying, data: { ...carrying.data!, flight, pace: playback.pace, paint: playback.paint } };
+  }), [graph.edges, painted, flight, playback.pace, playback.paint, background, transit, faultMarks, laidOut, m]);
   const ownershipEdges = useMemo<OwnershipEdge[]>(() => graph.resourceEdges.map(edge => {
     const route = laidOut?.routes.get(edge.id);
-    return route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
-  }), [graph.resourceEdges, laidOut]);
+    const routed: OwnershipEdge = route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
+    return background.has(edge.source) ? { ...routed, className: `${routed.className ?? ""} is-background`.trim() } : routed;
+  }), [graph.resourceEdges, background, laidOut]);
   const edges = useMemo<(ArchitectureEdge | OwnershipEdge)[]>(() => [...componentEdges, ...ownershipEdges], [componentEdges, ownershipEdges]);
   // Accept selection changes and React Flow's size measurements. Positions come only from the
   // ELK layout; graph structure is an immutable presentation input.
@@ -752,6 +791,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   // The legend starts collapsed (#166): open, it took a third of the canvas width at 1366×768 and
   // shrank every graph with it. One click opens it, and the reader's choice then holds.
   const [legendOpen, setLegendOpen] = useState(false);
+  // Recorded details stays as the reader left it from movement to movement, and when Replay starts again.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const inTransitText = useMemo(() => flightInTransitText(playback.inTransit, m, graph.names), [playback.inTransit, m, graph.names]);
   const toggleLegend = useCallback(() => setLegendOpen(open => !open), []);
 
   if (graph.error) return <p role="alert">{graph.error}</p>;
@@ -798,7 +840,9 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
         </ReactFlow>
       </div>
       {selectedId || flight ? <div className="architecture-side">
-        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges} {...(graph.names ? { names: graph.names } : {})} /> : null}
+        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges}
+          detailsOpen={detailsOpen} onDetailsToggle={setDetailsOpen} {...(inTransitText !== undefined ? { inTransit: inTransitText } : {})}
+          {...(graph.names ? { names: graph.names } : {})} /> : null}
         {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
           {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}
         </ComponentInspector> : null}
