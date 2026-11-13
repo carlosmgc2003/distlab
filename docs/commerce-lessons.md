@@ -164,6 +164,52 @@ Packaged lesson checks still run against the changed experiment. A business
 invariant may become VIOLATED and a scenario expectation "not reproduced": that
 means the faults changed the story, not that the simulator failed.
 
+## Lesson versions
+
+Every packaged lesson has a **lesson revision**: its own version number and the
+date of its last change. The browser shows it on the lesson's card in the
+Lesson chooser and under ① Goal, as "Version 1 · updated Nov 9, 2026", and
+`npm run lesson` prints it. The version is about the lesson a student meets. It
+is not the `@1` of the document's name, which stays the lesson's identity for
+reserved names and saved scenario files, and it never enters a document, a
+projection, or recorded history.
+
+A lesson gets the next version and a new date whenever it changes for a
+student: its document, its checks or their labels, its design choices or
+allowed faults, the behavior of a model it uses, or its title, description, or
+section in this guide. Versions started at 1 for every lesson when revisions
+were introduced; each date is that of the lesson's last change before then. A
+catalog test fails when a lesson's recorded run, checks, or policy change
+without a new version, and another keeps this table equal to the catalog data.
+The two checkout lessons belong to the `mvp.checkout` catalog and are listed
+here with the rest.
+
+| Lesson | Version | Last updated |
+| --- | ---: | --- |
+| `normal` | 1 | 2026-11-01 |
+| `response-lost` | 1 | 2026-11-01 |
+| `retry-unsafe` | 1 | 2026-11-09 |
+| `retry-idempotent` | 1 | 2026-11-09 |
+| `saga-uncompensated` | 1 | 2026-11-01 |
+| `saga-compensated` | 1 | 2026-11-01 |
+| `dual-write` | 1 | 2026-11-01 |
+| `outbox-unsafe-consumer` | 1 | 2026-11-01 |
+| `outbox-idempotent` | 1 | 2026-11-01 |
+| `outbox-notifications-gap` | 1 | 2026-11-04 |
+| `cqrs-delayed` | 1 | 2026-11-13 |
+| `cascade-unprotected` | 1 | 2026-11-09 |
+| `cascade-breaker` | 1 | 2026-11-09 |
+| `notifications-unbounded` | 1 | 2026-11-10 |
+| `notifications-dlq` | 1 | 2026-11-10 |
+| `cache-stale-price` | 1 | 2026-11-12 |
+| `cache-invalidated` | 1 | 2026-11-12 |
+| `inventory-oversell` | 1 | 2026-11-09 |
+| `inventory-optimistic` | 1 | 2026-11-09 |
+| `lease-unfenced` | 1 | 2026-11-11 |
+| `lease-fenced` | 1 | 2026-11-11 |
+| `clock-last-write-wins` | 1 | 2026-11-11 |
+| `clock-lamport` | 1 | 2026-11-11 |
+
 ## 1. Timeout, retry, and idempotency
 
 **Pattern:** request idempotency with a durable previous result.

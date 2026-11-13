@@ -42,7 +42,7 @@ import { TimelineView } from "./TimelineView.tsx";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
 import { AssessmentExperiment, AssessmentGoal, AssessmentInvestigate, AssessmentMatrix, AssessmentRun, useAssessmentSuite } from "./AssessmentView.tsx";
 import type { SimulationHost } from "./host.ts";
-import { assessmentTitle, assessments, experimentLabel, experimentShorthand, lessonCheckLabels, lessonCopy, lessonDescription, packagedMetadata, scenarios, starterSource } from "./scenarios.ts";
+import { assessmentTitle, assessments, experimentLabel, experimentShorthand, lessonCheckLabels, lessonCopy, lessonDescription, lessonRevisionText, packagedMetadata, scenarios, starterSource } from "./scenarios.ts";
 import { invariantLabel } from "./assessment.ts";
 import { lessonLinkSearch, lessonLinkUrl } from "./lesson-link.ts";
 import type { LessonLink, LessonLinkTarget } from "./lesson-link.ts";
@@ -489,6 +489,7 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
       {loadedChoice?.family === "commerce" ? null
         : <p className="lesson-goal-question">{loadedChoice?.id === "response-lost" ? m.app.goalQuestionResponseLost : m.app.goalQuestionCheckout}</p>}
       <p>{loadedChoice?.family === "commerce" ? lessonDescription(loadedChoice, m) : m.app.goalCheckout}</p>
+      {loadedChoice ? <p className="lesson-goal-revision">{lessonRevisionText(loadedChoice, m)}</p> : null}
     </>;
   const lessonRun = <>
     <p role="status" aria-label={m.app.lessonStateLabel} aria-live="polite">{lessonState}</p>

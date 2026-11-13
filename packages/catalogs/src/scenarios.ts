@@ -68,15 +68,24 @@ export function checkoutScenario(variant: "normal" | "response-lost"): Canonical
 export const normalCheckout: CanonicalValue = checkoutScenario("normal");
 export const responseLostCheckout: CanonicalValue = checkoutScenario("response-lost");
 
-/** Read-only lesson copy; scenario inputs remain the sole source of behavior. */
+/**
+ * Read-only lesson copy; scenario inputs remain the sole source of behavior.
+ * `revision` and `updated` are the lesson revision (see `LessonRevision` in
+ * `commerce/scenarios.ts`): the lesson's own version counter and the date of
+ * its last change, raised whenever the lesson changes for a student.
+ */
 export const checkoutLesson = {
   normal: {
     title: "Checkout with processor response",
     explanation: "Orders creates the order and publishes OrderCreated. Payments receives the approval and records AUTHORIZED.",
+    revision: 1,
+    updated: "2026-11-01",
   },
   "response-lost": {
     title: "Checkout with lost processor response",
     explanation: "The processor commits one authorization, but its response is dropped. Payments observes NETWORK_TIMEOUT and records UNKNOWN without an authorization ID.",
+    revision: 1,
+    updated: "2026-11-01",
   },
 } as const;
 

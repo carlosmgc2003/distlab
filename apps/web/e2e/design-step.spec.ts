@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "./support/test.ts";
-import { lessonDescription, scenarios } from "../src/scenarios.ts";
+import { lessonDescription, lessonRevisionText, scenarios } from "../src/scenarios.ts";
 import { messages } from "../src/i18n/catalog.ts";
 import { lessonChoice, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
 
@@ -16,8 +16,8 @@ test("#112 the Lesson chooser shows no \"design step is not available\" notice o
   await expect(lessonChooser(page)).toBeVisible();
   for (const lesson of scenarios) {
     const choice = lessonChoice(page, lesson.id);
-    // The card's accessible description is the lesson description alone.
-    await expect(choice).toHaveAccessibleDescription(lessonDescription(lesson, messages("en")));
+    // The card's accessible description is the lesson description and its revision, and nothing else.
+    await expect(choice).toHaveAccessibleDescription(`${lessonDescription(lesson, messages("en"))} ${lessonRevisionText(lesson, messages("en"))}`);
     await expect(choice).not.toContainText("not available in the browser");
   }
   const results = await new AxeBuilder({ page }).include(".lesson-chooser").analyze();

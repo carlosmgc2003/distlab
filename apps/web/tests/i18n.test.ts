@@ -60,6 +60,11 @@ test("I18N-AC-3: the locale comes from ?lang=, then the stored choice, then the 
 test("I18N-AC-4: plurals, lists, and numbers follow the locale's own rules", () => {
   const english = createFmt("en");
   const spanish = createFmt("es");
+  // A calendar date is formatted in UTC, so it names the same day in every time zone; other text is left as written.
+  assert.equal(english.date("2026-11-09"), "Nov 9, 2026");
+  assert.equal(spanish.date("2026-11-09"), "9 nov 2026");
+  assert.equal(english.date("2026-01-01"), "Jan 1, 2026");
+  assert.equal(english.date("soon"), "soon");
   assert.equal(english.plural(1, { one: "1 fault", other: "2+ faults" }), "1 fault");
   assert.equal(english.plural(0, { one: "1 fault", other: "0 faults" }), "0 faults");
   assert.equal(spanish.plural(1, { one: "1 falla", other: "fallas" }), "1 falla");

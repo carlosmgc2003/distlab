@@ -88,7 +88,9 @@ loading if the count of languages grows past three or four.
    own message with parameters.
 2. **Plurals through `f.plural`**, with whole phrases per form. No
    `n === 1 ? "" : "s"`.
-3. **Lists through `f.list`**, numbers through `f.number`. No hand-written
+3. **Lists through `f.list`**, numbers through `f.number`, calendar dates
+   through `f.date` (an ISO `YYYY-MM-DD` value from data, formatted in UTC;
+   the formatter never reads the host clock). No hand-written
    `", "` or `" and "` joins in prose.
 4. **Inline markup through `<Rich>`.** A message keeps its markup as tags and
    its values as placeholders: `"Seed: <code>{seed}</code>."`, rendered with

@@ -1,5 +1,9 @@
+import type { Fmt } from "../format.ts";
+
 /** English source messages for the `lessons` area (ADR-007): lesson copy written in apps/web. */
 export const lessons = {
+  /** A packaged lesson's revision: its own version counter and the date of its last change (catalog data, never the document's `@1`). */
+  revision: (p: { revision: number; updated: string }, f: Fmt) => `Version ${f.number(p.revision)} · updated ${f.date(p.updated)}`,
   /** Packaged commerce lessons, by lesson name. Every `commerceLessonNames` entry needs one (scenarios.ts fails to typecheck without it). */
   commerce: {
     "retry-unsafe": { title: "Retry without idempotency", description: "A timeout does not prove that a payment failed. Expect two payments after retry." },

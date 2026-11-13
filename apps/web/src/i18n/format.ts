@@ -19,6 +19,11 @@ export interface Fmt {
   list(items: readonly string[], type?: "and" | "or" | "unit"): string;
   /** Text quoted with the locale's quotation marks. */
   quote(text: string): string;
+  /**
+   * A calendar date written as ISO `YYYY-MM-DD`, in the locale's medium form: "Nov 13, 2026" / "13 nov 2026".
+   * The date is data (a lesson's last update); nothing here reads the host clock. Text that is not such a date is returned as it is.
+   */
+  date(iso: string): string;
 }
 
 export function createFmt(tag: string, quotes: readonly [string, string] = ["“", "”"]): Fmt {
@@ -29,8 +34,14 @@ export function createFmt(tag: string, quotes: readonly [string, string] = ["“
     or: new Intl.ListFormat(tag, { type: "disjunction" }),
     unit: new Intl.ListFormat(tag, { type: "unit", style: "narrow" }),
   };
+  // UTC, so a calendar date reads the same in every time zone.
+  const dates = new Intl.DateTimeFormat(tag, { dateStyle: "medium", timeZone: "UTC" });
   return {
     tag,
+    date(iso) {
+      const time = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? Date.parse(`${iso}T00:00:00Z`) : Number.NaN;
+      return Number.isNaN(time) ? iso : dates.format(time);
+    },
     plural: (count, forms) => forms[plurals.select(count)] ?? forms.other,
     number(value, options) {
       const key = JSON.stringify(options ?? {});

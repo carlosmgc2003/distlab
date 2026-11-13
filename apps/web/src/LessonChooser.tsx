@@ -3,7 +3,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher.tsx";
 import { lessonPairs } from "./lesson-pairs.ts";
 import { groupConcepts, lessonMatches, topicList, topicSections, type TopicFilter } from "./lesson-topics.ts";
 import type { PackagedAssessment, PackagedScenario } from "./scenarios.ts";
-import { assessmentDescription, assessmentTitle, experimentLabel, lessonDescription } from "./scenarios.ts";
+import { assessmentDescription, assessmentTitle, experimentLabel, lessonDescription, lessonRevisionText } from "./scenarios.ts";
 import { useMessages } from "./i18n/react.tsx";
 
 /**
@@ -82,10 +82,11 @@ export function LessonChooser({ open, lessons, assessments = [], current, busy, 
             {group.map(lesson => <li key={lesson.id}>
               <button type="button" className="lesson-choice" data-lesson-id={lesson.id} disabled={busy}
                 aria-current={lesson.id === current ? "true" : undefined}
-                aria-labelledby={`lesson-choice-${lesson.id}`} aria-describedby={`lesson-choice-${lesson.id}-description`}
+                aria-labelledby={`lesson-choice-${lesson.id}`} aria-describedby={`lesson-choice-${lesson.id}-description lesson-choice-${lesson.id}-revision`}
                 onClick={() => onChoose(lesson.id)}>
                 <span id={`lesson-choice-${lesson.id}`} className="lesson-choice-title">{experimentLabel(lesson, m)}</span>
                 <span id={`lesson-choice-${lesson.id}-description`} className="lesson-choice-description">{lessonDescription(lesson, m)}</span>
+                <span id={`lesson-choice-${lesson.id}-revision`} className="lesson-choice-revision">{lessonRevisionText(lesson, m)}</span>
                 {/* aria-current carries this to assistive technology; the badge is its visible text. */}
                 {lesson.id === current ? <span className="lesson-choice-current" aria-hidden="true">{m.lessonChooser.loaded}</span> : null}
               </button>

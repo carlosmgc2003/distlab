@@ -157,6 +157,12 @@ student may add, an entry limit, and the parameters a student may override. See
 ADR-004. ADR-005 adds an optional architecture allowance: the slots, peer
 bindings, resources, and subscriptions a student may edit.
 
+**Lesson revision** — A packaged lesson's own version counter and the date of
+its last change. The interface shows it as "Version" with "updated" and a date.
+It is separate from the `@1` of the document's name, which is the lesson's
+identity, and from the format, model, and catalog versions. It never enters a
+document, a projection, or recorded history.
+
 **Latency** — Simulated elapsed time between communication events. Network and
 external-service policies can add fixed or variable latency without causing a
 real-time wait.
@@ -411,6 +417,7 @@ endpoint, payload, span, checkout.
 | design choice / design edit | decisión de diseño / cambio de diseño |
 | draft / apply / experiment | borrador / aplicar / experimento |
 | seed | semilla |
+| version (of a lesson) / updated | versión / actualizada |
 | check / business invariant / expectation | verificación / invariante de negocio / expectativa |
 | holds / violated / reproduced / pending / incomplete | se cumple / violado / reproducido / pendiente / incompleto |
 | assessment | evaluación |

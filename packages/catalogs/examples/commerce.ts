@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { commerceAssessment, commerceCatalog, commerceChecks, commerceLessonNames, commerceScenario } from "@distlab/catalogs";
+import { commerceAssessment, commerceCatalog, commerceChecks, commerceLessonNames, commerceRevision, commerceScenario } from "@distlab/catalogs";
 import type { CommerceLessonName } from "@distlab/catalogs";
 import { compareExports, DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 
@@ -11,6 +11,9 @@ if (!commerceLessonNames.includes(name as CommerceLessonName) || flags.some(flag
 } else {
   const engine = new DeterministicScenarioEngine({ catalog: commerceCatalog, assessment: commerceAssessment });
   const session = openHarness(engine.create(commerceScenario(name as CommerceLessonName)));
+  // The lesson revision is about the lesson, not the run: it is printed, never exported.
+  const { revision, updated } = commerceRevision(name as CommerceLessonName);
+  if (!flags.includes("--json")) console.log(`Lesson ${name} · version ${revision} · updated ${updated}`);
   let cursor = 0;
   const timeline = () => {
     const history = session.inspect().history.observations;

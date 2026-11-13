@@ -218,7 +218,10 @@ proposal with your reasoning, not as a defect.
 4. A change to a packaged document changes its export and `runId`. That is
    expected for an intended behavior change and must be said in the pull
    request; it is a stop sign when you only meant to change words.
-5. Verify (below).
+5. Give the lesson its next revision and today's date: every change a student
+   can meet, copy included, is a new version of the lesson. The places are in
+   [touchpoints](references/touchpoints.md#what-a-change-costs).
+6. Verify (below).
 
 Copy-only changes touch no document: lesson titles and descriptions, topics,
 concepts, design-choice labels and hints, and component names live in
@@ -305,6 +308,10 @@ lesson, and look at the screenshots yourself:
 ```sh
 npm exec -w @distlab/web -- playwright test commerce-lessons.spec.ts lesson-chooser.spec.ts graph-legibility.spec.ts i18n.spec.ts --trace off
 ```
+
+The browser suite rewrites the screenshots under `apps/web/e2e/evidence/` as it
+runs. They are not part of a lesson change: restore them before committing
+(`git status` shows them) unless the pull request is about them.
 
 `npm test` runs everything and is what the pull request reports. Never weaken,
 skip, or loosen a test to make a lesson pass: several of them pin exactly the
