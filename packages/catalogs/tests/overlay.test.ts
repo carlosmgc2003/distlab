@@ -431,6 +431,43 @@ test("the fenced lease stays safe when a student delays the lock's own calls, an
   assert.deepEqual(longLease.history.observations.filter(item => item.type === "kv.condition.failed").map(item => item.time), [17]);
 });
 
+test("the event delivery delay decides what each CQRS read answers, and the read model converges within the deadline at every offered delay", async () => {
+  const lesson = lessons.find(item => item.id === "cqrs-delayed")!;
+  const facts = (result: HarnessExport) => {
+    const logs = result.history.observations.filter(item => item.type === "runtime.log").map(item => ({ time: item.time, ...(item.data as unknown as { message: string; data: Record<string, CanonicalValue> }) }));
+    const answers = Object.fromEntries(logs.filter(log => log.message === "client.result").map(log => [log.data.label, (log.data.result as Record<string, CanonicalValue>).status ?? (log.data.result as Record<string, CanonicalValue>).code]));
+    return {
+      status: result.status,
+      updated: logs.filter(log => log.message === "cqrs.projection-updated").map(log => log.time),
+      reporting: [answers["early-reporting"], answers["late-reporting"]],
+      verdicts: result.results.map(item => `${item.id} ${item.status}`),
+    };
+  };
+  const delay = (value: number) => run(lesson, { version: 1, parameters: [{ key: "delivery-delay", value }] });
+  const held = ["write-remains-paid PASS", "read-converged PASS"];
+  // Packaged: the update published at t=1 arrives at t=42, between the two reads.
+  assert.deepEqual(facts(await run(lesson, { version: 1 })), { status: "COMPLETED", updated: [42], reporting: ["PENDING", "PAID"], verdicts: ["write-paid PASS", "read-stale PASS", ...held] });
+  // 5 ms: Reporting is up to date before the first read, so the lesson's stale read is not reproduced.
+  assert.deepEqual(facts(await delay(5)), { status: "COMPLETED", updated: [6], reporting: ["PAID", "PAID"], verdicts: ["write-paid PASS", "read-stale FAIL", ...held] });
+  // 55 ms: the second read at t=51 is still stale, and Reporting converges at t=56, before the deadline at t=60.
+  assert.deepEqual(facts(await delay(55)), { status: "COMPLETED", updated: [56], reporting: ["PENDING", "PENDING"], verdicts: ["write-paid PASS", "read-stale PASS", ...held] });
+  // A lost delivery is redelivered after the 10 ms acknowledgement timeout, the 1 ms retry delay, and the delivery delay again.
+  const drop = { id: "student-lost-update", point: "message.delivery", source: "orders", target: "reporting", name: "OrderUpdated", from: 0, probability: 1, maxApplications: 1, effect: { kind: "drop" } };
+  // With the packaged 41 ms that is t=94, after the deadline: the read model did not catch up in time.
+  assert.deepEqual(facts(await run(lesson, { version: 1, faults: [drop] })), { status: "COMPLETED", updated: [94], reporting: ["PENDING", "PENDING"], verdicts: ["write-paid PASS", "read-stale PASS", "write-remains-paid PASS", "read-converged FAIL"] });
+  // With 20 ms it is t=52: at-least-once delivery brings Reporting up to date in time, after the second read saw the old status.
+  assert.deepEqual(facts(await run(lesson, { version: 1, faults: [drop], parameters: [{ key: "delivery-delay", value: 20 }] })), { status: "COMPLETED", updated: [52], reporting: ["PENDING", "PENDING"], verdicts: ["write-paid PASS", "read-stale PASS", ...held] });
+});
+
+test("the CQRS convergence check compares the two models: a payment Orders never recorded leaves them equal", async () => {
+  const lesson = lessons.find(item => item.id === "cqrs-delayed")!;
+  const result = await run(lesson, { version: 1, faults: [{ id: "student-orders-commit", point: "database.commit", target: "orders", from: 0, probability: 1, maxApplications: 1, effect: { kind: "fail" } }] });
+  assert.equal(result.status, "COMPLETED");
+  // Orders lost the payment, which is its own invariant's finding; Reporting agrees with Orders, at PENDING.
+  assert.deepEqual(result.results.filter(item => item.id === "write-remains-paid" || item.id === "read-converged").map(item => `${item.id} ${item.status}`), ["write-remains-paid FAIL", "read-converged PASS"]);
+  assert.equal(JSON.stringify(result.results.find(item => item.id === "read-converged")!.evidence), JSON.stringify([{ owner: "orders", value: "PENDING" }, { owner: "reporting", value: "PENDING" }]));
+});
+
 test("the cached price lifetime decides whether the old price is still cached when checkout reads it", async () => {
   const stale = lessons.find(item => item.id === "cache-stale-price")!, invalidated = lessons.find(item => item.id === "cache-invalidated")!;
   const facts = (result: HarnessExport) => {

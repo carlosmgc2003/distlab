@@ -34,7 +34,7 @@ export const orderReadModel: ScenarioModel = {
     OrderUpdated: function* (delivery, ctx) {
       const update = record(delivery.message.body);
       yield* save(ctx, "orders", "order-1", { status: update.status!, version: update.version! });
-      ctx.log.write("info", "cqrs.converged", { status: update.status! });
+      ctx.log.write("info", "cqrs.projection-updated", { status: update.status! });
     },
   } } satisfies ServiceDefinition),
 };

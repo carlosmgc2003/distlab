@@ -97,12 +97,13 @@ Setting every choice back to its default gives the packaged run exactly.
 | `saga-*` | `compensation` (orders `compensate`) |
 | `dual-write`, `outbox-unsafe-consumer`, `outbox-idempotent` | `outbox` (payments `outbox`), `consumer-idempotency` (notifications `idempotent`) |
 | `outbox-notifications-gap` | `outbox` (payments `outbox`); the notifications slot is a design edit, not a choice |
+| `cqrs-delayed` | `delivery-delay` 1–55 (`OrderUpdated` destination `deliveryDelay`) |
 | `cascade-*` | `circuit-breaker` (payments `breaker`) |
 | `notifications-*` | `decoupled-confirmation` (orders `decoupled`), `max-attempts` 1–50 (`OrderPlaced` destination `maxAttempts`) |
 | `cache-*` | `cache-invalidation` (catalog `invalidate`), `price-ttl` 1–200 (catalog `ttl`) |
 | `inventory-*` | `optimistic-concurrency` (inventory `optimistic`) |
 
-Checkout lessons and `cqrs-delayed` declare no choices. Each pair exposes the
+Checkout lessons declare no choices. Each pair exposes the
 switch that distinguishes it: setting it to the paired lesson's value gives the
 paired architecture. The notifications pair differs in both of its choices, and
 each one decides different invariants, so either one alone gives a mixed result. The checks stay the loaded lesson's. Business invariants
@@ -313,19 +314,59 @@ Reporting → Reporting DB. Client can read both services through VirtualNetwork
 
 **Initial state:** both databases contain `order-1` with status PENDING, version 0.
 
-**Injected fault:** Fault Engine adds 40 ms to the first `OrderUpdated` delivery.
+**Injected fault:** none. The `OrderUpdated` topic takes 41 ms to deliver, as an
+ordinary property of the destination. The lag is how the design works, not
+something that broke, so Recorded history shows no fault.
 
-**Expected timeline:** t=1 write model commits PAID/version 1 and publishes;
-t=10 assertions show PAID/PENDING; early network reads confirm the mismatch;
-t=42 event reaches Reporting and the projection commits PAID/version 1; later
-network reads show agreement. Logs: `cqrs.write-read`, `cqrs.projection-read`,
-`cqrs.converged`.
+**Expected timeline:**
 
-**Expected final state:** both models PAID at t=60, with one order each.
+- t=1: Orders commits PAID, version 1, and publishes `OrderUpdated`.
+- t=10: the customer reads the order from both services. At t=11 Orders answers
+  PAID (`cqrs.write-read`) and Reporting answers PENDING
+  (`cqrs.projection-read`). The customer has both answers at t=12.
+- t=42: the event reaches Reporting, which commits PAID, version 1
+  (`cqrs.projection-updated`).
+- t=50: the customer reads both again. At t=51 both answer PAID.
+
+**Expected checks:**
+
+| Run | Reporting's answer at t=11 | at t=51 | Payment kept | Reporting catches up |
+| --- | --- | --- | --- | --- |
+| `npm run lesson -- cqrs-delayed` | PENDING | PAID | HOLDS | HOLDS |
+
+"Orders records the payment and keeps it" requires Orders' row to be PAID at
+t=60. "Reporting ends up showing the same order status as Orders" compares the
+two services' rows at t=60, so it also holds when both agree on PENDING: a
+payment that Orders failed to record is the first invariant's finding, not this
+one's. Both are checked once, at t=60. That deadline is the lesson's: it is
+late enough for every delivery delay the lesson offers, and a read model that
+has not caught up by then is reported as VIOLATED even if it catches up later.
+The scenario expectations confirm the disagreement at t=10.
+
+In the browser, the customer's stored answers keep the disagreement after both
+databases agree: Service state shows `early-orders` PAID beside
+`early-reporting` PENDING. *Show evidence* on the convergence check lists each
+service with the status it holds.
 
 ```sh
 npm run lesson -- cqrs-delayed --step
 ```
+
+**Design choices:** *Event delivery delay* (1–55 ms, default 41) is how long the
+MessageBus takes to deliver `OrderUpdated` to Reporting. At 9 ms or less
+Reporting is up to date before it answers the first read at t=11, so that read
+already says PAID; at 8 ms or less the setup check at t=10 also reads "not
+reproduced". From 50 ms the second read, answered at t=51, is still PENDING,
+and both invariants hold all the same: the read model converges at t=56 at the
+latest, after the reader looked. Eventual consistency promises that the copy
+catches up, not when a reader may rely on it.
+
+**Experiment:** drop the `OrderUpdated` delivery in the Experiment drawer's
+**Faults**. The bus redelivers after the 10 ms acknowledgement timeout, the 1 ms
+retry delay, and the delivery delay again. With the packaged 41 ms that is
+t=94, past the deadline, and the convergence invariant is VIOLATED at t=60.
+With a delivery delay of 20 ms the redelivery lands at t=52 and the invariant
+holds: at-least-once delivery is what makes convergence survive a lost message.
 
 **Concept:** a distributed system can be correct while temporarily exposing stale
 state. The consumer has one update to project; arbitrary event reordering and

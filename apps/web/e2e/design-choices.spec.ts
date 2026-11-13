@@ -131,7 +131,7 @@ test("an out-of-range timeout is caught inline, and the panel has no axe violati
   expect(results.violations).toEqual([]);
 
   // A lesson without design choices shows only the Faults section.
-  await loadLesson(page, "cqrs-delayed");
+  await loadLesson(page, "normal");
   await expect(status(page)).toHaveText("READY");
   await expect(experimentDrawer(page)).toBeVisible();
   await expect(panel(page)).toHaveCount(0);

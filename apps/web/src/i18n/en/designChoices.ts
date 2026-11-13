@@ -16,6 +16,7 @@ export const designChoices = {
     fencing: { label: "Fencing tokens", hint: "Storage remembers the largest lease token it has accepted for a file and rejects a write that carries a smaller one." },
     "lease-ttl": { label: "Lease duration", hint: "The TTL each worker sets on the lease key. The key-value store removes the key when it ends, and another worker can then take the lease." },
     "logical-clock": { label: "Lamport clocks", hint: "Both regions stamp edits with a Lamport counter instead of their wall clocks." },
+    "delivery-delay": { label: "Event delivery delay", hint: "How long the MessageBus takes to deliver OrderUpdated to Reporting." },
     "clock-skew": { label: "Clock skew in eu", hint: "How far region eu's wall clock runs ahead of virtual time (negative: behind)." },
     "cache-invalidation": { label: "Invalidate cache on price change", hint: "Catalog deletes the cached price when the back office changes it, instead of letting it live until its TTL ends." },
     "price-ttl": { label: "Cached price lifetime", hint: "The TTL Catalog sets on a price it caches. The key-value store removes the entry when it ends, and the next read takes the price from the database." },
