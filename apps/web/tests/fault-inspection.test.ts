@@ -161,4 +161,6 @@ test("inspection ignores host-only secrets and does not invent checkout rows", (
   assert.equal(encoded.includes("PRIVATE_STATE_SENTINEL"), false);
   assert.equal(encoded.includes("effectCount"), false);
   assert.equal(encoded.includes("TASK_SENTINEL"), false);
+  // #204: the plain wording when no checkout fact is recorded; the timeout sentence stays.
+  assert.equal(report.knowledge, "No checkout facts are recorded yet. A network timeout is a missing response. It is not proof of denial or rollback.");
 });

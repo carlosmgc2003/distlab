@@ -287,7 +287,9 @@ test("recorded virtual-time boundaries are a list of times, not durations", asyn
   assert.deepEqual(boundaries, [...new Set(steps.map(step => step.time))]);
   assert.ok(boundaries.every(time => typeof time === "number"));
   assert.deepEqual(flightBoundaries([]), []);
-  assert.match(flightPosition(steps, 0, m).detail, /no duration is stored|Rules mark boundaries only/);
+  // #204: the plain wording of the movement list's virtual times.
+  assert.equal(flightPosition(steps, 0, m).detail,
+    `${steps.length} recorded movements at ${boundaries.length} virtual times, from t=${boundaries[0]} to t=${boundaries.at(-1)}. The marks show order, not duration.`);
   assert.equal(flightIndexOf(steps, steps[4]!.observationId), 4);
   assert.equal(flightIndexOf(steps, "not-a-record"), -1);
   assert.equal(flightIndexOf(steps, null), -1);

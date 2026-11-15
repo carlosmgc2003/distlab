@@ -44,8 +44,8 @@ export const story = {
   detail: (p: { columns: number; lanes: number; boundaries: number; kinds: readonly string[] }, f: Fmt) =>
     `${f.plural(p.columns, { one: "1 column", other: `${f.number(p.columns)} columns` })} and ${f.plural(p.lanes, { one: "1 component lane", other: `${f.number(p.lanes)} component lanes` })}. `
     + f.plural(p.boundaries, {
-      one: "1 recorded virtual-time boundary is marked, and no elapsed duration between milestones is stored. ",
-      other: `${f.number(p.boundaries)} recorded virtual-time boundaries are marked, and no elapsed duration between milestones is stored. `,
+      one: "1 virtual time is marked. The spacing shows order, not duration. ",
+      other: `${f.number(p.boundaries)} virtual times are marked. The spacing shows order, not duration. `,
     })
     + "Each milestone is one recorded observation; order is its recorded sequence. "
     + `Stored milestone categories and their shapes: ${f.list(p.kinds)}. `

@@ -117,7 +117,7 @@ test("Story reduces a completed checkout to labeled milestones and offers only i
   // The diagram presents the same milestones as a component-lane strip.
   await viewButton(page, "Story diagram").click();
   // Accessible summary, shapes, and labeled boundaries.
-  await expect(page.locator(".story-view")).toContainText("no elapsed duration between milestones is stored");
+  await expect(page.locator(".story-view")).toContainText("The spacing shows order, not duration.");
   await expect(page.locator("#story-summary")).toContainText("component lanes");
   await expect(page.locator("#story-summary")).toContainText("The first milestone is recorded at virtual time 0");
   const legend = await page.locator(".story-legend li").allInnerTexts();

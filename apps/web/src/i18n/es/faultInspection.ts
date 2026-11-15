@@ -32,7 +32,7 @@ export const faultInspection: typeof source = {
   stagedNote: "No se incluye ninguna transacción en preparación. Las filas de abajo están confirmadas.",
   knowledge: {
     sentences: (parts: readonly string[], _f: Fmt) => parts.join(" "),
-    noFacts: "No se proyectó ningún hecho del checkout visible para el estudiante. El estado de los componentes que solo ve el host sigue oculto.",
+    noFacts: "Todavía no hay hechos del checkout registrados.",
     timeoutBoundary: "Un timeout de red es una respuesta que no llegó. No prueba que se haya rechazado ni revertido el pago.",
     payment: (p: { id: string; state: string; outcome: string; authorization: string }, _f: Fmt) =>
       `el pago ${p.id} se confirmó como ${p.state} con resultado ${p.outcome} e ID de autorización local ${p.authorization}`,
@@ -94,7 +94,7 @@ export const faultInspection: typeof source = {
     busDelivery: "Entrega del bus",
     linkedObservations: "Observaciones vinculadas",
     noEvidence: "Todavía no se registró ninguna observación de falla, timeout, autorización o entrega.",
-    noStudentState: "No se proyecta ningún estado visible para estudiantes en este componente.",
+    noStudentState: "No se muestra ningún estado para este componente.",
     runtimeFacts: "Hechos de ejecución",
     processorFacts: "Autorizaciones visibles declaradas. Los contadores del proveedor siguen ocultos.",
     processorAuthorizationRow: (p: { id: string; status: string; amount: string; order: string }, _f: Fmt) =>

@@ -19,10 +19,10 @@ export const commerceLesson: typeof source = {
   },
   reproducedSummary: { YES: "sí", NO: "no", NOT_YET: "todavía no", INCOMPLETE: "incompleta" },
   runOutcome: {
-    completed: "Ejecución completa; el resultado de negocio se muestra desde el estado registrado.",
+    completed: "La ejecución terminó. Los hechos de abajo son lo que registró.",
     failed: "La ejecución falló.",
-    running: "Ejecución en curso.",
-    other: "Ejecución parcial o lista para empezar.",
+    running: "La ejecución está en curso.",
+    other: "La ejecución todavía no terminó.",
   },
   invariantsHelp: "Propiedades que el sistema debe mantener sea cual sea su diseño. VIOLADO es lo que esta ejecución le hizo al negocio.",
   expectationsHelp: "Las expectativas del escenario confirman que la ejecución contó la historia de esta lección. No dicen nada sobre si el sistema es seguro.",

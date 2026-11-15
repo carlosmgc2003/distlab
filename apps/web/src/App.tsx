@@ -519,7 +519,6 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
     {imported ? <p>{m.app.importedNote(lesson?.seed ?? "")}</p>
       : !checkoutGuide ? <p>{m.app.commerceNote(lesson?.seed ?? "")}</p> : <>
       <p>{m.app.objective}</p>
-      {loadedChoice ? <p>{m.app.scenarioDetails({ name: report?.scenarioName ?? "", seed: report?.seed ?? "" })}</p> : null}
       <p>{m.app.checkoutSteps}</p>
       <p>{m.app.responseLostPrompt}</p>
     </>}
@@ -567,6 +566,8 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
         <dt>{m.app.randomDraws}</dt><dd>{projection.simulation.randomDrawCount}</dd>
         <dt>{m.app.observations}</dt><dd>{projection.history.observations.length}</dd>
       </dl>
+      {/* The checkout scenario's name and seed in its precise wording (#204). */}
+      {checkoutGuide && loadedChoice ? <p className="scenario-details">{m.app.scenarioDetails({ name: report.scenarioName, seed: report.seed })}</p> : null}
     </details> : null}
   </>;
   // When a run ends, ③ Investigate is revealed and its summary announced once (#141). Focus does not

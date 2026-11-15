@@ -105,7 +105,7 @@ export const playback = {
       other: `All ${f.number(p.total)} recorded movements are at virtual time ${p.time}.`,
     }),
     boundaries: (p: { total: number; boundaries: number; from: number; to: number }, f: Fmt) =>
-      `${f.number(p.total)} recorded movements across ${f.number(p.boundaries)} recorded virtual-time boundaries, from t=${p.from} to t=${p.to}. Rules mark boundaries only; no duration is stored.`,
+      `${f.number(p.total)} recorded movements at ${f.number(p.boundaries)} virtual times, from t=${p.from} to t=${p.to}. The marks show order, not duration.`,
   },
   control: {
     play: "Play replay",
@@ -138,7 +138,7 @@ export const playback = {
     previous: "Previous movement",
     next: "Next movement",
     speed: "Speed",
-    help: "These controls move a browser cursor over movements the run has already recorded. They send no simulation command, do not change virtual time, and do not record observations. From the keyboard, Left arrow and Right arrow move one movement, and Space plays or pauses.",
+    help: "Replay shows movements the run has already recorded. It does not run the simulation again and changes nothing in it. From the keyboard, Left arrow and Right arrow move one movement, and Space plays or pauses.",
   },
   /** The narration of the painted movement (ArchitecturePlayback.tsx). */
   narration: {

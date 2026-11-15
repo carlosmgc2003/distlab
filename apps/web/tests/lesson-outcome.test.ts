@@ -40,12 +40,12 @@ test("outcomeSummary never shows a bare PASS or FAIL", () => {
   }
 });
 
-test("runOutcome keeps the checkout Run overview's outcome sentences", () => {
-  assert.equal(runOutcome("COMPLETED"), "Execution completed; business outcome is shown from recorded state.");
-  assert.equal(runOutcome("FAILED"), "Execution failed.");
-  assert.equal(runOutcome("RUNNING"), "Execution in progress.");
-  assert.equal(runOutcome("READY"), "Execution partial or ready.");
-  assert.equal(runOutcome("PAUSED"), "Execution partial or ready.");
+test("runOutcome states the checkout Run overview's outcome in plain words (#204)", () => {
+  assert.equal(runOutcome("COMPLETED"), "The run finished. The facts below are what it recorded.");
+  assert.equal(runOutcome("FAILED"), "The run failed.");
+  assert.equal(runOutcome("RUNNING"), "The run is in progress.");
+  assert.equal(runOutcome("READY"), "The run has not finished.");
+  assert.equal(runOutcome("PAUSED"), "The run has not finished.");
 });
 
 test("only COMPLETED and FAILED end a run", () => {
