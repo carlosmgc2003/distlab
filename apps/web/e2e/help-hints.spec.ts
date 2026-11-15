@@ -164,7 +164,7 @@ const moved: readonly { readonly sentence: string; readonly bodyId: string; read
   { lesson: "saga-uncompensated", bodyId: "experiment-help", sentence: "A request travels along the link, from the caller to the called component." },
   { lesson: "saga-uncompensated", bodyId: "experiment-help", sentence: "A response travels back along the link, from the called component to the caller." },
   { lesson: "saga-uncompensated", bodyId: "experiment-help", sentence: "1 means only the first matching request, message, or commit." },
-  { lesson: "response-lost", bodyId: "investigate-help", sentence: "Operation duration: unavailable — this projection does not provide authorized start/end boundaries. Scenario virtual end time is not operation latency; browser playback speed is not simulated performance." },
+  { lesson: "response-lost", bodyId: "investigate-help", sentence: "DistLab records the order of events, not how long an operation took. The virtual time at the end of a run is not a latency, and playback speed is not performance." },
   { lesson: "response-lost", bodyId: "experiment-help", sentence: "Only the faults this lesson allows are listed." },
   { lesson: "response-lost", bodyId: "experiment-help", sentence: "Fault controls are unavailable while the simulation runs or a command is in progress. The applied faults stay listed." },
   { lesson: "response-lost", bodyId: "timeline-filter-help", sentence: "Filters combine. Choose another field to narrow further; remove any condition using its chip below." },

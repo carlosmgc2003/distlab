@@ -103,7 +103,7 @@ export const playback: typeof source = {
       other: `Los ${f.number(p.total)} movimientos registrados ocurren en el tiempo virtual ${p.time}.`,
     }),
     boundaries: (p: { total: number; boundaries: number; from: number; to: number }, f: Fmt) =>
-      `${f.number(p.total)} movimientos registrados en ${f.number(p.boundaries)} límites de tiempo virtual registrados, de t=${p.from} a t=${p.to}. Las líneas marcan solo los límites; no se guarda ninguna duración.`,
+      `${f.number(p.total)} movimientos registrados en ${f.number(p.boundaries)} tiempos virtuales, de t=${p.from} a t=${p.to}. Las marcas muestran el orden, no la duración.`,
   },
   control: {
     play: "Reproducir",
@@ -133,7 +133,7 @@ export const playback: typeof source = {
     previous: "Movimiento anterior",
     next: "Movimiento siguiente",
     speed: "Velocidad",
-    help: "Estos controles mueven un cursor del navegador sobre movimientos que la ejecución ya registró. No envían ningún comando a la simulación, no cambian el tiempo virtual y no registran observaciones. Desde el teclado, Flecha izquierda y Flecha derecha avanzan o retroceden un movimiento, y Espacio reproduce o pausa.",
+    help: "La reproducción muestra movimientos que la ejecución ya registró. No vuelve a ejecutar la simulación y no cambia nada en ella. Desde el teclado, Flecha izquierda y Flecha derecha avanzan o retroceden un movimiento, y Espacio reproduce o pausa.",
   },
   narration: {
     position: "Posición de la reproducción de la arquitectura",

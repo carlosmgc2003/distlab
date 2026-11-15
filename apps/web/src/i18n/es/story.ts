@@ -39,8 +39,8 @@ export const story: typeof source = {
   detail: (p: { columns: number; lanes: number; boundaries: number; kinds: readonly string[] }, f: Fmt) =>
     `${f.plural(p.columns, { one: "1 columna", other: `${f.number(p.columns)} columnas` })} y ${f.plural(p.lanes, { one: "1 carril de componente", other: `${f.number(p.lanes)} carriles de componente` })}. `
     + f.plural(p.boundaries, {
-      one: "Hay marcado 1 límite de tiempo virtual registrado, y no se guarda ninguna duración transcurrida entre hitos. ",
-      other: `Hay marcados ${f.number(p.boundaries)} límites de tiempo virtual registrados, y no se guarda ninguna duración transcurrida entre hitos. `,
+      one: "Hay marcado 1 tiempo virtual. La separación muestra el orden, no la duración. ",
+      other: `Hay marcados ${f.number(p.boundaries)} tiempos virtuales. La separación muestra el orden, no la duración. `,
     })
     + "Cada hito es una observación registrada; el orden es su secuencia registrada. "
     + `Categorías de hitos guardadas y sus formas: ${f.list(p.kinds)}. `

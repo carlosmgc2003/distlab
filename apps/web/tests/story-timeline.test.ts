@@ -132,8 +132,8 @@ test("story copy reports the reduction, recorded boundaries, and labeled shapes 
   assert.ok(summary.includes(`last at virtual time ${milestones.at(-1)!.observation.time}`));
   const detail = storyDetail(milestones, m);
   assert.ok(detail.includes(`${milestones.length} columns and ${storyLanes(milestones).length} component lanes`));
-  assert.ok(detail.includes("no elapsed duration between milestones is stored"));
-  assert.ok(detail.includes(`${milestones.filter(milestone => milestone.timeBoundary).length} recorded virtual-time boundaries are marked`));
+  // #204: the plain wording, plural form.
+  assert.ok(detail.includes(`${milestones.filter(milestone => milestone.timeBoundary).length} virtual times are marked. The spacing shows order, not duration. `), detail);
   assert.ok(!/\b\d+\s*(ms|s|sec|seconds)\b/.test(summary + detail));
   const legend = storyLegend(milestones, m);
   assert.equal(new Set(legend.map(entry => entry.shape)).size, legend.length);
@@ -161,7 +161,7 @@ test("story copy has singular forms in English and Spanish", async () => {
   assert.equal(storyReduction(one, 1, es), "1 hito didáctico de 1 observación registrada.");
   assert.equal(storyReduction(one, 5, es), "1 hito didáctico de 5 observaciones registradas.");
   const detail = storyDetail(one, m);
-  assert.ok(detail.startsWith("1 column and 1 component lane. 1 recorded virtual-time boundary is marked,"), detail);
+  assert.ok(detail.startsWith("1 column and 1 component lane. 1 virtual time is marked. The spacing shows order, not duration. "), detail);
   assert.ok(storyDetail(one, es).startsWith("1 columna y 1 carril de componente."));
   const summary = storySummary(one, 1, labels, m);
   assert.ok(summary.includes("across 1 component lane:"), summary);

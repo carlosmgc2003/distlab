@@ -47,7 +47,7 @@ at a time, so until they land the shipped shell can still differ from it.
 | Region | Holds | Rules |
 | --- | --- | --- |
 | Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, `Pause`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no replay controls, no tagline. |
-| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run and Step do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
+| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run and Step do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure: engine counters and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
 | Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds a one-row **Replay** toolbar above the architecture graph, and nothing below the graph. |
 | Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds up to three sections, in this order: Architecture (only when the lesson's policy has an architecture allowance, #112), Design choices (only when the policy declares parameters), and Faults, with one footer: `Apply and restart`, `Discard changes`, `Close`. While it is open, the movement detail and the Component inspector go under the graph instead of beside it, so the canvas keeps the panel's width (#166). | No other overlay is added. |
 
@@ -60,6 +60,7 @@ at a time, so until they land the shipped shell can still differ from it.
 | Recorded history | Only the tab and its panel heading | — |
 | Observation #n | One recorded record | "Step #n"; **Step** is a simulation command |
 | Change the experiment / Apply and restart | The one path that sends the student's edited session overlay | "Apply faults and reload", "Apply choices and reload" |
+| Plain wording about guarantees | How student-facing panels state what a run records and what Replay does: "The run finished", "none yet", "Changing the experiment restarts the lesson", "The marks show order, not duration", "Replay … changes nothing" (#204). The **Advanced diagnostics** disclosure and Raw history keep the precise wording | Implementation terms in the Lesson panel and the Architecture tab outside the canvas, hint bodies included: `projection`, `projected`, `worker session`, `student-visible`, `host-only`, `simulation command`, `authorized start`, `boundaries only` |
 | Component display name | How a packaged lesson names a component in every student-facing place: graph, narration, Recorded history, Service state, fault targets (#103). The ID stays in the inspector's `Component ID` row, Raw history, and payloads; imported documents and destinations show IDs | Raw component IDs such as `client`, `kv`, `worker-1` as visible labels |
 
 ### Layout budgets
@@ -221,8 +222,8 @@ execution**.
   canonical sequence order; nothing is merged, reordered, or dropped.
 - The transport states its own position in one region beside the graph: the
   movement number, the recorded virtual time, and the observation sequence. A
-  second line states the recorded virtual-time boundaries of the movement list
-  and says that no duration is stored. The panel's heading line carries the
+  second line states how many virtual times the movement list spans and that
+  the marks show order, not duration. The panel's heading line carries the
   `Graph controls` and `Playback speed` explanations, so neither costs the graph
   a row.
 - **Speed** offers Slow, Steady, and Fast. It changes only how long the browser

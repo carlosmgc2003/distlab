@@ -18,10 +18,10 @@ export const commerceLesson = {
   /** The one-line summary of the expectations, by code. */
   reproducedSummary: { YES: "yes", NO: "no", NOT_YET: "not yet", INCOMPLETE: "incomplete" },
   runOutcome: {
-    completed: "Execution completed; business outcome is shown from recorded state.",
-    failed: "Execution failed.",
-    running: "Execution in progress.",
-    other: "Execution partial or ready.",
+    completed: "The run finished. The facts below are what it recorded.",
+    failed: "The run failed.",
+    running: "The run is in progress.",
+    other: "The run has not finished.",
   },
   /** What the two lists of lesson checks mean; shown in the one hint of ③ Investigate. */
   invariantsHelp: "Properties the system must keep whatever its design. VIOLATED is what this run did to the business.",

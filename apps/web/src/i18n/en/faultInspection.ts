@@ -35,7 +35,7 @@ export const faultInspection = {
   /** The "what does each side know" paragraph: whole sentences, joined by `knowledge.sentences`. */
   knowledge: {
     sentences: (parts: readonly string[], _f: Fmt) => parts.join(" "),
-    noFacts: "No student-visible checkout facts were projected. Host-only component state stays hidden.",
+    noFacts: "No checkout facts are recorded yet.",
     timeoutBoundary: "A network timeout is a missing response. It is not proof of denial or rollback.",
     payment: (p: { id: string; state: string; outcome: string; authorization: string }, _f: Fmt) =>
       `payment ${p.id} committed ${p.state} with outcome ${p.outcome} and local authorization ID ${p.authorization}`,
@@ -102,7 +102,7 @@ export const faultInspection = {
     busDelivery: "Bus delivery",
     linkedObservations: "Linked observations",
     noEvidence: "No fault, timeout, authorization, or delivery observation has been recorded yet.",
-    noStudentState: "No student-visible state is projected for this component.",
+    noStudentState: "No state is shown for this component.",
     runtimeFacts: "Runtime facts",
     processorFacts: "Declared visible authorizations. Provider counters stay hidden.",
     processorAuthorizationRow: (p: { id: string; status: string; amount: string; order: string }, _f: Fmt) =>
