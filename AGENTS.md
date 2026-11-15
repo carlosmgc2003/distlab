@@ -114,6 +114,13 @@ pure, async ELK layered layout over measured node sizes, and ELK runs in its
 own presentation worker, never in the simulation worker. Positions and edge
 routes never enter projections, worker commands, or history
 (`docs/spec/architecture-visualization.md`, Phase 5).
+The graph shows a design and never edits it (#203). `apps/web/src/design-preview.ts`
+is pure: from the packaged `ArchitectureDefinition`, the data-only descriptors,
+and architecture edits (`session.overlay.architecture`, or the draft) it returns
+presentation marks for the applied design, the draft preview, and a rejected
+design's problems. The marks are never an `ArchitectureDefinition`, never sent,
+and never validated, and `ArchitectureProjection` gains no resources or
+configuration.
 Interface text follows `docs/spec/adr/007-localization.md`. Every user-visible
 string lives in the message catalogs in `apps/web/src/i18n/` (`en/` is the
 source, every other locale is typed `typeof en`), one area per screen. Pure

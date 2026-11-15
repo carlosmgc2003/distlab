@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useMessages } from "./i18n/react.tsx";
 import type { ArchitectureNode, ResourceNode } from "./architecture-view.ts";
-import { categoryLabel, resourceTitle, symbolLabel } from "./architecture-view.ts";
+import { categoryLabel, resourceTitle, slotModelLabel, symbolLabel } from "./architecture-view.ts";
+import type { SlotMark } from "./design-preview.ts";
 
 export function ComponentInspector({ node, children }: {
   readonly node: ArchitectureNode | ResourceNode | undefined;
@@ -12,7 +13,9 @@ export function ComponentInspector({ node, children }: {
     <h3 id="inspector-heading">{m.architecture.inspector.heading}</h3>
     {node ? node.type === "component" ? <>
       <h4>{node.data.title}</h4>
-      {node.data.emptySlot ? <p className="inspector-empty-slot"><strong>{m.designChoices.emptySlot.label}.</strong> {m.designChoices.emptySlot.description}</p> : null}
+      {node.data.emptySlot && !node.data.draft ? <p className="inspector-empty-slot"><strong>{m.designChoices.emptySlot.label}.</strong> {m.designChoices.emptySlot.description}</p> : null}
+      {node.data.slot ? <SlotFacts heading={m.architecture.design.filledSlot} slot={node.data.slot} /> : null}
+      {node.data.draft ? <SlotFacts heading={m.architecture.design.draftSlot} slot={node.data.draft} draft /> : null}
       {children}<details className="inspector-metadata">
         <summary>{m.architecture.inspector.metadata}</summary>
       <dl>
@@ -31,6 +34,20 @@ export function ComponentInspector({ node, children }: {
       <ResourceFacts node={node} />
     </> : <p>{m.architecture.inspector.select}</p>}
   </aside>;
+}
+
+/**
+ * The model that fills a slot (#203): the applied design's, or the draft's. Option keys and values
+ * are declared identifiers and data, so they stay as written.
+ */
+function SlotFacts({ heading, slot, draft = false }: { readonly heading: string; readonly slot: SlotMark; readonly draft?: boolean }) {
+  const m = useMessages();
+  return <div className={`inspector-slot${draft ? " is-draft" : ""}`}>
+    <p><strong>{heading}.</strong> {slot.placeholder ? slotModelLabel(slot, m) : m.architecture.design.filledSlotModel({ model: slot.model, version: slot.version })}</p>
+    {slot.options.length ? <dl aria-label={m.architecture.design.options}>
+      {slot.options.map(option => <div key={option.key}><dt>{option.key}</dt><dd>{typeof option.value === "string" ? option.value : JSON.stringify(option.value)}</dd></div>)}
+    </dl> : null}
+  </div>;
 }
 
 function ResourceFacts({ node }: { readonly node: ResourceNode }) {

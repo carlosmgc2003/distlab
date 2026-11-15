@@ -317,6 +317,20 @@ presentation type built from the projection, the data-only descriptors, and
 the draft. It is never an `ArchitectureDefinition`, never sent to the worker,
 and never validated. After Apply the graph again shows only the projection.
 
+**Amendment (#203).** The projection carries no owned resources or
+configuration, so "only the projection" would hide a database the student
+attached. After Apply the graph shows the projection plus presentation marks
+derived on the main thread from the applied edits the worker published in
+`session.overlay.architecture`, the packaged `ArchitectureDefinition`, and the
+data-only descriptors: an attached resource is an ordinary satellite, a
+detached one is not drawn, and a filled slot's inspector states its model,
+version, and option values. No draft mark remains. The draft preview is the
+same function fed with the draft, shown only where the draft differs from the
+applied design. `ArchitectureProjection` is unchanged. The graph never edits a
+design: the Experiment drawer is the editing surface (#112). Details are in
+[Architecture visualization](../architecture-visualization.md), "Designs on the
+graph".
+
 Node positions, including those of slot nodes and new edges, are UI state.
 They never enter the overlay, `RunInputs`, or `runId`. A filled slot keeps its
 slot's position.
@@ -656,7 +670,8 @@ by lesson and model. It is not part of the contract.
 | #109 | Composition rules in `ScenarioEngine.validate` | #108 |
 | #110 | Architecture edits in session overlays: contracts, validation, application, attribution | #109, #94 |
 | #111 | Placeholder models and a first "fill the gap" lesson | #110 |
-| #112 | Design editor in the browser: preview, gestures, diagnostics | #110, #111 |
+| #112 | Design editor in the browser: the Architecture section of the Experiment drawer and its diagnostics | #110, #111 |
+| #203 | Design on the graph: draft preview, error badges, and the applied design's resources and filled slots | #112 |
 
 The sandbox increment is not ticketed yet. It follows #112 and the instructor
 scenario documents of #99.

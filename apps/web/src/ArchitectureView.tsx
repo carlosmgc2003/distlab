@@ -3,7 +3,8 @@ import type { CSSProperties, ReactNode, RefObject } from "react";
 import { Background, BaseEdge, ControlButton, Controls, Handle, Panel, Position, ReactFlow, getSmoothStepPath, useNodesInitialized, useReactFlow, useStore } from "@xyflow/react";
 import type { EdgeProps, NodeChange, NodeProps, ReactFlowInstance, XYPosition } from "@xyflow/react";
 import type { ArchitectureDefinition, ArchitectureProjection } from "@distlab/contracts";
-import { flightTokenStyle, handleFor, mapArchitecture, resourceTitle, symbolLabel, transitTokenStyle, type NodeSymbol } from "./architecture-view.ts";
+import { flightTokenStyle, handleFor, mapArchitecture, resourceTitle, slotModelLabel, symbolLabel, transitTokenStyle, type NodeSymbol } from "./architecture-view.ts";
+import type { GraphDesign } from "./architecture-view.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
@@ -211,7 +212,9 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
       <div className="node-content">
         <span className="category-label">{symbolLabel(data.symbol, m)}</span>
         <strong>{data.title}</strong>
-        {data.emptySlot ? <span className="empty-slot-badge">{m.designChoices.emptySlot.label}</span> : null}
+        {data.draft ? <span className="draft-badge"><span className="draft-word">{m.architecture.design.draftBadge}</span> {slotModelLabel(data.draft, m)}</span>
+          : data.emptySlot ? <span className="empty-slot-badge">{m.designChoices.emptySlot.label}</span> : null}
+        {data.problems?.length ? <ProblemBadge count={data.problems.length} /> : null}
         {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
         {data.faults?.length ? <FaultBadge faults={data.faults} /> : null}
         {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>
@@ -238,6 +241,8 @@ const ResourceNodeView = memo(function ResourceNodeView({ data }: NodeProps<Reso
     </svg>}
     <span className="resource-glyph" aria-hidden="true">{data.kind === "database" ? "▤" : "⚿"}</span>
     <span className="resource-title">{resourceTitle(data.kind, data.ownerName, m)}</span>
+    {data.draft ? <span className={`draft-badge draft-${data.draft}`}>{data.draft === "added" ? m.architecture.design.draftBadge : m.architecture.design.removedBadge}</span> : null}
+    {data.problems?.length ? <ProblemBadge count={data.problems.length} /> : null}
     {Array.isArray(data.faults) && data.faults.length ? <FaultBadge faults={data.faults as string[]} /> : null}
     </div>
   </>;
@@ -300,6 +305,17 @@ function FaultBadge({ faults }: { readonly faults: readonly string[] }) {
     <span aria-hidden="true">⚡ </span>{m.architecture.view.fault.badge(faults.length)}
     <span className="sr-only">{m.architecture.view.fault.detail(faults)}</span>
   </span>;
+}
+
+/** A rejected design's diagnostics point to this element (#203). Its messages are its accessible description. */
+function ProblemBadge({ count }: { readonly count: number }) {
+  const m = useMessages();
+  return <span className="problem-badge"><span aria-hidden="true">⚠ </span>{m.architecture.design.problemBadge(count)}</span>;
+}
+
+/** The id of the hidden element that holds a design element's problem messages. */
+function problemDescriptionId(key: string): string {
+  return `design-problem-${key.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
 function activityBadgeId(componentId: string): string {
@@ -647,7 +663,7 @@ export interface GraphFaultMarks {
   readonly nodes: ReadonlyMap<string, readonly string[]>;
 }
 
-export function ArchitectureView({ architecture, metadata, scenarioName, names, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick }: {
+export function ArchitectureView({ architecture, metadata, scenarioName, names, emphasis, movementText, inspectorFacts, sessionKey, playback, faultMarks, onPick, design, focusRequest }: {
   readonly architecture: ArchitectureProjection;
   readonly metadata?: ArchitectureDefinition;
   readonly scenarioName?: string;
@@ -664,6 +680,10 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   readonly faultMarks?: GraphFaultMarks;
   /** Set while the Break panel picks a target: a node or link choice is reported, nothing else changes. */
   readonly onPick?: (picked: GraphPick) => void;
+  /** The applied design, the draft preview, and a rejected design's problems (#203). Presentation only. */
+  readonly design?: GraphDesign;
+  /** Selects and focuses the element a design diagnostic concerns, by `elementKey`, once per token. */
+  readonly focusRequest?: { readonly key: string; readonly token: number };
 }) {
   const m = useMessages();
   const labels = useMemo(() => flowLabels(m), [m]);
@@ -671,11 +691,19 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   pickRef.current = onPick;
   // Boundary projections copy the same architecture on every update; keep React Flow's graph stable while it measures nodes.
   const architectureKey = JSON.stringify(architecture);
-  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, m, ...(names ? [names] : [])), [architectureKey, metadata, scenarioName, m, names]);
+  const graph = useMemo(() => mapArchitecture(architecture, metadata, scenarioName, m, names, design), [architectureKey, metadata, scenarioName, m, names, design]);
+  // Each element with a design problem, by the id of its drawn node or edge, so its messages describe it.
+  const problemIds = useMemo(() => new Map([...graph.designTargets.entries()].map(([key, target]) => [target.id, problemDescriptionId(key)])), [graph]);
+  const problemTexts = useMemo(() => [...graph.designTargets.entries()].flatMap(([key, target]) => {
+    const element = target.kind === "node" ? [...graph.nodes, ...graph.resourceNodes].find(node => node.id === target.id) : graph.edges.find(edge => edge.id === target.id);
+    const problems = element?.data?.problems as readonly string[] | undefined;
+    return problems?.length ? [{ id: problemDescriptionId(key), text: problems.join(" ") }] : [];
+  }), [graph]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Layout follows structure only: ids and labels, never playback state or badges.
+  // Layout follows structure only: ids and labels, never playback state or badges. Design marks
+  // (#203) are structure: a draft or problem badge grows its node, so the graph is laid out again.
   const layoutKey = useMemo(() => JSON.stringify([
-    [...graph.nodes, ...graph.resourceNodes].map(node => node.id),
+    [...graph.nodes, ...graph.resourceNodes].map(node => [node.id, node.data.draft ? 1 : 0, node.data.problems ? 1 : 0]),
     [...graph.edges, ...graph.resourceEdges].map(edge => [edge.id, String(edge.label ?? "")]),
   ]), [graph]);
   const [layout, setLayout] = useState<GraphLayout | null>(null);
@@ -722,10 +750,10 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
       domAttributes: {
         "aria-pressed": node.id === selectedId,
         ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}),
-        ...(activity ? { "aria-describedby": activityBadgeId(node.id) } : {}),
+        ...(activity || problemIds.has(node.id) ? { "aria-describedby": [activity ? activityBadgeId(node.id) : "", problemIds.get(node.id) ?? ""].filter(Boolean).join(" ") } : {}),
       },
     };
-  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, background, faultMarks, laidOut, sizes, m]);
+  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, background, faultMarks, laidOut, sizes, problemIds, m]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
     position: laidOut?.positions.get(node.id) ?? node.position,
@@ -734,13 +762,15 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     // An owned store follows its owner into the background.
     className: [node.className ?? "", faultMarks?.nodes.get(node.id)?.length ? "has-fault" : "", background.has(node.data.owner) ? "is-background" : ""].filter(Boolean).join(" "),
     selected: node.id === selectedId,
-    domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}) },
-  })), [graph.resourceNodes, selectedId, faultMarks, background, laidOut, sizes]);
+    domAttributes: { "aria-pressed": node.id === selectedId, ...(node.id === selectedId ? { "aria-controls": "component-inspector" } : {}),
+      ...(problemIds.has(node.id) ? { "aria-describedby": problemIds.get(node.id)! } : {}) },
+  })), [graph.resourceNodes, selectedId, faultMarks, background, laidOut, sizes, problemIds]);
   const nodes = useMemo(() => [...componentNodes, ...resourceNodes], [componentNodes, resourceNodes]);
   const componentEdges = useMemo<ArchitectureEdge[]>(() => graph.edges.map(routed => {
     const route = laidOut?.routes.get(routed.id);
     const edge: ArchitectureEdge = route && routed.data ? { ...routed, data: { ...routed.data, route } } : routed;
-    const marks = faultMarks?.links.get(`${edge.source}->${edge.target}`);
+    // A student fault marks the drawn link; a draft link is not drawn by the run, so it carries no fault mark.
+    const marks = edge.data?.draft === "added" ? undefined : faultMarks?.links.get(`${edge.source}->${edge.target}`);
     const marked: ArchitectureEdge = marks?.length ? {
       ...edge, className: "has-fault", label: `✕ ${String(edge.label)}`,
       ariaLabel: m.architecture.view.fault.link({ label: edge.ariaLabel ?? "", faults: marks }),
@@ -750,11 +780,12 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     // A link with an end in the background carries nothing at this record.
     const styled: ArchitectureEdge = background.has(edge.source) || background.has(edge.target)
       ? { ...emphasized, className: `${emphasized.className ?? ""} is-background`.trim() } : emphasized;
-    const waiting = transit.get(styled.id);
-    const carrying: ArchitectureEdge = waiting && styled.data ? { ...styled, data: { ...styled.data, transit: waiting } } : styled;
+    const described: ArchitectureEdge = problemIds.has(styled.id) ? { ...styled, domAttributes: { "aria-describedby": problemIds.get(styled.id)! } } : styled;
+    const waiting = transit.get(described.id);
+    const carrying: ArchitectureEdge = waiting && described.data ? { ...described, data: { ...described.data, transit: waiting } } : described;
     if (!flight || flight.edgeId === undefined || carrying.id !== flight.edgeId) return carrying;
     return { ...carrying, data: { ...carrying.data!, flight, pace: playback.pace, paint: playback.paint } };
-  }), [graph.edges, painted, flight, playback.pace, playback.paint, background, transit, faultMarks, laidOut, m]);
+  }), [graph.edges, painted, flight, playback.pace, playback.paint, background, transit, faultMarks, laidOut, problemIds, m]);
   const ownershipEdges = useMemo<OwnershipEdge[]>(() => graph.resourceEdges.map(edge => {
     const route = laidOut?.routes.get(edge.id);
     const routed: OwnershipEdge = route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
@@ -795,6 +826,19 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const inTransitText = useMemo(() => flightInTransitText(playback.inTransit, m, graph.names), [playback.inTransit, m, graph.names]);
   const toggleLegend = useCallback(() => setLegendOpen(open => !open), []);
+  // Choosing a diagnostic in the Architecture section selects and focuses its element (#203), once
+  // the laid-out graph is on view. A node is selected, so the inspector shows it; a link takes focus.
+  const handledFocus = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focusRequest || !ready || handledFocus.current === focusRequest.token) return;
+    const target = graph.designTargets.get(focusRequest.key);
+    const element = canvas.current;
+    if (!target || !element) return;
+    handledFocus.current = focusRequest.token;
+    if (target.kind === "node") setSelectedId(target.id);
+    const selector = target.kind === "node" ? `.react-flow__node[data-id="${CSS.escape(target.id)}"]` : `.react-flow__edge[data-id="${CSS.escape(target.id)}"]`;
+    element.querySelector<HTMLElement | SVGElement>(selector)?.focus();
+  }, [focusRequest, ready, graph]);
 
   if (graph.error) return <p role="alert">{graph.error}</p>;
   if (!nodes.length) return <p>{m.architecture.view.empty}</p>;
@@ -848,6 +892,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
         </ComponentInspector> : null}
       </div> : null}
     </div>
+    {problemTexts.length ? <div className="sr-only">{problemTexts.map(item => <p key={item.id} id={item.id}>{item.text}</p>)}</div> : null}
     <details className="connections">
       <summary>{m.architecture.view.connections(graph.edges.length)}</summary>
       <ul>{graph.edges.map(edge => <li key={edge.id}>{displayName(graph.names, edge.source)} → {displayName(graph.names, edge.target)}: {String(edge.label)}</li>)}</ul>
