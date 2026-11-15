@@ -112,7 +112,7 @@ test("#203 step 6: a rejected design marks the slot node with an error badge, an
   // The graph stays on view, with the draft preview and the error badge on the slot node.
   await graphLaidOut(page);
   await expect(notificationsNode(page).locator(".problem-badge")).toHaveText("⚠ Design problem");
-  await expect(notificationsNode(page)).toHaveAccessibleDescription(new RegExp(text.replace(/[().]/g, "\\$&")));
+  await expect(notificationsNode(page)).toHaveAccessibleDescription(text);
   await expect(canvas(page).getByRole("button", { name: "Notifications, Internal service, commerce.notifications 1.0.0, draft", exact: true })).toBeVisible();
   await expect(canvas(page).getByRole("img", { name: "PaymentApproved to Notifications: Subscription, draft", exact: true })).toHaveCount(1);
   // Activating the diagnostic moves focus to the node and selects it.
