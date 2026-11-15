@@ -7,6 +7,7 @@ export const designEditor: typeof source = {
   help: "Los cambios de diseño modifican la arquitectura de la lección: el modelo que ocupa un slot, un par al que llama, los recursos que posee un servicio y los destinos a los que se suscribe. Solo se ofrecen los cambios que esta lección permite, y Aplicar y reiniciar es lo que verifica que un diseño sea válido.",
   count: (p: { count: number; max: number }, f: Fmt) => `${f.number(p.count)} de ${f.number(p.max)} cambios de diseño`,
   problems: "Problemas de diseño",
+  showOnGraph: "Mostrar en el grafo",
   controls: {
     slot: (p: { component: string }, _f: Fmt) => `Modelo de ${p.component}`,
     packagedEmpty: "Slot vacío (empaquetado)",

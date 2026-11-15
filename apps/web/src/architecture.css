@@ -822,6 +822,31 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .fault-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 1.5px solid var(--status-error); border-radius: 999px; background: var(--status-error-bg); color: var(--status-error); font-size: .7rem; font-weight: 700; white-space: nowrap; }
 .resource-body .fault-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); margin: 0; }
 .react-flow__edge.has-fault .react-flow__edge-text { fill: var(--status-error); font-weight: 700; }
+/* A design on the graph (#203). Every draft mark carries the visible word Draft (or Removed in draft);
+   the outline and the dash only reinforce it. A design problem is a badge in words, described by its messages. */
+.draft-badge { display: inline-block; max-width: 100%; margin-top: 6px; padding: 1px 8px; border: 1.5px dashed var(--action-primary); border-radius: 999px; background: var(--surface-panel); color: var(--text-primary); font-size: .7rem; font-weight: 600; overflow-wrap: anywhere; }
+.draft-badge .draft-word { color: var(--action-primary); font-weight: 800; }
+.component-node.is-draft .shape-stroke { stroke: var(--action-primary); stroke-dasharray: 6 4; }
+.resource-node.is-draft .resource-body svg { fill: var(--surface-panel); stroke: var(--action-primary); stroke-dasharray: 5 3; }
+.resource-node.draft-removed .resource-body { opacity: .7; }
+.resource-node.draft-removed .resource-title { text-decoration: line-through; }
+.resource-body .draft-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); margin: 0; white-space: nowrap; color: var(--action-primary); font-weight: 800; }
+.react-flow__edge.is-draft .react-flow__edge-text { fill: var(--action-primary); font-weight: 700; }
+.react-flow__edge.draft-removed .react-flow__edge-text { text-decoration: line-through; }
+.problem-badge { display: inline-block; margin-top: 6px; padding: 1px 8px; border: 2px solid var(--status-error); border-radius: 999px; background: var(--status-error-bg); color: var(--status-error); font-size: .7rem; font-weight: 800; white-space: nowrap; }
+.resource-body .problem-badge { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); margin: 0; }
+.component-node.has-problem .shape-stroke { stroke: var(--status-error); stroke-width: 3; }
+.react-flow__edge.has-problem .react-flow__edge-text { fill: var(--status-error); font-weight: 700; }
+.react-flow__edge.has-problem:focus-visible .react-flow__edge-path { stroke-width: 4; }
+.inspector-slot { padding: 8px 10px; border-left: 3px solid var(--action-primary); background: var(--surface-subtle, #f8fafc); }
+.inspector-slot.is-draft { border-left-style: dashed; }
+.inspector-slot p { margin: 0; }
+.inspector-slot dl { display: grid; gap: 2px; margin: 4px 0 0; }
+.inspector-slot dl > div { display: flex; align-items: baseline; gap: 8px; }
+.inspector-slot dt, .inspector-slot dd { font-size: .85rem; }
+.inspector-slot dt { font-weight: 600; }
+.inspector-slot dd { margin: 0; }
+.design-show-on-graph { justify-self: start; min-height: 32px; padding: 2px 8px; font-size: .8rem; }
 
 /* Design choices (ADR-004 parameters, #95): lesson-declared settings in the Experiment drawer.
    Apply is an ordinary load; nothing here edits a running simulation. */

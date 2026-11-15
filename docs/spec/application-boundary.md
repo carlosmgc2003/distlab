@@ -39,8 +39,10 @@ API and the URL of its engine script, which runs in a presentation worker of
 its own, never in the simulation worker. Layout positions and edge routes are
 UI state like any other React Flow position.
 The main thread may derive presentation-only resource nodes from packaged
-`ArchitectureDefinition` metadata; those nodes remain outside
-`ArchitectureProjection`, worker messages, and canonical history.
+`ArchitectureDefinition` metadata, the data-only model descriptors, and the
+architecture edits the worker published or the draft holds (#203); those nodes
+and every draft mark remain outside `ArchitectureProjection`, worker messages,
+and canonical history.
 
 ## Packaged scenario hosting
 
@@ -354,8 +356,9 @@ increment edits lesson-declared slots, peer bindings, owned resources, and
 subscriptions (#108 to #112). The browser's Design editor is the Experiment
 drawer's **Architecture** section (#112): form controls, one per allowance
 entry, that join the one draft overlay. It offers only what the allowance and the
-data-only descriptors declare, and the worker's load is the validation. Drawing
-the draft as a preview on the graph is #203. These remain deferred:
+data-only descriptors declare, and the worker's load is the validation. The
+graph previews the draft, draws the applied design, and marks a rejected
+design's problems (#203); it never edits the design. These remain deferred:
 
 - adding components with student-chosen IDs and removing components (the
   sandbox increment, whose rules ADR-005 already fixes)

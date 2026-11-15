@@ -81,6 +81,9 @@ test("main-thread import graph uses application contracts and data, never runtim
   // and they read the descriptors from the data-only modules only.
   assert.ok(visited.has(resolve(app, "design-edits.ts")));
   assert.ok(visited.has(resolve(app, "ArchitectureSection.tsx")));
+  // ARCH-AC-7 (#203): the design on the graph (applied marks, draft preview, diagnostic mapping) is derived on the
+  // main thread from contracts and data-only modules only, under the same walk.
+  assert.ok(visited.has(resolve(app, "design-preview.ts")));
   for (const module of descriptorModules) assert.ok(visited.has(module), `${module} is read as data`);
   // Descriptor modules obey the same data-only rules whether or not the app imports them yet.
   for (const module of descriptorModules) walk(module);

@@ -17,13 +17,14 @@ without opening the inspector. Today every component renders as the same
 never appear as graph nodes, and message buses are indistinguishable from any
 other infrastructure box. This specification defines a richer symbol language
 for the graph while keeping it strictly presentation-only over published
-projections and packaged metadata.
+projections, packaged metadata, and the architecture edits the worker already
+published (amendment, #203).
 
 ## Architectural alignment and decisions
 
 | Requirement / source | Contract section | Acceptance criteria |
 | --- | --- | --- |
-| Presentation never mutates or commands the run | `docs/spec/application-boundary.md` | No new worker commands, observations, or virtual-time effects; resource nodes derive from packaged `ArchitectureDefinition` metadata only |
+| Presentation never mutates or commands the run | `docs/spec/application-boundary.md` | No new worker commands, observations, or virtual-time effects; resource nodes derive from packaged `ArchitectureDefinition` metadata, the data-only model descriptors, and the architecture edits in `session.overlay.architecture` or the draft (amendment, #203) |
 | Main-thread import boundary | `docs/spec/application-boundary.md` | `mapArchitecture` keeps importing `@distlab/contracts` types only; no runtime model factories |
 | Architecture playback is presentation over records | `docs/spec/observability.md` | Flight tokens, emphasis, and roles apply to component links only; owned-resource nodes never receive movement |
 | Playback direction and activity are read from records | `docs/spec/observability.md` | A token travels from the record's origin to its destination whatever the drawn link's direction; activity (idle, processing, waiting) is derived only from records at or before the cursor and never from records that were not written |
@@ -41,7 +42,8 @@ Resolved decisions (both settled by the Phase 2 design; rationale in
   five components and three satellites), and a toggle would be a new control
   that only restates an existing packaged fact, which
   `docs/spec/application-boundary.md` rules out as a presentation solution.
-  Visibility is derived from packaged metadata, never stored UI state.
+  Visibility is derived from packaged metadata and the applied architecture
+  edits (amendment, #203), never stored UI state.
 - Resource nodes are **selectable and open the inspector with static facts
   only** (owner, table names, initial keys). Selection is the app's single
   inspect gesture (mouse, or Tab plus Enter/Space with the same
@@ -182,7 +184,9 @@ export type ResourceNode = Node<ResourceNodeData, ResourceKind>;
   `ownerName` is the owner's component display name (see *Component display
   names*); `owner` keeps the ID.
 - Emission in `mapArchitecture`: group `metadata.databases` and
-  `metadata.stores` by `owner`. One node per owner and kind; when two
+  `metadata.stores` by `owner`. With an applied design (amendment, #203), the
+  groups are the packaged definitions the design does not detach, followed by
+  the resources it attaches; see "Designs on the graph" below. One node per owner and kind; when two
   definitions of the same kind share an owner, the last in array order wins
   (the same last-wins idiom as the existing `components` and `destinations`
   maps). A definition is emitted only when its owner is a projected component
@@ -348,9 +352,63 @@ existing `mapArchitecture` style):
    saga `inventory` `(670, 330)`; cqrs `reporting` `(360, 330)`; cascade
    `resource:kv:payments` `(980, 120)`.
 
+9. **Designs** (amendment, #203; `apps/web/tests/design-preview.test.ts`):
+   with absent or empty architecture edits, `mapArchitecture` with a `design`
+   input returns exactly the graph it returns without one, for every packaged
+   lesson and the Reliable Checkout base lesson. The fixture designs of
+   `docs/commerce-lessons.md` §9 give their marks in any edit order. After Apply,
+   `resource:db:notifications` is an ordinary satellite with the tables
+   `notifications` and `inbox`, and no element's accessible name contains
+   `draft`. Each row of ADR-005's error table maps as stated.
+
 The Phase 4 browser smoke pass adds selector and aria assertions that
 satellites are visible for commerce lessons and keyboard-inspectable, with
-static facts only in the inspector.
+static facts only in the inspector. `e2e/design-preview.spec.ts` covers the
+draft preview, the applied design, and a rejected design in the gap lesson.
+
+#### Designs on the graph (amendment, #203)
+
+ADR-005's Design editor edits the architecture in the Experiment drawer (#112).
+The graph shows the design and never edits it. `ArchitectureProjection` carries
+no owned resources or configuration, and it stays that way: the applied design
+is derived on the main thread. `apps/web/src/design-preview.ts` is a pure
+function of the packaged `ArchitectureDefinition`, the data-only model
+descriptors, and an `ArchitectureEdits` value. It returns presentation marks:
+each edited slot with its model, version, and option values; each attached or
+detached resource with its owner and kind, and for a database the tables the
+owner's model descriptor declares; each bound peer as a connection; each added
+or removed subscription. The marks are never an `ArchitectureDefinition`, never
+sent, and never validated. `mapArchitecture` takes them as an optional `design`
+input, and without one, or with empty marks, it returns exactly the packaged
+graph.
+
+- **Applied design.** The marks of `session.overlay.architecture`, the edits the
+  worker published. A projected component matches its packaged instance, or the
+  model an applied slot edit put in its place, so a filled slot keeps its
+  resources and configuration. An attached resource is an ordinary satellite,
+  inspectable like a packaged one, whose definition holds the descriptor's
+  tables and no initial rows. A detached one is not drawn. The Component
+  inspector of a filled slot states its model, version, and option values.
+  Links a design adds are already in the projection.
+- **Draft preview.** The difference between the draft's marks and the applied
+  design's, so only what the draft changes is marked: a slot node is relabeled
+  with the drafted model, and its Empty slot mark goes while a real model is
+  drafted; a drafted binding or subscription is a dashed link; a drafted
+  attached resource is an outlined satellite; a drafted detach or unsubscribe
+  keeps the element and marks it as removed. Every draft mark carries the
+  visible word `Draft` (or `Removed in draft`), and its accessible name ends with
+  `, draft` (or `, removed in draft`), so the mark never depends on color or line
+  style. Draft links are not in the projection, so playback never paints a
+  movement on them. Draft marks join the ELK layout as ordinary nodes and edges.
+- **Rejected design.** Each `INVALID_OVERLAY` diagnostic path maps to a graph
+  element as ADR-005's "Error presentation" table says, in the edits that were
+  submitted. A mapped element shows a `Design problem` badge, and its accessible
+  description holds the message the Architecture section shows for that
+  diagnostic; a link with a problem becomes focusable. Show on graph, beside a
+  diagnostic in the section, selects and focuses the element. A rejected load
+  exposes no session, so the graph keeps the session's last published
+  architecture and the applied edits it was drawn with, for the same session
+  only, with the draft preview over them.
 
 ### Phase 3 — Edge semantics and legend unification
 
@@ -515,7 +573,9 @@ west to the east: its source ends left of its target.
 - No changes to `@distlab/contracts` types; no new worker commands; review
   navigation and playback seams untouched.
 - All new graph elements are presentation state only and must never enter
-  `RunInputs`, scheduling, assertions, or canonical history.
+  `RunInputs`, scheduling, assertions, or canonical history. Design marks
+  (#203) are derived from data the main thread already holds and are never sent
+  to the worker.
 - Determinism rules apply as everywhere else in the UI (no `Date.now`,
   `setTimeout`-driven state). ELK runs with a fixed random seed, so the same
   graph and measured sizes always give the same layout.

@@ -7,6 +7,8 @@ export const designEditor = {
   help: "Design edits change the lesson's architecture: the model that fills a slot, a peer it calls, the resources a service owns, and the destinations it subscribes to. Only the edits this lesson allows are offered, and Apply and restart is what checks that a design is valid.",
   count: (p: { count: number; max: number }, f: Fmt) => `${f.number(p.count)} of ${f.number(p.max)} design edits`,
   problems: "Design problems",
+  /** Moves focus to the graph element a diagnostic concerns (#203). */
+  showOnGraph: "Show on graph",
   /** Control labels. Component IDs, option keys, models, and destinations stay as written. */
   controls: {
     slot: (p: { component: string }, _f: Fmt) => `Model for ${p.component}`,

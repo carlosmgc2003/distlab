@@ -42,6 +42,28 @@ export const architecture = {
   },
   nodeAria: (p: { title: string; symbol: string }, _f: Fmt) => `${p.title}, ${p.symbol}`,
   nodeAriaEmptySlot: (p: { title: string; symbol: string }, _f: Fmt) => `${p.title}, ${p.symbol}, empty slot`,
+  /** A design on the graph (#203): the applied design, the draft preview, and a rejected design's problems. */
+  design: {
+    model: (p: { model: string; version: string }, _f: Fmt) => `${p.model} ${p.version}`,
+    /** A slot node in the draft preview. The accessible name ends with "draft", so the mark never depends on color or line style. */
+    nodeAria: (p: { title: string; symbol: string; model: string }, _f: Fmt) => `${p.title}, ${p.symbol}, ${p.model}, draft`,
+    draftBadge: "Draft",
+    removedBadge: "Removed in draft",
+    draftModel: (model: string, _f: Fmt) => `Draft: ${model}`,
+    /** The accessible name of a drafted element, then of an element the draft removes. */
+    drafted: (name: string, _f: Fmt) => `${name}, draft`,
+    removed: (name: string, _f: Fmt) => `${name}, removed in draft`,
+    draftLabel: (label: string, _f: Fmt) => `Draft · ${label}`,
+    removedLabel: (label: string, _f: Fmt) => `Removed in draft · ${label}`,
+    /** A bound peer, named as the model declares it. */
+    binding: (peer: string, _f: Fmt) => `Peer ${peer}`,
+    problemBadge: (n: number, f: Fmt) => f.plural(n, { one: "Design problem", other: `${f.number(n)} design problems` }),
+    /** The Component inspector of a slot an applied design fills, and of one the draft fills. */
+    filledSlot: "Filled slot",
+    filledSlotModel: (p: { model: string; version: string }, _f: Fmt) => `Model ${p.model} ${p.version}.`,
+    draftSlot: "In the draft",
+    options: "Option values",
+  },
   /** Component activity at the playback cursor (activity.ts). */
   activity: {
     state: { idle: "Idle", processing: "Processing", waiting: "Waiting" },

@@ -145,7 +145,7 @@ test("inspector metadata comes from matching static definitions and omits busine
 });
 
 test("empty and invalid graphs have explicit presentation states", () => {
-  assert.deepEqual(map({ components: [], links: [] }), { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names: new Map(), error: null });
+  assert.deepEqual(map({ components: [], links: [] }), { nodes: [], edges: [], resourceNodes: [], resourceEdges: [], names: new Map(), error: null, designTargets: new Map() });
   const missing = map({ components: [], links: [{ source: "a", target: "b" }] });
   assert.match(missing.error!, /missing components/);
   assert.deepEqual([missing.nodes, missing.edges, missing.resourceNodes, missing.resourceEdges], [[], [], [], []]);

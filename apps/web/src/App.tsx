@@ -27,9 +27,11 @@ import { describeChoices, isChoiceDiagnostic, placeChoiceDiagnostics, sameChoice
 import { ArchitectureSection, DesignEditsHelp } from "./ArchitectureSection.tsx";
 import { describeDesign, isDesignDiagnostic } from "./design-edits.ts";
 import type { DesignContext, DesignDraft } from "./design-edits.ts";
+import { designMarks, designPreview, designProblems } from "./design-preview.ts";
+import type { GraphDesign } from "./architecture-view.ts";
 import { checkoutDescriptors } from "../../../packages/catalogs/src/descriptors.ts";
 import { commerceDescriptors } from "../../../packages/catalogs/src/commerce/descriptors.ts";
-import type { CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
+import type { ArchitectureEdits, ArchitectureProjection, CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { componentNames } from "./component-display.ts";
 import { FlightControls } from "./ArchitecturePlayback.tsx";
@@ -150,9 +152,18 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   // Keyed on the projected components, so a projection update that keeps them keeps the same names.
   // The names are catalog text (ADR-007), so they follow the interface language.
   const namingSource = imported ? "imported" : commerce ? "commerce" : "checkout";
-  const componentsKey = JSON.stringify(projection?.architecture.components ?? []);
+  const overlayError = snapshot.error?.code === "INVALID_OVERLAY" ? snapshot.error : null;
+  // A rejected design load exposes no session (ADR-004), but its diagnostics point to graph elements
+  // (#203). The graph keeps the session's last published architecture and the applied edits it was
+  // drawn with, for the same session only, so the draft preview and the error badges have a place.
+  // Presentation only: nothing here is sent, and the next load replaces it.
+  const keptGraph = useRef<{ readonly sessionName: string; readonly architecture: ArchitectureProjection; readonly applied: ArchitectureEdits | undefined } | null>(null);
+  if (projection) keptGraph.current = { sessionName, architecture: projection.architecture, applied: snapshot.session?.overlay.architecture };
+  const rejectedGraph = !projection && overlayError && keptGraph.current?.sessionName === sessionName ? keptGraph.current : null;
+  const graphArchitecture = projection?.architecture ?? rejectedGraph?.architecture;
+  const componentsKey = JSON.stringify(graphArchitecture?.components ?? []);
   const names = useMemo(() => componentNames(namingSource === "checkout" ? { source: "checkout", scenarioName: lesson?.name } : { source: namingSource },
-    projection?.architecture.components ?? [], m), [namingSource, lesson?.name, componentsKey, m]);
+    graphArchitecture?.components ?? [], m), [namingSource, lesson?.name, componentsKey, m]);
   const graph = useMemo(() => projection && lesson
     ? mapArchitecture(projection.architecture, lesson.architecture, lesson.name, m, names) : null, [projection, lesson, m, names]);
   const edges = useMemo(() => graph ? movementEdges(graph.edges) : [], [graph]);
@@ -174,7 +185,6 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   const applied = snapshot.session?.overlay ?? null;
   const appliedEntries = useMemo(() => applied ? draftFromOverlay(applied) : [], [applied]);
   const marks = useMemo(() => appliedEntries.length ? faultMarks(appliedEntries, lesson?.architecture, m) : undefined, [appliedEntries, lesson, m]);
-  const overlayError = snapshot.error?.code === "INVALID_OVERLAY" ? snapshot.error : null;
   const rejected = useMemo(() => {
     const context = overlayError?.context as { readonly diagnostics?: unknown } | null | undefined;
     const diagnostics = context && typeof context === "object" && Array.isArray(context.diagnostics) ? context.diagnostics as ScenarioDiagnostic[] : null;
@@ -187,8 +197,29 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   const choicesPending = !sameChoices(choiceDraft, applied?.parameters ?? []);
   const designPending = !sameOverlay(overlayFromDraft([], [], designDraft), overlayFromDraft([], [], applied?.architecture));
   // The Architecture section reads the allowance, the packaged architecture, and the descriptors of the session's catalog: data only (ADR-005).
+  const descriptors = commerce ? commerceDescriptors : checkoutDescriptors;
   const designContext = useMemo((): DesignContext | undefined => policy?.architecture && lesson
-    ? { allowance: policy.architecture, architecture: lesson.architecture, descriptors: commerce ? commerceDescriptors : checkoutDescriptors } : undefined, [policy, lesson, commerce]);
+    ? { allowance: policy.architecture, architecture: lesson.architecture, descriptors } : undefined, [policy, lesson, descriptors]);
+  // The design on the graph (#203), derived here from data: the applied edits the worker published
+  // (or, after a rejected load, those the kept graph was drawn with), the draft preview where the
+  // draft differs from them, and the rejected design's problems. Never sent, never validated.
+  const graphApplied = projection ? applied?.architecture : rejectedGraph?.applied;
+  const graphDesign = useMemo((): GraphDesign | undefined => {
+    if (!lesson) return undefined;
+    const marks = designMarks(lesson.architecture, descriptors, graphApplied);
+    if (!designContext) return { applied: marks };
+    return {
+      applied: marks,
+      preview: designPreview(lesson.architecture, descriptors, graphApplied, designDraft),
+      problems: rejectedDesign ? designProblems(rejectedDesign.diagnostics, rejectedDesign.edits, designContext.allowance.maxEdits, m).elements : [],
+    };
+  }, [lesson, descriptors, graphApplied, designContext, designDraft, rejectedDesign, m]);
+  // Choosing a diagnostic in the Architecture section selects and focuses its graph element.
+  const [graphFocus, setGraphFocus] = useState<{ readonly key: string; readonly token: number } | null>(null);
+  const showOnGraph = useCallback((key: string) => {
+    setTab("architecture");
+    setGraphFocus(current => ({ key, token: (current?.token ?? 0) + 1 }));
+  }, []);
   const faultsPending = useMemo(() => {
     // Only the faults differ here: the applied choices and design edits stand in for their own drafts.
     const faults = overlayFromDraft(draft, applied?.parameters ?? [], applied?.architecture);
@@ -452,7 +483,7 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
     onApply={() => applyDraft(overlayFromDraft(draft, choiceDraft, designDraft))} onDiscard={discardDraft}
     // Design edits exist only for lessons whose policy has an architecture allowance (#112).
     architecture={designContext ? <ArchitectureSection context={designContext} draft={designDraft} onDraftChange={setDesignDraft}
-      editable={editable} rejected={rejectedDesign} onInvalidChange={setDesignInvalid} resetToken={choicesReset} /> : null}
+      editable={editable} rejected={rejectedDesign} onInvalidChange={setDesignInvalid} resetToken={choicesReset} onShowOnGraph={showOnGraph} /> : null}
     // Design choices exist only for lessons whose policy declares parameters.
     designChoices={policy.parameters.length ? <DesignChoicesSection policy={policy} draft={choiceDraft}
       onDraftChange={setChoiceDraft} editable={editable} rejected={rejectedChoices} onInvalidChange={setChoicesInvalid} resetToken={choicesReset} /> : null}
@@ -646,6 +677,7 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
           <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
             {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
             {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})} names={names}
+            {...(graphDesign ? { design: graphDesign } : {})} {...(graphFocus ? { focusRequest: graphFocus } : {})}
             {...(emphasis ? { emphasis, ...(emphasis.text !== undefined ? { movementText: emphasis.text } : {}) } : {})}
             {...(commerce ? { inspectorFacts: (componentId: string) => <CommerceFacts projection={projection} componentId={componentId} names={names} /> } : report ? { inspectorFacts: (componentId: string) => <ComponentRuntimeFacts report={report} componentId={componentId} /> } : {})} />
         </section>
@@ -661,7 +693,15 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
       </div>
     </div> : overlayError && (loadedChoice || imported) ? <div className="investigation-workspace has-lesson-panel">
       {lessonPanel}
-      <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>{experimentDrawer}</div>
+      <div className={`workspace-main${drawerOpen && experimentDrawer ? " experiment-open" : ""}`}>
+        {experimentDrawer}
+        {/* The graph stays on view after a rejected design, so its problems are marked where they are (#203). */}
+        {rejectedGraph ? <div id="architecture-panel" className="panel-architecture">
+          <ArchitectureView architecture={rejectedGraph.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
+            {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})} names={names}
+            {...(graphDesign ? { design: graphDesign } : {})} {...(graphFocus ? { focusRequest: graphFocus } : {})} />
+        </div> : null}
+      </div>
     </div> : documentError ? <div className="investigation-workspace">
       <div className="workspace-navigation">{themeSelector}</div>
       <DocumentDiagnostics fileName={documentError.name} diagnostics={documentError.diagnostics} loaded={false} />

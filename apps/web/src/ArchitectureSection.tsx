@@ -6,6 +6,7 @@ import {
   controlAvailable, designControls, editCount, placeDesignDiagnostics, setBinding, setResource, setSlotModel, setSlotOption, setSubscription,
 } from "./design-edits.ts";
 import type { DesignContext, DesignControl, DesignDraft } from "./design-edits.ts";
+import { controlElement, designProblems, elementKey } from "./design-preview.ts";
 import { useMessages } from "./i18n/react.tsx";
 
 /** What the Architecture section is for. It is in the Experiment drawer's hint (#147). */
@@ -26,6 +27,8 @@ export interface ArchitectureSectionProps {
   readonly onInvalidChange: (invalid: boolean) => void;
   /** Changes when the drawer discards the draft, so half-typed field text is cleared too. */
   readonly resetToken: number;
+  /** Selects and focuses the graph element a diagnostic concerns, by `elementKey` (#203). */
+  readonly onShowOnGraph?: (key: string) => void;
 }
 
 /**
@@ -34,13 +37,16 @@ export interface ArchitectureSectionProps {
  * one Apply sends it in an ordinary `load`. Nothing here decides that a design is valid: a
  * rejected load places each diagnostic on the control its path points to.
  */
-export function ArchitectureSection({ context, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken }: ArchitectureSectionProps) {
+export function ArchitectureSection({ context, draft, onDraftChange, editable, rejected, onInvalidChange, resetToken, onShowOnGraph }: ArchitectureSectionProps) {
   const ids = useId();
   const m = useMessages();
   const [texts, setTexts] = useState<Readonly<Record<string, string>>>({});
   const [errors, setErrors] = useState<Readonly<Record<string, ChoiceError>>>({});
   const controls = useMemo(() => designControls(context, draft, m), [context, draft, m]);
   const placed = useMemo(() => rejected ? placeDesignDiagnostics(rejected.diagnostics, rejected.edits, context.allowance.maxEdits, m) : { controls: new Map<string, readonly string[]>(), general: [] },
+    [rejected, context.allowance.maxEdits, m]);
+  // The graph elements a rejected design's diagnostics point to: each one can be shown on the graph.
+  const onGraph = useMemo(() => new Set(rejected ? designProblems(rejected.diagnostics, rejected.edits, context.allowance.maxEdits, m).elements.map(item => item.key) : []),
     [rejected, context.allowance.maxEdits, m]);
   const invalid = Object.keys(errors).length > 0;
   useEffect(() => { onInvalidChange(invalid); }, [invalid, onInvalidChange]);
@@ -102,6 +108,9 @@ export function ArchitectureSection({ context, draft, onDraftChange, editable, r
         return <div key={control.id} className={`design-choice${changed ? " is-changed" : ""}`} data-control={control.id}>
           {field}
           {messages.length ? <span id={`${id}-error`} className="field-error">{messages.join(" ")}</span> : null}
+          {onShowOnGraph && placed.controls.has(control.id) && onGraph.has(elementKey(controlElement(control)))
+            ? <button type="button" className="design-show-on-graph" aria-describedby={`${id}-error`}
+              onClick={() => onShowOnGraph(elementKey(controlElement(control)))}>{m.designEditor.showOnGraph}</button> : null}
         </div>;
       })}
     </div>
