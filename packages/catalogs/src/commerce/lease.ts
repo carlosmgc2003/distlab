@@ -49,6 +49,12 @@ export const kvServerModel: ScenarioModel = {
       const condition: ExpectedValue = tagged.present ? { present: true, value: tagged.value! } : { present: false };
       return ok({ ok: ctx.kv!.compareAndSet(key, condition, next, ttl === undefined ? {} : { ttl: duration(ttl) }) });
     },
+    "POST /compare-and-delete": (body, ctx) => {
+      const { key, expected } = record(body);
+      const tagged = expected && typeof expected === "object" && !Array.isArray(expected) ? record(expected) : undefined;
+      if (typeof key !== "string" || !key || !tagged || tagged.present !== true || tagged.value === undefined) return invalid();
+      return ok({ deleted: ctx.kv!.compareAndDelete(key, { present: true, value: tagged.value }) });
+    },
   } } satisfies ServiceDefinition),
 };
 

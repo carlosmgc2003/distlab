@@ -87,6 +87,62 @@ test("conditional contenders have one winner, structural CAS and failed conditio
   assert.equal(sim.history.query({ type: "kv.expired" }).length, 1);
 });
 
+test("KV-AC-6 compareAndDelete removes a live matching entry and cancels its expiry", async () => {
+  const results: unknown[] = [];
+  const { sim } = fixture([{ key: "lock", value: "a", ttl: duration(5) }, { key: "shape", value: { a: 1, b: [2] } }], {
+    release: kv => results.push(kv.compareAndDelete("lock", { present: true, value: "a" }), kv.get("lock"),
+      kv.compareAndDelete("shape", { present: true, value: { b: [2], a: 1 } })),
+  }, (setup, runtime) => { setup.schedule(at(1, "release", runtime)); });
+  await sim.run();
+  assert.deepEqual(results, [true, undefined, true]);
+  const changed = sim.history.query({ type: "kv.changed" });
+  assert.deepEqual(JSON.parse(JSON.stringify(changed.map(o => o.data))), [
+    { key: "lock", operation: "compareAndDelete", before: { present: true, value: "a" }, after: { present: false } },
+    { key: "shape", operation: "compareAndDelete", before: { present: true, value: { a: 1, b: [2] } }, after: { present: false } },
+  ]);
+  assert.equal(sim.history.query({ type: "kv.condition.failed" }).length, 0);
+  // The lease's expiry work at t=5 was cancelled with the entry.
+  assert.equal(sim.history.query({ type: "kv.expired" }).length, 0);
+});
+
+test("KV-AC-6 compareAndDelete with another value keeps the entry and its expiry", async () => {
+  const results: unknown[] = [];
+  const { sim } = fixture([{ key: "lock", value: "b", ttl: duration(5) }], {
+    release: kv => results.push(kv.compareAndDelete("lock", { present: true, value: "a" })),
+    read: kv => results.push(kv.get("lock")),
+  }, (setup, runtime) => { setup.schedule(at(1, "release", runtime)); setup.schedule(at(4, "read", runtime)); });
+  await sim.run();
+  assert.deepEqual(results, [false, "b"]);
+  assert.equal(sim.history.query({ type: "kv.changed" }).length, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(sim.history.query({ type: "kv.condition.failed" }).map(o => o.data))), [{ key: "lock", operation: "compareAndDelete" }]);
+  assert.deepEqual(sim.history.query({ type: "kv.expired" }).map(o => [o.time, (o.data as { expiresAt: number }).expiresAt]), [[5, 5]]);
+});
+
+test("KV-AC-6 compareAndDelete sees an entry whose TTL has ended as absent", async () => {
+  for (const order of ["at-expiry", "after-expiry"] as const) {
+    const results: unknown[] = [];
+    const { sim } = fixture([{ key: "lock", value: "a", ttl: duration(3) }], {
+      release: kv => results.push(kv.compareAndDelete("lock", { present: true, value: "a" })),
+    }, (setup, runtime) => { setup.schedule(at(order === "at-expiry" ? 3 : 4, "release", runtime)); });
+    await sim.run();
+    assert.deepEqual(results, [false], order);
+    assert.equal(sim.history.query({ type: "kv.changed" }).length, 0);
+    assert.equal(sim.history.query({ type: "kv.expired" }).length, 1);
+    assert.equal(sim.history.query({ type: "kv.condition.failed" }).length, 1);
+  }
+});
+
+test("KV-AC-6 compareAndDelete runs reproduce history after reset", async () => {
+  const { sim } = fixture([{ key: "lock", value: "a", ttl: duration(5) }], {
+    other: kv => { kv.compareAndDelete("lock", { present: true, value: "b" }); },
+    owner: kv => { kv.compareAndDelete("lock", { present: true, value: "a" }); kv.set("lock", "b", { ttl: duration(2) }); },
+  }, (setup, runtime) => { setup.schedule(at(1, "other", runtime)); setup.schedule(at(2, "owner", runtime)); });
+  await sim.run();
+  const first = sim.history.export();
+  await sim.reset(); await sim.run();
+  assert.deepEqual(sim.history.export(), first);
+});
+
 test("crash retains data while TTL continues and reset reproduces history", async () => {
   const values: unknown[] = [];
   const { sim } = fixture([{ key: "short", value: 1, ttl: duration(4) }], {
@@ -108,7 +164,7 @@ test("crash retains data while TTL continues and reset reproduces history", asyn
 });
 
 test("invalid input, counter errors, foreign and stale capabilities fail without writes", async () => {
-  for (const mode of ["key", "ttl", "data", "integer", "overflow", "foreign", "stale"] as const) {
+  for (const mode of ["key", "ttl", "data", "integer", "overflow", "foreign", "stale", "absent-expectation", "untagged"] as const) {
     let saved!: KeyValueStore;
     const { sim } = fixture([{ key: "text", value: "x" }, { key: "max", value: Number.MAX_SAFE_INTEGER }], {
       capture: kv => { saved = kv; },
@@ -119,6 +175,8 @@ test("invalid input, counter errors, foreign and stale capabilities fail without
         if (mode === "integer") kv.increment("text");
         if (mode === "overflow") kv.increment("max");
         if (mode === "stale") saved.get("text");
+        if (mode === "absent-expectation") kv.compareAndDelete("text", { present: false } as never);
+        if (mode === "untagged") kv.compareAndDelete("text", "x" as never);
       },
     }, (setup, runtime) => {
       setup.schedule(at(1, "capture", runtime));

@@ -43,4 +43,13 @@ export interface KeyValueStore {
     next: CanonicalValue,
     options?: { readonly ttl?: Duration },
   ): boolean;
+  /**
+   * Removes the key only while a live entry holds `expected`, as a lock holder
+   * releases a lock it still owns. Only a present expectation is accepted:
+   * there is nothing to delete when the key is absent.
+   */
+  compareAndDelete(
+    key: string,
+    expected: { readonly present: true; readonly value: CanonicalValue },
+  ): boolean;
 }
