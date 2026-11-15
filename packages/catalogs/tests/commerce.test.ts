@@ -257,6 +257,62 @@ test("the key-value node answers each endpoint with one KeyValueStore operation 
   assert.deepEqual(exported.history.observations.filter(o => o.type === "kv.expired").map(o => o.time), [16]);
 });
 
+test("KV-AC-6 the key-value node releases a lock only for the holder that still owns it", async () => {
+  const base = object(commerceScenario("lease-fenced"));
+  const architecture = object(base.architecture!);
+  const call = (id: string, at: number, endpoint: string, body: CanonicalValue) =>
+    ({ id, at, kind: "client", target: "scheduler", action: "request", data: { target: "kv", endpoint, body, retry: false, label: id } });
+  const policy = { requestLatency: 1, responseLatency: 1, jitter: 0, timeout: 20, failureRate: 0 };
+  const release = (id: string, at: number, body: CanonicalValue) => call(id, at, "POST /compare-and-delete", body);
+  const document = { ...base, name: "kv-node-release-probe@1", faults: [], assertions: [],
+    architecture: { ...architecture, links: [...architecture.links as CanonicalValue[], { source: "scheduler", target: "kv", policy }] },
+    actions: [
+      { id: "start-kv", at: 0, kind: "service", target: "kv", state: "RUNNING" },
+      call("take-a", 0, "POST /set", { key: "lock", value: "a", ttl: 10, ifAbsent: true }),
+      release("release-by-b", 3, { key: "lock", expected: { present: true, value: "b" } }),
+      release("release-by-a", 4, { key: "lock", expected: { present: true, value: "a" } }),
+      call("get-released", 5, "POST /get", { key: "lock" }),
+      call("take-b", 6, "POST /set", { key: "lock", value: "b", ttl: 3, ifAbsent: true }),
+      release("release-expired", 12, { key: "lock", expected: { present: true, value: "b" } }),
+      release("no-key", 13, { expected: { present: true, value: "b" } }),
+      release("no-expected", 14, { key: "lock" }),
+      release("absent-expected", 15, { key: "lock", expected: { present: false } }),
+      release("untagged-expected", 16, { key: "lock", expected: "b" }),
+      release("no-value", 17, { key: "lock", expected: { present: true } }),
+    ] } as CanonicalValue;
+  assert.deepEqual(engine.validate(document), []);
+  const session = openHarness(engine.create(document));
+  await session.run();
+  const exported = session.inspect();
+  assert.equal(exported.status, "COMPLETED");
+  const results = Object.fromEntries(logs(exported, "client.result").map(entry => [entry.label, JSON.parse(JSON.stringify(entry.result))]));
+  const invalid = { code: "INVALID_KV_OPERATION" };
+  assert.deepEqual(results, {
+    "take-a": { ok: true }, "release-by-b": { deleted: false }, "release-by-a": { deleted: true },
+    "get-released": { present: false, value: null }, "take-b": { ok: true },
+    // take-b arrived at t=7 with a TTL of 3, so the lock is gone when this release arrives at t=13.
+    "release-expired": { deleted: false },
+    "no-key": invalid, "no-expected": invalid, "absent-expected": invalid, "untagged-expected": invalid, "no-value": invalid,
+  });
+  const kv = (type: string) => exported.history.observations.filter(o => o.type === type)
+    .map(o => JSON.parse(JSON.stringify([o.time, object(o.data!).operation ?? null])));
+  assert.deepEqual(kv("kv.changed"), [[1, "set"], [5, "compareAndDelete"], [7, "set"]]);
+  assert.deepEqual(kv("kv.condition.failed"), [[4, "compareAndDelete"], [13, "compareAndDelete"]]);
+  // The release at t=5 cancelled take-a's expiry at t=11; only take-b's entry expires.
+  assert.deepEqual(kv("kv.expired"), [[10, null]]);
+  // Fresh, reset, and stepped runs of the same document produce the same history and state.
+  const fresh = openHarness(engine.create(document));
+  await fresh.run();
+  assert.ok(compareExports(exported, fresh.inspect()));
+  await session.reset();
+  await session.run();
+  assert.ok(compareExports(exported, session.inspect()));
+  const steppedSession = engine.create(document);
+  const stepped = openHarness(steppedSession);
+  for (let i = 0; steppedSession.simulation.status !== "COMPLETED" && i < 10000; i++) await stepped.step();
+  assert.ok(compareExports(exported, stepped.inspect()));
+});
+
 test("two clients reserving the last unit: check-then-act oversells, optimistic concurrency rejects the second commit", async () => {
   const unsafe = await execute("inventory-oversell"), safe = await execute("inventory-optimistic");
   const of = (result: HarnessExport, type: string) => result.history.observations.filter(o => o.type === type);

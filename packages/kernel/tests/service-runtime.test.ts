@@ -293,7 +293,8 @@ test("fake KV and bus ports remain owner scoped; crash cancels local background 
   const kv: KeyValueStore = { get: key => values.get(key), set: (key, value) => { values.set(key, value as number); return true; },
     delete: key => values.delete(key), increment: key => { const next = (values.get(key) ?? 0) + 1; values.set(key, next); return next; },
     compareAndSet: (key, expected, next) => { if (expected.present && values.get(key) !== expected.value) return false;
-      values.set(key, next as number); return true; } };
+      values.set(key, next as number); return true; },
+    compareAndDelete: (key, expected) => values.get(key) === expected.value && values.delete(key) };
   const seen: number[] = [];
   const sim = new HeadlessSimulationFactory({ network: { targets: ["service"], links: [] } }).createSimulation(inputs, setup => {
     runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, kv,
@@ -540,7 +541,7 @@ test("restart keeps KV writes and reset restores the initial value", async () =>
     latest = values;
     const kv: KeyValueStore = { get: key => values.get(key), set: (key, value) => { values.set(key, value as number); return true; },
       delete: key => values.delete(key), increment: key => { const next = (values.get(key) ?? 0) + 1; values.set(key, next); return next; },
-      compareAndSet: () => false };
+      compareAndSet: () => false, compareAndDelete: () => false };
     const runtime = new DeterministicServiceRuntime({ id: "service", version: "1", setup, kv,
       resolve: () => definition("service", {}, { work: (_, ctx) => { ctx.kv!.increment("counter"); } }),
       taskLifecycle: () => sim.taskLifecycle, activeOwner: () => sim.activeTaskOwner, events });
@@ -567,7 +568,7 @@ test("a caught log sink failure preserves the KV commit and seals the run", asyn
   let value = 0;
   let caught = false;
   const kv: KeyValueStore = { get: () => value, set: (_key, next) => { value = next as number; return true; }, delete: () => false,
-    increment: () => value, compareAndSet: () => false };
+    increment: () => value, compareAndSet: () => false, compareAndDelete: () => false };
   const sim = new HeadlessSimulationFactory({
     createHistory: options => {
       const history = new ExecutionHistory(options);

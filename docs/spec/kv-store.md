@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-09-19 |
-| Related issues | None |
+| Last updated | 2026-11-15 |
+| Related issues | #197 |
 
 ## Responsibility
 
@@ -25,7 +25,7 @@ are deferred. There are no unresolved baseline decisions.
 | --- | --- | --- |
 | Architecture §18: TTL and conditional writes | Operation semantics and errors | KV-AC-1–3 |
 | Architecture §38: virtual time | Invariants | KV-AC-2, KV-AC-5 |
-| Vision §18: coordination patterns | Minimal examples | KV-AC-3 |
+| Vision §18: coordination patterns | Minimal examples | KV-AC-3, KV-AC-6 |
 
 ## Public API
 
@@ -43,6 +43,8 @@ interface KeyValueStore {
   increment(key: string): number;
   compareAndSet(key: string, expected: ExpectedValue,
     next: CanonicalValue, options?: { ttl?: Duration }): boolean;
+  compareAndDelete(key: string,
+    expected: { present: true; value: CanonicalValue }): boolean;
 }
 interface KeyValueDefinition {
   owner: ComponentId;
@@ -83,7 +85,16 @@ integers; invalid type or overflow raises modeled `KV_NOT_INTEGER` or
 `KV_COUNTER_OVERFLOW`, preserving the live value. An existing expiry is retained;
 a newly created counter has none. `compareAndSet` atomically checks the tagged
 expected value and, on success, replaces value/TTL like set. No operation yields
-or participates in a database transaction. There is no public cancellation or
+or participates in a database transaction.
+
+`compareAndDelete` atomically removes a key only while a live entry holds the
+expected value, as a lock holder releases a lock it still owns. The expected
+value uses the `ExpectedValue` tag, and only `{ present: true, value }` is
+valid: an absent expectation has nothing to delete and is
+`INVALID_KV_OPERATION`. On a match it removes the entry, cancels its expiry
+work, records `kv.changed` with operation `compareAndDelete`, and returns true.
+Otherwise, including an expired entry, it changes nothing, records
+`kv.condition.failed`, and returns false. There is no public cancellation or
 configured capacity/eviction policy in this baseline.
 
 ## Owned state
@@ -102,7 +113,7 @@ they are not full simulation snapshots. No caller alias reaches stored values.
 | Event | When | Required data |
 | --- | --- | --- |
 | `kv.read` | Owner read | Key, presence, value when present |
-| `kv.changed` | set, delete, increment, or CAS succeeds | Key, operation, before, after, expiry |
+| `kv.changed` | set, delete, increment, CAS, or compare-and-delete succeeds | Key, operation, before, after, expiry |
 | `kv.condition.failed` | Conditional mismatch | Key, operation |
 | `kv.expired` | Entry becomes physically removed at expiry | Key, prior value, expiresAt, generation |
 
@@ -138,6 +149,14 @@ const accepted = kv.set("message:m1", true, {
 // accepted=false means a live marker already exists.
 ```
 
+### Lock release by its holder
+
+```ts
+const released = kv.compareAndDelete("lock:report",
+  { present: true, value: "worker-a" });
+// released=false means the lease expired or another holder has taken it.
+```
+
 ### Lease ownership check
 
 ```ts
@@ -158,17 +177,22 @@ const renewed = kv.compareAndSet("lease:sku-1",
   counter type/overflow failures preserve values; sink failure seals execution.
 - **KV-AC-5:** Crash preserves unexpired data, expiry continues, and reset/fresh
   runs match history/state. Old handles fail and no wall-clock APIs are used.
+- **KV-AC-6:** compareAndDelete removes a live entry holding the expected value
+  and cancels its expiry; another value keeps the entry and its expiry and
+  records a failed condition; an expired entry returns false; an absent or
+  untagged expectation is invalid; fresh and reset runs match history.
 
 ## Acceptance coverage
 
 | Invariant / operation | Acceptance criteria |
 | --- | --- |
 | KV-INV-1 | KV-AC-2, KV-AC-5 |
-| KV-INV-2 | KV-AC-1, KV-AC-3 |
+| KV-INV-2 | KV-AC-1, KV-AC-3, KV-AC-6 |
 | KV-INV-3 | KV-AC-2, KV-AC-4, KV-AC-5 |
 | Construction, reset | KV-AC-1, KV-AC-4, KV-AC-5 |
 | get, set, delete, increment | KV-AC-1, KV-AC-2, KV-AC-4 |
 | compareAndSet | KV-AC-2–4 |
+| compareAndDelete | KV-AC-6 |
 
 ## References
 

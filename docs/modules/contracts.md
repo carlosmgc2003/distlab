@@ -180,8 +180,9 @@ consume the neutral decision port rather than importing a concrete fault engine.
 
 **Exported API:** `KeyValueObservationTypes`, `SetOptions`, `ExpectedValue`,
 `KeyValueDefinition`, and `KeyValueStore`. The port exposes `get`, `set`,
-`delete`, `increment`, and `compareAndSet`; definitions bind initial entries to
-one owner. Tagged expected values distinguish an absent key from a present null.
+`delete`, `increment`, `compareAndSet`, and `compareAndDelete`; definitions bind
+initial entries to one owner. Tagged expected values distinguish an absent key
+from a present null; `compareAndDelete` accepts only a present expectation.
 
 **Invariants:** Operations are synchronous and atomic per key in an owner task.
 Values are detached; comparisons use canonical structural equality. At

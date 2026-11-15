@@ -21,11 +21,11 @@ const only = (value: { [key: string]: CanonicalValue }, required: readonly strin
 const readRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
   (value.present === true ? only(value, ["key", "present", "value"]) : value.present === false && only(value, ["key", "present"]));
 const changedRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
-  (value.operation === "set" || value.operation === "delete" || value.operation === "increment" || value.operation === "compareAndSet") &&
+  (value.operation === "set" || value.operation === "delete" || value.operation === "increment" || value.operation === "compareAndSet" || value.operation === "compareAndDelete") &&
   presence(value.before) && presence(value.after) && (value.expiresAt === undefined || timeValue(value.expiresAt)) &&
   only(value, ["key", "operation", "before", "after"], ["expiresAt"]);
 const conditionRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
-  (value.operation === "set" || value.operation === "compareAndSet") && only(value, ["key", "operation"]);
+  (value.operation === "set" || value.operation === "compareAndSet" || value.operation === "compareAndDelete") && only(value, ["key", "operation"]);
 const expiredRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
   timeValue(value.expiresAt) && timeValue(value.generation) && only(value, ["key", "value", "expiresAt", "generation"]);
 const data = (value: unknown): CanonicalValue => { try { return canonicalCopy(value); } catch { return invalid(); } };
@@ -198,9 +198,12 @@ export class DeterministicKeyValueStore implements KeyValueStore {
     this.#active(); keyOf(key);
     const previous = this.#live(key);
     if (!previous) return false;
-    previous.handle?.cancel(); this.#entries.delete(key);
-    this.#observe(KeyValueObservationTypes.Changed, { key, operation: "delete", before: tag(previous.value), after: tag(undefined) });
+    this.#remove(key, previous, "delete");
     return true;
+  }
+  #remove(key: string, previous: Entry, operation: string): void {
+    previous.handle?.cancel(); this.#entries.delete(key);
+    this.#observe(KeyValueObservationTypes.Changed, { key, operation, before: tag(previous.value), after: tag(undefined) });
   }
   increment(key: string): number {
     this.#active(); keyOf(key); this.#next(key);
@@ -226,5 +229,14 @@ export class DeterministicKeyValueStore implements KeyValueStore {
     const matches = checked.present ? previous !== undefined && canonicalEncode(previous.value) === canonicalEncode(checked.value) : previous === undefined;
     if (!matches) { this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "compareAndSet" }); return false; }
     this.#write(key, copy, ttl, "compareAndSet", previous); return true;
+  }
+  compareAndDelete(key: string, expected: { readonly present: true; readonly value: CanonicalValue }): boolean {
+    this.#active(); keyOf(key); const checked = expectedOf(expected);
+    const value = checked.present ? checked.value : invalid();
+    const previous = this.#live(key);
+    if (!previous || canonicalEncode(previous.value) !== canonicalEncode(value)) {
+      this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "compareAndDelete" }); return false;
+    }
+    this.#remove(key, previous, "compareAndDelete"); return true;
   }
 }

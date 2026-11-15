@@ -81,8 +81,8 @@ and a validity check. Construction validates and canonically copies initial
 entries, rejects duplicate keys, assigns generation zero, sorts initialization
 by key, and registers KV observation schemas.
 
-Handler methods are synchronous `get`, `set`, `delete`, `increment`, and
-`compareAndSet`. Every method requires an active dispatch by the store owner.
+Handler methods are synchronous `get`, `set`, `delete`, `increment`,
+`compareAndSet`, and `compareAndDelete`. Every method requires an active dispatch by the store owner.
 Trusted composition uses `expiryEventType` (`kv.expiry.<owner>`), registers
 `expire(event)`, then calls the idempotent `scheduleInitialExpiries()` before
 scenario actions. `inspect()` returns sorted, detached live entries with their
@@ -101,6 +101,8 @@ entries without removing them or recording expiration.
 tag and canonical value equality. A failed condition returns `false` and emits
 condition-failure evidence. Successful set/CAS replaces any prior TTL with the
 supplied TTL, or clears it when omitted. Delete returns `false` for absence.
+`compareAndDelete` removes the entry and cancels its expiry only when a live
+entry equals the present expectation; otherwise it records a failed condition.
 Increment starts absent counters at zero, rejects non-safe-integer values and
 overflow, and preserves an existing absolute expiry time.
 

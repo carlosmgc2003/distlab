@@ -182,7 +182,7 @@ export const reliableNotificationsDescriptor: ModelDescriptor = {
  */
 export const kvServerDescriptor: ModelDescriptor = {
   ...none, model: "commerce.kv-server", version: VERSION, kind: "service",
-  endpoints: ["POST /get", "POST /set", "POST /delete", "POST /increment", "POST /compare-and-set"],
+  endpoints: ["POST /get", "POST /set", "POST /delete", "POST /increment", "POST /compare-and-set", "POST /compare-and-delete"],
   storage: { store: true },
 };
 
