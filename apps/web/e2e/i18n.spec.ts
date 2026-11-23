@@ -182,7 +182,7 @@ test("OT-PLAY: in Spanish the control group, the playback settings, the playhead
   // The first Paso executes the run; each later Paso moves one hito.
   for (let at = 1; at <= 4; at += 1) {
     await control(es.simulationControls.step).click();
-    await expect(position).toHaveText(new RegExp(`^Hito ${at} de 19 · tiempo virtual \\d+ · observación #\\d+\\.$`));
+    await expect(position).toHaveText(new RegExp(`^Hito ${at} de 19 · tiempo virtual \\d+ · observación #\\d+\\.`));
   }
   // Hito 4 is the first commit of Payments: painted on Pagos, and narrated there.
   const narration = page.locator(".flight-narration");

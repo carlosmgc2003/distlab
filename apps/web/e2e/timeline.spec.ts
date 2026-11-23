@@ -72,11 +72,12 @@ test("stepping checkout shows ordered Story table rows, trace detail, and moveme
   await expect(page.locator("#timeline-rows [data-observation-id][aria-pressed='true']")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
 
+  // The first Step executes the whole run, so both requests the checkout sends are recorded.
   await stepUntil(page, "network.request.sent");
   await filterByType(page, "network.request.sent");
   const tableRows = page.locator(".story-table tbody tr");
   const rowButtons = page.locator(".story-table button[data-observation-id]");
-  await expect(tableRows).toHaveCount(1);
+  await expect(tableRows).toHaveCount(2);
   const requestText = await tableRows.first().innerText();
   await rowButtons.first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
