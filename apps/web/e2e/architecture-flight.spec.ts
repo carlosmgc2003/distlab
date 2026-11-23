@@ -500,9 +500,15 @@ test("components show idle, processing, or waiting from the records at the curso
   await expect(narration(page)).toContainText("Payments is waiting on Payment Processor with a recorded deadline at virtual time 1025");
   await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-payments-waiting.png") });
 
-  // The deadline passes: the position names the virtual-time jump, and Payments leaves waiting with a timeout cue.
-  await stepTo(page, "Request timed out");
+  // The deadline passes: the first milestone at the new virtual time names the jump.
+  for (let attempt = 0; attempt < 5 && !(await position(page).innerText()).includes("virtual time 1025 "); attempt += 1) {
+    const before = await milestone(page);
+    await control(page, "Step").click();
+    await expect.poll(() => milestone(page)).not.toBe(before);
+  }
   await expect(position(page)).toContainText("Virtual time jumped t=55 → t=1025");
+  // Payments leaves waiting with a timeout cue.
+  await stepTo(page, "Request timed out");
   await expect(badge("payments")).not.toContainText("Waiting");
   await expect(badge("payments")).toContainText("timed out t=1025");
   await expect(page.locator("#movement-cue")).toContainText("Its request to Payment Processor timed out at virtual time 1025.");
@@ -850,8 +856,9 @@ test("two requests sent at the same virtual time stay on their links together un
   const resting = page.locator("[data-flight-transit]");
   const inTransit = narration(page).locator(".flight-in-transit");
   // Movements are counted as the playhead reaches them; milestones that travel no link are stepped over.
-  let movements = 0;
-  const visited = new Map<number, number>();
+  // The first milestone of this run is itself a movement.
+  let movements = await page.locator("[data-flight-token]").count() > 0 ? 1 : 0;
+  const visited = new Map<number, number>(movements ? [[1, 1]] : []);
   const goTo = async (movement: number) => {
     for (let attempt = 0; attempt < 80 && movements < movement; attempt += 1) {
       const before = await milestone(page);
