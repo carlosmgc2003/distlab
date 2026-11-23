@@ -118,7 +118,7 @@ function undeclaredConfiguration(lesson: Lesson, descriptors: readonly ModelDesc
 test("ARCH-AC-5 every packaged configuration key is a declared peer, option, or lesson-data field (#122)", () => {
   assert.deepEqual(lessons.flatMap(lesson => undeclaredConfiguration(lesson, lesson.descriptors)), []);
   assert.deepEqual(commerceDescriptors.filter(item => item.lessonData).map(item => [item.model, item.lessonData]), [
-    ["commerce.saga-resource", ["compensated", "forward"]],
+    ["commerce.saga-resource", ["compensated", "events", "forward"]],
     ["commerce.cache-catalog", ["ttl"]],
     ["commerce.cache-cart", ["ttl"]],
   ]);

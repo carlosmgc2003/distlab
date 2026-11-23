@@ -190,8 +190,8 @@ here with the rest.
 | `response-lost` | 2 | 2026-11-23 |
 | `retry-unsafe` | 2 | 2026-11-23 |
 | `retry-idempotent` | 2 | 2026-11-23 |
-| `saga-uncompensated` | 2 | 2026-11-23 |
-| `saga-compensated` | 2 | 2026-11-23 |
+| `saga-uncompensated` | 3 | 2026-11-23 |
+| `saga-compensated` | 3 | 2026-11-23 |
 | `dual-write` | 2 | 2026-11-23 |
 | `outbox-unsafe-consumer` | 2 | 2026-11-23 |
 | `outbox-idempotent` | 2 | 2026-11-23 |
@@ -281,12 +281,25 @@ Orders, Inventory, and Payments each own a database.
 **Injected fault:** Fault Engine drops the `POST /ship` request before it reaches
 Carrier. Inventory reservation and payment approval have already committed.
 
-**Expected timeline:** create order → reserve inventory → approve payment →
-shipment request lost → timeout → `NEEDS_COMPENSATION`. At t=30 assertions show
-the order incomplete, inventory reserved, and payment approved. The safe variant
-waits 10 virtual ms after the timeout to expose that inconsistent state, then
-performs refund → release → cancel. Logs distinguish `saga.forward`,
-`saga.inconsistent`, and `saga.compensation`; DB commits expose each local change.
+**Expected timeline:** Orders creates order-1 at t=1 (`order.created`),
+Inventory reserves it at t=2 (`inventory.reserved`), and Payments approves it
+at t=4 (`payment.approved`). The shipment request is dropped at t=5, and
+Orders times out at t=25: it records `NEEDS_COMPENSATION` and logs
+`order.needs-compensation` with the failed step (`ship-order`) and the steps to
+undo (`approve-payment`, `reserve-inventory`). At t=30 assertions show the order
+incomplete, inventory reserved, and payment approved. The customer's answer
+carries the order's status: `NEEDS_COMPENSATION` at t=26 without compensation.
+The safe variant waits 10 virtual ms after the timeout to expose that
+inconsistent state, then refunds at t=36 (`payment.refunded`), releases at t=38
+(`inventory.released`), and cancels at t=39 (`order.cancelled`); the customer
+receives `CANCELLED` at t=40. DB commits expose each local change.
+
+Any step can fail, not only the shipment: a step that is rejected (a failed
+commit returns an error reply) or times out leaves the order
+`NEEDS_COMPENSATION`. Compensation undoes the steps that completed and, because
+a timeout is ambiguous, the step that timed out. "A failed order does not keep
+inventory reserved" and "A failed order keeps no approved payment" forbid the
+bad state, so a reservation or payment that never happened holds.
 
 **Expected final state at t=60:**
 
@@ -295,11 +308,24 @@ performs refund → release → cancel. Logs distinguish `saga.forward`,
 | `npm run lesson -- saga-uncompensated` | NEEDS_COMPENSATION | true | false |
 | `npm run lesson -- saga-compensated` | CANCELLED | false | true |
 
+**Experiments that break the fix** (in `saga-compensated`, with one fault from
+the Experiment drawer):
+
+- Drop Orders' `POST /compensate` request to Payments. A compensation is a
+  request too: the refund times out at t=55, Orders logs `compensation.failed`
+  and stops, and the inventory is never released. All three invariants are
+  VIOLATED.
+- Drop Payments' response to that `POST /compensate`. The refund commits at
+  t=36, but Orders does not know it and stops. The payment holds; the
+  reservation and the cancellation do not.
+- Fail the commit of Payments' database. The approval is rejected, so Orders
+  releases only the reservation and cancels the order at t=17.
+
 **Concept:** compensation is another business operation, not a global rollback.
-The fixture deliberately has no shipment side effect and reliable compensation
-links. In a real ambiguous shipment outcome, cancellation/status reconciliation
-and retryable compensation would also be necessary; this is not a general saga
-recovery engine.
+The fixture deliberately has no shipment side effect. Orders does not retry a
+compensation that fails, so the order stays `NEEDS_COMPENSATION`; in a real
+saga, a retried, idempotent compensation and status reconciliation would also
+be necessary. This is not a general saga recovery engine.
 
 ## 3. Transactional outbox and at-least-once delivery
 

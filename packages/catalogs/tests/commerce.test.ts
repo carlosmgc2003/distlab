@@ -416,13 +416,18 @@ for (const name of commerceLessonNames) {
       assert.equal(logs(result, "notification.created").length, 0);
       assert.equal(result.history.observations.filter(o => o.type === "message.published").length, 0);
     }
+    if (name.startsWith("saga-")) {
+      // Each step logs what it did, where it did it; the customer's answer carries the order's status.
+      const steps = result.history.observations.filter(o => o.type === "runtime.log" && o.source !== "client").map(o => `${o.source} ${object(o.data!).message}`);
+      const forward = ["orders order.created", "inventory inventory.reserved", "payments payment.approved", "orders order.needs-compensation"];
+      assert.deepEqual(steps, name === "saga-compensated" ? [...forward, "payments payment.refunded", "inventory inventory.released", "orders order.cancelled"] : forward);
+      assert.deepEqual(JSON.parse(JSON.stringify(logs(result, "order.needs-compensation")[0])), { orderId: "order-1", failedStep: "ship-order", reason: "timeout", toUndo: ["approve-payment", "reserve-inventory"] });
+      assert.deepEqual({ ...object(logs(result, "client.result")[0]!.result!) }, { orderId: "order-1", status: name === "saga-compensated" ? "CANCELLED" : "NEEDS_COMPENSATION" });
+    }
     if (name === "saga-uncompensated") {
       const tables = (owner: string) => object(object(object(object(result.state).databases!)[owner]!).tables!);
       assert.deepEqual({ ...object(object(tables("orders").orders!)["order-1"]!) }, { status: "NEEDS_COMPENSATION" });
       assert.deepEqual({ ...object(object(tables("payments").state!)["order-1"]!) }, { status: "APPROVED", refunded: false });
-    }
-    if (name === "saga-compensated") {
-      assert.deepEqual(logs(result, "saga.compensation").map(entry => entry.component), ["payments", "inventory", "orders"]);
     }
     if (name === "cqrs-delayed") {
       assert.deepEqual(logs(result, "cqrs.projection-read").map(entry => entry.status), ["PENDING", "PAID"]);
