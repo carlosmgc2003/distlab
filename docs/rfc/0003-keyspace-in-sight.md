@@ -6,7 +6,7 @@
 | Date | 2026-11-23 |
 | Evidence | Recorded runs of the packaged lessons that declare a store, measured in [Problem](#problem) |
 | Builds on | [RFC 0002](0002-one-timeline.md): every view here reads the playhead. It amends RFC 0002 P6 for key-value state only. |
-| Related issues | #12, #186, #197, #198, #199, #200, #224 |
+| Related issues | Epic #237: K1 #238, K4 #239, K5 #240, K2 #241, K3 #242, K6 #243, K7 #244 and #245. Also #12, #186, #197, #198, #199, #200, #224 |
 | Decides | How a student sees what a `KeyValueStore` holds, who changed it, and for how long, at every point of a run. It adds no worker command. K5 changes one observation schema. |
 
 ## Summary
@@ -267,12 +267,12 @@ Each document changes in the pull request that builds the behavior:
 
 ## Order of work
 
-1. K1. Independent.
-2. K4 and K5, after K1 for K4; K5 is independent.
-3. K2, after K1 and the playhead (#224).
-4. K3, after K2.
-5. K6, after K2.
-6. K7: Compare after K2; the contention lesson after K5.
+1. K1 (#238). Independent.
+2. K4 (#239), after K1, and K5 (#240), independent.
+3. K2 (#241), after K1 and the playhead (#224).
+4. K3 (#242), after K2.
+5. K6 (#243), after K2.
+6. K7: Compare (#244) after K2; the contention lesson (#245) after K5.
 
 ## Alternatives considered
 
