@@ -186,29 +186,29 @@ here with the rest.
 
 | Lesson | Version | Last updated |
 | --- | ---: | --- |
-| `normal` | 1 | 2026-11-01 |
-| `response-lost` | 1 | 2026-11-01 |
-| `retry-unsafe` | 1 | 2026-11-09 |
-| `retry-idempotent` | 1 | 2026-11-09 |
-| `saga-uncompensated` | 1 | 2026-11-01 |
-| `saga-compensated` | 1 | 2026-11-01 |
-| `dual-write` | 1 | 2026-11-01 |
-| `outbox-unsafe-consumer` | 1 | 2026-11-01 |
-| `outbox-idempotent` | 1 | 2026-11-01 |
-| `outbox-notifications-gap` | 1 | 2026-11-04 |
+| `normal` | 2 | 2026-11-23 |
+| `response-lost` | 2 | 2026-11-23 |
+| `retry-unsafe` | 2 | 2026-11-23 |
+| `retry-idempotent` | 2 | 2026-11-23 |
+| `saga-uncompensated` | 2 | 2026-11-23 |
+| `saga-compensated` | 2 | 2026-11-23 |
+| `dual-write` | 2 | 2026-11-23 |
+| `outbox-unsafe-consumer` | 2 | 2026-11-23 |
+| `outbox-idempotent` | 2 | 2026-11-23 |
+| `outbox-notifications-gap` | 2 | 2026-11-23 |
 | `cqrs-delayed` | 1 | 2026-11-13 |
-| `cascade-unprotected` | 1 | 2026-11-09 |
-| `cascade-breaker` | 1 | 2026-11-09 |
-| `notifications-unbounded` | 1 | 2026-11-10 |
-| `notifications-dlq` | 1 | 2026-11-10 |
-| `cache-stale-price` | 1 | 2026-11-12 |
-| `cache-invalidated` | 1 | 2026-11-12 |
-| `inventory-oversell` | 1 | 2026-11-09 |
-| `inventory-optimistic` | 1 | 2026-11-09 |
-| `lease-unfenced` | 1 | 2026-11-11 |
-| `lease-fenced` | 1 | 2026-11-11 |
-| `clock-last-write-wins` | 1 | 2026-11-11 |
-| `clock-lamport` | 1 | 2026-11-11 |
+| `cascade-unprotected` | 2 | 2026-11-23 |
+| `cascade-breaker` | 2 | 2026-11-23 |
+| `notifications-unbounded` | 2 | 2026-11-23 |
+| `notifications-dlq` | 2 | 2026-11-23 |
+| `cache-stale-price` | 2 | 2026-11-23 |
+| `cache-invalidated` | 2 | 2026-11-23 |
+| `inventory-oversell` | 2 | 2026-11-23 |
+| `inventory-optimistic` | 2 | 2026-11-23 |
+| `lease-unfenced` | 2 | 2026-11-23 |
+| `lease-fenced` | 2 | 2026-11-23 |
+| `clock-last-write-wins` | 2 | 2026-11-23 |
+| `clock-lamport` | 2 | 2026-11-23 |
 
 ## 1. Timeout, retry, and idempotency
 

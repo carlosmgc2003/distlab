@@ -150,7 +150,7 @@ test("the collapsed Lesson panel survives a tab switch and a new lesson load and
   await expect(show).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(panel.getByRole("button", { name: "Hide lesson", exact: true })).toBeFocused();
-  await expect(panel.getByRole("region", { name: "① Goal", exact: true })).toContainText("Saga: no compensation");
+  await expect(panel.getByRole("region", { name: "① Goal", exact: true })).toContainText("Saga: the shipment fails");
 });
 
 test("the Lesson panel stays beside Recorded history", async ({ page }) => {

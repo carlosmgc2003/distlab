@@ -169,7 +169,7 @@ test("a rejected Compare opens the closed drawer on the carried fault", async ({
   await expect(experimentDrawer(page)).toBeHidden();
 
   // Compare carries the applied fault to the paired lesson, whose worker rejects it.
-  await page.getByRole("button", { name: "Compare: Retry with idempotency", exact: true }).click();
+  await page.getByRole("button", { name: "Compare: Retry: idempotency key", exact: true }).click();
   await page.evaluate(() => {
     const load = window.drawerFixture.commands.at(-1)!;
     window.drawerFixture.emit({ version: 1, type: "error", requestId: load.requestId, error: { code: "INVALID_OVERLAY", message: "The session overlay is not valid.", context: {

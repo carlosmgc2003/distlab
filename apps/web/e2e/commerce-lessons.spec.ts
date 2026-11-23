@@ -109,7 +109,7 @@ test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each ver
   await expect(page.locator("#history-panel")).toContainText("failed-order-refunded");
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
 
-  await page.getByRole("button", { name: "Compare: Saga: compensate", exact: true }).click();
+  await page.getByRole("button", { name: "Compare: Saga: compensating actions", exact: true }).click();
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
@@ -127,7 +127,7 @@ test("compare replaces the experiment; commerce state fits a narrow viewport", a
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "Payments state", exact: true })).toContainText("payment-2"));
-  await page.getByRole("button", { name: "Compare: Retry with idempotency", exact: true }).click();
+  await page.getByRole("button", { name: "Compare: Retry: idempotency key", exact: true }).click();
   await expect(status).toHaveText("READY");
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
