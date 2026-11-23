@@ -19,6 +19,7 @@ import { recordLabel, selectionStep } from "./timeline.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 import type { ComponentActivity } from "./activity.ts";
+import type { RecordStep } from "./playhead-steps.ts";
 
 /**
  * Presentation-only reading of recorded movements. Every value here is copied
@@ -121,7 +122,7 @@ const FIELD_KEYS = [
 ] as const satisfies readonly (keyof Messages["playback"]["fieldLabel"])[];
 
 /** The pattern question of one stored type, or the generic question for any other type. */
-function patternOf(type: string, m: Messages): string {
+export function patternOf(type: string, m: Messages): string {
   const table: Readonly<Record<string, string>> = m.playback.pattern;
   return Object.hasOwn(table, type) ? table[type]! : m.playback.patternFallback;
 }
@@ -443,14 +444,18 @@ function selectionAvailability(index: number, count: number): { readonly previou
  * caller stopped waiting, not what happened to the request. The cursor's own movement is not
  * listed, and a MessageBus record is a whole trip, so it is never in transit. Nothing after the
  * cursor is read.
+ *
+ * The steps may be playhead steps (`playhead-steps.ts`): a milestone that travels no link opens
+ * and closes nothing, and with the cursor on one, every departure before it still on its link is
+ * listed.
  */
-export function flightInTransit(steps: readonly FlightStep[], cursor: number): readonly FlightStep[] {
+export function flightInTransit(steps: readonly (FlightStep | RecordStep)[], cursor: number): readonly FlightStep[] {
   if (cursor < 0) return [];
   const open = new Map<string, FlightStep>();
   const last = Math.min(cursor, steps.length - 1);
   for (let index = 0; index <= last; index += 1) {
     const step = steps[index]!;
-    if (step.hopId === undefined) continue;
+    if (!("leg" in step) || step.hopId === undefined) continue;
     if (step.leg === "departure") { if (index < last) open.set(step.hopId, step); }
     else if (step.leg === "arrival" || step.leg === "interrupted") open.delete(step.hopId);
   }

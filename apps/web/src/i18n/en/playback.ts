@@ -9,7 +9,10 @@ export const playback = {
     label: { slow: "Slow", steady: "Steady", fast: "Fast" },
     note: (p: { seconds: number }, f: Fmt) => `one movement every ${f.number(p.seconds)} seconds`,
   },
-  /** One question per stored movement type, keyed by the observation type code. */
+  /**
+   * One question per stored milestone type, keyed by the observation type code: the movements,
+   * and the milestones that travel no link. A question, never an outcome claim.
+   */
   pattern: {
     "network.request.sent": "The caller is waiting for an answer. What has the receiver recorded so far?",
     "network.request.delivered": "The request arrived. What work did the receiver start, and in which order?",
@@ -23,6 +26,21 @@ export const playback = {
     "message.acknowledged": "The delivery was acknowledged. What would a consumer do if the acknowledgement never arrived?",
     "message.ack.stale": "This acknowledgement does not match the recorded delivery state. Which attempt does it belong to?",
     "message.retry.scheduled": "The same message will be delivered again. Is the consumer's work safe to repeat?",
+    "message.nacked": "The consumer rejected the delivery. When will the MessageBus deliver it again, if at all?",
+    "message.dead": "The MessageBus stopped delivering this message. Who will look at it now?",
+    "database.transaction.committed": "This change is now durable. Was the same change committed earlier in this run?",
+    "database.transaction.rolledback": "The transaction rolled back. What did it undo, and which effects outside the database remain?",
+    "database.transaction.rejected": "The database refused this transaction. Which stored condition did it fail, and who finds out?",
+    "external.effect.committed": "This effect is visible outside the system and cannot be rolled back. Did the same effect happen before?",
+    "service.handler.failed": "The handler failed. What had it changed before it failed, and what will try it again?",
+    "kv.changed": "A key changed. Which readers still hold the previous value?",
+    "kv.expired": "A key expired. What will the next reader of this key do?",
+    "kv.condition.failed": "The conditional write did not happen. Which value was there instead, and who wrote it?",
+    "fault.rule.matched": "A fault rule matched this operation. Which component will notice the fault, and how?",
+    "fault.effect.selected": "The fault chose its effect. What will each side of the operation record next?",
+    "fault.applied": "The fault acted. Which later records would be different without it?",
+    "runtime.log": "The service wrote down what it believes. Does it agree with the records around it?",
+    "scenario.assertion.evaluated": "A lesson check was evaluated. Which records decide its result?",
   },
   patternFallback: "What does this record state, and what does it leave unknown?",
   /** Labels of stored data fields, keyed by the stored field name. */
