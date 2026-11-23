@@ -151,7 +151,9 @@ test("I18N-AC-16: in Spanish the top bar stays one row, before and after a lesso
     await expect(page.locator(".react-flow__node").first()).toBeVisible();
     const run = page.locator(".control-buttons button").first();
     await run.click();
-    await expect(run).toHaveAttribute("aria-disabled", "true", { timeout: 30_000 });
+    await expect(page.getByRole("status", { name: es.simulationControls.statusLabel })).toHaveText(es.simulationControls.status.COMPLETED!, { timeout: 30_000 });
+    // While the playhead plays, the first control reads Pausar in the same place.
+    await expect(run).toHaveText(es.simulationControls.pause);
     expect((await page.locator("header.top-bar").boundingBox())!.height, `completed, ${size.width}px`).toBeLessThanOrEqual(64);
     // No control in the bar overlaps another (the Spanish group label once covered "Abrir…").
     const boxes = await page.locator("header.top-bar :is(button, h2:not(.sr-only), .run-status)").evaluateAll(elements =>
@@ -159,4 +161,39 @@ test("I18N-AC-16: in Spanish the top bar stays one row, before and after a lesso
     const overlapping = boxes.flatMap((a, i) => boxes.slice(i + 1).filter(b => a[0] < b[2] - 1 && b[0] < a[2] - 1 && a[1] < b[3] - 1 && b[1] < a[3] - 1).map(() => i));
     expect(overlapping, `overlaps at ${size.width}px`).toEqual([]);
   }
+});
+
+test("OT-PLAY: in Spanish the control group, the playback settings, the playhead, and a milestone at a component read from the catalog", async ({ page }) => {
+  test.setTimeout(60_000);
+  await recordWorkerCommands(page);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await page.goto("/?lang=es");
+  await page.locator("header.command-toolbar .lesson-trigger").click();
+  await lessonChoice(page, "retry-unsafe").click();
+  await expect(page.locator(".react-flow__node").first()).toBeVisible();
+  const group = page.getByRole("group", { name: es.simulationControls.executionLabel });
+  const control = (name: string) => group.getByRole("button", { name, exact: true });
+  for (const name of [es.simulationControls.run, es.simulationControls.back, es.simulationControls.step, es.simulationControls.reset]) await expect(control(name)).toBeVisible();
+  const settings = page.getByRole("group", { name: es.playback.settings.group });
+  await expect(settings.getByRole("switch", { name: es.playback.settings.animation })).toBeChecked();
+  await expect(settings.getByLabel(es.playback.settings.speed, { exact: true })).toBeEnabled();
+  const position = page.getByRole("status", { name: es.playback.narration.position });
+  await expect(position).toHaveText(es.playback.position.unrun);
+  // The first Paso executes the run; each later Paso moves one hito.
+  for (let at = 1; at <= 4; at += 1) {
+    await control(es.simulationControls.step).click();
+    await expect(position).toHaveText(new RegExp(`^Hito ${at} de 19 · tiempo virtual \\d+ · observación #\\d+\\.$`));
+  }
+  // Hito 4 is the first commit of Payments: painted on Pagos, and narrated there.
+  const narration = page.locator(".flight-narration");
+  await expect(narration.locator("h4")).toContainText("Transacción de base de datos confirmada");
+  await expect(narration.locator(".flight-route")).toHaveText(es.playback.narration.recordAt("Pagos"));
+  await expect(narration.locator(".flight-pattern")).toContainText(es.playback.pattern["database.transaction.committed"]);
+  await expect(page.locator('.react-flow__node[data-id="payments"] .milestone-badge')).toContainText("Transacción de base de datos confirmada");
+  await control(es.simulationControls.continue).click();
+  await expect(control(es.simulationControls.pause)).toBeVisible();
+  await control(es.simulationControls.pause).click();
+  await expect(control(es.simulationControls.continue)).toBeVisible();
+  expect(await workerCommands(page)).toEqual(["load", "run"]);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

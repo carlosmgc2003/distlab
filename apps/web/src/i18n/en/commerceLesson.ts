@@ -42,6 +42,6 @@ export const commerceLesson = {
   scenarioExpectations: "Scenario expectations",
   serviceStateHeading: "Service knowledge and committed state",
   aboutServiceState: "About service state",
-  serviceStateHelp: "These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs.",
+  serviceStateHelp: "These are recorded facts, not predictions. Reset replays the same inputs.",
   serviceStateOf: (componentId: string, _f: Fmt) => `${componentId} state`,
 };

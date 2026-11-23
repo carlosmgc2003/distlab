@@ -4,7 +4,7 @@ import { lessonTrigger, loadLesson } from "./support/lesson.ts";
 
 /**
  * The top bar (#144): one row, identical on both tabs, holding the lesson trigger, Simulation
- * execution, and the run summary. Replay lives in the Architecture tab, not here.
+ * execution, and the run summary. There is no second control group (RFC 0002 P2).
  */
 
 const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
@@ -41,15 +41,17 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1534, height: 897
     await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
     expect(await bar.boundingBox()).toEqual(onArchitecture);
     await expect(button(page, "Show simulation controls")).toHaveCount(0);
+    // OT-PLAY-AC-5: one control group; the Replay toolbar is gone.
     await expect(page.getByRole("group", { name: "Replay recorded movements" })).toHaveCount(0);
     expect(await recordedHistoryLabels(page)).toEqual(["tab", "h2"]);
-    for (const name of ["Run", "Pause", "Step", "Reset"]) await expect(button(page, name)).toBeVisible();
+    for (const name of ["Run", "Back", "Step", "Reset"]) await expect(button(page, name)).toBeVisible();
 
-    // The simulation is operable from the Recorded history tab.
+    // The simulation is operable from the Recorded history tab: the first Step executes the run.
     await button(page, "Step").click();
-    await expect(status(page)).toHaveText("PAUSED");
-    await button(page, "Run").click();
     await expect(status(page)).toHaveText("COMPLETED");
+    // After a Step, Run reads Continue: it plays on from the playhead.
+    await button(page, "Continue").click();
+    await expect(button(page, "Pause")).toBeVisible();
     expect(await bar.boundingBox()).toEqual(onArchitecture);
     await button(page, "Reset").click();
     await expect(status(page)).toHaveText("READY");
@@ -62,7 +64,7 @@ test("with no lesson loaded the top bar offers Choose a lesson and shows disable
   await page.goto("/");
   await expect(lessonTrigger(page)).toHaveText(/Choose a lesson/);
   await expect(lessonTrigger(page)).toBeEnabled();
-  for (const name of ["Run", "Pause", "Step", "Reset"]) {
+  for (const name of ["Run", "Back", "Step", "Reset"]) {
     await expect(button(page, name)).toBeVisible();
     await expect(button(page, name)).toHaveAttribute("aria-disabled", "true");
   }

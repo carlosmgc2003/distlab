@@ -34,8 +34,8 @@ import { commerceDescriptors } from "../../../packages/catalogs/src/commerce/des
 import type { ArchitectureEdits, ArchitectureProjection, CanonicalValue, LessonOverlayPolicy, ParameterOverride, ScenarioDefinition, ScenarioDiagnostic, ScenarioDocument, SessionOverlay } from "@distlab/contracts";
 import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { componentNames } from "./component-display.ts";
-import { FlightControls } from "./ArchitecturePlayback.tsx";
-import { useFlightPlayback, useReplayKeys } from "./flight-playback.ts";
+import { PlaybackSettingsBar } from "./ArchitecturePlayback.tsx";
+import { usePlaybackSettings, usePlayhead, usePlayheadKeys } from "./flight-playback.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
@@ -85,6 +85,8 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   const suite = useAssessmentSuite(host, assessment, commandBusy, useCallback((id: string) => setPendingEvidence(id), []));
   const suiteActive = suite.running || suite.reopening !== null;
   const busy = commandBusy || suiteActive;
+  // Animation and Speed are UI state held by the shell, so they survive lesson loads (RFC 0002 P3).
+  const playbackSettings = usePlaybackSettings();
   const [emphasis, setEmphasis] = useState<GraphEmphasis | undefined>(undefined);
   const [evidenceFocus, setEvidenceFocus] = useState<{ id: string; token: number } | null>(null);
   const [tab, setTab] = useState<WorkspaceTab>("architecture");
@@ -172,15 +174,19 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   const checkLabels = useMemo((): Readonly<Record<string, string>> => imported ? importedScenario?.presentation.assertions ?? {}
     : assessment ? Object.fromEntries(assessment.checks.map(check => [check.id, invariantLabel(assessment.definition, check, m)]))
     : loadedChoice ? lessonCheckLabels(loadedChoice, m) : {}, [imported, importedScenario, assessment, loadedChoice, m]);
-  // Replay state lives in the shell, so the cursor and the narration survive a tab switch.
-  // Choosing a record in Recorded history takes the graph highlight back, so the cursor stands
-  // down. A record that travels no link has no pulse id, so its movement text is the fallback
-  // identity; a live cue never takes the highlight back.
+  // The playhead lives in the shell, so its position and the narration survive a tab switch.
+  // Choosing a record in Recorded history takes the graph highlight back, so the playhead stands
+  // down. A record that travels no link has no pulse id, so its movement text is the fallback identity.
   const release = emphasis?.origin === "selection" ? emphasis.pulseId ?? emphasis.text : undefined;
-  const playback = useFlightPlayback(projection?.history.observations ?? [], edges,
-    snapshot.pendingCommands.includes("run") || projection?.simulation.status === "RUNNING", release, names);
-  // Replay answers to the keyboard only while the graph it drives is on screen.
-  useReplayKeys(playback, tab === "architecture" && projection !== undefined);
+  const executeRun = useCallback(() => host.run(), [host]);
+  const runStatus = projection?.simulation.status;
+  const playback = usePlayhead({
+    observations: projection?.history.observations ?? [], edges, names, release, settings: playbackSettings,
+    executed: runStatus === "COMPLETED" || runStatus === "FAILED", busy, execute: executeRun,
+    sessionKey: `${sessionName}:${snapshot.attempt}`,
+  });
+  // The keys answer only while the graph the playhead paints is on screen.
+  usePlayheadKeys(playback, tab === "architecture" && projection !== null && !suiteActive);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
   const applied = snapshot.session?.overlay ?? null;
   const appliedEntries = useMemo(() => applied ? draftFromOverlay(applied) : [], [applied]);
@@ -646,7 +652,7 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
           onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; void openFile(file); }} />
         <p id="scenario-help" className="sr-only">{m.app.scenarioHelp}</p>
       </div>
-      <SimulationControls host={host} snapshot={snapshot} locked={suiteActive} />
+      <SimulationControls host={host} snapshot={snapshot} locked={suiteActive} {...(projection ? { playhead: playback } : {})} />
     </header>
     <SimulationAlert snapshot={snapshot} notices={mark ? <p className="terminal-history" role="status" aria-label={m.app.terminalHistoryLabel}>{terminalCopy(mark, m)}</p> : null} />
     {unreadFile ? <DocumentDiagnostics fileName={unreadFile.name} diagnostics={unreadFile.diagnostics} loaded={projection !== null} /> : null}
@@ -673,8 +679,8 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
         {projection ? <>
         <section id="architecture-panel" className="panel-architecture" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-architecture" hidden={tab !== "architecture"}>
-          {/* Replay lives where the graph is (#144): a one-row toolbar above it. */}
-          <FlightControls playback={playback} />
+          {/* How Run shows the run (RFC 0002 P3): a slim row above the graph it paints. */}
+          <PlaybackSettingsBar settings={playbackSettings} />
           <ArchitectureView architecture={projection.architecture} sessionKey={`${sessionName}:${snapshot.attempt}`} playback={playback}
             {...(marks ? { faultMarks: marks } : {})} {...(picking ? { onPick: onGraphPick } : {})}
             {...(lesson ? { metadata: lesson.architecture, scenarioName: lesson.name } : {})} names={names}

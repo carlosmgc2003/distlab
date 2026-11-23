@@ -15,7 +15,7 @@ import {
 import { movementText } from "./records.ts";
 import type { Movement, MovementEdge } from "./records.ts";
 import type { Messages } from "./i18n/catalog.ts";
-import { recordLabel, selectionStep } from "./timeline.ts";
+import { recordLabel } from "./timeline.ts";
 import { displayName } from "./component-display.ts";
 import type { ComponentNames } from "./component-display.ts";
 import type { ComponentActivity } from "./activity.ts";
@@ -27,7 +27,7 @@ import type { RecordStep } from "./playhead-steps.ts";
  * is read, allocated, or changed by this module.
  */
 
-/** How long the browser paints one recorded movement. Presentation only: it never changes virtual time. */
+/** How long the browser paints one milestone while the playhead plays. Presentation only: it never changes virtual time. */
 export const FLIGHT_PACES = [
   { id: "slow", delayMs: 1800 },
   { id: "steady", delayMs: 900 },
@@ -46,7 +46,7 @@ export function flightPaceText(pace: FlightPace, m: Messages): { readonly label:
   return { label: m.playback.pace.label[pace], note: m.playback.pace.note({ seconds: flightPace(pace).delayMs / 1000 }) };
 }
 
-/** Milliseconds the host timer waits before painting the next recorded movement. */
+/** Milliseconds the host timer waits before moving the playhead to the next milestone. */
 export function flightDelayMs(pace: FlightPace): number {
   return flightPace(pace).delayMs;
 }
@@ -293,148 +293,6 @@ export function flightSteps(observations: readonly Observation[], edges: readonl
   return steps;
 }
 
-/** Index of the step for one recorded observation, or -1 when it travels no link. */
-export function flightIndexOf(steps: readonly FlightStep[], observationId: string | null): number {
-  if (observationId === null) return -1;
-  return steps.findIndex(step => step.observationId === observationId);
-}
-
-export interface FlightPosition {
-  readonly text: string;
-  readonly detail: string;
-  /**
-   * Set when virtual time advanced since the previous movement. It names the two
-   * recorded times only: playback never paints the interval as a duration.
-   */
-  readonly jump?: string;
-}
-
-/** Stated once for the playback cursor. Milestone position, virtual time, and the record's own facts. */
-export function flightPosition(steps: readonly FlightStep[], cursor: number, m: Messages): FlightPosition {
-  const total = steps.length;
-  if (total === 0) return { text: m.playback.position.none, detail: m.playback.position.noneDetail };
-  if (cursor < 0) return { text: m.playback.position.nothingSelected(total), detail: boundaryDetail(steps, m) };
-  const index = Math.min(cursor, total - 1);
-  const step = steps[index]!;
-  const jump = flightJump(steps, index, m);
-  return {
-    text: m.playback.position.current({ index: index + 1, total, time: step.time, sequence: step.sequence }),
-    detail: index >= total - 1 ? m.playback.position.atLast : boundaryDetail(steps, m),
-    ...(jump !== undefined ? { jump } : {}),
-  };
-}
-
-/** The virtual-time jump into this movement from the previous one, or undefined when time did not advance. */
-export function flightJump(steps: readonly FlightStep[], index: number, m: Messages): string | undefined {
-  const step = steps[index];
-  const previous = index > 0 ? steps[index - 1] : undefined;
-  if (step === undefined || previous === undefined || step.time <= previous.time) return undefined;
-  return m.playback.position.jump({ from: previous.time, to: step.time });
-}
-
-/** Recorded virtual-time boundaries of the movement list. No duration or latency is implied. */
-export function flightBoundaries(steps: readonly FlightStep[]): readonly SimulationTime[] {
-  const times: SimulationTime[] = [];
-  for (const step of steps) if (step.time !== times.at(-1)) times.push(step.time);
-  return times;
-}
-
-function boundaryDetail(steps: readonly FlightStep[], m: Messages): string {
-  const times = flightBoundaries(steps);
-  if (times.length === 0) return "";
-  return times.length === 1
-    ? m.playback.position.sameTime({ total: steps.length, time: times[0]! })
-    : m.playback.position.boundaries({ total: steps.length, boundaries: times.length, from: times[0]!, to: times.at(-1)! });
-}
-
-export type PlaybackPhase = "idle" | "playing" | "paused" | "ended";
-
-export interface PlaybackControl {
-  readonly action: "play" | "restart" | "unavailable";
-  readonly label: string;
-  readonly reason: string;
-}
-
-/** Play, pause, and restart describe the cursor. They do not rewind the simulation. */
-export function playbackControl(index: number, count: number, playing: boolean, m: Messages): PlaybackControl {
-  const copy = m.playback.control;
-  if (playing) return { action: "unavailable", label: copy.play, reason: copy.playing };
-  if (count <= 0) return { action: "unavailable", label: copy.play, reason: copy.noObservations };
-  // One recorded movement is still worth painting (#192): Play paints it, and Restart paints it again.
-  if (index >= 0 && index >= count - 1) return { action: "restart", label: copy.restart, reason: copy.atEnd };
-  if (index < 0) return { action: "play", label: copy.play, reason: copy.fromStart };
-  return { action: "play", label: copy.play, reason: copy.fromSelected };
-}
-
-export function playbackStatus(phase: PlaybackPhase, control: PlaybackControl, m: Messages): string {
-  if (phase === "playing") return m.playback.control.playing;
-  if (phase === "paused") return m.playback.control.paused;
-  if (phase === "ended") return m.playback.control.ended;
-  return control.reason;
-}
-
-export interface FlightAdvance {
-  readonly cursor: number;
-  readonly phase: PlaybackPhase;
-  /** True when the host timer should schedule the next paint. */
-  readonly waiting: boolean;
-}
-
-/**
- * Moves the playback cursor within an already recorded movement list.
- * While the run is still recording, the cursor waits at the end for the next
- * record instead of stopping. The cursor never re-executes anything.
- */
-export function flightAdvance(cursor: number, count: number, phase: PlaybackPhase, recording: boolean): FlightAdvance {
-  if (count === 0) return { cursor: -1, phase: "idle", waiting: false };
-  if (phase !== "playing") return { cursor: Math.min(Math.max(cursor, 0), count - 1), phase, waiting: false };
-  if (cursor >= count - 1) {
-    // At the recorded end: keep waiting only while the simulation is still recording.
-    return recording
-      ? { cursor: count - 1, phase: "playing", waiting: true }
-      : { cursor: count - 1, phase: "ended", waiting: false };
-  }
-  return { cursor: cursor + 1, phase: "playing", waiting: false };
-}
-
-export interface FlightTransport {
-  readonly control: PlaybackControl;
-  readonly pauseLabel: string;
-  readonly status: string;
-  readonly reason: string;
-  readonly previous: boolean;
-  readonly next: boolean;
-}
-
-/** Play, pause, restart, and the two step directions over recorded movements. */
-export function flightTransport(cursor: number, count: number, phase: PlaybackPhase, recording: boolean, m: Messages): FlightTransport {
-  const playing = phase === "playing";
-  const control = playbackControl(cursor, count, playing, m);
-  const steps = selectionAvailability(cursor, count);
-  return {
-    control,
-    pauseLabel: m.playback.control.pause,
-    status: playbackStatus(phase, control, m),
-    reason: recording && playing ? m.playback.control.recording : control.reason,
-    previous: steps.previous,
-    next: steps.next,
-  };
-}
-
-/**
- * The movement a Replay step selects, or null when that direction is unavailable. With nothing
- * selected, Next selects the first movement and Previous is unavailable (#191): a replay starts at
- * the start of the story. `selectionStep` alone wraps from no selection to the last movement.
- */
-export function transportStep(index: number, count: number, delta: -1 | 1): number | null {
-  if (index < 0 && delta < 0) return null;
-  return selectionStep(index, count, delta);
-}
-
-function selectionAvailability(index: number, count: number): { readonly previous: boolean; readonly next: boolean } {
-  return { previous: transportStep(index, count, -1) !== null, next: transportStep(index, count, 1) !== null };
-}
-
 /**
  * The hops still on their link at the cursor: every departure recorded before the cursor's
  * movement whose arrival or drop is not recorded at or before it. Two requests sent at the same
@@ -504,7 +362,7 @@ export function flightInTransitText(inTransit: readonly FlightStep[], m: Message
  * The components a painted movement leaves in the background: not an end of the movement or of
  * a hop still in transit, and with no recorded work, wait, or timeout at the cursor. The graph
  * draws them fainter, so the eye goes to the movement and to whoever is still busy. With no
- * movement painted, nothing is in the background. Presentation only: it reads the step and the
+ * milestone painted, or one recorded at no component, nothing is in the background. Presentation only: it reads the step and the
  * activity already read from records.
  */
 export function flightBackground(
@@ -514,7 +372,8 @@ export function flightBackground(
   inTransit: readonly Pick<FlightStep, "nodeIds">[] = [],
 ): ReadonlySet<string> {
   const background = new Set<string>();
-  if (step === undefined) return background;
+  // A milestone at no component, such as a check the simulation records, puts nothing in front, so nothing fades.
+  if (step === undefined || step.nodeIds.length === 0) return background;
   const travelling = new Set(inTransit.flatMap(item => item.nodeIds));
   for (const id of componentIds) {
     if (step.nodeIds.includes(id) || travelling.has(id)) continue;
@@ -523,36 +382,6 @@ export function flightBackground(
     background.add(id);
   }
   return background;
-}
-
-export type ReplayKeyAction = "previous" | "next" | "toggle";
-
-/** The keys the Replay toolbar answers to, as `KeyboardEvent.key` values. Key names are not translated. */
-export const REPLAY_KEYS = { previous: "ArrowLeft", next: "ArrowRight", toggle: " " } as const satisfies Record<ReplayKeyAction, string>;
-
-export interface ReplayKeyPress {
-  readonly key: string;
-  /** True when Alt, Control, Meta, or Shift is held: those chords belong to the browser. */
-  readonly modified: boolean;
-  /** True for an auto-repeated key. Holding Space must not flip play and pause over and over. */
-  readonly repeat: boolean;
-  /** True when focus is in a control that uses the arrow keys itself: a field, a select, a tab list, a dialog. */
-  readonly arrowsClaimed: boolean;
-  /** True when focus is on anything Space already activates: a button, a link, a component node. */
-  readonly spaceClaimed: boolean;
-}
-
-/**
- * The Replay action a key press asks for, or null when the key is not Replay's to take.
- * Left and Right step one recorded movement; Space plays or pauses. A key a focused control
- * already uses keeps its own meaning, so no existing gesture changes.
- */
-export function replayKeyAction(press: ReplayKeyPress): ReplayKeyAction | null {
-  if (press.modified) return null;
-  if (press.key === REPLAY_KEYS.previous) return press.arrowsClaimed ? null : "previous";
-  if (press.key === REPLAY_KEYS.next) return press.arrowsClaimed ? null : "next";
-  if (press.key === REPLAY_KEYS.toggle) return press.spaceClaimed || press.repeat ? null : "toggle";
-  return null;
 }
 
 export interface FlightLegendEntry {

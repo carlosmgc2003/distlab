@@ -11,7 +11,8 @@ import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-f
 import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
 import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
-import type { FlightPlayback } from "./flight-playback.ts";
+import type { Playhead } from "./flight-playback.ts";
+import { recordStepText, travelsLink } from "./playhead-steps.ts";
 import { TRANSIT_SAMPLE_GLYPH, flightBackground, flightDelayMs, flightInTransitText, flightLegend, flightTransitGroups } from "./flight.ts";
 import type { FlightTransitGroup } from "./flight.ts";
 import { ACTIVITY_SYMBOLS, activityDescription, activityLabel, activityOf } from "./activity.ts";
@@ -216,6 +217,7 @@ const ComponentNode = memo(function ComponentNode({ data }: NodeProps<Architectu
           : data.emptySlot ? <span className="empty-slot-badge">{m.designChoices.emptySlot.label}</span> : null}
         {data.problems?.length ? <ProblemBadge count={data.problems.length} /> : null}
         {data.roleLabel ? <span className={`role-badge role-${data.role ?? "sending"}`}>{data.roleLabel}</span> : null}
+        {data.milestone ? <span className="milestone-badge"><span aria-hidden="true">{data.milestone.glyph} </span>{data.milestone.label}</span> : null}
         {data.faults?.length ? <FaultBadge faults={data.faults} /> : null}
         {data.activity ? <span id={activityBadgeId(data.component.id)} className={`activity-badge activity-${data.activity.state}${data.activity.timedOut ? " has-timeout" : ""}`}>
           <span aria-hidden="true">{ACTIVITY_SYMBOLS[data.activity.state]} </span>{activityLabel(data.activity, m)}
@@ -674,8 +676,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   readonly inspectorFacts?: (componentId: string) => ReactNode;
   /** Changes when a scenario is loaded or reset; restores the fitted default view. */
   readonly sessionKey: string;
-  /** Replay state owned by the shell, so the cursor survives a tab switch. Reads projections only. */
-  readonly playback: FlightPlayback;
+  /** The playhead, owned by the shell so it survives a tab switch. Reads projections only. */
+  readonly playback: Playhead;
   /** Applied student faults, drawn as a broken-link mark or a node badge. Presentation only. */
   readonly faultMarks?: GraphFaultMarks;
   /** Set while the Break panel picks a target: a node or link choice is reported, nothing else changes. */
@@ -716,23 +718,29 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   // Sizes React Flow measured for this structure. A new structure starts unmeasured, so layout waits for fresh sizes.
   const [measuredSizes, setMeasuredSizes] = useState<{ readonly key: string; readonly sizes: ReadonlyMap<string, Size> }>({ key: layoutKey, sizes: new Map() });
   const sizes = measuredSizes.key === layoutKey ? measuredSizes.sizes : undefined;
-  const flight = playback.step;
+  // The milestone under the playhead: a movement travels its link; any other milestone is painted on its component.
+  const current = playback.step;
+  const flight = current !== undefined && travelsLink(current) ? current : undefined;
+  const record = current !== undefined && !travelsLink(current) ? current : undefined;
+  const recordText = useMemo(() => record ? recordStepText(record, m, graph.names) : undefined, [record, m, graph.names]);
   const movementNodes = useRef<readonly string[]>([]);
-  movementNodes.current = flight?.nodeIds ?? [];
+  movementNodes.current = current?.nodeIds ?? [];
   const painted: GraphEmphasis | undefined = flight
     ? { nodeIds: flight.nodeIds, ...(flight.edgeId !== undefined ? { edgeId: flight.edgeId } : {}), kind: flight.kind, text: flight.announcement, pulseId: flight.observationId }
+    : record && recordText ? { nodeIds: record.nodeIds, text: recordText.announcement, pulseId: record.observationId }
     : emphasis;
-  // Replay draws the components its movement leaves idle fainter, so the eye goes to the movement.
+  // The playhead draws the components its milestone leaves idle fainter, so the eye goes to the milestone.
   // A component with a hop still travelling to or from it is part of the moment, so it stays in front.
-  const background = useMemo(() => flightBackground(graph.nodes.map(node => node.id), flight, playback.activity, playback.inTransit),
-    [graph.nodes, flight, playback.activity, playback.inTransit]);
+  const background = useMemo(() => flightBackground(graph.nodes.map(node => node.id), current, playback.activity, playback.inTransit),
+    [graph.nodes, current, playback.activity, playback.inTransit]);
   const transit = useMemo(() => flightTransitGroups(playback.inTransit), [playback.inTransit]);
   const componentNodes = useMemo(() => graph.nodes.map(node => {
     const involved = painted?.nodeIds.includes(node.id) === true;
     const pulse = involved && painted?.pulseId ? ` ${movementPulseClass(painted.pulseId)}` : "";
     const role: "sending" | "receiving" | undefined = flight?.from === node.id ? "sending" : flight?.to === node.id ? "receiving" : undefined;
-    // Activity is shown only while the cursor stands on a record, and only from records at or before it.
-    const activity = flight ? activityOf(playback.activity, node.id) : undefined;
+    // Activity is shown only while the playhead stands on a record, and only from records at or before it.
+    const activity = current ? activityOf(playback.activity, node.id) : undefined;
+    const milestone = record?.component === node.id && recordText ? { glyph: recordText.glyph, label: record.headline } : undefined;
     const classes = [node.className ?? "", involved ? `is-involved${pulse}` : "", activity ? `activity-${activity.state}` : "", background.has(node.id) ? "is-background" : ""].filter(Boolean).join(" ");
     const size = sizes?.get(node.id);
     return {
@@ -743,6 +751,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
       data: {
         ...node.data,
         ...(role !== undefined && flight !== undefined ? { role, roleLabel: role === "sending" ? m.architecture.view.role.sending(flight.glyph) : m.architecture.view.role.receiving(flight.glyph) } : {}),
+        ...(milestone ? { milestone } : {}),
         ...(activity ? { activity, activityText: activityDescription(activity, m, graph.names) } : {}),
         ...(faultMarks?.nodes.get(node.id)?.length ? { faults: faultMarks.nodes.get(node.id)! } : {}),
       },
@@ -753,7 +762,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
         ...(activity || problemIds.has(node.id) ? { "aria-describedby": [activity ? activityBadgeId(node.id) : "", problemIds.get(node.id) ?? ""].filter(Boolean).join(" ") } : {}),
       },
     };
-  }), [graph.nodes, graph.names, selectedId, painted, flight, playback.activity, background, faultMarks, laidOut, sizes, problemIds, m]);
+  }), [graph.nodes, graph.names, selectedId, painted, current, flight, record, recordText, playback.activity, background, faultMarks, laidOut, sizes, problemIds, m]);
   const resourceNodes = useMemo(() => graph.resourceNodes.map(node => ({
     ...node,
     position: laidOut?.positions.get(node.id) ?? node.position,
@@ -784,8 +793,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     const waiting = transit.get(described.id);
     const carrying: ArchitectureEdge = waiting && described.data ? { ...described, data: { ...described.data, transit: waiting } } : described;
     if (!flight || flight.edgeId === undefined || carrying.id !== flight.edgeId) return carrying;
-    return { ...carrying, data: { ...carrying.data!, flight, pace: playback.pace, paint: playback.paint } };
-  }), [graph.edges, painted, flight, playback.pace, playback.paint, background, transit, faultMarks, laidOut, problemIds, m]);
+    return { ...carrying, data: { ...carrying.data!, flight, pace: playback.settings.pace, paint: playback.paint } };
+  }), [graph.edges, painted, flight, playback.settings.pace, playback.paint, background, transit, faultMarks, laidOut, problemIds, m]);
   const ownershipEdges = useMemo<OwnershipEdge[]>(() => graph.resourceEdges.map(edge => {
     const route = laidOut?.routes.get(edge.id);
     const routed: OwnershipEdge = route && edge.data ? { ...edge, data: { ...edge.data, route } } : edge;
@@ -822,7 +831,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
   // The legend starts collapsed (#166): open, it took a third of the canvas width at 1366×768 and
   // shrank every graph with it. One click opens it, and the reader's choice then holds.
   const [legendOpen, setLegendOpen] = useState(false);
-  // Recorded details stays as the reader left it from movement to movement, and when Replay starts again.
+  // Recorded details stays as the reader left it from milestone to milestone, and when play starts again.
   const [detailsOpen, setDetailsOpen] = useState(false);
   const inTransitText = useMemo(() => flightInTransitText(playback.inTransit, m, graph.names), [playback.inTransit, m, graph.names]);
   const toggleLegend = useCallback(() => setLegendOpen(open => !open), []);
@@ -851,10 +860,10 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
     </div>
     <FlightReadout position={playback.position} />
     {/* While a movement is painted, the narration carries this region's sentence, so it is stated once. */}
-    {flight ? null
+    {current ? null
       : <p id="movement-cue" className="movement-cue" role="status" aria-label={m.architecture.view.movementRegion}>{movementText ?? m.architecture.view.noMovement}</p>}
     {selectedId ? <a className="inspector-link" href="#component-inspector">{m.architecture.view.skipToInspector}</a> : null}
-    <div className={`architecture-layout${selectedId || flight ? " has-selection" : ""}${onPick ? " is-picking" : ""}`}>
+    <div className={`architecture-layout${selectedId || current ? " has-selection" : ""}${onPick ? " is-picking" : ""}`}>
       <div className={`graph-canvas${ready ? "" : " is-laying-out"}`} ref={canvas} aria-busy={ready ? undefined : true} aria-label={m.architecture.view.graph} aria-describedby="movement-cue" onKeyDownCapture={event => {
         if (!(event.target instanceof Element) || !event.target.closest(".react-flow__node")) return;
         if (event.key === " " || event.key === "Enter") event.preventDefault();
@@ -874,7 +883,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
           <ElkLayoutRunner layoutKey={layoutKey} nodes={nodes} edges={edges} container={canvas} onLayout={setLayout} />
           <FitToCanvas container={canvas} sessionKey={sessionKey} layoutKey={laidOut ? layoutKey : "pending"} legendOpen={legendOpen}
             onFitted={setFittedKey} movementNodes={movementNodes} />
-          <RevealMovement container={canvas} movement={ready ? flight?.observationId : undefined} nodeIds={flight?.nodeIds ?? []} />
+          <RevealMovement container={canvas} movement={ready ? current?.observationId : undefined} nodeIds={current?.nodeIds ?? []} />
           <Background gap={24} color="var(--graph-grid)" />
           <Controls showInteractive={false} showFitView={false}>
             <LegendAwareFit container={canvas} />
@@ -883,8 +892,8 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
           <ArchitectureLegend open={legendOpen} onToggle={toggleLegend} />
         </ReactFlow>
       </div>
-      {selectedId || flight ? <div className="architecture-side">
-        {flight ? <FlightNarration step={flight} activity={playback.activity} changes={playback.activityChanges}
+      {selectedId || current ? <div className="architecture-side">
+        {current ? <FlightNarration step={current} activity={playback.activity} changes={playback.activityChanges}
           detailsOpen={detailsOpen} onDetailsToggle={setDetailsOpen} {...(inTransitText !== undefined ? { inTransit: inTransitText } : {})}
           {...(graph.names ? { names: graph.names } : {})} /> : null}
         {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>

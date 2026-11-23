@@ -148,7 +148,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await page.goto("/");
   const button = (name: string) => page.getByRole("button", { name, exact: true });
   const status = page.getByRole("status", { name: "Simulation status" });
-  for (const name of ["Run", "Pause", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
+  for (const name of ["Run", "Back", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
   await expect(lessonTrigger(page)).toBeEnabled();
   await expect(page.locator("#timeline-rows")).toHaveCount(0);
 
@@ -173,7 +173,7 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(button("Run")).toBeEnabled();
   await expect(button("Step")).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
-  await expect(button("Pause")).toBeDisabled();
+  await expect(button("Back")).toBeDisabled();
 
   await emit("READY", history, "projection.updated", false);
   // Engine bookkeeping is recorded but is not a teaching milestone, so the Story says so.
@@ -191,20 +191,22 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await emit("RUNNING", history, "projection.updated", false);
   await expect(status).toHaveText("RUNNING");
   await expect(lessonTrigger(page)).toBeDisabled();
-  await expect(button("Pause")).toBeEnabled();
-  for (const name of ["Run", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
+  // A run in progress takes no control: the browser never pauses it (RFC 0002 P1).
+  await expect(button("Pause")).toHaveCount(0);
+  for (const name of ["Run", "Back", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
 
   await emit("PAUSED", history, "projection.updated", false);
   await expect(status).toHaveText("PAUSED");
   await expect(button("Run")).toBeEnabled();
   await expect(button("Step")).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
-  await expect(button("Pause")).toBeDisabled();
+  await expect(button("Back")).toBeDisabled();
 
   await emit("COMPLETED", history, "projection.updated", false);
   await expect(status).toHaveText("COMPLETED");
   await expect(button("Reset")).toBeEnabled();
-  for (const name of ["Run", "Pause", "Step"]) await expect(button(name)).toBeDisabled();
+  // None of these records is a milestone, so the playhead is at the end at once.
+  for (const name of ["Run", "Back", "Step"]) await expect(button(name)).toBeDisabled();
   await expect(page.locator(".run-summary")).toContainText("COMPLETED");
   await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toHaveCount(0);
 
@@ -224,11 +226,12 @@ test("timeline and simulation controls follow the lifecycle without extra worker
   await expect(page.locator("#timeline-rows")).toHaveCount(0);
   await expect(lessonTrigger(page)).toBeEnabled();
   await expect(button("Reset")).toBeEnabled();
-  for (const name of ["Run", "Pause", "Step"]) await expect(button(name)).toBeDisabled();
+  for (const name of ["Run", "Back", "Step"]) await expect(button(name)).toBeDisabled();
   await expect(page.getByRole("region", { name: "Architecture", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Distributed state", exact: true })).toHaveCount(0);
   await expect(page.getByRole("form", { name: "Timeline filters", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Timeline playback", exact: true })).toHaveCount(0);
   await expect(page.getByRole("status", { name: "Terminal history" })).toContainText("incomplete");
-  expect(await page.evaluate(() => window.navigationFixture.commands.map(command => command.type))).toEqual(["load", "step"]);
+  // From PAUSED the session has not executed, so Step asks the worker to execute the run.
+  expect(await page.evaluate(() => window.navigationFixture.commands.map(command => command.type))).toEqual(["load", "run"]);
 });

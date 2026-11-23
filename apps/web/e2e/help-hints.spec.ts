@@ -156,7 +156,7 @@ test("a pinned explanation closes on Escape or an outside click and fits 200% zo
 const moved: readonly { readonly sentence: string; readonly bodyId: string; readonly lesson: "saga-uncompensated" | "response-lost" }[] = [
   { lesson: "saga-uncompensated", bodyId: "investigate-help", sentence: "Properties the system must keep whatever its design. VIOLATED is what this run did to the business." },
   { lesson: "saga-uncompensated", bodyId: "investigate-help", sentence: "Scenario expectations confirm that the run told this lesson's story. They say nothing about whether the system is safe." },
-  { lesson: "saga-uncompensated", bodyId: "service-state-help", sentence: "These are recorded facts, not predictions. Step to inspect intermediate states; Reset replays the same inputs." },
+  { lesson: "saga-uncompensated", bodyId: "service-state-help", sentence: "These are recorded facts, not predictions. Reset replays the same inputs." },
   { lesson: "saga-uncompensated", bodyId: "experiment-help", sentence: "Business invariants report what your choices achieve. The setup checks still describe the packaged lesson, so one can read \"not reproduced\" under your choices. That shows how your change altered the story, not a simulator error." },
   { lesson: "saga-uncompensated", bodyId: "experiment-help", sentence: "Only the faults this lesson allows are listed." },
   { lesson: "saga-uncompensated", bodyId: "experiment-help", sentence: "A fault applies when you apply the draft, never during a run." },

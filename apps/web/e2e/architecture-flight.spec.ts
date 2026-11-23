@@ -8,6 +8,7 @@ import type { WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { graphLaidOut, lessonChooser, lessonTrigger, loadLesson } from "./support/lesson.ts";
 import { MIN_NAME_PX, expectLegibleView, graphView } from "./support/graph.ts";
 import { viewButton } from "./support/history.ts";
+import { control, playheadPosition } from "./support/playhead.ts";
 
 declare global {
   interface Window {
@@ -45,15 +46,20 @@ async function loadScenario(page: Page, scenario: "normal" | "response-lost" = "
   await graphLaidOut(page);
 }
 
+/** Loads a checkout lesson and presses Step once: the run executes, and the playhead stands on the first milestone. */
 async function runCheckout(page: Page, scenario: "normal" | "response-lost" = "response-lost") {
   await loadScenario(page, scenario);
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await control(page, "Step").click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  await expect(position(page)).toHaveText(/^Milestone 1 of /);
 }
 
-const transport = (page: Page) => page.getByRole("group", { name: "Replay recorded movements" });
 const narration = (page: Page) => page.locator(".flight-narration");
-const position = (page: Page) => page.getByRole("status", { name: "Architecture playback position" });
+const position = (page: Page) => playheadPosition(page);
+/** The milestone number under the playhead, or 0 before the first record. */
+const milestone = async (page: Page) => Number((await position(page).innerText()).match(/^Milestone (\d+) of/)?.[1] ?? 0);
+const unavailable = (page: Page, name: string) => expect(control(page, name)).toHaveAttribute("aria-disabled", "true");
+const available = (page: Page, name: string) => expect(control(page, name)).toHaveAttribute("aria-disabled", "false");
 
 /** The narration heading, with the glyph and the stored label on one line. */
 async function narrationTitle(page: Page): Promise<string> {
@@ -61,17 +67,29 @@ async function narrationTitle(page: Page): Promise<string> {
   return (await narration(page).locator("h4").innerText()).replace(/\s+/g, " ").trim();
 }
 
-/** Steps the replay cursor to the first movement with this stored headline. */
+/** Steps the playhead to the next movement with this stored headline, stepping over every other milestone. */
 async function stepTo(page: Page, headline: string) {
-  const next = page.getByRole("button", { name: "Next movement" });
+  const next = control(page, "Step");
   const wanted = `${glyphFor(headline)} ${headline}`;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     if (await narrationTitle(page) === wanted) return;
-    if (await next.isDisabled()) break;
+    if (await next.getAttribute("aria-disabled") === "true" && await narration(page).count() > 0) break;
+    const before = await milestone(page);
     await next.click();
-    await page.waitForTimeout(60);
+    await expect.poll(() => milestone(page)).not.toBe(before);
   }
   expect(await narrationTitle(page)).toBe(wanted);
+}
+
+/** Steps the playhead until the movement under it has this route line. */
+async function stepToRoute(page: Page, route: string) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (await page.locator("[data-flight-token]").count() > 0 && await narration(page).locator(".flight-route").innerText() === route) return;
+    const before = await milestone(page);
+    await control(page, "Step").click();
+    await expect.poll(() => milestone(page)).not.toBe(before);
+  }
+  await expect(narration(page).locator(".flight-route")).toHaveText(route);
 }
 
 function glyphFor(headline: string): string {
@@ -149,7 +167,7 @@ async function headingAgreesWith(page: Page, motion: { x: number; y: number }) {
   expect(cosine(local, motion), "the token travels toward its destination").toBeGreaterThan(-0.1);
 }
 
-test("the replay cursor walks recorded movements and paints a token on the graph", async ({ page }) => {
+test("OT-PLAY-AC-5: one control group in the top bar, settings above the graph, and the playhead paints each movement", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
   // A supported desktop baseline.
@@ -157,35 +175,35 @@ test("the replay cursor walks recorded movements and paints a token on the graph
   await observeWorker(page);
   await loadScenario(page);
 
-  // Replay is not a simulation command (#144): it lives in the Architecture tab, above the graph it
-  // drives, while Simulation execution stays in the one-row top bar.
-  await expect(transport(page)).toBeVisible();
+  // One control group (RFC 0002 P2) in the one-row top bar; the Replay toolbar is gone, and the
+  // playback settings sit in one slim row above the graph they apply to.
   const topBar = page.locator("header.top-bar");
   await expect(topBar.getByRole("group", { name: "Simulation execution" })).toBeVisible();
-  await expect(topBar.getByRole("group", { name: "Replay recorded movements" })).toHaveCount(0);
-  await expect(page.locator("#architecture-panel").getByRole("group", { name: "Replay recorded movements" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Replay recorded movements" })).toHaveCount(0);
+  const settings = page.locator("#architecture-panel").getByRole("group", { name: "Playback settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("switch", { name: "Animation" })).toBeChecked();
   const barBox = (await topBar.boundingBox())!;
-  const transportBox = (await transport(page).boundingBox())!;
+  const settingsBox = (await settings.boundingBox())!;
   const canvasBox = (await page.locator(".graph-canvas").boundingBox())!;
   expect(barBox.height, "the top bar is one row").toBeLessThanOrEqual(64);
-  expect(transportBox.y, "Replay sits below the top bar").toBeGreaterThan(barBox.y + barBox.height);
-  expect(transportBox.y + transportBox.height, "Replay sits above the graph").toBeLessThanOrEqual(canvasBox.y);
-  await expect(page.locator(".replay-toolbar .control-group-label")).toHaveText("Replay");
-  // Only the simulation group's first command is painted as the primary action.
-  await expect(page.getByRole("button", { name: "Run", exact: true })).toHaveCSS("background-color", "rgb(29, 78, 216)");
-  await expect(page.getByRole("button", { name: "Play replay" })).not.toHaveCSS("background-color", "rgb(29, 78, 216)");
-  // Before the run there is nothing recorded to replay, and the transport says so.
-  await expect(page.getByRole("button", { name: "Play replay" })).toBeDisabled();
-  await expect(position(page)).toHaveText("No recorded movements to replay.");
+  expect(settingsBox.y, "the settings sit below the top bar").toBeGreaterThan(barBox.y + barBox.height);
+  expect(settingsBox.y + settingsBox.height, "the settings sit above the graph").toBeLessThanOrEqual(canvasBox.y);
+  // Only Run is painted as the primary action.
+  await expect(control(page, "Run")).toHaveCSS("background-color", "rgb(29, 78, 216)");
+  await expect(control(page, "Step")).not.toHaveCSS("background-color", "rgb(29, 78, 216)");
+  // Before the run nothing is recorded, and the playhead says so.
+  await unavailable(page, "Back");
+  await expect(position(page)).toHaveText("The run has not executed yet. Run or Step executes it.");
   await expect(narration(page)).toHaveCount(0);
   await expect(page.locator("[data-flight-token]")).toHaveCount(0);
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await control(page, "Step").click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
-  await expect(page.getByRole("button", { name: "Play replay" })).toBeEnabled();
+  await expect(position(page)).toHaveText(/^Milestone 1 of 32 · virtual time 0 · observation #\d+\.$/);
 
   await stepTo(page, "Request sent");
   const first = await position(page).innerText();
-  expect(first).toMatch(/^Movement 1 of 13 · virtual time 0 · observation #\d+\.$/);
+  expect(first).toMatch(/^Milestone \d+ of 32 · virtual time 0 · observation #\d+\.$/);
   // The token is painted on the link the record says the movement used.
   await expect(page.locator("[data-flight-token]")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(1);
@@ -241,44 +259,67 @@ test("a dropped response and a timeout stop on the link and state only what is r
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-request-timed-out.png") });
 });
 
-test("playback advances the cursor at the chosen pace and sends no worker command", async ({ page }) => {
+test("Run plays the playhead at the chosen pace, Pause stops it, and nothing reaches the worker", async ({ page }) => {
   test.setTimeout(180_000);
   await observeWorker(page);
   await runCheckout(page);
 
   await stepTo(page, "Request sent");
-  // The narration names the chosen pace, and the help explains that pace is presentation only.
+  // The help explains that pace is presentation only.
   await expect(page.getByLabel("Speed", { exact: true })).toHaveValue("slow");
   await expect(page.getByRole("button", { name: "Playback speed" })).toBeVisible();
   await expect(page.locator("#flight-pace-help")).toContainText("does not change virtual time");
 
   const before = await page.evaluate(() => window.workerEvidence.commands.map(command => command.type));
-  await page.getByRole("button", { name: "Play replay" }).click();
-  await expect(page.getByRole("button", { name: "Pause replay" })).toBeVisible();
-  // Slow pace: the first advance takes longer than the token animation it paints.
-  await expect.poll(async () => (await position(page).innerText()).includes("Movement 1 of"), { timeout: 4_000 }).toBe(true);
-  await expect.poll(async () => (await position(page).innerText()).includes("Movement 2 of"), { timeout: 8_000 }).toBe(true);
+  const start = await milestone(page);
+  // Paused, Run reads Continue and plays on from the playhead.
+  await control(page, "Continue").click();
+  await expect(control(page, "Pause")).toBeVisible();
+  // Slow pace: the playhead stays on a milestone long enough to read it, then moves one.
+  expect(await milestone(page)).toBe(start);
+  await expect.poll(() => milestone(page), { timeout: 8_000 }).toBe(start + 1);
   const after = await page.evaluate(() => window.workerEvidence.commands.map(command => command.type));
-  expect(after, "playback is a browser cursor, not a simulation command").toEqual(before);
+  expect(after, "playing moves the playhead, it sends no simulation command").toEqual(before);
 
-  await page.getByRole("button", { name: "Pause replay" }).click();
+  await control(page, "Pause").click();
   const paused = await position(page).innerText();
   await page.waitForTimeout(2_000);
-  expect(await position(page).innerText(), "Pause stops the cursor").toBe(paused);
+  expect(await position(page).innerText(), "Pause stops the playhead").toBe(paused);
   expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(before);
 
-  // A faster pace reaches the end of the recorded movements; the last one stays painted.
+  // A faster pace reaches the end of the run; the last milestone stays painted.
   await page.getByLabel("Speed", { exact: true }).selectOption("fast");
-  await page.getByRole("button", { name: "Play replay" }).click();
-  await expect.poll(async () => (await position(page).innerText()).includes("Movement 13 of"), { timeout: 30_000 }).toBe(true);
-  // At the recorded end the primary control becomes Restart replay, as the transport states.
-  await expect(page.getByRole("button", { name: "Restart replay" })).toBeVisible();
-  await expect(page.locator(".flight-boundaries")).toContainText("waits for the run to record more");
-  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
-  // At the recorded end the transport offers Restart, which plays from the first movement.
-  await page.getByRole("button", { name: "Restart replay" }).click();
-  await expect.poll(async () => (await position(page).innerText()).includes("Movement 1 of"), { timeout: 5_000 }).toBe(true);
+  await control(page, "Continue").click();
+  await expect.poll(async () => (await position(page).innerText()).startsWith("Milestone 32 of 32 "), { timeout: 30_000 }).toBe(true);
+  // At the end, Run and Step are unavailable and Back still moves back (RFC 0002 P2).
+  await expect(control(page, "Run")).toBeVisible();
+  await unavailable(page, "Run");
+  await unavailable(page, "Step");
+  await available(page, "Back");
+  await expect(narration(page)).toBeVisible();
+  await control(page, "Back").click();
+  await expect(position(page)).toHaveText(/^Milestone 31 of 32 /);
   expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(before);
+});
+
+test("OT-PLAY-AC-4: with Animation off, Run leaves the playhead on the last milestone and Speed is unavailable", async ({ page }) => {
+  await observeWorker(page);
+  await loadScenario(page);
+  const animation = page.getByRole("switch", { name: "Animation" });
+  await animation.uncheck();
+  await expect(page.getByLabel("Speed", { exact: true })).toBeDisabled();
+  await control(page, "Run").click();
+  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  await expect(position(page)).toHaveText(/^Milestone 32 of 32 /);
+  await expect(narration(page)).toBeVisible();
+  await unavailable(page, "Run");
+  await available(page, "Back");
+  // The setting is UI state: it survives loading a lesson again.
+  await loadLesson(page, "normal");
+  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+  await expect(animation).not.toBeChecked();
+  await expect(page.getByLabel("Speed", { exact: true })).toBeDisabled();
+  expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load", "run", "load"]);
 });
 
 test("speed changes the painted interval, not the recorded run", async ({ page }) => {
@@ -294,8 +335,9 @@ test("speed changes the painted interval, not the recorded run", async ({ page }
   await page.getByLabel("Speed", { exact: true }).selectOption("fast");
   await expect.poll(async () => page.locator("[data-flight-token]").evaluate(token => getComputedStyle(token).getPropertyValue("--flight-duration").trim()))
     .toBe("217ms");
-  await page.getByRole("button", { name: "Play replay" }).click();
-  await expect.poll(async () => (await position(page).innerText()).includes("Movement 2 of"), { timeout: 8_000 }).toBe(true);
+  const at = await milestone(page);
+  await control(page, "Continue").click();
+  await expect.poll(() => milestone(page), { timeout: 8_000 }).toBeGreaterThan(at);
   // Neither the pace nor playback touches the recorded projection the worker published.
   const stateAfter = await page.evaluate(() => window.workerEvidence.events.filter(event => event.type === "projection.updated").length);
   expect(stateAfter).toBe(stateBefore);
@@ -330,17 +372,17 @@ test("selecting a record in Recorded history takes the graph highlight back", as
   await expect(narration(page)).toBeVisible();
 
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // Selecting a movement milestone in the Story table is a reader choice, not a live cue.
+  // Selecting a movement milestone in the Story table is a reader choice.
   await viewButton(page, "Story table").click();
   await page.locator(".story-table button").filter({ hasText: "Request sent" }).first().click();
   await expect(page.locator(".story-table button[aria-pressed='true']")).toHaveCount(1);
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  // The reader's choice wins: the replay cursor stands down and the graph shows the selection.
+  // The reader's choice wins: the playhead returns to the start and the graph shows the selection.
   await expect(narration(page)).toHaveCount(0);
   await expect(page.locator("[data-flight-token]")).toHaveCount(0);
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(1);
   await expect(page.locator("#movement-cue")).toContainText("from Customer App to Orders");
-  await expect(position(page)).toHaveText("0 of 13 recorded movements. Nothing selected.");
+  await expect(position(page)).toHaveText("Before the first record. The run recorded 32 milestones.");
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-history-selection-wins.png") });
 });
 
@@ -349,7 +391,7 @@ test("the graph keeps a legible view while the narration column opens and closes
   mkdirSync(evidenceDir, { recursive: true });
   await page.setViewportSize({ width: 1534, height: 897 });
   await observeWorker(page);
-  await runCheckout(page);
+  await loadScenario(page);
   const canvas = () => page.locator(".graph-canvas");
   // The top bar is one row at the supported baselines, so the graph area keeps its height.
   expect((await page.locator("header.top-bar").boundingBox())!.height).toBeLessThanOrEqual(64);
@@ -423,16 +465,18 @@ test("components show idle, processing, or waiting from the records at the curso
   mkdirSync(activityEvidenceDir, { recursive: true });
   await page.setViewportSize({ width: 1600, height: 1000 });
   await observeWorker(page);
-  await runCheckout(page);
+  await loadScenario(page);
   const status = async () => page.getByRole("status", { name: "Simulation status" }).innerText();
   // Virtual time, processed events, and pending events, as the status line states them.
   const counters = async () => page.locator(".run-summary").innerText();
-  const recorded = { status: await status(), counters: await counters() };
   const node = (name: string) => page.getByRole("button", { name, exact: true });
   const badge = (id: string) => page.locator(`${nodeSelector(id)} .activity-badge`);
 
-  // No cursor, no activity claim.
+  // No playhead, no activity claim.
   await expect(page.locator(".activity-badge")).toHaveCount(0);
+  await control(page, "Step").click();
+  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  const recorded = { status: await status(), counters: await counters() };
 
   await stepTo(page, "Request sent");
   await expect(badge("customer-app")).toContainText("Waiting · deadline t=1000");
@@ -464,7 +508,7 @@ test("components show idle, processing, or waiting from the records at the curso
   await expect(page.locator("#movement-cue")).toContainText("Its request to Payment Processor timed out at virtual time 1025.");
   await page.screenshot({ path: path.join(activityEvidenceDir, "1600x1000-payments-timed-out.png") });
 
-  // Playback changed nothing in the run.
+  // Moving the playhead changed nothing in the run.
   expect({ status: await status(), counters: await counters() }).toEqual(recorded);
 });
 
@@ -496,38 +540,31 @@ async function expectNoHighlight(page: Page, label: string) {
   await expect(page.locator("#movement-cue"), `${label}: the movement region is at its default`).toHaveText("No request or message movement is highlighted.");
 }
 
-/** A live cue is on the graph: at least one involved component and a movement region that names it. */
+/** A movement is on the graph: at least one involved component and a movement region that names it. */
 async function expectHighlight(page: Page, label: string) {
   await expect(page.locator(".react-flow__node.is-involved").first(), `${label}: a component is involved`).toBeVisible();
   await expect(page.locator("#movement-cue"), `${label}: the movement region names the movement`).not.toHaveText("No request or message movement is highlighted.");
 }
 
-test("Reset leaves no movement highlighted after a completed run or a Step (#189)", async ({ page }) => {
+test("OT-PLAY-AC-7: Reset leaves no movement highlighted and returns the playhead to the start (#189)", async ({ page }) => {
   test.setTimeout(180_000);
   const status = page.getByRole("status", { name: "Simulation status" });
   await runCheckout(page);
-  await expectHighlight(page, "completed run");
+  await stepTo(page, "Request sent");
+  await expectHighlight(page, "a movement under the playhead");
 
-  // Given a completed run whose last movement is highlighted, Reset clears it.
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  // Given a movement under the playhead, Reset clears it and the playhead returns to the start.
+  await control(page, "Reset").click();
   await expect(status).toHaveText("READY");
-  await expectNoHighlight(page, "after Reset from COMPLETED");
-
-  // Given a run paused after Step recorded a movement, Reset clears it.
-  const step = page.getByRole("button", { name: "Step", exact: true });
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (await page.locator(".react-flow__node.is-involved").count() > 0) break;
-    await step.click();
-    await expect(status).toHaveText(/^(READY|PAUSED)$/);
-  }
-  await expectHighlight(page, "after Step");
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(status).toHaveText("READY");
-  await expectNoHighlight(page, "after Reset from a Step");
+  await expectNoHighlight(page, "after Reset");
+  await expect(position(page)).toHaveText("The run has not executed yet. Run or Step executes it.");
+  await unavailable(page, "Back");
 
   // A reset session highlights movements again, as on a first run.
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await page.getByLabel("Speed", { exact: true }).selectOption("fast");
+  await control(page, "Run").click();
   await expect(status).toHaveText("COMPLETED");
+  await expect.poll(() => page.locator(".react-flow__node.is-involved").count(), { timeout: 15_000 }).toBeGreaterThan(0);
   await expectHighlight(page, "run after Reset");
 });
 
@@ -564,13 +601,17 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768
     await observeWorker(page);
     await runCheckout(page);
     const before = await page.evaluate(() => ({ commands: window.workerEvidence.commands.length, events: window.workerEvidence.events.length }));
-    const next = page.getByRole("button", { name: "Next movement" });
+    const next = control(page, "Step");
     let kept = 0;
-    for (let movement = 1; movement <= 13; movement += 1) {
+    let movement = 0;
+    for (let at = 2; at <= 32; at += 1) {
       const transform = await settledTransform(page);
       const inside = await nodesInside(page);
       await next.click();
-      await expect(position(page)).toContainText(`Movement ${movement} of 13 `);
+      await expect(position(page)).toContainText(`Milestone ${at} of 32 `);
+      // A milestone that travels no link is painted on its component; this test follows the movements.
+      if (await page.locator("[data-flight-token]").count() === 0) continue;
+      movement += 1;
       const after = await settledTransform(page);
       const ids = await involvedIds(page);
       expect(ids.length, `movement ${movement} paints its components`).toBeGreaterThan(0);
@@ -584,6 +625,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768
         kept += 1;
       }
     }
+    expect(movement, "every movement of the run was painted").toBe(13);
     expect(kept, "some movements stay within the current view").toBeGreaterThan(0);
     // The viewport is presentation: no command was sent and the worker published nothing new.
     expect(await page.evaluate(() => ({ commands: window.workerEvidence.commands.length, events: window.workerEvidence.events.length }))).toEqual(before);
@@ -591,58 +633,60 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768
   });
 }
 
-test("Replay starts at the start: Previous movement is unavailable until a movement is selected (#191)", async ({ page }) => {
+test("OT-PLAY-AC-2: the first Step stands on the first milestone, where Back is unavailable (#191)", async ({ page }) => {
   test.setTimeout(180_000);
   await observeWorker(page);
   await runCheckout(page);
-  const previous = page.getByRole("button", { name: "Previous movement" });
-  const next = page.getByRole("button", { name: "Next movement" });
-  await expect(position(page)).toHaveText("0 of 13 recorded movements. Nothing selected.");
-  await expect(previous).toBeDisabled();
-  await expect(next).toBeEnabled();
-  // Next selects the first movement, where Previous is still unavailable.
-  await next.click();
-  await expect(position(page)).toContainText("Movement 1 of 13 ");
-  await expect(previous).toBeDisabled();
-  await next.click();
-  await expect(position(page)).toContainText("Movement 2 of 13 ");
-  await expect(previous).toBeEnabled();
-  await previous.click();
-  await expect(position(page)).toContainText("Movement 1 of 13 ");
-  await expect(page.getByRole("button", { name: "Play replay" })).toBeEnabled();
+  await unavailable(page, "Back");
+  await available(page, "Step");
+  await expect(control(page, "Continue")).toBeVisible();
+  await control(page, "Step").click();
+  await expect(position(page)).toContainText("Milestone 2 of 32 ");
+  await available(page, "Back");
+  await control(page, "Back").click();
+  await expect(position(page)).toContainText("Milestone 1 of 32 ");
+  await unavailable(page, "Back");
+  // While playing, Step and Back stop the playhead, then move one milestone.
+  await control(page, "Continue").click();
+  await expect(control(page, "Pause")).toBeVisible();
+  await control(page, "Step").click();
+  await expect(control(page, "Continue")).toBeVisible();
+  const stopped = await milestone(page);
+  expect(stopped).toBeGreaterThanOrEqual(2);
+  await control(page, "Continue").click();
+  await expect(control(page, "Pause")).toBeVisible();
+  const playing = await milestone(page);
+  await control(page, "Back").click();
+  await expect(control(page, "Continue")).toBeVisible();
+  expect(await milestone(page)).toBeLessThanOrEqual(playing);
   expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load", "run"]);
 });
 
-test("one recorded movement can be played and restarted (#192)", async ({ page }) => {
-  test.setTimeout(180_000);
+test("OT-PLAY-AC-3: in retry-unsafe Step reaches 19 milestones, and each commit of Payments is a badge on Payments with its narration", async ({ page }) => {
+  test.setTimeout(120_000);
   await observeWorker(page);
-  await loadScenario(page);
-  const status = page.getByRole("status", { name: "Simulation status" });
-  const step = page.getByRole("button", { name: "Step", exact: true });
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if ((await position(page).innerText()).startsWith("0 of 1 recorded movement.")) break;
-    await step.click();
-    await expect(status).toHaveText(/^(READY|PAUSED)$/);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await page.goto("/");
+  await loadLesson(page, "retry-unsafe");
+  await graphLaidOut(page);
+  const payments = page.locator(nodeSelector("payments"));
+  let commits = 0;
+  for (let at = 1; at <= 19; at += 1) {
+    await control(page, "Step").click();
+    await expect(position(page)).toHaveText(new RegExp(`^Milestone ${at} of 19 `));
+    if (!(await narrationTitle(page)).endsWith("Database transaction committed")) continue;
+    commits += 1;
+    await expect(payments.locator(".milestone-badge")).toContainText("✓ Database transaction committed");
+    await expect(page.locator(".milestone-badge")).toHaveCount(1);
+    await expect(page.locator("[data-flight-token]")).toHaveCount(0);
+    await expect(narration(page).locator(".flight-route")).toHaveText("At Payments");
+    await expect(narration(page).locator(".flight-pattern")).toContainText("Was the same change committed earlier in this run?");
+    await expect(page.locator("#movement-cue")).toContainText("Database transaction committed at Payments");
+    await expect(payments).toHaveClass(/is-involved/);
   }
-  await expect(position(page)).toHaveText("0 of 1 recorded movement. Nothing selected.");
-  const play = page.getByRole("button", { name: "Play replay" });
-  await expect(play).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Previous movement" })).toBeDisabled();
-  await play.click();
-  // The movement is painted with its narration, and playback ends there: the run is not recording.
-  await expect(position(page)).toContainText("Movement 1 of 1 ");
-  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
-  await expect(narration(page)).toBeVisible();
-  const restart = page.getByRole("button", { name: "Restart replay" });
-  await expect(restart).toBeEnabled();
-  // Restart paints the same movement again: its token is a new one.
-  await page.locator("[data-flight-token]").evaluate(token => token.setAttribute("data-e2e-old", "true"));
-  await restart.click();
-  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
-  await expect(page.locator("[data-flight-token][data-e2e-old]")).toHaveCount(0);
-  await expect(position(page)).toContainText("Movement 1 of 1 ");
-  await expect(page.getByRole("button", { name: "Restart replay" })).toBeEnabled();
-  expect(new Set(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type)))).toEqual(new Set(["load", "step"]));
+  expect(commits, "both commits of Payments are steps").toBe(2);
+  await unavailable(page, "Step");
+  expect(await page.evaluate(() => window.workerEvidence.commands.map(command => command.type))).toEqual(["load", "run"]);
 });
 
 test("a movement reads in two short lines, and the rest of the record waits under Recorded details", async ({ page }) => {
@@ -665,8 +709,7 @@ test("a movement reads in two short lines, and the rest of the record waits unde
   await expect(details.locator(".flight-transit")).toContainText("Departure: the token leaves Customer App");
   await expect(details.locator(".flight-facts")).toContainText("POST /orders");
   await expect(details.locator(".flight-activity")).toContainText("Customer App is waiting on Orders");
-  await page.getByRole("button", { name: "Next movement" }).click();
-  await expect(position(page)).toContainText("Movement 2 of 13 ");
+  await stepTo(page, "Request delivered");
   await expect(details).toHaveAttribute("open");
   await expect(details.locator(".flight-transit")).toContainText("Arrival:");
 
@@ -676,58 +719,59 @@ test("a movement reads in two short lines, and the rest of the record waits unde
   await stepTo(page, "Response dropped");
   await expect(narration(page).locator(".flight-interrupted")).toBeVisible();
   await expect(details.locator(".flight-facts")).toBeHidden();
-  // Closed is remembered as well, including after Recorded history takes the highlight and Replay starts again.
+  // Closed is remembered as well, including after a tab switch.
   await page.getByRole("tab", { name: "Recorded history" }).click();
   await page.getByRole("tab", { name: "Architecture" }).click();
   await expect(details).not.toHaveAttribute("open");
 });
 
-test("Left and Right step one movement and Space plays or pauses, and no control loses a key it already uses", async ({ page }) => {
+test("Left is Back, Right is Step, and Space is Run or Pause, and no control loses a key it already uses", async ({ page }) => {
   await observeWorker(page);
   await page.setViewportSize({ width: 1534, height: 897 });
   await runCheckout(page);
   const commands = await page.evaluate(() => window.workerEvidence.commands.length);
-  await expect(page.getByRole("button", { name: "Previous movement" })).toHaveAttribute("aria-keyshortcuts", "ArrowLeft");
-  await expect(page.getByRole("button", { name: "Next movement" })).toHaveAttribute("aria-keyshortcuts", "ArrowRight");
-  await expect(page.getByRole("button", { name: "Play replay" })).toHaveAttribute("aria-keyshortcuts", "Space");
+  await expect(control(page, "Back")).toHaveAttribute("aria-keyshortcuts", "ArrowLeft");
+  await expect(control(page, "Step")).toHaveAttribute("aria-keyshortcuts", "ArrowRight");
+  await expect(control(page, "Continue")).toHaveAttribute("aria-keyshortcuts", "Space");
 
-  // With nothing selected, Left is unavailable like the Previous button (#191), and Right selects the first movement.
+  // On the first milestone, Left is unavailable like Back, and Right is Step.
+  await position(page).click();
   await page.keyboard.press("ArrowLeft");
-  await expect(position(page)).toContainText("0 of 13 recorded movements");
+  await expect(position(page)).toContainText("Milestone 1 of 32 ");
   await page.keyboard.press("ArrowRight");
-  await expect(position(page)).toContainText("Movement 1 of 13 ");
+  await expect(position(page)).toContainText("Milestone 2 of 32 ");
   await page.keyboard.press("ArrowRight");
-  await expect(position(page)).toContainText("Movement 2 of 13 ");
+  await expect(position(page)).toContainText("Milestone 3 of 32 ");
   await page.keyboard.press("ArrowLeft");
-  await expect(position(page)).toContainText("Movement 1 of 13 ");
-  // The arrows keep stepping while focus rests on a toolbar button, which does not use them.
-  await page.getByRole("button", { name: "Next movement" }).focus();
+  await expect(position(page)).toContainText("Milestone 2 of 32 ");
+  // The arrows keep stepping while focus rests on a control button, which does not use them.
+  await control(page, "Step").focus();
   await page.keyboard.press("ArrowRight");
-  await expect(position(page)).toContainText("Movement 2 of 13 ");
+  await expect(position(page)).toContainText("Milestone 3 of 32 ");
 
-  // Space plays and pauses from neutral ground.
+  // Space runs and pauses from neutral ground.
   await position(page).click();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "Pause replay" })).toBeVisible();
+  await expect(control(page, "Pause")).toBeVisible();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "Play replay" })).toBeVisible();
+  await expect(control(page, "Continue")).toBeVisible();
   const paused = await position(page).innerText();
 
-  // A component node keeps Space for inspecting, and Replay stays paused.
+  // A component node keeps Space for inspecting, and the playhead stays paused.
   const orders = page.getByRole("button", { name: "Orders, Internal service", exact: true });
   await orders.focus();
   await page.keyboard.press("Space");
   await expect(orders).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: "Play replay" })).toBeVisible();
-  // The inspector is a focusable scroll region, so Space scrolls it and does not start Replay.
+  await expect(control(page, "Continue")).toBeVisible();
+  // The inspector is a focusable scroll region, so Space scrolls it and does not play.
   await page.locator("#component-inspector").focus();
   await page.keyboard.press("Space");
-  await expect(page.getByRole("button", { name: "Play replay" })).toBeVisible();
+  await expect(control(page, "Continue")).toBeVisible();
   // The Speed select keeps its arrows.
   await page.getByLabel("Speed").focus();
   await page.keyboard.press("ArrowRight");
   expect(await position(page).innerText()).toBe(paused);
-  // The tab list keeps its arrows, and Replay does not answer while the graph is off screen.
+  // The tab list keeps its arrows, and the keys do not answer while the graph is off screen.
   await page.getByRole("tab", { name: "Architecture" }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("tab", { name: "Recorded history" })).toHaveAttribute("aria-selected", "true");
@@ -743,20 +787,25 @@ test("Left and Right step one movement and Space plays or pauses, and no control
   await expect(lessonChooser(page)).toBeHidden();
   expect(await position(page).innerText()).toBe(paused);
 
-  // Like the toolbar, the keys only move a browser cursor: no worker command was sent.
+  // Like the buttons, the keys only move the playhead: no worker command was sent.
   expect(await page.evaluate(() => window.workerEvidence.commands.length)).toBe(commands);
 });
 
-test("Replay draws idle bystanders fainter with their stores and links, and keeps every label readable", async ({ page }) => {
+test("the playhead draws idle bystanders fainter with their stores and links, and keeps every label readable", async ({ page }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1534, height: 897 });
-  await runCheckout(page);
+  await loadScenario(page);
   const faint = page.locator(".react-flow__node.is-background");
   const faintIds = async () => (await faint.evaluateAll(nodes => nodes.map(node => node.getAttribute("data-id")))).sort();
   const shapeOpacity = (id: string) => page.locator(`${nodeSelector(id)} :is(.node-shape, .resource-body svg)`).evaluate(element => getComputedStyle(element).opacity);
-  // No cursor, no background: the graph is drawn as it always was.
+  // No playhead, no background: the graph is drawn as it always was.
   await expect(faint).toHaveCount(0);
   await expect(page.locator(".react-flow__edge.is-background")).toHaveCount(0);
+  // The first milestone is a check the simulation records at no component: nothing is put in front, so nothing fades.
+  await control(page, "Step").click();
+  await expect(position(page)).toHaveText(/^Milestone 1 of 32 /);
+  await expect(narration(page).locator(".flight-route")).toHaveText("Recorded by the simulation, at no component");
+  await expect(faint).toHaveCount(0);
 
   // Customer App → Orders: Payments, its database, the processor, and the topic have no part in it.
   await stepTo(page, "Request sent");
@@ -772,10 +821,7 @@ test("Replay draws idle bystanders fainter with their stores and links, and keep
   expect((await new AxeBuilder({ page }).include(".panel-architecture").analyze()).violations).toEqual([]);
 
   // Payments → Payment Processor: Customer App is no end of it, but it is still waiting, so it stays in front.
-  await page.getByRole("button", { name: "Next movement" }).click();
-  for (let step = 0; step < 4; step += 1) await page.getByRole("button", { name: "Next movement" }).click();
-  await expect(position(page)).toContainText("Movement 6 of 13 ");
-  await expect(narration(page).locator(".flight-route")).toHaveText("Payments → Payment Processor · Request link");
+  await stepToRoute(page, "Payments → Payment Processor · Request link");
   await expect(page.locator(`${nodeSelector("customer-app")} .activity-badge`)).toContainText("Waiting");
   // Orders stays in front too: its response to Customer App left earlier and has not arrived.
   await expect(page.locator("[data-flight-transit]")).toHaveCount(1);
@@ -797,15 +843,23 @@ test("two requests sent at the same virtual time stay on their links together un
   await page.goto("/");
   await loadLesson(page, "cqrs-delayed");
   await graphLaidOut(page);
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await control(page, "Step").click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
+  await expect(position(page)).toHaveText(/^Milestone 1 of /);
   const commands = await page.evaluate(() => window.workerEvidence.commands.length);
-  const next = page.getByRole("button", { name: "Next movement" });
   const resting = page.locator("[data-flight-transit]");
   const inTransit = narration(page).locator(".flight-in-transit");
+  // Movements are counted as the playhead reaches them; milestones that travel no link are stepped over.
+  let movements = 0;
+  const visited = new Map<number, number>();
   const goTo = async (movement: number) => {
-    for (let attempt = 0; attempt < 30 && !(await position(page).innerText()).startsWith(`Movement ${movement} of 23 `); attempt += 1) await next.click();
-    await expect(position(page)).toContainText(`Movement ${movement} of 23 `);
+    for (let attempt = 0; attempt < 80 && movements < movement; attempt += 1) {
+      const before = await milestone(page);
+      await control(page, "Step").click();
+      await expect.poll(() => milestone(page)).not.toBe(before);
+      if (await page.locator("[data-flight-token]").count() > 0) visited.set(++movements, await milestone(page));
+    }
+    expect(movements).toBe(movement);
   };
 
   // Movement 6: the read of Orders leaves. Nothing left before it, so nothing else is on a link.
@@ -816,7 +870,7 @@ test("two requests sent at the same virtual time stay on their links together un
 
   // Movement 7, same virtual time: the read of Reporting leaves, and the read of Orders is still on its link.
   await goTo(7);
-  await expect(position(page)).toContainText("virtual time 10");
+  await expect(position(page)).toContainText("virtual time 10 ");
   await expect(narration(page).locator(".flight-route")).toHaveText("Customer App → Reporting · Request link");
   await expect(inTransit).toHaveText("Still in transit: REQ Customer App → Orders.");
   await expect(page.locator("[data-flight-token]")).toHaveCount(1);
@@ -843,10 +897,10 @@ test("two requests sent at the same virtual time stay on their links together un
   await expect(resting).toHaveCount(0);
   await expect(inTransit).toHaveCount(0);
 
-  // Going back shows the same picture: it is read from the records at the cursor, not remembered.
-  await page.getByRole("button", { name: "Previous movement" }).click();
-  await page.getByRole("button", { name: "Previous movement" }).click();
-  await expect(position(page)).toContainText("Movement 7 of 23 ");
+  // Going back shows the same picture: it is read from the records at the playhead, not remembered.
+  const seventh = visited.get(7)!;
+  for (let attempt = 0; attempt < 20 && await milestone(page) > seventh; attempt += 1) await control(page, "Back").click();
+  await expect(position(page)).toHaveText(new RegExp(`^Milestone ${seventh} of `));
   await expect(inTransit).toHaveText("Still in transit: REQ Customer App → Orders.");
   await expect(resting).toHaveCount(1);
   // The legend names the resting token.

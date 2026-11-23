@@ -27,12 +27,17 @@ reader needs before changing code, and the vocabulary used when discussing them.
   [docs/learning-timeline.md](docs/learning-timeline.md) and is transcribed in
   `milestoneKinds`. `apps/web/tests/records.test.ts` reads the document and
   fails when the two disagree, so the document wins by construction.
-- **Presentation playback** (`apps/web/src/flight.ts`, `flight-playback.ts`)
-  moves a browser cursor over records the worker already published. It never
-  advances virtual time, allocates an observation, or sends a worker command.
-  The architecture-graph flight cursor is the only playback. Selecting a row in
-  Recorded history is review navigation, not playback, and deliberately shares
-  no cursor seam with the graph.
+- **The playhead** (`apps/web/src/playhead.ts`, `playhead-steps.ts`,
+  `flight-playback.ts`) is the one position over the current run: one teaching
+  milestone, or "before the first record" (RFC 0002). The first `Run` or `Step`
+  after a load or a reset asks the worker to execute the whole run, once; from
+  then on `Run`, `Pause`, `Step`, `Back`, and the keys move the playhead over
+  milestones the worker already published. A milestone that travels a link is
+  painted as a movement token (`flight.ts`); any other milestone is painted on
+  its component. The playhead never advances virtual time, allocates an
+  observation, or sends a worker command. Selecting a row in Recorded history
+  is review navigation, not playback: it takes the graph highlight back, and
+  the playhead returns to the start.
 - **Review navigation** (`apps/web/src/review-navigation.ts`) is the one place
   that decides where the reader is in Recorded history: the **review position**
   (the stored record under review), the active constraints, and a focus request.

@@ -35,7 +35,7 @@ export const app = {
   goalQuestionCheckout: "How does a checkout travel through a distributed system?",
   goalCheckout: "Explore the architecture, run the scenario, then follow its recorded story.",
   lessonStateLabel: "Lesson state",
-  runHelp: "Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again.",
+  runHelp: "The first Run or Step executes the whole run. Then Run plays it on the graph, Step and Back move one milestone, and Reset starts the loaded scenario again.",
   runCompare: "Reset and run again to compare the same virtual-time history.",
   importedNote: (seed: string, _f: Fmt) => `Seed: ${seed}. This scenario was imported from a file, so no packaged lesson copy applies. Run it, read its checks above, then use Recorded history to follow what happened.`,
   commerceNote: (seed: string, _f: Fmt) => `Seed: ${seed}. Observe the service state, then use Recorded history to follow database commits, faults, messages, and runtime logs.`,

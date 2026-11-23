@@ -34,17 +34,21 @@ async function latestProjection(page: Page): Promise<RuntimeProjectionSet> {
   });
 }
 
+const playhead = (page: Page) => page.getByRole("status", { name: "Playhead position" });
+const button = (page: Page, name: string) => page.getByRole("group", { name: "Simulation execution" }).getByRole("button", { name, exact: true });
+
 for (const scenario of ["normal", "response-lost"]) {
-  test(`${scenario}: UI Run and repeated Step produce equal canonical worker exports`, async ({ page }, testInfo) => {
+  test(`${scenario}: UI Run and the first Step execute the same canonical run, and later controls do no canonical work`, async ({ page }, testInfo) => {
     await observeWorker(page);
     await page.goto("/");
     const status = page.getByRole("status", { name: "Simulation status" });
-    const button = (name: string) => page.getByRole("button", { name, exact: true });
-    for (const name of ["Run", "Pause", "Step", "Reset"]) await expect(button(name)).toBeDisabled();
+    for (const name of ["Run", "Back", "Step", "Reset"]) await expect(button(page, name)).toBeDisabled();
     await loadLesson(page, scenario);
     await expect(status).toHaveText("READY");
     const initial = await latestProjection(page);
-    await button("Run").click();
+    // Animation off: Run executes the run and puts the playhead on the last milestone at once.
+    await page.getByRole("switch", { name: "Animation" }).uncheck();
+    await button(page, "Run").click();
     await expect(status).toHaveText("COMPLETED");
     const run = await latestProjection(page);
     expect(run.simulation.processedEvents).toBeGreaterThan(16);
@@ -55,27 +59,33 @@ for (const scenario of ["normal", "response-lost"]) {
       expect(update.history.observations).toEqual(run.history.observations.slice(0, update.history.observations.length));
       expect(update.simulation.processedEvents).toBe(update.history.observations.filter(item => item.type === "scheduler.event.dispatched").length);
     }
-    await expect(button("Run")).toBeDisabled();
-    await expect(button("Step")).toBeDisabled();
-    await expect(button("Pause")).toBeDisabled();
-    await button("Reset").click();
+    await expect(playhead(page)).toHaveText(/^Milestone (\d+) of \1 /);
+    await expect(button(page, "Run")).toBeDisabled();
+    await expect(button(page, "Step")).toBeDisabled();
+    await expect(button(page, "Back")).toBeEnabled();
+    await button(page, "Reset").click();
     await expect(status).toHaveText("READY");
     expect(await latestProjection(page)).toEqual(initial);
-    const count = run.simulation.processedEvents;
-    for (let boundary = 1; boundary <= count; boundary++) {
-      await button("Step").click();
-      await expect(status).toHaveText(boundary === count ? "COMPLETED" : "PAUSED");
-      const projection = await latestProjection(page);
-      expect(projection.simulation.processedEvents).toBe(boundary);
+    // The first Step executes the same run once and stands on the first milestone.
+    await button(page, "Step").click();
+    await expect(status).toHaveText("COMPLETED");
+    expect(await latestProjection(page)).toEqual(run);
+    await expect(playhead(page)).toHaveText(/^Milestone 1 of /);
+    const total = Number((await playhead(page).innerText()).match(/of (\d+)/)![1]);
+    for (let milestone = 2; milestone <= total; milestone++) {
+      await button(page, "Step").click();
+      await expect(playhead(page)).toHaveText(new RegExp(`^Milestone ${milestone} of ${total} `));
       // Rendering, selection and viewport changes do not contribute canonical work.
-      if (boundary === 1) {
-        await button("Orders, Internal service").click();
-        await button("Zoom In").click();
+      if (milestone === 2) {
+        await page.getByRole("button", { name: "Orders, Internal service" }).click();
+        await page.getByRole("button", { name: "Zoom In" }).click();
         await page.setViewportSize({ width: 683, height: 384 });
       }
     }
+    await expect(button(page, "Step")).toBeDisabled();
     expect(await latestProjection(page)).toEqual(run);
-    await button("Reset").click();
+    expect(await page.evaluate(() => window.controlEvidence.commands.map(command => command.type))).toEqual(["load", "run", "reset", "run"]);
+    await button(page, "Reset").click();
     await expect(status).toHaveText("READY");
     expect(await latestProjection(page)).toEqual(initial);
     await page.getByRole("tab", { name: "Architecture", exact: true }).click();
@@ -85,30 +95,38 @@ for (const scenario of ["normal", "response-lost"]) {
   });
 }
 
-test("Load → Run/Pause → Step → Reset uses correlated boundary commands", async ({ page }, testInfo) => {
+test("OT-PLAY-AC-1 and OT-PLAY-AC-7: after the first Run, Pause, Run, Step, Back, and the keys send nothing; Reset sends reset and returns the playhead to the start", async ({ page }, testInfo) => {
   await observeWorker(page);
   await page.goto("/");
   await loadLesson(page, "normal");
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
   const initial = await latestProjection(page);
-  // Submit both user actions in one browser task, so this tiny fixture cannot
-  // finish while Playwright makes its next round trip. Both go through React + host.
-  await page.evaluate(async () => {
-    const buttons = [...document.querySelectorAll("button")];
-    buttons.find(button => button.textContent === "Run")!.click();
-    await Promise.resolve();
-    buttons.find(button => button.textContent === "Pause")!.click();
-  });
-  await expect(status).toHaveText("PAUSED");
-  const paused = await latestProjection(page);
-  expect(paused.simulation.processedEvents).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "Step", exact: true }).click();
-  await expect(status).toHaveText("PAUSED");
-  expect((await latestProjection(page)).simulation.processedEvents).toBe(paused.simulation.processedEvents + 1);
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await page.getByRole("combobox", { name: "Speed" }).selectOption("fast");
+  await button(page, "Run").click();
+  await expect(status).toHaveText("COMPLETED");
+  // Run reads Pause while the playhead plays, in the same place.
+  await button(page, "Pause").click();
+  await expect(button(page, "Continue")).toBeVisible();
+  const paused = await playhead(page).innerText();
+  await button(page, "Continue").click();
+  await button(page, "Pause").click();
+  await button(page, "Step").click();
+  await button(page, "Back").click();
+  // The keys do what their buttons do, from neutral ground.
+  await page.locator("body").click({ position: { x: 2, y: 2 } });
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Space");
+  await page.keyboard.press("Space");
+  expect(paused).toMatch(/^Milestone \d+ of \d+ /);
+  expect(await page.evaluate(() => window.controlEvidence.commands.map(command => command.type))).toEqual(["load", "run"]);
+  await button(page, "Reset").click();
   await expect(status).toHaveText("READY");
   expect(await latestProjection(page)).toEqual(initial);
-  expect(await page.evaluate(() => window.controlEvidence.commands.map(command => command.type))).toEqual(["load", "run", "pause", "step", "reset"]);
+  await expect(page.locator(".flight-narration")).toHaveCount(0);
+  await expect(button(page, "Back")).toBeDisabled();
+  await expect(button(page, "Run")).toBeEnabled();
+  expect(await page.evaluate(() => window.controlEvidence.commands.map(command => command.type))).toEqual(["load", "run", "reset"]);
   await page.screenshot({ path: testInfo.outputPath("simulation-controls.png"), fullPage: true });
 });

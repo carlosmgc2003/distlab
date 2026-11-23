@@ -151,33 +151,24 @@ test("clearing all filters also clears a filter error left in the drawer", () =>
   assert.equal(derive(cleared, ctx, m).filtered.length, records.length);
 });
 
-test("history growth raises a cue for the newest recorded movement and leaves the review position alone", () => {
+test("history growth leaves the review position and the highlight alone", () => {
   const ctx = context();
   const selected = published(at(createReviewNavigation(), ctx, { type: "select", observationId: "o1" }), records, ctx);
   const grown = transition(selected, { type: "published", observations: [...records, record("o6", 6, "network.response.received", { source: "orders", target: "customer-app" })] }, ctx);
   const view = derive(grown, ctx, m);
   assert.equal(grown.selectedId, "o1");
-  assert.equal(grown.liveCueId, "o6");
   assert.equal(view.emphasis?.origin, "selection", "a selected record keeps the highlight");
 });
 
-test("an unselected history growth cues the newest movement without taking the highlight from playback", () => {
+test("an unselected history growth raises no live cue: the graph belongs to the playhead (RFC 0002 P5)", () => {
   const ctx = context();
   const grownRecords = [...records, record("o6", 6, "network.response.received", { source: "orders", target: "customer-app" })];
   const grownCtx = context({ observations: grownRecords });
   const start = published(createReviewNavigation(), records, ctx);
   const grown = transition(start, { type: "published", observations: grownRecords }, grownCtx);
-  const view = derive(grown, grownCtx, m);
-  assert.equal(grown.liveCueId, "o6");
-  assert.equal(view.emphasis?.origin, "live");
-  assert.equal(view.emphasis?.edgeId, "request:orders:customer-app:0");
-});
-
-test("a record that travels no link raises no cue", () => {
-  const ctx = context();
-  const grown = transition(published(createReviewNavigation(), records, ctx), { type: "published", observations: [...records, record("o6", 6, "clock.advanced")] }, ctx);
-  assert.equal(grown.liveCueId, null);
-  assert.equal(derive(grown, ctx, m).emphasis, undefined);
+  assert.equal(derive(grown, grownCtx, m).emphasis, undefined);
+  const quiet = transition(published(createReviewNavigation(), records, ctx), { type: "published", observations: [...records, record("o6", 6, "clock.advanced")] }, ctx);
+  assert.equal(derive(quiet, ctx, m).emphasis, undefined);
 });
 
 test("replaced history drops the review position and every active constraint", () => {

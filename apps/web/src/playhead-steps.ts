@@ -2,10 +2,11 @@ import type { Observation, SimulationTime } from "@distlab/contracts";
 import { flightFacts, flightSteps, patternOf } from "./flight.ts";
 import type { FlightFact, FlightStep } from "./flight.ts";
 import type { MovementEdge, RecordKind } from "./records.ts";
-import { storyMilestones } from "./story-timeline.ts";
+import { SHAPES, storyMilestones } from "./story-timeline.ts";
 import { recordLabel } from "./timeline.ts";
 import type { Messages } from "./i18n/catalog.ts";
 import type { ComponentNames } from "./component-display.ts";
+import { displayName } from "./component-display.ts";
 
 /**
  * Presentation-only reading of a run's teaching milestones as playhead steps
@@ -80,3 +81,26 @@ export function playheadSteps(
     movements.get(milestone.observation.id) ?? recordStep(milestone.observation, milestone.kind, m));
 }
 
+
+/** What the graph and the narration say about a milestone that travels no link. */
+export interface RecordStepText {
+  /** The teaching category's non-color marker, as the Story view draws it. */
+  readonly glyph: string;
+  /** Where it is recorded: its component, or the simulation. */
+  readonly route: string;
+  /** One sentence for the live region: stored label, component, and virtual time. */
+  readonly announcement: string;
+  readonly transit: string;
+}
+
+/** Text for a milestone that travels no link, in `m`'s language. Names components by display name (#103). */
+export function recordStepText(step: RecordStep, m: Messages, names?: ComponentNames): RecordStepText {
+  const copy = m.playback.narration;
+  const component = step.component !== undefined ? displayName(names, step.component) : undefined;
+  return {
+    glyph: SHAPES[step.recordKind],
+    route: component !== undefined ? copy.recordAt(component) : copy.recordBySimulation,
+    announcement: copy.recordAnnouncement({ label: step.headline, ...(component !== undefined ? { component } : {}), time: step.time }),
+    transit: copy.recordTransit,
+  };
+}
