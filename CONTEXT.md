@@ -23,6 +23,13 @@ reader needs before changing code, and the vocabulary used when discussing them.
   attempt, stored changes, payload visibility. It reads only stored fields.
   Presentations keep their own wording; link identity and layout stay in the
   presentation that draws them.
+- **Key history** (`apps/web/src/kv-history.ts`, RFC 0003 K1) is what each
+  `KeyValueStore` held, who wrote it, and for how long, read from stored `kv.*`
+  records at or before a position and from the declared initial entries. A value
+  stored in a record's `before` or `after` is read, not inferred; a hidden
+  payload is never reconstructed. An entry ends at its stored `expiresAt`, even
+  before the `kv.expired` record at the same time. The writer is the sender of
+  the request named by the record's `causationId`, or else the store's owner.
 - The milestone set lives in
   [docs/learning-timeline.md](docs/learning-timeline.md) and is transcribed in
   `milestoneKinds`. `apps/web/tests/records.test.ts` reads the document and
