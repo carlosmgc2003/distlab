@@ -205,8 +205,8 @@ here with the rest.
 | `cache-invalidated` | 2 | 2026-11-23 |
 | `inventory-oversell` | 2 | 2026-11-23 |
 | `inventory-optimistic` | 2 | 2026-11-23 |
-| `lease-unfenced` | 2 | 2026-11-23 |
-| `lease-fenced` | 2 | 2026-11-23 |
+| `lease-unfenced` | 3 | 2026-11-24 |
+| `lease-fenced` | 3 | 2026-11-24 |
 | `clock-last-write-wins` | 2 | 2026-11-23 |
 | `clock-lamport` | 2 | 2026-11-23 |
 
@@ -791,7 +791,7 @@ answers `LOCK_UNAVAILABLE` and does not write.
 **Expected timeline:**
 
 - t=2: worker-1's set creates `lock:report`, expiring at t=12
-  (`kv.changed`). At t=4 its increment returns token 1.
+  (`kv.changed` with `ifAbsent: true`). At t=4 its increment returns token 1.
 - t=5: worker-1 checks its lease (`lease.checked`, `validUntil: 11`,
   `valid: true`) and sends its write, which the fault holds up until t=36.
 - t=12: the store removes the entry (`kv.expired`).
@@ -821,8 +821,9 @@ two `kv.expired` records.
 
 **Design choices:** *Fencing tokens* switches storage's check. *Lease
 duration* (1–60 ms) is the TTL both workers set: at 40 ms the entry is still
-live when worker-2 asks, so its set-if-absent fails (`kv.condition.failed`)
-and it answers `LOCK_BUSY`. No stale write can happen in that run, though a
+live when worker-2 asks, so its set-if-absent fails (`kv.condition.failed`,
+whose `actual` stores worker-1's entry and its expiry) and it answers
+`LOCK_BUSY`. No stale write can happen in that run, though a
 longer delay would bring it back.
 
 **Concept:** a lease does not give mutual exclusion on its own, because the
