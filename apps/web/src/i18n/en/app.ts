@@ -30,6 +30,8 @@ export const app = {
   deliveryFact: (p: { destination: string; attempt: number; state: string }, _f: Fmt) => `${p.destination}: attempt ${p.attempt} (${p.state})`,
   deliveries: (items: readonly string[], f: Fmt) => `Recorded delivery attempts: ${f.list(items)}`,
   deliveriesUnavailable: "Recorded delivery attempts: none yet.",
+  /** ③ Investigate before the outcome is revealed (RFC 0002 P5, decision 4). */
+  outcomeWaits: "The outcome appears here when the playhead reaches the end of the run.",
   investigatePrompt: "Investigate: Which record proves authorization? What does Payments know after the timeout? A timeout does not prove that authorization was undone.",
   goalQuestionResponseLost: "Does a timeout mean the payment failed?",
   goalQuestionCheckout: "How does a checkout travel through a distributed system?",

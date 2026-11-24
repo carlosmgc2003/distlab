@@ -35,3 +35,29 @@ export async function stepToMovement(page: Page, headline?: string): Promise<voi
   }
   expect(await narrationHeading(page), `a movement${headline ? ` "${headline}"` : ""} is under the playhead`).toMatch(headline ? new RegExp(` ${headline}$`) : /./);
 }
+
+/** The **Animation** switch above the graph (RFC 0002 P3). */
+export function animationSwitch(page: Page): Locator {
+  return page.getByRole("switch", { name: "Animation", exact: true });
+}
+
+/**
+ * Turns Animation off, so `Run` shows the end of the run at once and ③ Investigate reveals the
+ * outcome as soon as the run has executed (RFC 0002 P5). The setting survives lesson loads.
+ */
+export async function animationOff(page: Page): Promise<void> {
+  const toggle = animationSwitch(page);
+  const tab = page.getByRole("tab", { name: "Architecture", exact: true });
+  await expect(tab).toBeVisible();
+  if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
+  await expect(toggle).toBeVisible();
+  if (await toggle.isChecked()) await toggle.click();
+  await expect(toggle).not.toBeChecked();
+}
+
+/** Runs the loaded lesson to its end with Animation off: the outcome is revealed at once. */
+export async function runToEnd(page: Page): Promise<void> {
+  await animationOff(page);
+  await control(page, "Run").click();
+  await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText(/^(COMPLETED|FAILED)$/);
+}

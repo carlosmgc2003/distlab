@@ -7,6 +7,7 @@ import { loadLesson } from "./support/lesson.ts";
 import { filterByType, viewButton } from "./support/history.ts";
 import { inServiceState } from "./support/service-state.ts";
 import { commerceComponentNames } from "../src/component-display.ts";
+import { animationOff } from "./support/playhead.ts";
 
 /** The lesson checks live in the Lesson panel's ③ Investigate (#141); service facts in the Service state dialog (#142). */
 const lessonChecks = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true }).getByRole("region", { name: "Lesson checks", exact: true });
@@ -35,6 +36,8 @@ for (const name of commerceLessonNames) {
     const status = page.getByRole("status", { name: "Simulation status" });
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
+    // Animation off: the outcome is revealed as soon as the run has executed (RFC 0002 P5).
+    await animationOff(page);
     await recordAnnouncements(page);
     // The first Step, from the keyboard, executes the run: the reveal must leave focus on the element that had it.
     const step = page.getByRole("button", { name: "Step", exact: true });
@@ -62,9 +65,9 @@ for (const name of commerceLessonNames) {
     const recorded = [await state.innerText(), await serviceText(page)];
     await page.getByRole("button", { name: "Reset", exact: true }).click();
     await expect(status).toHaveText("READY");
-    await expect(checks).toContainText("PENDING");
-    await expect(checks).not.toContainText(/HOLDS|VIOLATED/);
-    await expect(summary(page)).toHaveText("Checks are pending: run the lesson");
+    // Reset withholds the outcome again until the run has executed.
+    await expect(checks).toHaveCount(0);
+    await expect(summary(page)).toHaveCount(0);
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     expect([await state.innerText(), await serviceText(page)]).toEqual(recorded);
@@ -94,6 +97,7 @@ test("the Saga pair shows the same invariants VIOLATED, then HOLDS, and each ver
   const invariants = state.getByRole("list", { name: "Business invariants", exact: true });
   await loadLesson(page, "saga-uncompensated");
   await expect(status).toHaveText("READY");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   const labels = ["A failed order is cancelled", "A failed order does not keep inventory reserved", "A failed order keeps no approved payment"];
@@ -122,6 +126,7 @@ test("compare replaces the experiment; commerce state fits a narrow viewport", a
   await loadLesson(page, "retry-unsafe");
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   await inServiceState(page, dialog => expect(dialog.getByRole("region", { name: "Payments state", exact: true })).toContainText("payment-2"));
@@ -144,6 +149,7 @@ test("the notifications pair shows the dead-letter queue only when the retry bud
   for (const [name, letters] of [["notifications-dlq", 1], ["notifications-unbounded", 0]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
+    await animationOff(page);
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     await inServiceState(page, async dialog => {
@@ -172,6 +178,7 @@ test("the cache pair shows the price Orders used, the end-of-run KV state, and T
   for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
+    await animationOff(page);
     // The browser no longer steps one scheduler event (RFC 0002, decision 2), so Service state shows the
     // end of the run; live entries at the playhead come with state at the playhead (P6, #229).
     await page.getByRole("button", { name: "Run", exact: true }).click();
@@ -205,6 +212,7 @@ test("the inventory pair shows stock with its version and each client's outcome,
   for (const [name, stock, version, outcome, verdict] of [["inventory-oversell", -1, 3, "RESERVED", "VIOLATED"], ["inventory-optimistic", 0, 2, "OUT_OF_STOCK", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
+    await animationOff(page);
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     await inServiceState(page, async dialog => {
@@ -235,6 +243,7 @@ test("the lease pair draws the key-value node as a shared store and shows the le
   for (const [name, writer, verdict] of [["lease-unfenced", "worker-1", "VIOLATED"], ["lease-fenced", "worker-2", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
+    await animationOff(page);
     // Both workers point at one store node: no service box and no separate store beside it.
     const kv = page.locator('.react-flow__node[data-id="kv"]');
     await expect(kv).toHaveAccessibleName("Key-Value Store, Shared key-value store");
