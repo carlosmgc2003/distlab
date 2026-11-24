@@ -8,6 +8,7 @@ import type { AssertionEvidence, MovementEdge, SpanNode } from "./records.ts";
 import { assertionEvidence, correlation, payloadVisibility, traceView } from "./records.ts";
 import { componentLabel } from "./timeline-query.ts";
 import { changeEvidence, payloadCopy, recordLabel } from "./timeline.ts";
+import { kvSentence } from "./kv-wording.ts";
 import type { GraphEmphasis } from "./timeline.ts";
 import type { StoryLegendEntry, StoryMilestone, StoryTableRow } from "./story-timeline.ts";
 import { createReviewNavigation, derive, feedbackText, filterErrorText, transition } from "./review-navigation.ts";
@@ -535,11 +536,14 @@ function DetailBody({ observation, observations, componentTitles, checkLabels, h
   const target = observation.target;
   const entities = observation.entityRefs ?? [];
   const heading = recordLabel(observation, m);
+  const sentence = kvSentence(observation, observations, m, new Map(componentTitles.map(item => [item.id, item.title])));
   return <>
     {hidden ? <p>{m.timeline.view.hiddenByFilters}</p> : null}
     {/* The one visible statement of the selection: Observation #, plain-language label, virtual time. */}
     <h3 className="detail-header">{m.timeline.view.detailHeader({ sequence: observation.sequence, heading, time: observation.time })}</h3>
     <p className="event-path">{componentLabel(observation.source, componentTitles, m)}{target ? ` → ${componentLabel(target, componentTitles, m)}` : ""}</p>
+    {/* What a key-value record did, read from its stored fields (RFC 0003 K4). */}
+    {sentence !== undefined ? <p className="detail-summary">{sentence}</p> : null}
     <details className="detail-disclosure">
     <summary>{m.timeline.view.fieldsSummary}</summary>
     <dl>

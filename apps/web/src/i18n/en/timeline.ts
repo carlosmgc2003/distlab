@@ -35,8 +35,51 @@ export const timeline = {
     "kv.condition.failed": "Key-value condition failed",
     "kv.changed": "Key-value entry changed",
     "kv.expired": "Key-value entry expired",
+    "kv.read": "Key-value read",
     "runtime.log": "Log",
     "scenario.assertion.evaluated": "Check",
+  },
+  /**
+   * Short labels of key-value records (RFC 0003 K4), by stored type and stored `operation`. They
+   * replace `recordLabels` for `kv.*` while the payload is visible; the `: ‹key›` qualifier follows.
+   */
+  kvLabels: {
+    set: "Key set",
+    setIfAbsent: "Key set (set-if-absent)",
+    increment: "Key incremented",
+    compareAndSet: "Key replaced (compare-and-set)",
+    delete: "Key deleted",
+    compareAndDelete: "Key deleted (compare-and-delete)",
+    expired: "Key expired",
+    readPresent: "Key read (present)",
+    readAbsent: "Key read (not present)",
+    conditionFailed: "Key condition failed",
+  },
+  /**
+   * What a key-value record did, one sentence per message, joined with a space (RFC 0003 K4).
+   * `writer` is a display name; `key`, `value`, and `after` are stored values printed as stored;
+   * `time` is a stored time.
+   */
+  kvSentence: {
+    set: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} set ${p.key}.`,
+    setIfAbsent: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} set ${p.key} with set-if-absent.`,
+    increment: (p: { writer: string; key: string; after: string }, _f: Fmt) => `${p.writer} incremented ${p.key} to ${p.after}.`,
+    compareAndSet: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} replaced ${p.key} with compare-and-set.`,
+    delete: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} deleted ${p.key}.`,
+    compareAndDelete: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} deleted ${p.key} with compare-and-delete.`,
+    nowHolds: (value: string, _f: Fmt) => `It now holds ${value}.`,
+    expiresAt: (time: number | string, _f: Fmt) => `It expires at t=${time}.`,
+    expired: (p: { key: string; time: number | string }, _f: Fmt) => `${p.key} expired at t=${p.time}.`,
+    lifetimeEnded: "No component removed it: its lifetime ended.",
+    readPresent: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} read ${p.key}: present.`,
+    holds: (value: string, _f: Fmt) => `It holds ${value}.`,
+    readAbsent: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} read ${p.key}: not present.`,
+    failedSet: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} could not set ${p.key}: it was already present.`,
+    failedCompareAndSet: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} could not replace ${p.key}: it did not hold the expected value.`,
+    failedCompareAndDelete: (p: { writer: string; key: string }, _f: Fmt) => `${p.writer} could not delete ${p.key}: it did not hold the expected value.`,
+    heldUntil: (p: { value: string; time: number | string }, _f: Fmt) => `It held ${p.value} until t=${p.time}.`,
+    held: (value: string, _f: Fmt) => `It held ${value}.`,
+    wasNotPresent: "It was not present.",
   },
   faultRecorded: "Fault recorded",
   recordedChange: "Recorded change",
@@ -191,6 +234,12 @@ export const timeline = {
         inline: "rejections & failures",
         keeps: "It keeps rejected transactions and key-value conditions, failed handlers, and rejected and dead-lettered messages.",
         empty: (total: number, f: Fmt) => `The Rejections & failures quick view keeps rejected transactions and key-value conditions, failed handlers, and rejected and dead-lettered messages, and this run recorded ${clause(total, f)} without any of them.`,
+      },
+      coordination: {
+        label: "Coordination",
+        inline: "key-value operations",
+        keeps: "It keeps key-value writes, reads, expiries, and failed conditions.",
+        empty: (total: number, f: Fmt) => `The Coordination quick view keeps key-value writes, reads, expiries, and failed conditions, and this run recorded ${clause(total, f)} without any of them.`,
       },
     },
     emptyRemove: "Remove the quick view chip to see the recorded history again.",

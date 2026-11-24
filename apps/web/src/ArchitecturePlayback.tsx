@@ -72,6 +72,8 @@ export function FlightNarration({ step, activity, changes, names, detailsOpen, o
     {/* Level 1: what was recorded, and between which components. */}
     <h4><span className="flight-glyph" aria-hidden="true">{text.glyph}</span> {step.headline}</h4>
     <p className="flight-route">{text.route}</p>
+    {/* What a key-value record did, read from its stored fields. */}
+    {!movement && (step as RecordStep).sentence !== undefined ? <p className="flight-sentence">{(step as RecordStep).sentence}</p> : null}
     {/* A jump names two recorded times. The playhead never paints the interval as a duration. */}
     {jump !== undefined ? <p className="flight-jump"><span aria-hidden="true">⤼</span> {jump}</p> : null}
     {/* The playhead shows one record at a time, so what left earlier and has not arrived is said here and drawn on its link. */}

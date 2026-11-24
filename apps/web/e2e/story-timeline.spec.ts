@@ -48,7 +48,7 @@ const STORY_TYPES = new Set([
   "database.transaction.committed", "database.transaction.rolledback", "external.effect.committed",
   "fault.effect.selected", "fault.rule.matched",
   "database.transaction.rejected", "service.handler.failed", "message.nacked", "message.dead", "kv.condition.failed",
-  "kv.changed", "kv.expired", "runtime.log",
+  "kv.changed", "kv.expired", "kv.read", "runtime.log",
 ]);
 
 /** A check is a milestone for its first stored verdict and each change of it. */
@@ -207,4 +207,37 @@ test("response-lost Story milestones stay linked to their records without new co
   expect(await commandTypes(page)).toEqual(before);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: "e2e/evidence/issue-67-story-timeline-response-lost.png", fullPage: true });
+});
+
+test("cache-stale-price: the read at t=24 that returns the cached price is a Story milestone, drawn as a key-value read", async ({ page }) => {
+  test.setTimeout(90_000);
+  await observeWorker(page);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await runScenario(page, "cache-stale-price");
+  const observations = (await latestProjection(page)).history.observations;
+  const before = await commandTypes(page);
+  const read = observations.find(observation => observation.type === "kv.read" && observation.time === 24 && observation.source === "catalog");
+  expect(read, "the lesson records the read of the cached price at t=24").toBeDefined();
+
+  // The diagram draws it in the Catalog lane, with the key-value read glyph and its short label.
+  const milestone = page.locator(`.story-strip .story-milestone[data-observation-id="${read!.id}"]`);
+  await expect(milestone).toHaveClass(/story-milestone-kv-read/);
+  await expect(milestone).toContainText("▢");
+  await expect(milestone).toContainText("Key read (present): price:sku-1");
+  await expect(page.locator(".story-legend")).toContainText("Key-value read");
+
+  // The table row and the record detail name the operation; the stored value is an object, so no value sentence.
+  await viewButton(page, "Story table").click();
+  const row = page.locator(rowSelector(read!));
+  await expect(row).toHaveText("Key read (present): price:sku-1");
+  await expect(page.locator(`.story-table tr:has(${rowSelector(read!)})`)).toContainText("Key-value read");
+  await row.click();
+  await expect(page.locator(".detail-header")).toContainText("Key read (present): price:sku-1");
+  await expect(page.locator(".detail-summary")).toHaveText("Orders read price:sku-1: present.");
+  // Every milestone the rule names has a row, in order.
+  const rowIds = await page.locator(".story-table button[data-observation-id]").evaluateAll(
+    buttons => buttons.map(button => button.getAttribute("data-observation-id") ?? ""));
+  expect(rowIds).toEqual(expectedMilestones(observations).map(observation => observation.id));
+  expect(await commandTypes(page)).toEqual(before);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

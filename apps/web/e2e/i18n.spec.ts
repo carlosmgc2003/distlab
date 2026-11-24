@@ -197,3 +197,31 @@ test("OT-PLAY: in Spanish the control group, the playback settings, the playhead
   expect(await workerCommands(page)).toEqual(["load", "run"]);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("RFC 0003 K4: in Spanish, key-value records are named by their operation, and the Coordination quick view reads from the catalog", async ({ page }) => {
+  test.setTimeout(90_000);
+  await recordWorkerCommands(page);
+  await page.setViewportSize({ width: 1534, height: 897 });
+  await page.goto("/?lang=es");
+  await chooseLesson(page, "cache-stale-price");
+  await expect(page.getByRole("status", { name: es.simulationControls.statusLabel })).toHaveText(es.simulationControls.status.READY!);
+  await page.getByRole("group", { name: es.simulationControls.executionLabel }).getByRole("button", { name: es.simulationControls.run, exact: true }).click();
+  await expect(page.getByRole("status", { name: es.simulationControls.statusLabel })).toHaveText(es.simulationControls.status.COMPLETED!);
+  await page.getByRole("tab", { name: es.app.tabs.history, exact: true }).click();
+
+  const show = page.getByLabel(es.timeline.view.show, { exact: true });
+  await show.selectOption("coordination");
+  await expect(page.locator("#timeline-quick-count")).toContainText(es.timeline.quickView.views.coordination.keeps);
+  await page.getByRole("group", { name: es.timeline.view.viewSwitch, exact: true })
+    .getByRole("button", { name: es.timeline.view.viewChoices.table, exact: true }).click();
+  const labels = await page.locator(".story-table button[data-observation-id]").allInnerTexts();
+  expect(labels).toContain(`${es.timeline.kvLabels.readPresent}: price:sku-1`);
+  expect(labels).toContain(`${es.timeline.kvLabels.readAbsent}: cart:cart-2`);
+  expect(labels).toContain(`${es.timeline.kvLabels.expired}: price:sku-1`);
+  await expect(page.locator(".story-table tr[data-kind='kv-read']").first()).toContainText(es.story.kinds["kv-read"]);
+
+  await page.locator(".story-table button[data-observation-id]").filter({ hasText: `${es.timeline.kvLabels.expired}: price:sku-1` }).click();
+  await expect(page.locator(".detail-summary")).toHaveText(
+    `${es.timeline.kvSentence.expired({ key: "price:sku-1", time: 101 })} ${es.timeline.kvSentence.lifetimeEnded}`);
+  expect(await workerCommands(page)).toEqual(["load", "run"]);
+});

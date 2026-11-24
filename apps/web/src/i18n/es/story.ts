@@ -24,6 +24,8 @@ export const story: typeof source = {
     timeout: "Timeout",
     failure: "Rechazo o fallo",
     kv: "Cambio clave-valor",
+    "kv-read": "Lectura clave-valor",
+    contention: "Contención",
     log: "Registro de negocio",
     check: "Resultado de verificación",
   },

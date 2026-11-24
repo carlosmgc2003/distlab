@@ -9,7 +9,8 @@ export type QuickViewId =
   | "requests-and-responses"
   | "messages"
   | "state-changes"
-  | "failures";
+  | "failures"
+  | "coordination";
 
 /**
  * The predicate of one quick view. Its wording (`label`, and the sentence naming the stored
@@ -47,7 +48,11 @@ export const QUICK_VIEWS: readonly QuickView[] = [
   },
   {
     id: "failures",
-    kinds: ["failure"],
+    kinds: ["failure", "contention"],
+  },
+  {
+    id: "coordination",
+    kinds: ["kv", "kv-read", "contention"],
   },
 ];
 

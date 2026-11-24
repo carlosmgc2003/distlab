@@ -393,6 +393,12 @@ and a text label, and the legend names all of them:
 | Fault | `⚠` | dotted |
 | Dropped message | `⊘` | dotted |
 | Timeout | `◷` | rounded |
+| Key-value read | `▢` | solid |
+| Contention | `⇆` | dotted, in `--status-warning` |
+
+Contention is a failed key-value condition, such as a set-if-absent that finds
+a lock taken. It is the lock working as designed, so it uses the warning tone
+and never the error tone of a failure. No new colour token is added.
 
 Timeline quick views use the same categories. They are the options of the one
 **Show** select in the Recorded history toolbar: each option names its category

@@ -84,7 +84,7 @@ test("each Show option names the count its quick view keeps", async ({ page }) =
   await completed(page);
   const afterRun = await commands(page);
   const options = await show(page).locator("option").evaluateAll(elements => elements.map(option => ({ value: (option as HTMLOptionElement).value, text: option.textContent ?? "" })));
-  expect(options.map(option => option.value)).toEqual(["all", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "failures"]);
+  expect(options.map(option => option.value)).toEqual(["all", "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "failures", "coordination"]);
   for (const option of options.slice(1)) {
     const match = /^(.+) \((\d+)\)$/.exec(option.text);
     expect(match, option.text).not.toBeNull();
@@ -94,6 +94,40 @@ test("each Show option names the count its quick view keeps", async ({ page }) =
   }
   await show(page).selectOption("all");
   await expect(page.getByRole("list", { name: "Active filters" })).toHaveCount(0);
+  expect(await commands(page)).toEqual(afterRun);
+});
+
+test("the Coordination quick view keeps the key-value writes, reads, and expiries of the lease lesson", async ({ page }) => {
+  test.setTimeout(90_000);
+  await observeCommands(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  const status = page.getByRole("status", { name: "Simulation status" });
+  await loadLesson(page, "lease-unfenced");
+  await expect(status).toHaveText("READY");
+  await page.getByRole("button", { name: "Run", exact: true }).click();
+  await expect(status).toHaveText("COMPLETED");
+  await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
+  const afterRun = await commands(page);
+
+  // The option names the count it keeps: four writes, two reads, and two expiries.
+  await expect(show(page).locator('option[value="coordination"]')).toHaveText("Coordination (8)");
+  await show(page).selectOption("coordination");
+  await expect(page.locator("#timeline-quick-count")).toContainText(/^Coordination shows 8 of \d+ recorded observations\. It keeps key-value writes, reads, expiries, and failed conditions\.$/);
+  await expect(page.getByRole("list", { name: "Active filters" })).toContainText("Quick view Coordination");
+  await viewButton(page, "Story table").click();
+  const labels = await page.locator(".story-table button[data-observation-id]").allInnerTexts();
+  // Each label names the stored operation; the lock is taken twice and expires twice.
+  expect(labels.filter(text => /^Key set( \(set-if-absent\))?: lock:report$/.test(text))).toHaveLength(2);
+  expect(labels.filter(text => text === "Key expired: lock:report")).toHaveLength(2);
+  expect(labels.filter(text => text === "Key incremented: lock:report:token")).toHaveLength(2);
+  expect(labels.filter(text => /^Key read \((present|not present)\): lock:report:token$/.test(text))).toHaveLength(2);
+  expect(labels).toHaveLength(8);
+  await expect(page.locator(".story-table tr[data-kind='kv-read']")).toHaveCount(2);
+  // The sentence of the first expiry is in the record detail.
+  await page.locator(".story-table button[data-observation-id]").filter({ hasText: "Key expired: lock:report" }).first().click();
+  await expect(page.locator(".detail-summary")).toHaveText("lock:report expired at t=12. No component removed it: its lifetime ended.");
+  // Quick views and selection are display-only.
   expect(await commands(page)).toEqual(afterRun);
 });
 

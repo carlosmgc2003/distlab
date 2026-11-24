@@ -4,6 +4,7 @@ import type { FlightFact, FlightStep } from "./flight.ts";
 import type { MovementEdge, RecordKind } from "./records.ts";
 import { SHAPES, storyMilestones } from "./story-timeline.ts";
 import { recordLabel } from "./timeline.ts";
+import { kvSentence } from "./kv-wording.ts";
 import type { Messages } from "./i18n/catalog.ts";
 import type { ComponentNames } from "./component-display.ts";
 import { displayName } from "./component-display.ts";
@@ -36,6 +37,8 @@ export interface RecordStep {
   readonly nodeIds: readonly string[];
   /** Stored plain-language label for the record type, as a movement's `headline`. */
   readonly headline: string;
+  /** What a key-value record did, from stored fields (RFC 0003 K4). Absent for any other record. */
+  readonly sentence?: string;
   readonly facts: readonly FlightFact[];
   /** A question about the pattern this record belongs to. Never an outcome claim. */
   readonly pattern: string;
@@ -49,9 +52,13 @@ export function travelsLink(step: PlayheadStep): step is FlightStep {
   return "leg" in step;
 }
 
-/** One milestone that travels no link. Reads stored fields only. */
-export function recordStep(observation: Observation, kind: RecordKind, m: Messages): RecordStep {
+/**
+ * One milestone that travels no link. Reads stored fields only. `observations` is the history the
+ * record belongs to, read only to name the writer of a key-value record.
+ */
+export function recordStep(observation: Observation, kind: RecordKind, m: Messages, observations: readonly Observation[] = [], names?: ComponentNames): RecordStep {
   const component = observation.source === SIMULATION_SOURCE ? undefined : observation.source;
+  const sentence = kvSentence(observation, observations, m, names);
   return {
     observationId: observation.id,
     sequence: observation.sequence,
@@ -60,6 +67,7 @@ export function recordStep(observation: Observation, kind: RecordKind, m: Messag
     ...(component !== undefined ? { component } : {}),
     nodeIds: component !== undefined ? [component] : [],
     headline: recordLabel(observation, m),
+    ...(sentence !== undefined ? { sentence } : {}),
     facts: flightFacts(observation, m),
     pattern: patternOf(observation.type, m),
   };
@@ -78,7 +86,7 @@ export function playheadSteps(
 ): readonly PlayheadStep[] {
   const movements = new Map(flightSteps(observations, edges, m, names).map(step => [step.observationId, step]));
   return storyMilestones(observations, m).map(milestone =>
-    movements.get(milestone.observation.id) ?? recordStep(milestone.observation, milestone.kind, m));
+    movements.get(milestone.observation.id) ?? recordStep(milestone.observation, milestone.kind, m, observations, names));
 }
 
 
@@ -100,7 +108,8 @@ export function recordStepText(step: RecordStep, m: Messages, names?: ComponentN
   return {
     glyph: SHAPES[step.recordKind],
     route: component !== undefined ? copy.recordAt(component) : copy.recordBySimulation,
-    announcement: copy.recordAnnouncement({ label: step.headline, ...(component !== undefined ? { component } : {}), time: step.time }),
+    announcement: [copy.recordAnnouncement({ label: step.headline, ...(component !== undefined ? { component } : {}), time: step.time }),
+      ...(step.sentence !== undefined ? [step.sentence] : [])].join(" "),
     transit: copy.recordTransit,
   };
 }

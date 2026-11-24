@@ -35,6 +35,7 @@ export const playback = {
     "service.handler.failed": "The handler failed. What had it changed before it failed, and what will try it again?",
     "kv.changed": "A key changed. Which readers still hold the previous value?",
     "kv.expired": "A key expired. What will the next reader of this key do?",
+    "kv.read": "A key was read. Is the value it returned still the current one?",
     "kv.condition.failed": "The conditional write did not happen. Which value was there instead, and who wrote it?",
     "fault.rule.matched": "A fault rule matched this operation. Which component will notice the fault, and how?",
     "fault.effect.selected": "The fault chose its effect. What will each side of the operation record next?",

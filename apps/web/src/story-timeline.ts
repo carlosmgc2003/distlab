@@ -48,6 +48,8 @@ export const SHAPES: Readonly<Record<RecordKind, string>> = {
   timeout: "◷",
   failure: "✗",
   kv: "▣",
+  "kv-read": "▢",
+  contention: "⇆",
   log: "✎",
   check: "☑",
 };

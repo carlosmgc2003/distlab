@@ -27,6 +27,8 @@ export const story = {
     timeout: "Timeout",
     failure: "Rejection or failure",
     kv: "Key-value change",
+    "kv-read": "Key-value read",
+    contention: "Contention",
     log: "Business log",
     check: "Check result",
   },

@@ -11,6 +11,7 @@ import {
   continuesHistory,
   correlation,
   edgeFor,
+  milestoneKinds,
   milestoneTypeList,
   movementOf,
   movementText,
@@ -88,6 +89,36 @@ test("the milestone table matches the documented Story milestone set", () => {
   }
 });
 
+/** The key-value rows of the document's category table: stored type to teaching category. */
+function documentedKeyValueKinds(): ReadonlyMap<string, string> {
+  const section = document.slice(document.indexOf("## Story view"), document.indexOf("## Quick views"));
+  const kinds = new Map<string, string>();
+  for (const line of section.split("\n")) {
+    const cells = line.split("|").map(cell => cell.trim()).filter(cell => cell.length > 0);
+    if (cells.length !== 2 || !cells[0]!.startsWith("`kv.")) continue;
+    const kind = /^`([a-z-]+)`$/.exec(cells[1]!)?.[1];
+    for (const match of cells[0]!.matchAll(/`(kv\.[a-z.]+)`/g)) if (match[1] && kind) kinds.set(match[1], kind);
+  }
+  return kinds;
+}
+
+test("key-value records have the categories the document states: a read is kv-read, a failed condition is contention", () => {
+  const documented = documentedKeyValueKinds();
+  assert.deepEqual(Object.fromEntries(documented), {
+    "kv.changed": "kv", "kv.expired": "kv", "kv.read": "kv-read", "kv.condition.failed": "contention",
+  });
+  for (const [type, kind] of documented) {
+    assert.equal((milestoneKinds as Readonly<Record<string, string>>)[type], kind, type);
+    assert.equal(recordKind(observation({ type, source: "kv" })), kind, type);
+  }
+  // A failed condition is the lock working as designed, never a failure.
+  assert.notEqual(recordKind(observation({ type: "kv.condition.failed", source: "kv" })), "failure");
+  // The two new categories follow kv in legend order.
+  assert.deepEqual(recordKinds.slice(recordKinds.indexOf("kv"), recordKinds.indexOf("kv") + 3), ["kv", "kv-read", "contention"]);
+  // Reads are no longer in the list of records Story leaves out.
+  assert.doesNotMatch(document.slice(document.indexOf("Everything else"), document.indexOf("is not listed.")), /key-value reads/);
+});
+
 test("every milestone has wording in each view that names it", () => {
   for (const type of milestoneTypeList) {
     const record = observation({ type, source: "orders", target: "payments" });
@@ -109,7 +140,7 @@ test("the canonical transaction rollback type is worded and the removed alias is
 });
 
 test("records outside the milestone set state their stored type and never a milestone", () => {
-  for (const type of ["kv.read", "service.lifecycle.changed", "database.write.staged", "scheduler.event.scheduled"]) {
+  for (const type of ["service.lifecycle.changed", "database.write.staged", "scheduler.event.scheduled"]) {
     const record = observation({ type, source: "orders" });
     assert.equal(recordKind(record), undefined, type);
     assert.equal(storyLabel(record, m), undefined, type);
@@ -123,7 +154,7 @@ test("records outside the milestone set state their stored type and never a mile
 test("labels add only stored fields: a log's message, a key, a rejection code, and a check's verdict", () => {
   const cases: readonly (readonly [Observation, string, string])[] = [
     [observation({ type: "runtime.log", source: "orders", data: { level: "info", message: "saga.compensation" } }), "Log: saga.compensation", "Log: saga.compensation"],
-    [observation({ type: "kv.expired", source: "kv", data: { key: "lock:report", expiresAt: 12 } }), "Key-value entry expired: lock:report", "Key-value entry expired: lock:report"],
+    [observation({ type: "kv.expired", source: "kv", data: { key: "lock:report", expiresAt: 12 } }), "Key expired: lock:report", "Key expired: lock:report"],
     [observation({ type: "database.transaction.rejected", source: "inventory", data: { transactionId: "t", code: "TRANSACTION_CONFLICT" } }), "Database transaction rejected (TRANSACTION_CONFLICT)", "Transaction rejected (TRANSACTION_CONFLICT)"],
     [observation({ type: "message.dead", source: "bus", data: { reason: "RETRY_EXHAUSTED", attempts: 3 } }), "Message dead-lettered (RETRY_EXHAUSTED)", "Message dead-lettered (RETRY_EXHAUSTED)"],
     [observation({ type: "scenario.assertion.evaluated", source: "simulation", data: { assertionId: "one-charge", verdict: false } }), "Check: one-charge did not pass", "Check: one-charge did not pass"],
@@ -263,7 +294,7 @@ test("traces and causation are read from stored ids only", () => {
 });
 
 test("every teaching category is listed once, in legend order", () => {
-  assert.equal(recordKinds.length, 14);
+  assert.equal(recordKinds.length, 16);
   assert.equal(new Set(recordKinds).size, recordKinds.length);
   const story = storyMilestones([
     observation({ id: "a", sequence: 1, type: "network.request.sent", source: "customer-app", target: "orders" }),
