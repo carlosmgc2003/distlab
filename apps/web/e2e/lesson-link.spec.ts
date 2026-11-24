@@ -29,7 +29,7 @@ test("a lesson link opens that lesson with one load and no overlay, without the 
   await captureCommands(page);
   await page.goto("/?lesson=retry-unsafe");
   await expect(status(page)).toHaveText("READY");
-  await expect(lessonTrigger(page)).toHaveText(/^Lesson: Retry without idempotency/);
+  await expect(lessonTrigger(page)).toHaveText(/^Lesson: Retry: a lost payment response/);
   await expect(lessonChooser(page)).toBeHidden();
   const sent = await loads(page);
   expect(sent).toHaveLength(1);

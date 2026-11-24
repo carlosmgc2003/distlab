@@ -52,7 +52,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
   await page.getByLabel("Scenario file", { exact: true }).setInputFiles({ name: download.suggestedFilename(), mimeType: "application/json", buffer: Buffer.from(text, "utf8") });
   await expect(status(page)).toHaveText("READY");
   const header = page.getByLabel("Imported scenario", { exact: true });
-  await expect(header).toContainText("Imported · Retry with idempotency · retry-idempotent-copy@1 · seed commerce-classroom-1 · commerce.lessons@1.0.0");
+  await expect(header).toContainText("Imported · Retry: idempotency key · retry-idempotent-copy@1 · seed commerce-classroom-1 · commerce.lessons@1.0.0");
   // The starter keeps the lesson's overlay policy, so the student choices stay available.
   await expect(experimentTrigger(page)).toBeVisible();
   // A starter is offered only for a packaged lesson.

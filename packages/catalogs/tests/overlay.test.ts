@@ -226,6 +226,34 @@ test("every fault kind a policy offers runs its lesson to completion instead of 
   }
 });
 
+test("a saga step that fails in any way leaves an honest saga: no run ends, and compensation undoes what may have happened", async () => {
+  const lesson = (id: string) => lessons.find(item => item.id === id)!;
+  const rule = (point: string, effect: string, extra: Record<string, string>) => ({ id: "student-saga", point, from: 0, probability: 1, maxApplications: 1, effect: { kind: effect }, ...extra });
+  const facts = (result: HarnessExport) => ({
+    status: result.status,
+    logs: result.history.observations.filter(item => item.type === "runtime.log" && item.source !== "client").map(item => (item.data as { message: string }).message),
+    verdicts: result.results.filter(item => item.id.startsWith("failed-order-")).map(item => `${item.id} ${item.status}`),
+  });
+  // A failed commit at Payments is a rejected step: nothing was charged, so only the reservation is undone.
+  assert.deepEqual(facts(await run(lesson("saga-compensated"), { version: 1, faults: [rule("database.commit", "fail", { target: "payments" })] })), {
+    status: "COMPLETED", logs: ["order.created", "inventory.reserved", "order.needs-compensation", "inventory.released", "order.cancelled"],
+    verdicts: ["failed-order-cancelled PASS", "failed-order-releases-inventory PASS", "failed-order-refunded PASS"],
+  });
+  // A lost approval reply is ambiguous: the payment was approved, so it is refunded too.
+  assert.deepEqual(facts(await run(lesson("saga-compensated"), { version: 1, faults: [rule("network.response", "drop", { source: "payments", target: "orders", name: "POST /apply" })] })).logs,
+    ["order.created", "inventory.reserved", "payment.approved", "order.needs-compensation", "payment.refunded", "inventory.released", "order.cancelled"]);
+  // Without compensation, a reservation that never happened keeps no inventory and no payment: only the cancellation is missing.
+  assert.deepEqual(facts(await run(lesson("saga-uncompensated"), { version: 1, faults: [rule("network.request", "drop", { source: "orders", target: "inventory", name: "POST /apply" })] })), {
+    status: "COMPLETED", logs: ["order.created", "order.needs-compensation"],
+    verdicts: ["failed-order-cancelled FAIL", "failed-order-releases-inventory PASS", "failed-order-refunded PASS"],
+  });
+  // A compensation is a request too: when the refund is lost, the rest of the compensation does not happen.
+  assert.deepEqual(facts(await run(lesson("saga-compensated"), { version: 1, faults: [rule("network.request", "drop", { source: "orders", target: "payments", name: "POST /compensate" })] })), {
+    status: "COMPLETED", logs: ["order.created", "inventory.reserved", "payment.approved", "order.needs-compensation", "compensation.failed"],
+    verdicts: ["failed-order-cancelled FAIL", "failed-order-releases-inventory FAIL", "failed-order-refunded FAIL"],
+  });
+});
+
 test("lessons offer only the fault points their architecture has", () => {
   for (const lesson of lessons) {
     const doc = definition(lesson);

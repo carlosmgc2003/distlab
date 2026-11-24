@@ -45,8 +45,8 @@ test("Retry: idempotent downloads retry-idempotent-copy.json with the lesson's c
   assert.equal(document.formatVersion, 1);
   assert.deepEqual(document.catalog, { id: "commerce.lessons", version: "1.0.0" });
   assert.deepEqual(document.presentation, {
-    title: "Retry with idempotency",
-    summary: "The same lost response and retry produce one payment and the original result.",
+    title: "Retry: idempotency key",
+    summary: "The same lost response and the same retry. Now Payments stores each result under its idempotency key and answers a repeated key with the stored result.",
     assertions: { "one-payment-per-order": "A retried payment request charges the order once" },
   });
   assert.equal((document.scenario as Doc).name, "retry-idempotent-copy@1");
@@ -103,8 +103,8 @@ test("a starter file is exported in the active language, and still validates and
   const choice = scenarios.find(item => item.id === "retry-idempotent")!;
   const document = starterDocument(starterSource(choice, es));
   assert.deepEqual(document.presentation, {
-    title: "Reintento con idempotencia",
-    summary: "La misma respuesta perdida y el mismo reintento producen un solo pago y el resultado original.",
+    title: "Reintento: clave de idempotencia",
+    summary: "La misma respuesta perdida y el mismo reintento. Ahora Pagos guarda cada resultado bajo su clave de idempotencia y, ante una clave repetida, responde con el resultado guardado.",
     assertions: { "one-payment-per-order": "Una solicitud de pago reintentada cobra el pedido una sola vez" },
   });
   // Identifiers, the scenario, and the policy do not depend on the language.

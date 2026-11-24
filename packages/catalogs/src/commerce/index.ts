@@ -184,6 +184,12 @@ export const commerceAssessment: ScenarioAssessment = {
       // `maximum` is an upper bound on the row count that holds at every boundary, including
       // before the first commit; `count` is the exact count at one moment.
       if (typeof p.maximum === "number") return { pass: Object.keys(rows).length <= p.maximum, evidence: rows };
+      // `forbidden` holds when no row has every one of its fields: it forbids a state, so a table
+      // that never received the row (the step never ran) holds as well.
+      if (p.forbidden !== undefined) {
+        const forbidden = Object.entries(record(p.forbidden));
+        return { pass: Object.values(rows).every(row => !forbidden.every(([key, value]) => record(row)[key] === value)), evidence: rows };
+      }
       const expected = record(p.expected!);
       const row = rows[text(p.key)] ?? {};
       const pass = Object.keys(rows).length === p.count && Object.entries(expected).every(([key, value]) => record(row)[key] === value);

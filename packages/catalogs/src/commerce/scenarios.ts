@@ -53,27 +53,27 @@ const revised = (revision: number, updated: string): LessonRevision => Object.fr
 
 /** Every packaged commerce-catalog lesson's revision. A lesson without an entry fails to typecheck. */
 const commerceRevisions: Readonly<Record<CommerceLessonName, LessonRevision>> = {
-  "retry-unsafe": revised(1, "2026-11-09"),
-  "retry-idempotent": revised(1, "2026-11-09"),
-  "saga-uncompensated": revised(1, "2026-11-01"),
-  "saga-compensated": revised(1, "2026-11-01"),
-  "dual-write": revised(1, "2026-11-01"),
-  "outbox-unsafe-consumer": revised(1, "2026-11-01"),
-  "outbox-idempotent": revised(1, "2026-11-01"),
-  "outbox-notifications-gap": revised(1, "2026-11-04"),
+  "retry-unsafe": revised(2, "2026-11-23"),
+  "retry-idempotent": revised(2, "2026-11-23"),
+  "saga-uncompensated": revised(3, "2026-11-23"),
+  "saga-compensated": revised(3, "2026-11-23"),
+  "dual-write": revised(2, "2026-11-23"),
+  "outbox-unsafe-consumer": revised(2, "2026-11-23"),
+  "outbox-idempotent": revised(2, "2026-11-23"),
+  "outbox-notifications-gap": revised(2, "2026-11-23"),
   "cqrs-delayed": revised(1, "2026-11-13"),
-  "cascade-unprotected": revised(1, "2026-11-09"),
-  "cascade-breaker": revised(1, "2026-11-09"),
-  "notifications-unbounded": revised(1, "2026-11-10"),
-  "notifications-dlq": revised(1, "2026-11-10"),
-  "cache-stale-price": revised(1, "2026-11-12"),
-  "cache-invalidated": revised(1, "2026-11-12"),
-  "inventory-oversell": revised(1, "2026-11-09"),
-  "inventory-optimistic": revised(1, "2026-11-09"),
-  "lease-unfenced": revised(1, "2026-11-11"),
-  "lease-fenced": revised(1, "2026-11-11"),
-  "clock-last-write-wins": revised(1, "2026-11-11"),
-  "clock-lamport": revised(1, "2026-11-11"),
+  "cascade-unprotected": revised(2, "2026-11-23"),
+  "cascade-breaker": revised(2, "2026-11-23"),
+  "notifications-unbounded": revised(2, "2026-11-23"),
+  "notifications-dlq": revised(2, "2026-11-23"),
+  "cache-stale-price": revised(2, "2026-11-23"),
+  "cache-invalidated": revised(2, "2026-11-23"),
+  "inventory-oversell": revised(2, "2026-11-23"),
+  "inventory-optimistic": revised(2, "2026-11-23"),
+  "lease-unfenced": revised(2, "2026-11-23"),
+  "lease-fenced": revised(2, "2026-11-23"),
+  "clock-last-write-wins": revised(2, "2026-11-23"),
+  "clock-lamport": revised(2, "2026-11-23"),
 };
 
 export function commerceRevision(name: CommerceLessonName): LessonRevision {
@@ -105,8 +105,12 @@ export function commerceScenario(name: CommerceLessonName): CanonicalValue {
 function sagaScenario(name: CommerceLessonName): CanonicalValue {
   const compensate = name === "saga-compensated";
   const components = [component("client", "client", "client"), component("orders", "saga", "service", { compensate }),
-    component("inventory", "saga-resource", "service", { forward: { reserved: true }, compensated: { reserved: false } }),
-    component("payments", "saga-resource", "service", { forward: { status: "APPROVED", refunded: false }, compensated: { status: "REFUNDED", refunded: true } }),
+    component("inventory", "saga-resource", "service", {
+      forward: { reserved: true }, compensated: { reserved: false }, events: { forward: "inventory.reserved", compensated: "inventory.released" },
+    }),
+    component("payments", "saga-resource", "service", {
+      forward: { status: "APPROVED", refunded: false }, compensated: { status: "REFUNDED", refunded: true }, events: { forward: "payment.approved", compensated: "payment.refunded" },
+    }),
     component("carrier", "carrier", "external")];
   return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
     architecture: { components, links: [link("client", "orders", 100), link("orders", "inventory"), link("orders", "payments"), link("orders", "carrier")],
@@ -118,8 +122,9 @@ function sagaScenario(name: CommerceLessonName): CanonicalValue {
       assertion("inventory-still-reserved", 30, "inventory", "state", 1, "order-1", { reserved: true }),
       assertion("payment-still-approved", 30, "payments", "state", 1, "order-1", { status: "APPROVED", refunded: false }),
       assertion("failed-order-cancelled", 60, "orders", "orders", 1, "order-1", { status: "CANCELLED" }),
-      assertion("failed-order-releases-inventory", 60, "inventory", "state", 1, "order-1", { reserved: false }),
-      assertion("failed-order-refunded", 60, "payments", "state", 1, "order-1", { status: "REFUNDED", refunded: true }),
+      // Forbid the bad state instead of requiring the compensated row: a step that never ran leaves no row, and holds.
+      { id: "failed-order-releases-inventory", predicate: "commerce.rows", mode: "at", at: 60, parameters: { owner: "inventory", table: "state", forbidden: { reserved: true } } },
+      { id: "failed-order-refunded", predicate: "commerce.rows", mode: "at", at: 60, parameters: { owner: "payments", table: "state", forbidden: { status: "APPROVED" } } },
     ],
   } as CanonicalValue;
 }
