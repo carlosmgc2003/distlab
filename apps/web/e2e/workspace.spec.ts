@@ -90,13 +90,13 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       for (const target of [
         lessonTrigger(page),
         page.getByRole("button", { name: "Run", exact: true }),
-        page.getByRole("button", { name: "Pause", exact: true }),
+        page.getByRole("button", { name: "Back", exact: true }),
         page.getByRole("button", { name: "Step", exact: true }),
         page.getByRole("button", { name: "Reset", exact: true }),
         page.getByRole("status", { name: "Simulation status" }),
         page.locator(".run-summary"),
       ]) await boxInViewport(page, target, 16);
-      // Simulation execution is in the top bar; Replay is a separate group inside the Architecture tab.
+      // Simulation execution is the one control group, in the top bar; playback settings sit above the graph.
       await expect(page.getByRole("group", { name: "Simulation execution" })).toBeVisible();
       // The tab set is the desktop-only investigation workspace: exactly two tabs.
       const tablist = page.getByRole("tablist", { name: "Investigation workspace" });
@@ -349,7 +349,7 @@ test("desktop 200% zoom keeps tabs and controls keyboard reachable without horiz
       seen.add(focused.name);
       await page.keyboard.press("Tab");
     }
-    for (const label of ["Lesson: ", "Run", "Pause", "Step", "Reset", "Architecture", "Hide lesson"]) {
+    for (const label of ["Lesson: ", "Run", "Back", "Step", "Reset", "Architecture", "Hide lesson"]) {
       expect([...seen].some(item => item.includes(label)), `${label} at ${viewport.name}`).toBe(true);
     }
     // Roving tabindex: Tab reaches the active tab; arrows reach the other tab.

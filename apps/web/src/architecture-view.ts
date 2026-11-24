@@ -47,6 +47,8 @@ export type ArchitectureNode = Node<{
   /** Set while a recorded movement is painted on the graph. */
   role?: "sending" | "receiving";
   roleLabel?: string;
+  /** Set while the playhead stands on a milestone recorded at this component that travels no link. */
+  milestone?: { readonly glyph: string; readonly label: string };
   /** The activity sentence, with display names (#103), rendered where the names are known. */
   activityText?: string;
   /** Set while the playback cursor is on a record: idle, processing, or waiting, read from records at or before it. */

@@ -46,9 +46,9 @@ at a time, so until they land the shipped shell can still differ from it.
 
 | Region | Holds | Rules |
 | --- | --- | --- |
-| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, `Pause`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no replay controls, no tagline. |
-| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run and Step do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure: engine counters and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
-| Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds a one-row **Replay** toolbar above the architecture graph, and nothing below the graph. |
+| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, which reads `Pause` while the playhead plays, then `Back`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no second control group, no tagline. |
+| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run, Step, and Back do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure: engine counters and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
+| Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds one slim row of **Playback settings** (**Animation** and **Speed**) above the architecture graph, and nothing below the graph. |
 | Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds up to three sections, in this order: Architecture (only when the lesson's policy has an architecture allowance, #112), Design choices (only when the policy declares parameters), and Faults, with one footer: `Apply and restart`, `Discard changes`, `Close`. While it is open, the movement detail and the Component inspector go under the graph instead of beside it, so the canvas keeps the panel's width (#166). | No other overlay is added. |
 
 ### Vocabulary
@@ -56,11 +56,12 @@ at a time, so until they land the shipped shell can still differ from it.
 | Term | Use | Replaces |
 | --- | --- | --- |
 | Lesson | A packaged lesson, in all visible UI text | "Scenario" and "experiment" in visible labels |
-| Replay | The Architecture tab's graph playback controls: `Play replay`, `Pause replay`, `Restart replay`, `Previous movement`, `Next movement`, **Speed** | The "Recorded history" group label, `Play timeline`, `Previous observation`, `Next observation` |
+| Playhead | The one position over the run's teaching milestones, moved by `Run`, `Pause`, `Step`, and `Back` (RFC 0002) | "Replay", "playback cursor", `Previous movement`, `Next movement` |
+| Milestone | One teaching milestone under the playhead, whether it travels a link or not | "Movement" for a position: a movement is a milestone that travels a link |
 | Recorded history | Only the tab and its panel heading | — |
-| Observation #n | One recorded record | "Step #n"; **Step** is a simulation command |
+| Observation #n | One recorded record | "Step #n"; **Step** is a control that moves the playhead one milestone |
 | Change the experiment / Apply and restart | The one path that sends the student's edited session overlay | "Apply faults and reload", "Apply choices and reload" |
-| Plain wording about guarantees | How student-facing panels state what a run records and what Replay does: "The run finished", "none yet", "Changing the experiment restarts the lesson", "The marks show order, not duration", "Replay … changes nothing" (#204). The **Advanced diagnostics** disclosure and Raw history keep the precise wording | Implementation terms in the Lesson panel and the Architecture tab outside the canvas, hint bodies included: `projection`, `projected`, `worker session`, `student-visible`, `host-only`, `simulation command`, `authorized start`, `boundaries only` |
+| Plain wording about guarantees | How student-facing panels state what a run records and what the playhead does: "The run finished", "none yet", "Changing the experiment restarts the lesson", "Neither setting changes the run" (#204). The **Advanced diagnostics** disclosure and Raw history keep the precise wording | Implementation terms in the Lesson panel and the Architecture tab outside the canvas, hint bodies included: `projection`, `projected`, `worker session`, `student-visible`, `host-only`, `simulation command`, `authorized start`, `boundaries only` |
 | Component display name | How a packaged lesson names a component in every student-facing place: graph, narration, Recorded history, Service state, fault targets (#103). The ID stays in the inspector's `Component ID` row, Raw history, and payloads; imported documents and destinations show IDs | Raw component IDs such as `client`, `kv`, `worker-1` as visible labels |
 
 ### Layout budgets
@@ -97,16 +98,16 @@ Rules that keep the regions distinct:
   second line restates completion, and no region repeats the run's virtual time.
   Engine counters such as random draws and the observation count stay under the
   **Advanced diagnostics** disclosure in ④ Experiment.
-- Simulation commands and replay are two separate control groups in two
-  regions. `Run`, `Pause`, `Step`, and `Reset` carry **Simulation execution** in
-  the top bar; the replay controls carry **Replay** in the Architecture tab. Each
-  is a `group` with an accessible name (**Simulation execution**, and **Replay
-  recorded movements** for the visible label **Replay**), so the distinction
-  survives without the styling, and only `Run` is painted as the primary action.
-  An error, or a terminal-history notice, takes its own row directly under the
-  top bar only while it exists.
-- Only Simulation execution changes the run. The Replay group states its
-  boundary once: replaying does not change the simulation or its virtual time.
+- There is one control group, **Simulation execution**, in the top bar: `Run`
+  (which reads `Continue` after a pause and `Pause` while the playhead plays,
+  in the same place), `Back`, `Step`, and `Reset` (RFC 0002 P2). It is a
+  `group` with that accessible name, and only `Run` is painted as the primary
+  action. The first `Run` or `Step` executes the run once; every later control
+  moves the playhead. An error, or a terminal-history notice, takes its own row
+  directly under the top bar only while it exists.
+- **Animation** and **Speed** sit in one slim row above the graph, in a group
+  named **Playback settings**. They decide how `Run` shows the run and change
+  nothing in it; **Speed** is unavailable while **Animation** is off.
 - The top bar and the lesson panel are identical on both tabs. No tab hides the
   simulation controls or the lesson guidance.
 - ③ Investigate states the outcome in one line before anything else: for a
@@ -120,7 +121,7 @@ Rules that keep the regions distinct:
   outcome once per run, not on every projection update. Focus does not move,
   and a collapsed panel stays collapsed.
 - The loaded investigation workspace exposes exactly two top-level tabs:
-  **Architecture** (the Replay toolbar, the architecture graph, and the
+  **Architecture** (the playback settings, the architecture graph, and the
   Component inspector) and **Recorded history** (history navigation and
   filtering, and the docked Observation detail). Service state is a dialog, not
   a third tab.
@@ -208,41 +209,48 @@ fields; redacted payloads are never reconstructed or summarized as if visible.
 
 ## Architecture playback and message flight
 
-The Architecture tab can replay the movements a run has already recorded, so a
-reader watches requests, responses, and messages travel between components at a
-pace they choose. The transport is the **Replay** toolbar, one row at the top of
-the Architecture tab panel, above the graph: `Play replay`, `Pause replay`,
-`Restart replay`, `Previous movement`, `Next movement`, and a **Speed** select.
-It lives inside the Architecture tab, never in the top bar, because the graph it
-animates is the graph it belongs to; the top bar keeps only **Simulation
-execution**.
+The Architecture tab shows the run the worker already executed, one teaching
+milestone at a time, so a reader watches requests, responses, and messages
+travel between components, and sees commits, faults, and checks land on their
+component, at a pace they choose (RFC 0002 P1 to P4). The one position is the
+**playhead**, and the one control group is **Simulation execution** in the top
+bar: the first `Run` or `Step` executes the run, and from then on `Run`
+(`Pause` while playing), `Step`, and `Back` move the playhead. **Animation** and
+**Speed** sit in one slim row above the graph.
 
-- A *movement* is one stored observation that travels a link. A record that
-  travels no link is not a movement and stays in Recorded history. Movements keep
-  canonical sequence order; nothing is merged, reordered, or dropped.
-- The transport states its own position in one region beside the graph: the
-  movement number, the recorded virtual time, and the observation sequence. A
-  second line states how many virtual times the movement list spans and that
-  the marks show order, not duration. The panel's heading line carries the
-  `Graph controls` and `Playback speed` explanations, so neither costs the graph
-  a row.
-- **Speed** offers Slow, Steady, and Fast. It changes only how long the browser
-  paints each movement. It never changes virtual time, the recorded history, or
-  the run, and the `Playback speed` hint says so.
-- While the run is still recording, the cursor waits at the recorded end for the
-  next movement instead of stopping. When the run has finished, the transport
-  ends with the last movement still painted and offers `Restart replay`.
-- The transport answers to the keyboard while the Architecture tab is shown:
-  Left arrow is `Previous movement`, Right arrow is `Next movement`, and Space
-  plays or pauses. A key that a focused control already uses keeps its meaning:
-  a field, a select, the tab list, and an open dialog keep their arrows, and a
-  button, a link, and a component node keep Space. The two step buttons show
-  their key, and every button states it in `aria-keyshortcuts`. A key moves the
-  browser cursor only, exactly as the button does.
+- A *milestone* is one stored observation of the Story view's milestone set
+  (`playhead-steps.ts`). A *movement* is a milestone that travels a link; it is
+  painted as a token on that link. Any other milestone is painted on its
+  component, as a badge with its stored label and the Story view's marker. A
+  check recorded by the simulation names no component and is narrated without
+  a badge. Milestones keep canonical sequence order; nothing is merged,
+  reordered, or dropped.
+- The playhead states its position in one region beside the graph: the
+  milestone number, the milestone count, the recorded virtual time, and the
+  observation sequence. The panel's heading line carries the `Graph controls`
+  and `Playback speed` explanations, so neither costs the graph a row.
+- **Animation** on (the default): `Run` plays, moving the playhead one
+  milestone at a time. Off: `Run` puts the playhead on the last milestone at
+  once, and **Speed** is unavailable. Turning Animation off stops play where it
+  is. Both settings are UI state and survive lesson loads.
+- **Speed** offers Slow, Steady, and Fast. It changes only how long the playhead
+  stays on each milestone while playing. It never changes virtual time, the
+  recorded history, or the run, and the `Playback speed` hint says so.
+- Play ends on the last milestone, which stays painted. `Run` is then
+  unavailable; `Back` still moves back, and `Reset` starts again.
+- Once the run has executed, the control group answers to the keyboard while
+  the Architecture tab is shown: Left arrow is `Back`, Right arrow is `Step`,
+  and Space is `Run` or `Pause`. Before that no key is taken, so a stray arrow
+  on the graph never starts a run. A key that a focused control already uses keeps its meaning: a field,
+  a select, the tab list, and an open dialog keep their arrows, and a button, a
+  link, and a component node keep Space. Every button states its key in
+  `aria-keyshortcuts`. A key does exactly what its button does.
 
 The narration beside the graph is a presentation mapping over stored fields. It
 reads in three levels, so a reader stepping through a run reads two short lines
-per movement and opens the rest when a movement deserves it:
+per milestone and opens the rest when a milestone deserves it. A milestone that
+travels no link reads the same levels: its route line names the component it is
+recorded at, and its transit line says that nothing travels:
 
 | Level | Line | Reads |
 | --- | --- | --- |
@@ -258,8 +266,8 @@ per movement and opens the rest when a movement deserves it:
 | 3. Recorded details | Component activity | The activity the graph already shows as badges, as sentences |
 
 Levels 1 and 2 are always shown. **Recorded details** is a disclosure that
-starts closed and then stays as the reader left it, from movement to movement
-and when Replay starts again. Nothing was removed from the narration: level 3
+starts closed and then stays as the reader left it, from milestone to milestone
+and when play starts again. Nothing was removed from the narration: level 3
 holds every line that was shown before.
 
 A redacted or omitted payload contributes one visibility statement and nothing
@@ -275,29 +283,30 @@ receiving components carry a text badge on the graph, and the legend names every
 token. The token is decorative: the narration, the playback position, and the
 `Request and message movement` region carry the same movement as text.
 
-Replay stands on one record at a time, but several hops can be on their links at
+The playhead stands on one record at a time, but several hops can be on their links at
 once: a client that reads two services at the same virtual time records two
-`*.sent`, one after the other. A hop is **in transit** at the cursor when its
-departure is recorded before the cursor's movement and no arrival or drop of the
+`*.sent`, one after the other. A hop is **in transit** at the playhead when its
+departure is recorded before the playhead's milestone and no arrival or drop of the
 same stored request id is recorded at or before it. Each one keeps a resting
 token on its link, just behind mid-link, with a dashed outline and no travel, so
-it reads as lighter than the cursor's own token. Several hops of one kind
+it reads as lighter than the token of the milestone under the playhead. Several hops of one kind
 waiting on one link in one direction are one token with a count, `×3`. A
 caller's timeout does not end a transit: that record says the caller stopped
 waiting, not what became of the request. The narration says the same in words,
-and the legend names the resting token. Nothing after the cursor is read, so
+and the legend names the resting token. Nothing after the playhead is read, so
 stepping back shows the same picture.
 
-While a movement is painted, the graph has a foreground and a background. A
-component is in the background when it is neither end of the movement nor of a
-hop in transit, and the
-records at or before the cursor leave it with no work, no wait, and no timeout.
+While a milestone is painted, the graph has a foreground and a background. A
+component is in the background when it is neither end of the movement (or the
+component of a milestone that travels no link) nor an end of a hop in transit,
+and the records at or before the playhead leave it with no work, no wait, and
+no timeout.
 Its shape is drawn at reduced opacity, with its owned store and every link that
 touches it. A component that is still waiting or processing stays in front,
 because it is part of the story. Only the drawing fades: names, category
 labels, and badges keep their own colors, so contrast does not change, and
 hovering, focusing, or inspecting a background component draws it in full. With
-no movement painted, nothing is in the background.
+no milestone painted, or one recorded at no component, nothing is in the background.
 
 Both ends of a painted movement stay on screen. When the sending or receiving
 component is outside the canvas, the graph pans just enough to show both, at the
@@ -307,13 +316,13 @@ pan and zoom are kept while both components are already visible. Under
 `prefers-reduced-motion: reduce` the view changes without animation.
 
 Choosing a record in Recorded history takes the graph highlight back and the
-replay cursor stands down. A live cue, which flashes by itself as a run records,
-never takes the highlight back from playback. Both tab panels stay mounted, so
-the cursor and the narration survive a tab switch.
+playhead returns to before the first record. Nothing flashes by itself while
+the worker executes a run: the graph shows the playhead. Both tab panels stay
+mounted, so the playhead and the narration survive a tab switch.
 
 ### Non-inference rules
 
-- The host timer moves a browser cursor over records the worker already
+- The host timer moves the playhead over records the worker already
   published. It does not advance virtual time, allocate an observation, or send a
   worker command, and it does not change the run.
 - A token paints the stored movement of one record. It encodes no latency,
@@ -325,9 +334,10 @@ the cursor and the narration survive a tab switch.
 
 ### Accessibility
 
-The transport is a labelled button group with a `select`, and every control
-reaches the next movement or the recorded boundary. The playback position is a
-polite live region; the narration is a labelled article, and the graph's
+The control group is a labelled button group in the top bar, and the playback
+settings are a labelled group with a switch and a `select`. Every control reaches
+the next milestone or the recorded end. The playhead position is a polite live
+region; the narration is a labelled article, and the graph's
 `Request and message movement` region carries the movement sentence while the
 narration is open, so no fact is stated twice. Token movement is removed under
 `prefers-reduced-motion: reduce`: each token rests where the record says the

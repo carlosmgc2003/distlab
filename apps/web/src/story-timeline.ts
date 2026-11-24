@@ -35,7 +35,7 @@ export interface StoryLegendEntry {
 }
 
 /** Non-color marker per teaching category. */
-const SHAPES: Readonly<Record<RecordKind, string>> = {
+export const SHAPES: Readonly<Record<RecordKind, string>> = {
   request: "→",
   response: "←",
   message: "⇢",

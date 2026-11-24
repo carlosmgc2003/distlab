@@ -42,6 +42,6 @@ export const commerceLesson: typeof source = {
   scenarioExpectations: "Expectativas del escenario",
   serviceStateHeading: "Conocimiento de los servicios y estado confirmado",
   aboutServiceState: "Acerca del estado de los servicios",
-  serviceStateHelp: "Son hechos registrados, no predicciones. Avanzá paso a paso para inspeccionar estados intermedios; Reiniciar reproduce las mismas entradas.",
+  serviceStateHelp: "Son hechos registrados, no predicciones. Reiniciar reproduce las mismas entradas.",
   serviceStateOf: (componentId: string, _f: Fmt) => `Estado de ${componentId}`,
 };

@@ -4,6 +4,7 @@ import { scenarios } from "../src/scenarios.ts";
 import { viewports } from "./layout-budget.ts";
 import { expectLegibleView } from "./support/graph.ts";
 import { graphLaidOut, loadLesson } from "./support/lesson.ts";
+import { stepToMovement } from "./support/playhead.ts";
 import { experimentDrawer, faultsSection, openExperiment } from "./support/experiment.ts";
 
 // #166: the architecture graph stays legible at the supported baselines. Every component name renders at
@@ -40,9 +41,9 @@ test("#166 names stay legible at 1366×768 with a movement selected and the Expe
     await page.goto("/");
     await loadLesson(page, lesson.id);
     await expect(status(page)).toHaveText("READY");
-    await page.getByRole("button", { name: "Run", exact: true }).click();
+    // The first Step executes the run; the playhead then stands on the first movement.
+    await stepToMovement(page);
     await expect(status(page)).toHaveText("COMPLETED");
-    await page.getByRole("button", { name: "Next movement", exact: true }).click();
     await openExperiment(page);
     await expect(experimentDrawer(page)).toBeVisible();
     await expect(page.locator(".architecture-side")).toBeVisible();

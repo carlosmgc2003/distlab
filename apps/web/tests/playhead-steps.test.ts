@@ -213,7 +213,7 @@ test("the component of a milestone that travels no link is never in the backgrou
   const commit = steps.find(step => !travelsLink(step) && step.recordKind === "commit")!;
   const idle = new Map();
   assert.deepEqual([...flightBackground(ids, commit, idle)], ["client"]);
-  // A check names no component, so every idle component is in the background.
+  // A check names no component, so nothing is put in front and nothing fades.
   const check = steps.find(step => !travelsLink(step) && step.recordKind === "check")!;
-  assert.deepEqual([...flightBackground(ids, check, idle)], ids);
+  assert.deepEqual([...flightBackground(ids, check, idle)], []);
 });

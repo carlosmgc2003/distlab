@@ -43,7 +43,7 @@ async function emitProjection(page: Page, status: RuntimeProjectionSet["simulati
 }
 
 async function enabled(page: Page, names: string[]) {
-  for (const name of ["Run", "Pause", "Step", "Reset"]) {
+  for (const name of ["Run", "Back", "Step", "Reset"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeEnabled({ enabled: names.includes(name) });
   }
 }
@@ -55,7 +55,8 @@ test("controls derive availability from every authoritative lifecycle and retain
   await expect(page.getByRole("status", { name: "Simulation status" })).toContainText("Loading");
   await emitProjection(page, "READY", "loaded");
   for (const [status, available] of [
-    ["READY", ["Run", "Step", "Reset"]], ["RUNNING", ["Pause"]],
+    // A run that is executing takes no control; the browser never pauses it (RFC 0002 P1).
+    ["READY", ["Run", "Step", "Reset"]], ["RUNNING", []],
     ["PAUSED", ["Run", "Step", "Reset"]], ["COMPLETED", ["Reset"]], ["FAILED", ["Reset"]],
   ] as const) {
     await emitProjection(page, status, "projection.updated", false);
@@ -65,27 +66,28 @@ test("controls derive availability from every authoritative lifecycle and retain
   }
 });
 
-test("outstanding Run/Pause stays busy until both terminal replies and uses no optimistic status", async ({ page }) => {
+test("OT-PLAY-AC-1: the first Run sends one run, every control waits until it settles, and no optimistic status is shown", async ({ page }) => {
   await mount(page);
   await emitProjection(page, "READY", "loaded");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await enabled(page, ["Pause"]);
+  const run = page.getByRole("button", { name: "Run", exact: true });
+  await run.click();
+  await enabled(page, []);
   const status = page.getByRole("status", { name: "Simulation status" });
   await expect(status).toHaveText("READY · Run in progress…");
+  // A second press while the worker executes asks for nothing more.
+  await run.click({ force: true });
   await emitProjection(page, "RUNNING");
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
   await enabled(page, []);
-  await expect(status).toHaveText("RUNNING · Pause requested; waiting for an event boundary…");
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toHaveCount(0);
+  await emitProjection(page, "COMPLETED");
   await page.evaluate(() => {
     const run = window.controlFixture.commands.find(command => command.type === "run")!;
-    window.controlFixture.emit({ version: 1, requestId: run.requestId, type: "run.finished", status: "PAUSED" });
+    window.controlFixture.emit({ version: 1, requestId: run.requestId, type: "run.finished", status: "COMPLETED" });
   });
-  await enabled(page, []);
-  await expect(status).toContainText("RUNNING");
-  await emitProjection(page, "PAUSED");
-  await expect(status).toHaveText("PAUSED");
-  await enabled(page, ["Run", "Step", "Reset"]);
-  expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run", "pause"]);
+  await expect(status).toHaveText("COMPLETED");
+  // This fixture's run records no milestone, so the playhead is at the end at once.
+  await enabled(page, ["Reset"]);
+  expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run"]);
 });
 
 for (const terminal of ["COMPLETED", "FAILED"] as const) {
@@ -141,7 +143,7 @@ test("a lesson choice cannot replace a session that starts running while the cho
   expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load"]);
 });
 
-test("Step and Reset serialize commands; structured failure remains inspectable and reset recovers", async ({ page }) => {
+test("the first Step sends run, Reset serializes after it; structured failure remains inspectable and reset recovers", async ({ page }) => {
   await mount(page);
   await emitProjection(page, "READY", "loaded");
   const step = page.getByRole("button", { name: "Step", exact: true });
@@ -152,10 +154,11 @@ test("Step and Reset serialize commands; structured failure remains inspectable 
   await expect(step).toHaveCSS("outline-style", "solid");
   await step.press("Enter");
   await enabled(page, []);
-  await expect(page.getByRole("status", { name: "Simulation status" })).toContainText("Stepping one event");
+  await expect(page.getByRole("status", { name: "Simulation status" })).toContainText("Run in progress");
   await expect(step).toBeFocused();
   await step.press("Enter");
-  expect(await page.evaluate(() => window.controlFixture.commands.filter(command => command.type === "step").length)).toBe(1);
+  // The first Step executes the whole run once; the browser never sends a step command.
+  expect(await page.evaluate(() => window.controlFixture.commands.map(command => command.type))).toEqual(["load", "run"]);
   await emitProjection(page, "FAILED");
   await enabled(page, []);
   await page.evaluate(() => {

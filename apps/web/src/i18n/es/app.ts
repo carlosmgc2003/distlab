@@ -34,7 +34,7 @@ export const app: typeof source = {
   goalQuestionCheckout: "¿Cómo viaja un checkout por un sistema distribuido?",
   goalCheckout: "Explorá la arquitectura, ejecutá el escenario y seguí su historia registrada.",
   lessonStateLabel: "Estado de la lección",
-  runHelp: "Paso avanza un evento programado. Pausar tiene efecto en el límite de un evento. Reiniciar vuelve a empezar el escenario cargado.",
+  runHelp: "El primer Ejecutar o Paso ejecuta toda la corrida. Después, Ejecutar la reproduce en el grafo, Paso y Atrás mueven un hito, y Reiniciar vuelve a empezar el escenario cargado.",
   runCompare: "Reiniciá y ejecutá de nuevo para comparar la misma historia en tiempo virtual.",
   importedNote: (seed: string, _f: Fmt) => `Semilla: ${seed}. Este escenario se importó desde un archivo, así que no hay texto de lección empaquetada. Ejecutalo, leé sus verificaciones de arriba y después usá el historial registrado para seguir lo que pasó.`,
   commerceNote: (seed: string, _f: Fmt) => `Semilla: ${seed}. Observá el estado de los servicios y después usá el historial registrado para seguir las confirmaciones en la base de datos, las fallas, los mensajes y los logs de ejecución.`,

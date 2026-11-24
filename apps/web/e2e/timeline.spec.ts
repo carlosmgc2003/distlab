@@ -72,11 +72,12 @@ test("stepping checkout shows ordered Story table rows, trace detail, and moveme
   await expect(page.locator("#timeline-rows [data-observation-id][aria-pressed='true']")).toHaveCount(0);
   expect((await latestProjection(page)).history.observations).toEqual(ready.history.observations);
 
+  // The first Step executes the whole run, so both requests the checkout sends are recorded.
   await stepUntil(page, "network.request.sent");
   await filterByType(page, "network.request.sent");
   const tableRows = page.locator(".story-table tbody tr");
   const rowButtons = page.locator(".story-table button[data-observation-id]");
-  await expect(tableRows).toHaveCount(1);
+  await expect(tableRows).toHaveCount(2);
   const requestText = await tableRows.first().innerText();
   await rowButtons.first().click();
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
@@ -121,11 +122,11 @@ test("stepping checkout shows ordered Story table rows, trace detail, and moveme
   assertOrder(parsed);
 
   const commands = await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type));
-  // Playback navigation lives with the architecture graph now.
+  // Once the run has executed, the controls move the playhead and send no command (RFC 0002 P1).
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  await page.getByRole("button", { name: "Next movement" }).click();
-  await page.getByRole("button", { name: "Play replay" }).click();
-  await page.getByRole("button", { name: "Pause replay" }).click();
+  await page.getByRole("button", { name: "Step", exact: true }).click();
+  await page.getByRole("button", { name: /^(Run|Continue)$/ }).click();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
   expect(await page.evaluate(() => window.timelineEvidence.commands.map(command => command.type))).toEqual(commands);
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
   expect(requestText).toContain("Request sent");

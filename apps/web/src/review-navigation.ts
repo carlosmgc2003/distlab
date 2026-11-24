@@ -1,6 +1,6 @@
 import type { Observation } from "@distlab/contracts";
-import { continuesHistory, edgeFor, movementOf, movementText } from "./records.ts";
-import type { Movement, MovementEdge } from "./records.ts";
+import { continuesHistory } from "./records.ts";
+import type { MovementEdge } from "./records.ts";
 import type { Messages } from "./i18n/catalog.ts";
 import {
   emphasisFor,
@@ -140,11 +140,9 @@ export interface ReviewNavigation {
   readonly selectedId: string | null;
   /** What to announce, as a descriptor. Render it with `feedbackText`. */
   readonly feedback: ReviewFeedback | null;
-  /** The newest recorded movement flashing by itself. Never takes the graph highlight from playback. */
-  readonly liveCueId: string | null;
   readonly focus: FocusRequest | null;
   readonly scroll: ScrollRequest;
-  /** Highest published sequence already read, so only new records raise a live cue. */
+  /** Highest published sequence already read. */
   readonly seenSequence: number;
   /** Records as last published, for continuity only. Never rendered. */
   readonly published: readonly Observation[] | null;
@@ -183,7 +181,6 @@ export function createReviewNavigation(): ReviewNavigation {
     view: "diagram",
     selectedId: null,
     feedback: null,
-    liveCueId: null,
     focus: null,
     scroll: { kind: "top", epoch: 0, view: "diagram", index: -1 },
     seenSequence: -1,
@@ -301,13 +298,8 @@ export function derive(state: ReviewNavigation, context: ReviewContext, m: Messa
     explanation = parts.join(" ");
   }
 
-  // A selected record takes the graph highlight back; a live cue never does.
-  let liveCue: Movement | null = null;
-  if (!selected && state.liveCueId !== null) {
-    const cue = observations.find(item => item.id === state.liveCueId);
-    if (cue) liveCue = movementOf(cue);
-  }
-  const emphasis = deriveEmphasis(selected, liveCue, edges, m, names);
+  // A selected record takes the graph highlight back from the playhead. Growth raises no cue (RFC 0002 P5).
+  const emphasis = selected ? emphasisFor(selected, edges, m, names) : undefined;
 
   const tableExtra = selected !== undefined && !milestones.some(item => item.observation.id === selected.id) && filtered.some(item => item.id === selected.id);
   const storyCount = m.story.count({ reduction, filtered: filtered.length, total: observations.length, tableExtra });
@@ -440,7 +432,7 @@ function withDraft(state: ReviewNavigation, draft: TimelineDraft, query: Timelin
 /**
  * Records as published. History either grows or is replaced, and the two are
  * different transitions: a replacement drops the review position and every
- * active constraint, while growth raises a cue for the newest recorded movement.
+ * active constraint, while growth keeps both.
  */
 function published(state: ReviewNavigation, next: readonly Observation[]): ReviewNavigation {
   const previous = state.published;
@@ -453,7 +445,6 @@ function published(state: ReviewNavigation, next: readonly Observation[]): Revie
       seenSequence: next.at(-1)?.sequence ?? -1,
       selectedId: null,
       feedback: null,
-      liveCueId: null,
       draft: emptyTimelineDraft,
       query: {},
       filterError: null,
@@ -461,12 +452,7 @@ function published(state: ReviewNavigation, next: readonly Observation[]): Revie
       scroll: scrollTo(state, "top"),
     };
   }
-  let newest: string | null = null;
-  for (const observation of next) {
-    if (observation.sequence <= state.seenSequence) continue;
-    if (movementOf(observation)) newest = observation.id;
-  }
-  return { ...state, published: next, seenSequence: next.at(-1)?.sequence ?? state.seenSequence, liveCueId: newest ?? state.liveCueId };
+  return { ...state, published: next, seenSequence: next.at(-1)?.sequence ?? state.seenSequence };
 }
 
 // --- helpers ---
@@ -477,19 +463,4 @@ function scrollTo(state: ReviewNavigation, kind: ScrollKind): ScrollRequest {
 
 function selectionRef(observation: Observation): SelectionRef {
   return { sequence: observation.sequence, type: observation.type, time: observation.time };
-}
-
-function deriveEmphasis(selected: Observation | undefined, liveCue: Movement | null, edges: readonly MovementEdge[], m: Messages, names: ComponentNames): GraphEmphasis | undefined {
-  if (selected) return emphasisFor(selected, edges, m, names);
-  if (!liveCue) return undefined;
-  const edge = edgeFor(liveCue, edges);
-  return {
-    nodeIds: liveCue.to !== undefined ? [liveCue.from, liveCue.to] : [liveCue.from],
-    ...(edge !== undefined ? { edgeId: edge.id } : {}),
-    kind: liveCue.kind,
-    text: movementText(liveCue, m, names),
-    pulseId: liveCue.observationId,
-    // A live cue flashes by itself; it never takes the graph highlight back from playback.
-    origin: "live" as const,
-  };
 }

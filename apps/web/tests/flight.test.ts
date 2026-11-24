@@ -5,30 +5,19 @@ import { simulationTime } from "@distlab/contracts";
 import {
   DEFAULT_FLIGHT_PACE,
   FLIGHT_PACES,
-  flightAdvance,
   flightBackground,
-  flightBoundaries,
   flightDelayMs,
   flightFacts,
-  flightIndexOf,
   flightInTransit,
   flightInTransitText,
-  flightJump,
   flightPace,
-  flightPosition,
   flightSteps,
   flightStop,
   flightTransitGroups,
-  flightTransport,
-  playbackControl,
-  playbackStatus,
   flightLegend,
   flightPaceText,
-  replayKeyAction,
-  transportStep,
 } from "../src/flight.ts";
 import type { ComponentActivity } from "../src/activity.ts";
-import { selectionStep } from "../src/timeline.ts";
 import { flightTokenStyle, transitTokenStyle } from "../src/architecture-view.ts";
 import { mapArchitecture, movementEdges } from "../src/architecture-view.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
@@ -199,11 +188,11 @@ test("paces are named, ordered, and default to the slowest", () => {
   assert.equal(flightPace("fast").delayMs, flightDelayMs("fast"));
   // Each named pace states its own interval, so the control never hides its timing.
   for (const pace of FLIGHT_PACES) {
-    assert.equal(flightPaceText(pace.id, m).note, `one movement every ${pace.delayMs / 1000} seconds`);
+    assert.equal(flightPaceText(pace.id, m).note, `one milestone every ${pace.delayMs / 1000} seconds`);
   }
   assert.deepEqual(FLIGHT_PACES.map(pace => flightPaceText(pace.id, m).label), ["Slow", "Steady", "Fast"]);
   // Spanish writes the interval with the locale's decimal mark.
-  assert.equal(flightPaceText("steady", es).note, "un movimiento cada 0,9 segundos");
+  assert.equal(flightPaceText("steady", es).note, "un hito cada 0,9 segundos");
   // The token paints inside the cursor's interval, so a movement arrives before the next one starts.
   assert.ok(Math.round(flightDelayMs("slow") * 0.62) < flightDelayMs("slow"));
 });
@@ -232,67 +221,6 @@ test("the token follows the measured link path and stops where the record says",
   assert.deepEqual(Object.keys(style).sort(), ["--flight-duration", "--flight-end", "--flight-path", "--flight-rotate", "--flight-start"]);
   const dropped = steps.find(step => step.interrupted)!;
   assert.equal(flightTokenStyle(dropped, "M 0 0", 0)["--flight-duration"], "1ms");
-});
-
-test("the cursor walks recorded movements, waits while recording, and ends at the recorded end", () => {
-  assert.deepEqual(flightAdvance(-1, 0, "playing", false), { cursor: -1, phase: "idle", waiting: false });
-  assert.deepEqual(flightAdvance(0, 3, "playing", false), { cursor: 1, phase: "playing", waiting: false });
-  assert.deepEqual(flightAdvance(2, 3, "playing", false), { cursor: 2, phase: "ended", waiting: false });
-  // The recorded end waits for the run instead of stopping, then still ends when the run is done.
-  assert.deepEqual(flightAdvance(2, 3, "playing", true), { cursor: 2, phase: "playing", waiting: true });
-  assert.deepEqual(flightAdvance(2, 3, "paused", true), { cursor: 2, phase: "paused", waiting: false });
-  assert.deepEqual(flightAdvance(0, 1, "paused", false), { cursor: 0, phase: "paused", waiting: false });
-});
-
-test("the transport states one position, one reason, and the two step directions", async () => {
-  const projection = await run(0);
-  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
-  const idle = flightTransport(-1, steps.length, "idle", false, m);
-  assert.equal(idle.control.action, "play");
-  assert.equal(idle.control.label, "Play replay");
-  // With nothing selected, Next selects the first movement and Previous is unavailable (#191).
-  assert.equal(idle.previous, false);
-  assert.equal(idle.next, true);
-  const playing = flightTransport(0, steps.length, "playing", true, m);
-  assert.equal(playing.control.action, "unavailable");
-  assert.match(playing.reason, /waits at the end while the run records more/);
-  const ended = flightTransport(steps.length - 1, steps.length, "idle", false, m);
-  assert.equal(ended.control.action, "restart");
-  assert.equal(ended.control.label, "Restart replay");
-  assert.equal(ended.next, false);
-  const empty = flightTransport(-1, 0, "idle", false, m);
-  assert.equal(empty.control.action, "unavailable");
-  assert.match(empty.status, /No visible observations/);
-  // The shared control copy states the action and the phase wording.
-  assert.equal(playbackControl(-1, 0, false, m).action, "unavailable");
-  assert.equal(playbackControl(-1, 4, false, m).label, "Play replay");
-  assert.equal(playbackControl(1, 4, false, m).action, "play");
-  assert.equal(playbackControl(3, 4, false, m).label, "Restart replay");
-  assert.equal(playbackControl(1, 4, true, m).action, "unavailable");
-  assert.match(playbackStatus("ended", playbackControl(3, 4, false, m), m), /Restart replay/);
-  assert.match(playbackStatus("playing", playbackControl(1, 4, true, m), m), /Pause/);
-  assert.match(playbackStatus("paused", playbackControl(1, 4, false, m), m), /paused/);
-
-  const position = flightPosition(steps, 2, m);
-  assert.equal(position.text, `Movement 3 of ${steps.length} · virtual time ${steps[2]!.time} · observation #${steps[2]!.sequence}.`);
-  assert.match(flightPosition(steps, -1, m).text, /^0 of \d+ recorded movements/);
-  assert.match(flightPosition([], -1, m).text, /No recorded movements/);
-  assert.match(flightPosition(steps, steps.length - 1, m).detail, /waits for the run to record more/);
-});
-
-test("recorded virtual-time boundaries are a list of times, not durations", async () => {
-  const projection = await run(0);
-  const steps = flightSteps(projection.history.observations, checkoutEdges, m);
-  const boundaries = flightBoundaries(steps);
-  assert.deepEqual(boundaries, [...new Set(steps.map(step => step.time))]);
-  assert.ok(boundaries.every(time => typeof time === "number"));
-  assert.deepEqual(flightBoundaries([]), []);
-  // #204: the plain wording of the movement list's virtual times.
-  assert.equal(flightPosition(steps, 0, m).detail,
-    `${steps.length} recorded movements at ${boundaries.length} virtual times, from t=${boundaries[0]} to t=${boundaries.at(-1)}. The marks show order, not duration.`);
-  assert.equal(flightIndexOf(steps, steps[4]!.observationId), 4);
-  assert.equal(flightIndexOf(steps, "not-a-record"), -1);
-  assert.equal(flightIndexOf(steps, null), -1);
 });
 
 /** The link a step travels, as the edge list the architecture draws. */
@@ -405,67 +333,8 @@ test("hop pairing: a sent leg and its delivered leg cross the link once, one rec
   assert.deepEqual(redacted.map(step => step.span), [{ start: 0, end: 50 }, { start: 50, end: 100 }]);
 });
 
-test("a virtual-time jump names the two recorded times and nothing else", async () => {
-  const steps = flightSteps((await run(1)).history.observations, checkoutEdges, m);
-  const timeout = steps.findIndex(step => step.leg === "timeout");
-  assert.equal(flightJump(steps, timeout, m), "Virtual time jumped t=55 → t=1025 with no recorded movement in between.");
-  assert.equal(flightPosition(steps, timeout, m).jump, flightJump(steps, timeout, m));
-  // No jump at the first movement or between movements at the same virtual time.
-  assert.equal(flightJump(steps, 0, m), undefined);
-  const same = steps.findIndex((step, index) => index > 0 && step.time === steps[index - 1]!.time);
-  assert.equal(flightJump(steps, same, m), undefined);
-  assert.equal(flightPosition(steps, same, m).jump, undefined);
-});
-
-test("#191 with nothing selected, Next selects the first movement and Previous is unavailable", () => {
-  assert.equal(transportStep(-1, 13, 1), 0);
-  assert.equal(transportStep(-1, 13, -1), null);
-  assert.equal(transportStep(-1, 1, -1), null);
-  assert.equal(transportStep(-1, 0, 1), null);
-  // On the first movement Previous is unavailable; on a later one it selects the one before.
-  assert.equal(transportStep(0, 13, -1), null);
-  assert.equal(transportStep(5, 13, -1), 4);
-  assert.equal(transportStep(12, 13, 1), null);
-  const first = flightTransport(0, 13, "paused", false, m);
-  assert.equal(first.previous, false);
-  assert.equal(first.next, true);
-  const later = flightTransport(5, 13, "paused", false, m);
-  assert.equal(later.previous, true);
-  assert.equal(later.next, true);
-  // Row navigation in Recorded history is unchanged: with nothing selected, Previous selects the last row.
-  assert.equal(selectionStep(-1, 13, -1), 12);
-  assert.equal(selectionStep(-1, 13, 1), 0);
-});
-
-test("#192 one recorded movement can be played, and restarted once painted", () => {
-  const idle = flightTransport(-1, 1, "idle", false, m);
-  assert.equal(idle.control.action, "play");
-  assert.equal(idle.control.label, "Play replay");
-  assert.equal(idle.next, true);
-  assert.equal(idle.previous, false);
-  // Play paints the one movement, then the cursor ends there, or waits while the run records.
-  assert.deepEqual(flightAdvance(0, 1, "playing", false), { cursor: 0, phase: "ended", waiting: false });
-  assert.deepEqual(flightAdvance(0, 1, "playing", true), { cursor: 0, phase: "playing", waiting: true });
-  const ended = flightTransport(0, 1, "ended", false, m);
-  assert.equal(ended.control.action, "restart");
-  assert.equal(ended.control.label, "Restart replay");
-  assert.equal(ended.previous, false);
-  assert.equal(ended.next, false);
-  assert.equal(playbackControl(0, 1, false, m).action, "restart");
-  assert.equal(playbackControl(-1, 1, false, m).action, "play");
-  // Zero movements still leave Play unavailable.
-  assert.equal(flightTransport(-1, 0, "idle", false, m).control.action, "unavailable");
-});
-
 test("counts and transit sentences are whole phrases per form and per language", async () => {
   const steps = flightSteps((await run(0)).history.observations, checkoutEdges, m);
-  const one = steps.slice(0, 1);
-  assert.equal(flightPosition(one, -1, m).text, "0 of 1 recorded movement. Nothing selected.");
-  assert.equal(flightPosition(one, -1, es).text, "0 de 1 movimiento registrado. No hay nada seleccionado.");
-  assert.equal(flightPosition(steps, -1, m).text, `0 of ${steps.length} recorded movements. Nothing selected.`);
-  assert.equal(flightPosition(steps, -1, es).text, `0 de ${steps.length} movimientos registrados. No hay nada seleccionado.`);
-  assert.equal(flightPosition(one, -1, m).detail, `The 1 recorded movement is at virtual time ${one[0]!.time}.`);
-  assert.equal(flightPosition(one, -1, es).detail, `El único movimiento registrado ocurre en el tiempo virtual ${one[0]!.time}.`);
   // The same records, narrated in each language, keep the stored ids and the t= notation.
   const spanish = flightSteps((await run(0)).history.observations, checkoutEdges, es);
   assert.equal(spanish.length, steps.length);
@@ -561,23 +430,4 @@ test("hops in transit are grouped per link, kind, and direction, and a caller's 
   // A resting token sits just behind mid-link, measured from its own origin.
   assert.equal(transitTokenStyle({ reversed: false }, "M0 0")["--flight-end"], "42%");
   assert.equal(transitTokenStyle({ reversed: true }, "M0 0")["--flight-end"], "58%");
-});
-
-test("Left and Right step one movement and Space plays or pauses, unless a control or a chord owns the key", () => {
-  const free = { modified: false, repeat: false, arrowsClaimed: false, spaceClaimed: false };
-  assert.equal(replayKeyAction({ ...free, key: "ArrowLeft" }), "previous");
-  assert.equal(replayKeyAction({ ...free, key: "ArrowRight" }), "next");
-  assert.equal(replayKeyAction({ ...free, key: " " }), "toggle");
-  // Holding an arrow walks the movements; holding Space must not flip play and pause.
-  assert.equal(replayKeyAction({ ...free, key: "ArrowRight", repeat: true }), "next");
-  assert.equal(replayKeyAction({ ...free, key: " ", repeat: true }), null);
-  // A field, a select, a tab list, or a dialog keeps its arrows; a button or a component node keeps Space.
-  assert.equal(replayKeyAction({ ...free, key: "ArrowRight", arrowsClaimed: true }), null);
-  assert.equal(replayKeyAction({ ...free, key: "ArrowLeft", arrowsClaimed: true }), null);
-  assert.equal(replayKeyAction({ ...free, key: " ", spaceClaimed: true }), null);
-  // A button does not use the arrows, so they still step while focus rests on a toolbar button.
-  assert.equal(replayKeyAction({ ...free, key: "ArrowRight", spaceClaimed: true }), "next");
-  // Browser chords and every other key are left alone.
-  assert.equal(replayKeyAction({ ...free, key: "ArrowLeft", modified: true }), null);
-  for (const key of ["ArrowUp", "ArrowDown", "Enter", "Escape", "a", "Home"]) assert.equal(replayKeyAction({ ...free, key }), null);
 });

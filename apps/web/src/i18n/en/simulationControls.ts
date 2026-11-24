@@ -4,10 +4,13 @@ import type { Fmt } from "../format.ts";
 export const simulationControls = {
   executionLabel: "Simulation execution",
   run: "Run",
+  /** The Run control after a pause: it plays on from the playhead. */
+  continue: "Continue",
   pause: "Pause",
+  back: "Back",
   step: "Step",
   reset: "Reset",
-  help: "These four controls change the simulation. Step advances one scheduled event. Pause takes effect at an event boundary. Reset starts the loaded scenario again. Replay, in the Architecture tab, is a separate group of controls that leaves the simulation unchanged.",
+  help: "The first Run or Step executes the whole run once. After that, Run plays the recorded milestones on the graph, Pause stops the playhead, Step and Back move one milestone, and nothing runs again. Reset starts the loaded scenario again. Once the run has executed, Left arrow is Back, Right arrow is Step, and Space is Run or Pause.",
   committedState: "Committed simulation state",
   statusLabel: "Simulation status",
   /** Display text for the simulation status codes. An unknown code is shown as it is. */
@@ -15,9 +18,7 @@ export const simulationControls = {
   statusUnavailable: "Simulation unavailable.",
   statusAssessmentRunning: "Assessment running.",
   statusChoose: "Choose a scenario to begin.",
-  pendingPause: "Pause requested; waiting for an event boundary…",
   pendingReset: "Resetting scenario…",
-  pendingStep: "Stepping one event…",
   pendingRun: "Run in progress…",
   pendingLoading: "Loading…",
   pendingAssessment: "Assessment running…",

@@ -7,6 +7,7 @@ import { commerceComponentNames } from "../src/component-display.ts";
 import { packagedMetadata, scenarios } from "../src/scenarios.ts";
 import { viewports } from "./layout-budget.ts";
 import { graphLaidOut, loadLesson } from "./support/lesson.ts";
+import { stepToMovement } from "./support/playhead.ts";
 import { closeServiceState, openServiceState } from "./support/service-state.ts";
 
 // #103: packaged lessons name components by display name, never by raw ID; an imported document keeps its IDs.
@@ -79,9 +80,9 @@ test("#103 saga-uncompensated: narration, the Component filter, and Service stat
   mkdirSync(evidenceDir, { recursive: true });
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-saga-graph.png") });
 
-  await page.getByRole("button", { name: "Run", exact: true }).click();
+  // The first Step executes the run; Step then moves the playhead to the first request.
+  await stepToMovement(page, "Request sent");
   await expect(status(page)).toHaveText("COMPLETED");
-  await page.getByRole("button", { name: "Next movement", exact: true }).click();
   await expect(narration(page)).toContainText("Request sent from Customer App to Orders at virtual time 0. Customer App is waiting on Orders");
   // The trace id is a stored fact and keeps its ID; no sentence names `client` as a component.
   await expect(narration(page)).not.toContainText(/(^|[\s(])client([\s.,)]|$)/);

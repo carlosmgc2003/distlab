@@ -7,7 +7,7 @@ type Transit = { from: string; to?: string; departure?: Departure };
 export const playback = {
   pace: {
     label: { slow: "Slow", steady: "Steady", fast: "Fast" },
-    note: (p: { seconds: number }, f: Fmt) => `one movement every ${f.number(p.seconds)} seconds`,
+    note: (p: { seconds: number }, f: Fmt) => `one milestone every ${f.number(p.seconds)} seconds`,
   },
   /**
    * One question per stored milestone type, keyed by the observation type code: the movements,
@@ -107,36 +107,17 @@ export const playback = {
       ? `Trip: the token travels from ${p.from} to ${p.to} in one record.`
       : `Trip: the token travels from ${p.from} to its destination in one record.`,
   },
+  /** The playhead's position (playhead.ts), stated beside the graph. */
   position: {
-    none: "No recorded movements to replay.",
-    noneDetail: "Run the scenario, or open Recorded history and select a record.",
-    nothingSelected: (total: number, f: Fmt) => f.plural(total, {
-      one: "0 of 1 recorded movement. Nothing selected.",
-      other: `0 of ${f.number(total)} recorded movements. Nothing selected.`,
+    unrun: "The run has not executed yet. Run or Step executes it.",
+    none: "The run recorded no milestones.",
+    start: (total: number, f: Fmt) => f.plural(total, {
+      one: "Before the first record. The run recorded 1 milestone.",
+      other: `Before the first record. The run recorded ${f.number(total)} milestones.`,
     }),
     current: (p: { index: number; total: number; time: number; sequence: number }, f: Fmt) =>
-      `Movement ${f.number(p.index)} of ${f.number(p.total)} · virtual time ${p.time} · observation #${p.sequence}.`,
-    atLast: "At the last recorded movement. Playback waits for the run to record more.",
-    jump: (p: { from: number; to: number }, _f: Fmt) => `Virtual time jumped t=${p.from} → t=${p.to} with no recorded movement in between.`,
-    sameTime: (p: { total: number; time: number }, f: Fmt) => f.plural(p.total, {
-      one: `The 1 recorded movement is at virtual time ${p.time}.`,
-      other: `All ${f.number(p.total)} recorded movements are at virtual time ${p.time}.`,
-    }),
-    boundaries: (p: { total: number; boundaries: number; from: number; to: number }, f: Fmt) =>
-      `${f.number(p.total)} recorded movements at ${f.number(p.boundaries)} virtual times, from t=${p.from} to t=${p.to}. The marks show order, not duration.`,
-  },
-  control: {
-    play: "Play replay",
-    restart: "Restart replay",
-    pause: "Pause replay",
-    playing: "Playing the visible timeline. Pause stops the cursor.",
-    noObservations: "No visible observations to play.",
-    atEnd: "At the end of the visible results. Restart replay plays from the first visible observation.",
-    fromStart: "Play replay starts at the first visible observation.",
-    fromSelected: "Play replay continues from the selected observation.",
-    paused: "Playback is paused.",
-    ended: "Playback reached the end of the visible results. Restart replay plays from the first visible observation.",
-    recording: "Playing recorded movements. The cursor waits at the end while the run records more.",
+      `Milestone ${f.number(p.index)} of ${f.number(p.total)} · virtual time ${p.time} · observation #${p.sequence}.`,
+    jump: (p: { from: number; to: number }, _f: Fmt) => `Virtual time jumped t=${p.from} → t=${p.to} with no recorded milestone in between.`,
   },
   /** Legend of the tokens painted on the graph, keyed by the token glyph. */
   legend: {
@@ -148,20 +129,18 @@ export const playback = {
     "◷": { label: "Token: timed out", detail: "the record says the caller's deadline passed; the token rests at the caller" },
   },
   /** The legend entry for a token that rests on its link (ArchitectureView.tsx). */
-  legendInTransit: { label: "Token: still in transit", detail: "it left earlier, and no record up to this movement says it arrived or was dropped; a number counts the ones waiting on the same link" },
-  /** The Replay toolbar (ArchitecturePlayback.tsx). */
-  toolbar: {
-    label: "Replay",
-    group: "Replay recorded movements",
-    previous: "Previous movement",
-    next: "Next movement",
+  legendInTransit: { label: "Token: still in transit", detail: "it left earlier, and no record up to this milestone says it arrived or was dropped; a number counts the ones waiting on the same link" },
+  /** The playback settings above the graph (ArchitecturePlayback.tsx). UI state only: they never change the run. */
+  settings: {
+    group: "Playback settings",
+    animation: "Animation",
     speed: "Speed",
-    help: "Replay shows movements the run has already recorded. It does not run the simulation again and changes nothing in it. From the keyboard, Left arrow and Right arrow move one movement, and Space plays or pauses.",
+    help: "Animation on: Run plays the recorded milestones one at a time at the chosen speed. Animation off: Run shows the end of the run at once, and Speed is unavailable. Neither setting changes the run.",
   },
   /** The narration of the painted movement (ArchitecturePlayback.tsx). */
   narration: {
-    position: "Architecture playback position",
-    region: "Recorded movement",
+    position: "Playhead position",
+    region: "Recorded milestone",
     noFields: "This record stores no further fields for narration.",
     lookFor: "What to look for",
     details: "Recorded details",
@@ -174,5 +153,13 @@ export const playback = {
     allIdle: "Every component is idle at this record.",
     timeoutRests: "The token rests at the caller. This record states that the caller's deadline passed; it does not state whether the request or its response arrived.",
     interrupted: "The token stops on this link. This record states that the movement did not arrive; it does not state what either component concluded.",
+    /** Where a milestone that travels no link is recorded. */
+    recordAt: (component: string, _f: Fmt) => `At ${component}`,
+    recordBySimulation: "Recorded by the simulation, at no component",
+    /** The live-region sentence for a milestone that travels no link. */
+    recordAnnouncement: (p: { label: string; component?: string; time: number }, _f: Fmt) => p.component !== undefined
+      ? `${p.label} at ${p.component}, virtual time ${p.time}.`
+      : `${p.label}, recorded by the simulation at virtual time ${p.time}.`,
+    recordTransit: "Nothing travels: this record is painted on its component.",
   },
 };

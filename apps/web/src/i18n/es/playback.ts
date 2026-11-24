@@ -7,7 +7,7 @@ type Transit = { from: string; to?: string; departure?: { time: number; sequence
 export const playback: typeof source = {
   pace: {
     label: { slow: "Lenta", steady: "Constante", fast: "Rápida" },
-    note: (p: { seconds: number }, f: Fmt) => `un movimiento cada ${f.number(p.seconds)} segundos`,
+    note: (p: { seconds: number }, f: Fmt) => `un hito cada ${f.number(p.seconds)} segundos`,
   },
   pattern: {
     "network.request.sent": "Quien llama espera una respuesta. ¿Qué registró hasta ahora el receptor?",
@@ -103,35 +103,15 @@ export const playback: typeof source = {
       : `Viaje: el token viaja de ${p.from} a su destino en un solo registro.`,
   },
   position: {
-    none: "No hay movimientos registrados para reproducir.",
-    noneDetail: "Ejecutá el escenario, o abrí el historial registrado y elegí un registro.",
-    nothingSelected: (total: number, f: Fmt) => f.plural(total, {
-      one: "0 de 1 movimiento registrado. No hay nada seleccionado.",
-      other: `0 de ${f.number(total)} movimientos registrados. No hay nada seleccionado.`,
+    unrun: "La corrida todavía no se ejecutó. Ejecutar o Paso la ejecutan.",
+    none: "La corrida no registró hitos.",
+    start: (total: number, f: Fmt) => f.plural(total, {
+      one: "Antes del primer registro. La corrida registró 1 hito.",
+      other: `Antes del primer registro. La corrida registró ${f.number(total)} hitos.`,
     }),
     current: (p: { index: number; total: number; time: number; sequence: number }, f: Fmt) =>
-      `Movimiento ${f.number(p.index)} de ${f.number(p.total)} · tiempo virtual ${p.time} · observación #${p.sequence}.`,
-    atLast: "Estás en el último movimiento registrado. La reproducción espera a que la ejecución registre más.",
-    jump: (p: { from: number; to: number }, _f: Fmt) => `El tiempo virtual saltó de t=${p.from} a t=${p.to} sin ningún movimiento registrado en el medio.`,
-    sameTime: (p: { total: number; time: number }, f: Fmt) => f.plural(p.total, {
-      one: `El único movimiento registrado ocurre en el tiempo virtual ${p.time}.`,
-      other: `Los ${f.number(p.total)} movimientos registrados ocurren en el tiempo virtual ${p.time}.`,
-    }),
-    boundaries: (p: { total: number; boundaries: number; from: number; to: number }, f: Fmt) =>
-      `${f.number(p.total)} movimientos registrados en ${f.number(p.boundaries)} tiempos virtuales, de t=${p.from} a t=${p.to}. Las marcas muestran el orden, no la duración.`,
-  },
-  control: {
-    play: "Reproducir",
-    restart: "Reiniciar reproducción",
-    pause: "Pausar reproducción",
-    playing: "Reproduciendo la línea de tiempo visible. Pausar detiene el cursor.",
-    noObservations: "No hay observaciones visibles para reproducir.",
-    atEnd: "Estás al final de los resultados visibles. Reiniciar reproducción empieza desde la primera observación visible.",
-    fromStart: "Reproducir empieza en la primera observación visible.",
-    fromSelected: "Reproducir continúa desde la observación seleccionada.",
-    paused: "La reproducción está en pausa.",
-    ended: "La reproducción llegó al final de los resultados visibles. Reiniciar reproducción empieza desde la primera observación visible.",
-    recording: "Reproduciendo los movimientos registrados. El cursor espera al final mientras la ejecución registra más.",
+      `Hito ${f.number(p.index)} de ${f.number(p.total)} · tiempo virtual ${p.time} · observación #${p.sequence}.`,
+    jump: (p: { from: number; to: number }, _f: Fmt) => `El tiempo virtual saltó de t=${p.from} a t=${p.to} sin ningún hito registrado en el medio.`,
   },
   legend: {
     REQ: { label: "Token: solicitud", detail: "sale de quien llama cuando se envía, espera a mitad del enlace y llega al destinatario cuando se entrega; su punta de flecha señala el sentido del viaje" },
@@ -141,18 +121,16 @@ export const playback: typeof source = {
     "⊘": { label: "Token: descartado", detail: "el registro dice que este movimiento nunca llegó; el token se detiene en el enlace" },
     "◷": { label: "Token: con timeout", detail: "el registro dice que venció el plazo de quien llama; el token queda en quien llama" },
   },
-  legendInTransit: { label: "Token: sigue en viaje", detail: "salió antes, y ningún registro hasta este movimiento dice que llegó o que se descartó; un número cuenta los que esperan en el mismo enlace" },
-  toolbar: {
-    label: "Reproducción",
-    group: "Reproducción de movimientos registrados",
-    previous: "Movimiento anterior",
-    next: "Movimiento siguiente",
+  legendInTransit: { label: "Token: sigue en viaje", detail: "salió antes, y ningún registro hasta este hito dice que llegó o que se descartó; un número cuenta los que esperan en el mismo enlace" },
+  settings: {
+    group: "Ajustes de reproducción",
+    animation: "Animación",
     speed: "Velocidad",
-    help: "La reproducción muestra movimientos que la ejecución ya registró. No vuelve a ejecutar la simulación y no cambia nada en ella. Desde el teclado, Flecha izquierda y Flecha derecha avanzan o retroceden un movimiento, y Espacio reproduce o pausa.",
+    help: "Con Animación activada, Ejecutar reproduce los hitos registrados de a uno, a la velocidad elegida. Con Animación desactivada, Ejecutar muestra el final de la corrida de inmediato, y Velocidad no está disponible. Ningún ajuste cambia la corrida.",
   },
   narration: {
-    position: "Posición de la reproducción de la arquitectura",
-    region: "Movimiento registrado",
+    position: "Posición del cabezal",
+    region: "Hito registrado",
     noFields: "Este registro no guarda más campos para la narración.",
     lookFor: "Qué mirar",
     details: "Detalles registrados",
@@ -168,5 +146,11 @@ export const playback: typeof source = {
     allIdle: "Todos los componentes están inactivos en este registro.",
     timeoutRests: "El token queda en quien llama. Este registro dice que venció el plazo de quien llama; no dice si llegó la solicitud o su respuesta.",
     interrupted: "El token se detiene en este enlace. Este registro dice que el movimiento no llegó; no dice qué concluyó cada componente.",
+    recordAt: (component: string, _f: Fmt) => `En ${component}`,
+    recordBySimulation: "Registrado por la simulación, en ningún componente",
+    recordAnnouncement: (p: { label: string; component?: string; time: number }, _f: Fmt) => p.component !== undefined
+      ? `${p.label} en ${p.component}, tiempo virtual ${p.time}.`
+      : `${p.label}, registrado por la simulación en el tiempo virtual ${p.time}.`,
+    recordTransit: "Nada viaja: este registro se pinta en su componente.",
   },
 };

@@ -3,14 +3,21 @@ import type { SimulationHost, HostSnapshot } from "./host.ts";
 import { errorText } from "./error-text.ts";
 import { byCode } from "./i18n/catalog.ts";
 import { useMessages } from "./i18n/react.tsx";
+import type { Playhead } from "./flight-playback.ts";
 
 /**
- * The top bar's simulation part (#144): the **Simulation execution** group and the one run summary,
- * both on the bar's single row. The same component renders on both tabs.
+ * The top bar's simulation part (#144): the one control group and the one run summary, both on the
+ * bar's single row. The same component renders on both tabs.
+ *
+ * The group drives the playhead (RFC 0002 P2): the first `Run` or `Step` executes the run once, and
+ * every later control moves the playhead over recorded milestones without a worker command. `Run`
+ * reads `Pause` while the playhead plays. Only `Reset` always sends a command.
  */
-export function SimulationControls({ host, snapshot, locked = false }: {
+export function SimulationControls({ host, snapshot, playhead, locked = false }: {
   readonly host: SimulationHost;
   readonly snapshot: HostSnapshot;
+  /** The playhead's controls; absent while no session is loaded. */
+  readonly playhead?: Pick<Playhead, "controls" | "toggle" | "forward" | "back">;
   /** An assessment suite is running (#97): it owns the session until it ends, so every control waits. */
   readonly locked?: boolean;
 }) {
@@ -18,16 +25,12 @@ export function SimulationControls({ host, snapshot, locked = false }: {
   const { projection, pendingCommands, loading, error } = snapshot;
   const status = projection?.simulation.status;
   const busy = pendingCommands.length > 0 || loading || locked;
-  const canAdvance = !busy && (status === "READY" || status === "PAUSED");
-  const canPause = !locked && (status === "RUNNING" || ((status === "READY" || status === "PAUSED") && pendingCommands.includes("run")))
-    && !pendingCommands.some(type => type !== "run");
+  const controls = locked ? undefined : playhead?.controls;
   const canReset = !busy && status !== "RUNNING" && (projection !== null || error?.code === "SIMULATION_FAILED");
   // A terminal projection can arrive before `run.finished` releases the command (#193): the run is
   // over, so it is not described as in progress while the command settles.
   const runEnded = status === "COMPLETED" || status === "FAILED";
-  const pendingMessage = pendingCommands.includes("pause") ? m.simulationControls.pendingPause
-    : pendingCommands.includes("reset") ? m.simulationControls.pendingReset
-    : pendingCommands.includes("step") ? m.simulationControls.pendingStep
+  const pendingMessage = pendingCommands.includes("reset") ? m.simulationControls.pendingReset
     : pendingCommands.includes("run") ? (runEnded ? "" : m.simulationControls.pendingRun)
     : loading ? m.simulationControls.pendingLoading : locked ? m.simulationControls.pendingAssessment : "";
   // Between two assessment rows no session is loaded yet; that is not a request to choose one.
@@ -35,16 +38,20 @@ export function SimulationControls({ host, snapshot, locked = false }: {
   const statusLabel = statusCode !== null ? byCode(m.simulationControls.status, statusCode) ?? statusCode
     : error ? m.simulationControls.statusUnavailable : locked ? m.simulationControls.statusAssessmentRunning : m.simulationControls.statusChoose;
   const simulation = projection?.simulation;
+  const toggle = controls?.toggle;
 
   return <>
     <div className="execution-group">
       <h2 id="execution-label" className="control-group-label">{m.simulationControls.executionLabel}</h2>
       <div className="control-buttons" role="group" aria-labelledby="execution-label" aria-describedby="controls-help">
-        {/* aria-disabled keeps keyboard focus on a control while its command settles. */}
-        <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.run().catch(() => {}); }}>{m.simulationControls.run}</button>
-        <button aria-disabled={!canPause} onClick={() => { if (canPause) void host.pause().catch(() => {}); }}>{m.simulationControls.pause}</button>
-        <button aria-disabled={!canAdvance} onClick={() => { if (canAdvance) void host.step().catch(() => {}); }}>{m.simulationControls.step}</button>
-        <button aria-disabled={!canReset} onClick={() => { if (canReset) void host.reset().catch(() => {}); }}>{m.simulationControls.reset}</button>
+        {/* aria-disabled keeps keyboard focus on a control while it is unavailable, so Run → Pause keeps focus. */}
+        <button type="button" aria-disabled={!toggle?.available} aria-keyshortcuts="Space" className={toggle?.pauses ? "is-pause" : undefined}
+          onClick={() => { if (toggle?.available) playhead?.toggle(); }}>{toggle?.label ?? m.simulationControls.run}</button>
+        <button type="button" aria-disabled={!controls?.back} aria-keyshortcuts="ArrowLeft"
+          onClick={() => { if (controls?.back) playhead?.back(); }}>{m.simulationControls.back}</button>
+        <button type="button" aria-disabled={!controls?.step} aria-keyshortcuts="ArrowRight"
+          onClick={() => { if (controls?.step) playhead?.forward(); }}>{m.simulationControls.step}</button>
+        <button type="button" aria-disabled={!canReset} onClick={() => { if (canReset) void host.reset().catch(() => {}); }}>{m.simulationControls.reset}</button>
       </div>
       <p id="controls-help" className="sr-only">{m.simulationControls.help}</p>
     </div>

@@ -161,7 +161,7 @@ operation handles, generator state, writable databases, scheduler controllers,
 random state internals, and live callbacks. `randomDrawCount` is an observable
 counter only; it cannot reveal or advance the generator. React Flow positions
 and selection remain UI-owned state and are excluded from every projection.
-Timeline filters, the selected observation, and the playback cursor are UI-owned
+Timeline filters, the selected observation, and the playhead are UI-owned
 too. Text filters offer the distinct canonical values already present in the
 visible history projection. Exact mode uses the same comparisons as
 `ExecutionHistoryReader.query`: inclusive virtual-time bounds, exact type,
@@ -273,37 +273,43 @@ cannot alter canonical history.
 
 ## Shell action matrix
 
-Browser controls follow the simulation lifecycle. A disabled Run, Pause, Step, or
-Reset means that command is unavailable in the current state. The shell does not
-add a worker command to stand in for it. Scenario choice and Load replace the
-session only when no command is outstanding and the simulation is not running.
+Browser controls follow the simulation lifecycle. The browser has one control
+group, **Simulation execution**: `Run`, `Back`, `Step`, and `Reset`, where `Run`
+reads `Pause` while the playhead plays (RFC 0002 P2). The first `Run` or `Step`
+after a load or a reset sends `run` once, and the worker executes the whole run.
+From then on `Run`, `Pause`, `Step`, `Back`, and their keys move the
+**playhead** over the recorded milestones and send nothing to the worker. Only
+`Reset` sends a command after that. The browser sends no `step` or `pause`; both
+stay in the protocol, and `npm run lesson -- <name> --step` still steps one
+event. A disabled control is unavailable in the current state, and the shell
+does not add a worker command to stand in for it. Scenario choice and Load
+replace the session only when no command is outstanding and the simulation is
+not running.
 
 Timeline filters, the selected observation, evidence and trace navigation, graph
-gestures, and playback stay in the UI. They do not advance virtual time, record
-observations, or send worker commands. Restart replay moves the playback
-cursor to the first visible observation and leaves the simulation where it is.
+gestures, and the playhead stay in the UI. They do not advance virtual time,
+record observations, or send worker commands.
 
 Presentation is layered, and the layering is not a boundary of its own. The
 shell states the committed run once, as status, virtual time, processed events,
-and pending events; engine counters stay behind a disclosure. Simulation
-commands and recorded-history navigation are separate control groups, and only
-the first one sends worker commands. Switching between the architecture,
+and pending events; engine counters stay behind a disclosure. The simulation
+control group and recorded-history navigation are separate control groups, and
+only the first one sends worker commands. Switching between the architecture,
 recorded history, and observation detail regions is a view control: it changes
 no projection, sends no command, preserves each region's local selection, and is
 offered only in a layout that shows one region at a time. Adding a control to
 express a new fact, or a new status to restate an existing one, is not a
 solution to a presentation problem.
 
-While a command is outstanding, scenario choice, Load, Open scenario file, Run, Step, and Reset are
-unavailable. Pause stays available only when Run is the sole outstanding command,
-and it takes effect at an event boundary.
+While a command is outstanding, scenario choice, Load, Open scenario file, Run, Back, Step, and Reset are
+unavailable.
 
 | Action | Empty | Ready | Running | Paused | Completed | Error |
 | --- | --- | --- | --- | --- | --- | --- |
 | Choose a lesson | Choosing a packaged lesson in the Lesson chooser loads it | Choosing a lesson replaces the session; choosing the loaded lesson reloads it without the session overlay | Unavailable while the run is in progress | Choosing a lesson replaces the session | Choosing a lesson replaces the session | Choosing a lesson loads a fresh session after a load or worker error. `SIMULATION_FAILED` recovers through Reset |
-| Run | Unavailable until a session is loaded | Start the loaded scenario | Unavailable. Pause is the command for a run in progress | Continue from the current boundary | Unavailable because the run has finished. Reset runs the loaded scenario again | Unavailable |
-| Pause | Unavailable | Unavailable | Request a pause at the next event boundary | Unavailable | Unavailable because the run is not in progress | Unavailable |
-| Step | Unavailable | Process one scheduled event | Unavailable | Process one scheduled event | Unavailable because the run has finished | Unavailable |
+| Run | Unavailable until a session is loaded | Send `run` once. With **Animation** on, the playhead then plays from the first milestone; with it off, the playhead stands on the last | Unavailable while the worker executes the run | Send `run` once, as in Ready. The browser never pauses a run, so only another client leaves a session here | Move the playhead only, as the playhead table says | Unavailable |
+| Step | Unavailable | Send `run` once, then stand the playhead on the first milestone | Unavailable while the worker executes the run | Send `run` once, as in Ready | Move the playhead only, as the playhead table says | Unavailable |
+| Back | Unavailable | Unavailable | Unavailable | Unavailable | Move the playhead only, as the playhead table says | Unavailable |
 | Reset | Unavailable | Reconstruct the loaded scenario | Unavailable | Reconstruct the loaded scenario | Reconstruct the loaded scenario | Available for `SIMULATION_FAILED`, including when history was withheld. Unavailable when no session was loaded |
 | Open scenario file | Read a local file and load it | Replace the session | Unavailable | Replace the session | Replace the session | After `INVALID_DOCUMENT` the diagnostics stay listed, and choosing a file loads again |
 | Open a lesson link | Opening the page with `?lesson=<id>` or `?assessment=<id>` loads that packaged lesson or assessment once, as choosing it in the Lesson chooser does. An unknown name is reported on the welcome screen and loads nothing | Not applicable: a link is read only when the page opens | Not applicable | Not applicable | Not applicable | Not applicable |
@@ -314,10 +320,8 @@ and it takes effect at an event boundary.
 | Component selection | Not shown | Inspect that component. Escape clears the selection | Inspect that component | Inspect that component | Inspect that component | Not shown when the failure withholds the projection |
 | Timeline filters | Not shown | Narrow the visible rows with recorded suggestions. Exact, Prefix, and Contains are labeled. Clear all filters is unavailable when no filter is set | Narrow the rows received so far | Narrow the visible rows | Narrow the visible rows | Not shown when history is withheld |
 | Evidence, causation, and trace | Not shown | Select the recorded observation, show its row and detail, and move focus to that row. A filter cleared to reveal it is announced | Same read-only navigation | Same read-only navigation | Same read-only navigation | Not shown when history is withheld |
-| Play / Restart | Not shown | Play moves the cursor through recorded movements. Zero movements leave Play unavailable. One movement is painted by Play, and Restart paints it again. On the last movement the control is Restart replay | Move the cursor only. Playback does not pause or advance the simulation | Move the cursor only | Move the cursor only | Not shown when history is withheld |
-| Pause replay | Not shown | Unavailable until playback is running | Stop the cursor | Stop the cursor | Stop the cursor | Not shown when history is withheld |
-| Previous / Next | Not shown | Available only when that direction selects a different visible row or movement | Available only when that direction selects a different visible row or movement | Available only when that direction selects a different visible row or movement | Available only when that direction selects a different visible row or movement | Not shown when history is withheld |
-| Replay keys | Not shown | With the Architecture tab shown, Left arrow and Right arrow do what Previous and Next do, and Space does what Play, Pause replay, or Restart replay does. A key that the focused control already uses is left to that control, and no key is handled while a dialog is open. Unavailable with zero movements | Move the cursor only | Move the cursor only | Move the cursor only | Not shown when history is withheld |
+| Previous / Next observation | Not shown | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Available only when that direction selects a different visible row | Not shown when history is withheld |
+| Animation and Speed | Not shown | Change UI state only. They survive lesson loads. **Speed** is unavailable while **Animation** is off | The same | The same | The same | Not shown when the failure withholds the projection |
 
 Empty means no session is loaded. Error means a host error is showing. A terminal
 `SIMULATION_FAILED` withholds incomplete history, keeps the failure visible, and
@@ -328,14 +332,22 @@ last, including when the filter matches one row. After that only row is
 selected, both controls are unavailable. Previous is unavailable on the first
 visible row, and Next is unavailable on the last.
 
-The Replay transport in the Architecture tab starts at the start of the story
-(#191). Before any movement is selected, `Next movement` selects the first
-recorded movement and `Previous movement` is unavailable. `Previous movement`
-is also unavailable on the first movement, and `Next movement` on the last.
-With exactly one recorded movement (#192), `Play replay` paints it and playback
-ends there, or waits for the next movement while the run is still recording;
-once it is painted and the run is not recording, the control is
-`Restart replay`, which paints it again.
+Once the run has executed, the controls move the playhead over the run's
+teaching milestones (`apps/web/src/playhead-steps.ts`, the Story view's
+milestone set) and send no worker command. The table is RFC 0002 P2, with `Run`
+and `Pause` as one control (`apps/web/src/playhead.ts`):
+
+| Control | Before the first `Run` or `Step` | Playing | Paused | At the end |
+| --- | --- | --- | --- | --- |
+| `Run` / `Pause` | `Run` executes the run, then plays from the first milestone (Animation on) or stands on the last (Animation off) | Reads `Pause`: stop the playhead | Reads `Continue`: play on from the playhead; with Animation off, go to the last milestone | Unavailable; `Reset` starts again |
+| `Step` | Execute the run, then stand on the first milestone | Stop, then move one milestone forward | Move one milestone forward | Unavailable |
+| `Back` | Unavailable | Stop, then move one milestone back | Move one milestone back | Move one milestone back |
+| `Reset` | Reconstruct the loaded scenario | Reconstruct it; the playhead returns to the start | The same | The same |
+| Keys | Not taken: a key never executes the run, so only the buttons start it | With the Architecture tab shown, Left arrow is `Back`, Right arrow is `Step`, and Space is `Run` or `Pause`. A key that the focused control already uses is left to that control, and no key is handled while a dialog is open | The same | The same |
+
+`Back` is unavailable on the first milestone, and a run that records one
+milestone ends on it. Selecting a record in Recorded history takes the graph
+highlight back, and the playhead returns to before the first record.
 
 ## Deferred capabilities
 

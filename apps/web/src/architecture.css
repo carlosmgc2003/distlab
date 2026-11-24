@@ -543,6 +543,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .react-flow__edge.is-movement .react-flow__edge-path { stroke-dasharray: 6 4; animation: movement-dash 0.9s linear 1; }
 @keyframes movement-dash { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
 .role-badge { display: inline-block; margin-top: 7px; padding: 1px 8px; border: 1px solid var(--selection-border); border-radius: 999px; background: var(--selection-bg); color: var(--text-primary); font-size: .7rem; font-weight: 700; white-space: nowrap; }
+/* A milestone that travels no link is painted on its component: its stored label, with the Story view's marker. */
+.milestone-badge { display: inline-block; max-width: 100%; margin-top: 7px; padding: 1px 8px; border: 2px solid var(--selection-border); border-radius: 6px; background: var(--selection-bg); color: var(--text-primary); font-size: .7rem; font-weight: 700; overflow-wrap: anywhere; }
 .role-badge.role-receiving { border-style: dashed; background: var(--category-service-bg); border-color: var(--status-approved); }
 /* Activity is a word, a symbol, and an outline pattern; colour only repeats it. The badge
    sits on the node's top edge so the node keeps its measured size during playback. */
@@ -607,12 +609,10 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .top-bar .run-metrics dd { margin: 0; line-height: 1.2; font-weight: 650; }
 .top-bar-alerts { flex: none; display: flex; flex-direction: column; gap: 6px; }
 .top-bar-alerts p { margin: 0; }
-/* Replay (#144): a one-row toolbar inside the Architecture tab, above the graph it drives. */
-.replay-toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0 0 6px; }
-.replay-toolbar .control-buttons { gap: 6px; }
-.replay-toolbar .control-buttons button { min-height: 36px; min-width: 0; padding: 4px 10px; font-size: .85rem; }
-/* The key that does the same as the button. Decorative: `aria-keyshortcuts` carries it for assistive technology. */
-.key-cap { display: inline-block; min-width: 1.4em; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; font: inherit; font-size: .8em; line-height: 1.3; text-align: center; opacity: .75; }
+/* Playback settings (RFC 0002 P3): one slim row above the graph the playhead paints. */
+.playback-settings { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 0 0 6px; }
+.playback-animation { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 600; min-height: 36px; cursor: pointer; }
+.playback-animation input { width: 18px; height: 18px; margin: 0; accent-color: var(--selection-border); }
 .history-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-right: auto; }
 .language-switcher select { font: inherit; font-size: 0.8125rem; padding: 2px 4px; }

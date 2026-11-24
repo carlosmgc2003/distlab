@@ -104,7 +104,8 @@ test("the dark theme passes accessibility checks on the lesson surfaces, and the
   await axe();
 
   await page.locator(".react-flow__node").first().click();
-  await page.getByRole("button", { name: "Next movement", exact: true }).click();
+  // Step stops the playhead and moves one milestone.
+  await page.getByRole("button", { name: "Step", exact: true }).click();
   await axe();
   await openServiceState(page);
   await axe();

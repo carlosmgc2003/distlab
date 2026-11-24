@@ -29,10 +29,9 @@ export interface GraphEmphasis {
   readonly pulseId?: string;
   /**
    * How the highlight was raised. `selection` is a record the reader chose in
-   * Recorded history; `live` is the newest recorded movement flashing by itself.
-   * Only a selection takes the graph highlight back from architecture playback.
+   * Recorded history, and it takes the graph highlight back from the playhead.
    */
-  readonly origin?: "selection" | "live";
+  readonly origin?: "selection";
 }
 
 export interface ChangeEvidence {

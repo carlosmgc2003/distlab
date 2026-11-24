@@ -80,22 +80,13 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   }
   const initial = await latestProjection(page);
 
-  // Submit both controls in one browser task so Pause reaches this small run at its next yield.
-  await page.evaluate(async () => {
-    const controls = [...document.querySelectorAll("button")];
-    controls.find(item => item.textContent === "Run")!.click();
-    await Promise.resolve();
-    controls.find(item => item.textContent === "Pause")!.click();
-  });
-  await expect(status).toHaveText("PAUSED");
-  const paused = await latestProjection(page);
-  expect(paused.simulation.processedEvents).toBeGreaterThan(0);
+  // The first Step, from the keyboard, executes the whole run once; the next ones move the playhead.
   await button("Step").focus();
   await page.keyboard.press("Enter");
-  await expect(status).toHaveText("PAUSED");
-  expect((await latestProjection(page)).simulation.processedEvents).toBe(paused.simulation.processedEvents + 1);
-  await button("Run").click();
   await expect(status).toHaveText("COMPLETED");
+  await expect(page.getByRole("status", { name: "Playhead position" })).toHaveText(/^Milestone 1 of /);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status", { name: "Playhead position" })).toHaveText(/^Milestone 2 of /);
   // The committed-state summary is the single visible presentation of the run.
   await expect(page.locator(".run-summary")).toContainText("COMPLETED");
   await expect(lesson).toContainText("Lesson ready: Lost processor response.");
@@ -156,5 +147,5 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   const second = await latestProjection(page);
   expect(second).toEqual(first);
   expect(second.history.observations).toEqual(fixture.history.observations);
-  expect(await page.evaluate(() => window.lessonEvidence.commands.map(item => item.type))).toEqual(["load", "run", "pause", "step", "run", "reset", "run"]);
+  expect(await page.evaluate(() => window.lessonEvidence.commands.map(item => item.type))).toEqual(["load", "run", "reset", "run"]);
 });

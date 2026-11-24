@@ -279,12 +279,16 @@ hint pill rather than as permanent text. The inspector skip link moves keyboard
 focus directly to the metadata panel. These interactions remain local to the UI
 and send no worker commands.
 
-The Architecture tab replays the movements a run has already recorded, so a
-reader watches the system in action. The **Replay** toolbar, one row at the top
-of the Architecture tab — `Play replay`, `Pause replay`, `Restart replay`,
-`Previous movement`, `Next movement`, plus a **Speed** select of Slow,
-Steady, or Fast — moves a cursor over recorded movements and paints a token on
-the link each movement used: `REQ` for a request, `RES` for a response, `MSG`
+The Architecture tab shows a run one teaching milestone at a time, so a reader
+watches the system in action. There is one control group, in the top bar on both
+tabs: `Run`, `Back`, `Step`, and `Reset`. The first `Run` or `Step` executes the
+whole run in the worker, once. From then on `Run` plays the run (it reads
+`Pause` while playing and `Continue` after a pause), and `Step` and `Back` move
+one milestone; none of them sends a worker command. One slim row above the graph
+holds **Animation** (on by default; off, `Run` shows the end of the run at once)
+and **Speed** (Slow, Steady, or Fast). The **playhead** moves over the Story
+view's milestones. A milestone that travels a link paints a token on that link:
+`REQ` for a request, `RES` for a response, `MSG`
 for a message, `ACK` for an acknowledgement, `⊘` for a recorded drop, and `◷`
 for a recorded timeout. The token always travels from the record's origin to its
 destination, whichever way the link is drawn: a response leaves the callee for
@@ -294,25 +298,24 @@ arrow points the way the token moves on horizontal, vertical, and stepped links.
 One network hop crosses its link once over two records: `*.sent` departs and
 waits mid-link, and `*.delivered` or `*.received` arrives. The legs are paired by
 the stored request id. A drop stops on the link past the middle. A timeout
-travels nowhere and rests at the caller. While the cursor stands on a record,
+travels nowhere and rests at the caller. Any other milestone, such as a commit,
+a fault, a log, or a check, is painted on its component as a badge with its
+stored label. While the playhead stands on a record,
 each component shows **Idle**, **Processing** (a delivered request with no
 response sent, an open transaction, or an unacknowledged delivery), or
 **Waiting** (a sent request with no response or timeout recorded, with its stored
-deadline). States are read only from records at or before the cursor, and each
+deadline). States are read only from records at or before the playhead, and each
 has a word, a symbol, and an outline pattern. A dropped request or response does
 not end a wait, because the caller has recorded nothing. When virtual time
-advances between two movements, the playback position names both times, for
+advances between two milestones, the playhead position names both times, for
 example `t=55 → t=1025`, without painting the interval as a duration. The legend
 reserves its own column in the fitted view so it covers no node, and folds away
-on narrow canvases. Replay never shares a row with `Run`, `Pause`, `Step`, and
-`Reset`: those stay in the one-row top bar on both tabs, and only `Run` carries
-the primary action paint. Replay shows only in the Architecture tab, because the
-graph it animates is the graph it belongs to. A movement that arrived leaves the
+on narrow canvases. Only `Run` carries the primary action paint. A movement that arrived leaves the
 link highlighted, and the sending and receiving components carry a text badge.
-Beside the graph, a narration reads in three levels so one movement takes two
+Beside the graph, a narration reads in three levels so one milestone takes two
 short lines: the stored label and the route, then one question about the
 pattern that record belongs to, then **Recorded details**, folded until the
-reader opens it and kept as they left it from movement to movement. The details
+reader opens it and kept as they left it from milestone to milestone. The details
 hold the record's stored fields — endpoint, deadline, status, delivery attempt,
 destination, consumer, fault rule, reason, recorded transitions, changed rows,
 and the stored external change — with the trace and the component activity.
@@ -321,18 +324,17 @@ wait is drawn fainter, with its store and its links, so the eye goes to the
 movement; its labels keep their contrast. A hop that left earlier and has no
 arrival or drop recorded yet keeps a resting token on its link, and the
 narration names it, so two requests sent at the same virtual time are seen
-together. From the keyboard, the Left and Right
-arrow keys do what `Previous movement` and `Next movement` do, and Space plays
-or pauses, wherever a focused control does not already use that key. Payload *field names* are shown instead of payload values, a
+together. From the keyboard, the Left arrow is `Back`, the Right arrow is
+`Step`, and Space is `Run` or `Pause`, wherever a focused control does not
+already use that key. Payload *field names* are shown instead of payload values, a
 redacted or omitted payload contributes only a visibility statement, and a
 pattern question never asserts an outcome, so a dropped response is never
-described as a failed operation. Speed changes only how fast the browser paints
-movements: the host timer moves a browser cursor over records the worker already
-published and never advances virtual time, records an observation, or sends a
-worker command. While the run is still recording the cursor waits at the
-recorded end for the next movement; when the run has finished it ends with the
-last movement painted. Choosing a record in Recorded history takes the graph
-highlight back, a live cue does not, and reduced motion rests each token where
+described as a failed operation. Speed changes only how long the playhead stays
+on each milestone: the host timer moves the playhead over records the worker
+already published and never advances virtual time, records an observation, or
+sends a worker command. Play ends with the last milestone painted. Choosing a
+record in Recorded history takes the graph highlight back and returns the
+playhead to the start, and reduced motion rests each token where
 the record says the movement stopped. The narration and the component inspector
 share one side column, so the graph keeps its height at the supported desktop
 baselines.
@@ -382,12 +384,7 @@ trace destination shows that row and its detail, moves focus to the row, and
 announces when filters were cleared or narrowed to reveal it. Redacted and
 omitted payloads stay marked as stored; missing fields are not reconstructed.
 Request and message observations highlight the matching architecture link with
-a transient movement cue and a text alternative. Play, pause, and the playback
-cursor are UI state: a host timer may advance that cursor, and it does not
-advance virtual time, record observations, or send worker commands. Play is
-unavailable when fewer than two rows are visible. On the last visible row the
-control is Restart replay, which starts again at the first visible row. Pause
-timeline is available while that cursor is moving. Reset clears the selection,
+a transient movement cue and a text alternative. Reset clears the selection,
 the filters, and the movement cue and shows the new run. A terminal failure
 says whether the published history is complete. Incomplete history is withheld
 with the failure, the same way a projectionless failure stays visible until

@@ -36,14 +36,12 @@ for (const name of commerceLessonNames) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
     await recordAnnouncements(page);
-    await page.getByRole("button", { name: "Step", exact: true }).click();
-    await expect(status).toHaveText("PAUSED");
-    // Run from the keyboard: the reveal must leave focus on the element that had it.
-    const run = page.getByRole("button", { name: "Run", exact: true });
-    await run.focus();
+    // The first Step, from the keyboard, executes the run: the reveal must leave focus on the element that had it.
+    const step = page.getByRole("button", { name: "Step", exact: true });
+    await step.focus();
     await page.keyboard.press("Enter");
     await expect(status).toHaveText("COMPLETED");
-    await expect(run).toBeFocused();
+    await expect(step).toBeFocused();
     const state = lessonChecks(page);
     const checks = state.getByRole("list", { name: "Business invariants", exact: true });
     // The first verdict is revealed in the Lesson panel without any scrolling by the test.
@@ -165,7 +163,7 @@ test("the notifications pair shows the dead-letter queue only when the retry bud
   }
 });
 
-test("the cache pair shows live KV entries with their expiry, the price Orders used, and TTL expiry in history", async ({ page }) => {
+test("the cache pair shows the price Orders used, the end-of-run KV state, and TTL expiry in history", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/");
   const status = page.getByRole("status", { name: "Simulation status" });
@@ -174,18 +172,8 @@ test("the cache pair shows live KV entries with their expiry, the price Orders u
   for (const [name, price, source, verdict] of [["cache-stale-price", 1000, "cache", "VIOLATED"], ["cache-invalidated", 1200, "database", "HOLDS"]] as const) {
     await loadLesson(page, name);
     await expect(status).toHaveText("READY");
-    // Step until both carts are live: each entry shows its absolute expiry.
-    const step = page.getByRole("button", { name: "Step", exact: true });
-    for (let i = 0; i < 80 && !(await inServiceState(page, dialog => region(dialog, "cart").innerText())).includes("cart:cart-2"); i++) {
-      await step.click();
-      await expect(status).toHaveText("PAUSED");
-    }
-    await inServiceState(page, async dialog => {
-      await expect(region(dialog, "cart")).toContainText("cart:cart-1");
-      await expect(region(dialog, "cart")).toContainText("expires at t=31");
-      await expect(region(dialog, "catalog")).toContainText("price:sku-1");
-      await expect(region(dialog, "catalog")).toContainText("expires at t=101");
-    });
+    // The browser no longer steps one scheduler event (RFC 0002, decision 2), so Service state shows the
+    // end of the run; live entries at the playhead come with state at the playhead (P6, #229).
     await page.getByRole("button", { name: "Run", exact: true }).click();
     await expect(status).toHaveText("COMPLETED");
     // Every entry has expired by the end of the run; the committed rows remain.

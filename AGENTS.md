@@ -83,19 +83,24 @@ normalized architecture, never from fixed component IDs.
 Commerce student projections expose committed business rows, live KV entries with their expiry, client
 outcomes, declared external-visible state, delivery facts, dead letters, and
 assertion results; the checkout client projection carries assertion results
-too. Runtime tasks and provider counters remain host-only. Architecture playback in
-`apps/web/src/flight.ts` and `apps/web/src/flight-playback.ts` is presentation
-over records the worker already published: a host timer may move the playback
-cursor and paint a movement token on a measured link path, and it must not
-advance virtual time, record observations, or send worker commands. Narration
-reads stored observation fields only, and a redacted or omitted payload is never
-reconstructed. A token travels from the record's origin to its destination even
-when that runs against the drawn link. The Replay keys (`useReplayKeys`), the
-hops in transit (`flightInTransit`), and the Replay background
-(`flightBackground`) follow the same rule: a key moves the playback cursor only,
-and the other two are read from records at or before the cursor. Component activity in
-`apps/web/src/activity.ts` is pure: it reads records at or before the cursor and
-nothing after it. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
+too. Runtime tasks and provider counters remain host-only. The playhead
+(`apps/web/src/playhead.ts`, `apps/web/src/playhead-steps.ts`, and
+`apps/web/src/flight-playback.ts`, RFC 0002) is one position over the run's
+teaching milestones. The first `Run` or `Step` after a load or a reset sends
+`run` once; every later `Run`, `Pause`, `Step`, `Back`, and key moves the
+playhead and sends no worker command, and the browser never sends `step` or
+`pause`. Architecture playback in `apps/web/src/flight.ts` is presentation over
+records the worker already published: a host timer may move the playhead and
+paint a movement token on a measured link path, or a milestone badge on its
+component, and it must not advance virtual time, record observations, or send
+worker commands. Narration reads stored observation fields only, and a redacted
+or omitted payload is never reconstructed. A token travels from the record's
+origin to its destination even when that runs against the drawn link. The keys
+(`usePlayheadKeys`), the hops in transit (`flightInTransit`), and the
+background (`flightBackground`) follow the same rule: a key moves the playhead
+only, and the other two are read from records at or before the playhead.
+Component activity in `apps/web/src/activity.ts` is pure: it reads records at or
+before the playhead and nothing after it. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
 edits a draft overlay as UI state in up to three sections: Architecture
 (`apps/web/src/ArchitectureSection.tsx`, `apps/web/src/design-edits.ts`), Design
 choices (`apps/web/src/DesignChoicesSection.tsx`, `apps/web/src/design-choices.ts`),
@@ -143,8 +148,8 @@ document, a projection, or history.
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns
-scroll and focus as requests for the presentation to apply. Presentation playback
-and review navigation share no seam; nothing in review navigation is a cursor.
+scroll and focus as requests for the presentation to apply. The playhead and
+review navigation share no seam; nothing in review navigation is a cursor.
 
 ## Coding Style & Naming Conventions
 

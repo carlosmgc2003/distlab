@@ -148,7 +148,7 @@ the fields that would hide it.
 - The counts on a quick view are the number of stored records the predicate
   keeps in the current run, not a rate, a severity, or a health measure.
 - Quick views are UI state owned by the browser, like the filter draft, the
-  selected observation, and the playback cursor.
+  selected observation, and the playhead.
 
 ### Accessibility
 

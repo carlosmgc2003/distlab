@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_FLIGHT_PACE, flightDelayMs, flightInTransit } from "./flight.ts";
+import type { FlightPace, FlightStep } from "./flight.ts";
 import {
-  DEFAULT_FLIGHT_PACE,
-  flightAdvance,
-  flightDelayMs,
-  flightInTransit,
-  flightPosition,
-  flightSteps,
-  flightTransport,
-  replayKeyAction,
-  transportStep,
-} from "./flight.ts";
-import type { FlightPace, FlightPosition, FlightStep, FlightTransport, PlaybackPhase } from "./flight.ts";
+  INITIAL_PLAYHEAD,
+  playheadCommand,
+  playheadControls,
+  playheadExecuted,
+  playheadKeyAction,
+  playheadPosition,
+  playheadTick,
+} from "./playhead.ts";
+import type { PlayheadCommand, PlayheadContext, PlayheadControls, PlayheadPosition, PlayheadState } from "./playhead.ts";
+import { playheadSteps } from "./playhead-steps.ts";
+import type { PlayheadStep } from "./playhead-steps.ts";
 import { activityAt, activityChanges } from "./activity.ts";
 import type { ComponentActivity } from "./activity.ts";
 import type { MovementEdge } from "./records.ts";
@@ -18,156 +20,167 @@ import type { Observation } from "@distlab/contracts";
 import { useMessages } from "./i18n/react.tsx";
 import type { ComponentNames } from "./component-display.ts";
 
-/** How often the host timer rechecks while the cursor waits for the run to record more movements. */
-const TAIL_POLL_MS = 200;
-
-interface Cursor {
-  readonly index: number;
-  readonly phase: PlaybackPhase;
-  /** Counts restarts, so Restart paints the same movement again when there is only one (#192). */
-  readonly paint: number;
-}
-
-export interface FlightPlayback {
-  readonly steps: readonly FlightStep[];
-  readonly cursor: number;
-  readonly step: FlightStep | undefined;
-  readonly phase: PlaybackPhase;
+/**
+ * The playback settings: UI state owned by the shell, so it survives lesson loads. Neither
+ * setting changes the run; they decide how `Run` shows it.
+ */
+export interface PlaybackSettings {
+  /** On: `Run` plays the milestones at `pace`. Off: `Run` shows the end at once. */
+  readonly animation: boolean;
   readonly pace: FlightPace;
-  /** Changes on every Restart, so a token painted again starts from the start of its leg. */
-  readonly paint: number;
-  readonly position: FlightPosition;
-  readonly transport: FlightTransport;
-  /** Component activity read from records at or before the cursor; empty with no cursor. */
-  readonly activity: ReadonlyMap<string, ComponentActivity>;
-  /** Activity that differs from the previous movement, one sentence per component. */
-  readonly activityChanges: readonly string[];
-  /** Hops that left before the cursor's movement and have no arrival or drop recorded at or before it. */
-  readonly inTransit: readonly FlightStep[];
-  readonly play: () => void;
-  readonly pause: () => void;
-  readonly restart: () => void;
-  readonly previous: () => void;
-  readonly next: () => void;
+  readonly setAnimation: (animation: boolean) => void;
   readonly setPace: (pace: FlightPace) => void;
 }
 
+export function usePlaybackSettings(): PlaybackSettings {
+  const [animation, setAnimation] = useState(true);
+  const [pace, setPace] = useState<FlightPace>(DEFAULT_FLIGHT_PACE);
+  return { animation, pace, setAnimation, setPace };
+}
+
+export interface Playhead {
+  /** Every teaching milestone of the run, in canonical order (`playhead-steps.ts`). */
+  readonly steps: readonly PlayheadStep[];
+  /** Index of the milestone under the playhead, or -1 before the first record. */
+  readonly index: number;
+  readonly step: PlayheadStep | undefined;
+  readonly controls: PlayheadControls;
+  readonly settings: PlaybackSettings;
+  /** Changes on every start of play, so a token painted again starts from the start of its leg. */
+  readonly paint: number;
+  readonly position: PlayheadPosition;
+  /** Component activity read from records at or before the playhead; empty before the first record. */
+  readonly activity: ReadonlyMap<string, ComponentActivity>;
+  /** Activity that differs from the previous milestone, one sentence per component. */
+  readonly activityChanges: readonly string[];
+  /** Hops that left before the playhead's milestone and have no arrival or drop recorded at or before it. */
+  readonly inTransit: readonly FlightStep[];
+  /** `Run`, or `Pause` while playing. */
+  readonly toggle: () => void;
+  readonly forward: () => void;
+  readonly back: () => void;
+}
+
 /**
- * Replays recorded movements on the architecture graph at a chosen pace.
+ * The one position over the current run (RFC 0002 P1 to P4).
  *
- * The host timer only moves a browser cursor over records the worker already
- * published. It never advances virtual time, allocates an observation, or sends
- * a worker command, so playback cannot change the run.
+ * The first `Run` or `Step` after a load or a reset calls `execute` once: the worker executes the
+ * whole run at engine speed. From then on every control, and the host timer that plays, moves the
+ * playhead over milestones already recorded. The timer never advances virtual time, records an
+ * observation, or sends a worker command, so watching a run cannot change it.
  */
-export function useFlightPlayback(
-  observations: readonly Observation[],
-  edges: readonly MovementEdge[],
-  recording: boolean,
-  /** Changes when Recorded history takes over the graph highlight. */
-  release: string | undefined,
+export function usePlayhead(input: {
+  readonly observations: readonly Observation[];
+  readonly edges: readonly MovementEdge[];
+  /** The worker has executed the run: the session is COMPLETED or FAILED. */
+  readonly executed: boolean;
+  /** A command is outstanding, a lesson is loading, or an assessment owns the session. */
+  readonly busy: boolean;
+  /** Asks the worker to execute the run. Called by the first `Run` or `Step` only. */
+  readonly execute: () => Promise<unknown>;
+  /** Changes with the loaded session or a reset: the playhead returns to the start. */
+  readonly sessionKey: string;
+  /** Changes when Recorded history takes over the graph highlight: the playhead stands down. */
+  readonly release: string | undefined;
+  readonly settings: PlaybackSettings;
   /** The session's component display names, for the narration and activity lines (#103). */
-  names?: ComponentNames,
-): FlightPlayback {
+  readonly names?: ComponentNames;
+}): Playhead {
+  const { observations, edges, executed, busy, execute, sessionKey, release, settings, names } = input;
   const m = useMessages();
   // Text is produced here at render time, so a language switch recomputes it and nothing stale survives.
-  const steps = useMemo(() => flightSteps(observations, edges, m, names), [observations, edges, m, names]);
-  // One record holds the cursor and the phase, so a single transition can never
-  // paint a cursor the phase does not belong to.
-  const [cursor, setCursor] = useState<Cursor>({ index: -1, phase: "idle", paint: 0 });
-  const [pace, setPace] = useState<FlightPace>(DEFAULT_FLIGHT_PACE);
+  const steps = useMemo(() => playheadSteps(observations, edges, m, names), [observations, edges, m, names]);
+  const [state, setState] = useState<PlayheadState>(INITIAL_PLAYHEAD);
+  const count = steps.length;
+  const context: PlayheadContext = { executed, busy, count, animation: settings.animation };
 
-  // A shorter recorded list, a new session, or a new history selection releases the cursor.
+  // A new session, a reset, or a new history selection returns the playhead to the start.
+  useEffect(() => { setState(current => ({ ...INITIAL_PLAYHEAD, paint: current.paint })); }, [sessionKey]);
+  const wasExecuted = useRef(executed);
   useEffect(() => {
-    setCursor(current => (current.index < 0
-      ? current
-      : { ...current, index: Math.min(current.index, steps.length - 1) }));
-    setCursor(current => (current.phase === "playing" && steps.length === 0 ? { ...current, phase: "idle" } : current));
-  }, [steps.length]);
-  useEffect(() => { setCursor(current => ({ index: -1, phase: "idle", paint: current.paint })); }, [release]);
+    const before = wasExecuted.current;
+    wasExecuted.current = executed;
+    if (before && !executed) setState(current => ({ ...INITIAL_PLAYHEAD, paint: current.paint }));
+    // The run the first Run or Step asked for has executed: apply what it asked for.
+    else if (executed) setState(current => playheadExecuted(current, count));
+  }, [executed, count]);
+  useEffect(() => {
+    if (release === undefined) return;
+    setState(current => current.intent !== null ? current : { ...current, index: -1, playing: false });
+  }, [release]);
+  // Turning Animation off stops play; it never moves the playhead by itself.
+  useEffect(() => { if (!settings.animation) setState(current => current.playing ? { ...current, playing: false } : current); }, [settings.animation]);
 
-  const step = cursor.index >= 0 ? steps[cursor.index] : undefined;
-  const previousId = cursor.index > 0 ? steps[cursor.index - 1]?.observationId : undefined;
+  const latest = useRef({ state, context });
+  latest.current = { state, context };
+  const command = useCallback((name: PlayheadCommand) => {
+    const outcome = playheadCommand(latest.current.state, latest.current.context, name);
+    if (outcome === null) return;
+    setState(outcome.state);
+    // A refused run leaves nothing to wait for: the playhead returns to before the first Run.
+    if (outcome.execute) void execute().catch(() => setState(current => ({ ...current, intent: null })));
+  }, [execute]);
+  const toggle = useCallback(() => command("toggle"), [command]);
+  const forward = useCallback(() => command("step"), [command]);
+  const back = useCallback(() => command("back"), [command]);
+
+  const playing = state.playing && executed;
+  useEffect(() => {
+    if (!playing) return;
+    const timer = window.setTimeout(() => setState(current => playheadTick(current, count)), flightDelayMs(settings.pace));
+    return () => window.clearTimeout(timer);
+  }, [playing, state.index, count, settings.pace]);
+
+  const index = state.index < count ? state.index : count - 1;
+  const step = index >= 0 ? steps[index] : undefined;
+  const previousId = index > 0 ? steps[index - 1]?.observationId : undefined;
   const activity = useMemo(() => activityAt(observations, step?.observationId), [observations, step?.observationId]);
   const changes = useMemo(
     () => step === undefined ? [] : activityChanges(activityAt(observations, previousId), activity, m, names),
     [observations, previousId, activity, step, m, names],
   );
-  const inTransit = useMemo(() => flightInTransit(steps, cursor.index), [steps, cursor.index]);
-  const play = useCallback(() => {
-    setCursor(current => current.phase === "playing" ? current
-      : steps.length === 0 ? current
-      : { ...current, index: current.index >= 0 ? current.index : 0, phase: "playing" });
-  }, [steps.length]);
-  const pause = useCallback(() => {
-    setCursor(current => current.phase === "idle" ? current : { ...current, phase: "paused" });
-  }, []);
-  const restart = useCallback(() => {
-    setCursor(current => steps.length === 0 ? { index: -1, phase: "idle", paint: current.paint }
-      : { index: 0, phase: "playing", paint: current.paint + 1 });
-  }, [steps.length]);
-  // Both directions follow the same stated contract as the transport's availability:
-  // with nothing selected, Next selects the first movement and Previous is unavailable (#191).
-  const moveTo = useCallback((delta: -1 | 1) => {
-    setCursor(current => {
-      const target = transportStep(current.index, steps.length, delta);
-      if (target === null) return current;
-      return { ...current, index: target, phase: current.phase === "playing" ? "paused" : current.phase };
-    });
-  }, [steps.length]);
-  const previous = useCallback(() => moveTo(-1), [moveTo]);
-  const next = useCallback(() => moveTo(1), [moveTo]);
-
-  const playing = cursor.phase === "playing";
-  useEffect(() => {
-    if (!playing) return;
-    const advanced = flightAdvance(cursor.index, steps.length, "playing", recording);
-    // At the recorded end the cursor waits for the run to publish more movements.
-    const timer = window.setTimeout(() => setCursor({ ...cursor, index: advanced.cursor, phase: advanced.phase }),
-      advanced.waiting ? TAIL_POLL_MS : flightDelayMs(pace));
-    return () => window.clearTimeout(timer);
-  }, [cursor, pace, playing, recording, steps.length]);
+  const inTransit = useMemo(() => flightInTransit(steps, index), [steps, index]);
 
   return {
     steps,
-    cursor: cursor.index,
+    index,
     step,
-    phase: cursor.phase,
-    pace,
-    paint: cursor.paint,
-    position: flightPosition(steps, cursor.index, m),
-    transport: flightTransport(cursor.index, steps.length, cursor.phase, recording, m),
+    controls: playheadControls(state, context, m),
+    settings,
+    paint: state.paint,
+    position: playheadPosition(steps, index, executed, m),
     activity,
     activityChanges: changes,
     inTransit,
-    play, pause, restart, previous, next, setPace,
+    toggle, forward, back,
   };
 }
 
 /** Controls that use the arrow keys themselves. Inside one, an arrow keeps its own meaning. */
 const ARROW_OWNERS = "input, select, textarea, [contenteditable], [role='tablist'], [role='radiogroup'], [role='listbox'], [role='menu'], [role='slider'], dialog, [role='dialog'], [popover], .graph-legend";
 /**
- * Everything Space already activates or scrolls, so Space plays or pauses only from neutral ground.
+ * Everything Space already activates or scrolls, so Space runs or pauses only from neutral ground.
  * `[tabindex='0']` covers the component nodes and the focusable scroll regions, such as the inspector.
  */
 const SPACE_OWNERS = `${ARROW_OWNERS}, button, a[href], summary, [role='button'], [tabindex='0']`;
 
 /**
- * Replay from the keyboard: Left and Right step one recorded movement, Space plays or pauses.
+ * The control group from the keyboard: Left is `Back`, Right is `Step`, Space is `Run` or `Pause`.
  *
- * Like the toolbar, a key only moves the browser cursor over recorded movements. A key that a
- * focused control already uses is left to that control, and nothing is handled while a modal
- * dialog is open or while `active` is false (the graph is not on screen).
+ * A key moves the playhead as its button does, and nothing more: before the run has executed, the
+ * keys are not taken, so a stray arrow on the graph never starts a run. A key that a focused
+ * control already uses is left to that control, and nothing is handled while a modal dialog is
+ * open or while `active` is false (the graph is not on screen).
  */
-export function useReplayKeys(playback: FlightPlayback, active: boolean): void {
-  const { play, pause, restart, previous, next, phase } = playback;
-  const toggle = playback.transport.control.action;
-  const available = playback.steps.length > 0;
+export function usePlayheadKeys(playhead: Playhead, active: boolean): void {
+  const { toggle, forward, back } = playhead;
+  const recorded = playhead.controls.phase !== "unrun" && playhead.controls.phase !== "executing";
   useEffect(() => {
-    if (!active || !available) return;
+    if (!active || !recorded) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || document.querySelector("dialog[open]")) return;
       const target = event.target instanceof Element ? event.target : null;
-      const action = replayKeyAction({
+      const action = playheadKeyAction({
         key: event.key,
         modified: event.altKey || event.ctrlKey || event.metaKey || event.shiftKey,
         repeat: event.repeat,
@@ -177,13 +190,11 @@ export function useReplayKeys(playback: FlightPlayback, active: boolean): void {
       if (action === null) return;
       // Space would scroll the page, and an arrow would scroll a panel sideways.
       event.preventDefault();
-      if (action === "previous") previous();
-      else if (action === "next") next();
-      else if (phase === "playing") pause();
-      else if (toggle === "restart") restart();
-      else if (toggle === "play") play();
+      if (action === "back") back();
+      else if (action === "step") forward();
+      else toggle();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [active, available, play, pause, restart, previous, next, phase, toggle]);
+  }, [active, recorded, toggle, forward, back]);
 }
