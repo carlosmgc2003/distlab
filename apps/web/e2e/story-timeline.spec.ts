@@ -230,7 +230,7 @@ test("cache-stale-price: the read at t=24 that returns the cached price is a Sto
   await viewButton(page, "Story table").click();
   const row = page.locator(rowSelector(read!));
   await expect(row).toHaveText("Key read (present): price:sku-1");
-  await expect(page.locator(`.story-table tr:has(${rowSelector(read!)})`)).toContainText("Key-value read");
+  await expect(page.locator(`.story-table tr:has(button[data-observation-id="${read!.id}"])`)).toContainText("Key-value read");
   await row.click();
   await expect(page.locator(".detail-header")).toContainText("Key read (present): price:sku-1");
   await expect(page.locator(".detail-summary")).toHaveText("Orders read price:sku-1: present.");
