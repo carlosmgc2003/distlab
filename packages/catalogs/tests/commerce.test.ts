@@ -42,10 +42,10 @@ const violated: Record<typeof commerceLessonNames[number], readonly string[]> = 
   "retry-idempotent": [],
   "saga-uncompensated": ["failed-order-cancelled", "failed-order-releases-inventory", "failed-order-refunded"],
   "saga-compensated": [],
-  "dual-write": ["one-notification-per-payment", "payment-event-published"],
-  "outbox-unsafe-consumer": ["one-notification-per-payment"],
+  "dual-write": ["approved-payment-notified"],
+  "outbox-unsafe-consumer": ["no-duplicate-notification"],
   "outbox-idempotent": [],
-  "outbox-notifications-gap": ["one-notification-per-payment"],
+  "outbox-notifications-gap": ["approved-payment-notified"],
   "cqrs-delayed": [],
   "cascade-unprotected": ["bounded-waiting"],
   "cascade-breaker": [],
@@ -415,6 +415,16 @@ for (const name of commerceLessonNames) {
     if (name === "dual-write") {
       assert.equal(logs(result, "notification.created").length, 0);
       assert.equal(result.history.observations.filter(o => o.type === "message.published").length, 0);
+      // The crash cancels the publication Payments had scheduled; after the restart it owes nothing it knows of.
+      assert.equal(logs(result, "payment.event-published").length, 0);
+      assert.deepEqual(logs(result, "outbox.relay").map(entry => entry.pending), [0]);
+    }
+    if (name === "dual-write" || name.startsWith("outbox-")) {
+      // The customer is told APPROVED as soon as the payment commits, and the scheduler, not the customer, asks for the relay.
+      assert.deepEqual(logs(result, "payment.approved").map(entry => entry.event), [name === "dual-write" ? "publish-pending" : "in-outbox"]);
+      assert.deepEqual(result.history.observations.filter(o => o.type === "runtime.log" && object(o.data!).message === "client.result").map(o => [o.source, o.time]), [["client", 2], ["scheduler", 19]]);
+      assert.equal(logs(result, "client.ambiguous-timeout").length, 0);
+      if (name !== "dual-write") assert.deepEqual(logs(result, "outbox.relay").map(entry => entry.pending), [1]);
     }
     if (name.startsWith("saga-")) {
       // Each step logs what it did, where it did it; the customer's answer carries the order's status.
@@ -453,7 +463,7 @@ for (const name of commerceLessonNames) {
 
 /** The business invariants that are safety properties: they must hold at every event boundary (#163). */
 const safety = ["one-payment-per-order", "bounded-waiting", "bounded-notification-retries", "order-priced-at-checkout", "no-expired-cart-checkout",
-  "stock-never-negative", "one-reservation-per-unit", "writes-in-token-order", "file-from-latest-lease"];
+  "stock-never-negative", "one-reservation-per-unit", "writes-in-token-order", "file-from-latest-lease", "no-duplicate-notification"];
 
 test("#163 safety invariants are checked at every boundary; deadline invariants and scenario expectations keep a stated time", () => {
   const seen = new Set<string>();

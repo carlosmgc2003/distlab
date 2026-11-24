@@ -218,7 +218,7 @@ instances share a model definition but receive fresh factory-created handlers.
 | `saga.ts` | `commerce.saga` | Service `POST /checkout`; creates an order, applies Inventory and Payments operations, then requests shipment. Any step that is rejected (an error reply, such as a failed commit) or times out records `NEEDS_COMPENSATION` and logs `order.needs-compensation` with the failed step and the steps to undo: those that completed or may have completed, since a timeout is ambiguous. Configuration `compensate` waits 10 ms, undoes them in reverse order, and cancels the order; a compensation that fails logs `compensation.failed` and leaves the order `NEEDS_COMPENSATION`. The reply carries the order's status. |
 | `saga.ts` | `commerce.saga-resource` | Service `POST /apply` and `POST /compensate`; saves configuration `forward` or `compensated` into its own `state` table at `order-1` and logs the business event that `events` names for it (`inventory.reserved`, `payment.refunded`). Used separately by Inventory and Payments. |
 | `saga.ts` | `commerce.carrier` | External `POST /ship`; declares the shipped order ID as visible state and returns `SHIPPED`. The packaged saga fault prevents admission of the shipment request. |
-| `outbox.ts` | `commerce.outbox-payment` | Service `POST /pay` commits a payment and, with configuration `outbox`, a pending outbox row in one transaction. `POST /relay` schedules one background relay tick to publish pending `PaymentApproved` events and then mark them sent. |
+| `outbox.ts` | `commerce.outbox-payment` | Service `POST /pay` commits a payment and, with configuration `outbox`, a pending outbox row in one transaction, logs `payment.approved`, and answers `APPROVED` at once. Without `outbox` (a dual write) it publishes `PaymentApproved` from a background task 10 ms later; a crash in between cancels that task. `POST /relay` schedules one background relay tick that logs `outbox.relay` with the number of pending rows, publishes each, and then marks it sent. |
 | `outbox.ts` | `commerce.notifications` | Service consumer `PaymentApproved`; inserts notification intent. Configuration `idempotent` commits an inbox entry with the notification and ignores duplicate business `eventId` values. |
 | `cqrs.ts` | `commerce.order-write` | Service `POST /paid` commits `PAID`/version 1 and publishes `OrderUpdated`; `GET /order` returns its own order row. |
 | `cqrs.ts` | `commerce.order-read` | Service `GET /order` and consumer `OrderUpdated`; updates a separate local order projection from the delivered event. |
@@ -294,9 +294,9 @@ classified and that each family shares its invariants.
 | `retry-idempotent` | Same loss and retry with durable previous-result lookup; one payment row exists when the run ends at t=23. | `one-payment-per-order` |
 | `saga-uncompensated` | Drop the shipment request. At t=30 and t=60 the order needs compensation, inventory remains reserved, and payment remains unrefunded. `failed-order-releases-inventory` and `failed-order-refunded` use `commerce.rows` with `forbidden`. | `failed-order-cancelled`, `failed-order-releases-inventory`, `failed-order-refunded` (all violated) |
 | `saga-compensated` | Same shipment failure and visible inconsistency at t=30; by t=60 the order is cancelled, inventory released, and payment refunded. Compensation uses separate local transactions. | The same three |
-| `dual-write` | Crash Payments at t=5 after its payment commit and before direct publication. The payment survives restart, but no outbox or notification exists at t=50. | `payment-survives-restart`, `one-notification-per-payment` (violated), `payment-event-published` (violated) |
-| `outbox-unsafe-consumer` | Same crash, durable outbox, restart at t=15/16, and relay request at t=17. One injected duplicate produces two notification rows by t=50; the outbox row is marked sent. | The same three; `one-notification-per-payment` violated |
-| `outbox-idempotent` | Same durable relay and duplicate delivery; the consumer inbox leaves one notification row by t=50. | The same three |
+| `dual-write` | Payments commits at t=1 and answers the customer `APPROVED` at t=2; it crashes at t=5, before its publication at t=11, and the crash cancels it. After the restart, the scheduler's relay request at t=17 finds no pending row (`outbox.relay` `pending: 0`), so no notification exists at t=50. | `approved-payment-notified` (violated), `no-duplicate-notification` |
+| `outbox-unsafe-consumer` | Same crash with a durable outbox, restart at t=15/16, and the scheduler's relay request at t=17. One injected duplicate produces a second notification row at t=23, where `no-duplicate-notification` fails; the outbox row is marked sent. | The same two; `no-duplicate-notification` violated |
+| `outbox-idempotent` | Same durable relay and duplicate delivery; the consumer inbox leaves one notification row by t=50. | The same two |
 | `outbox-notifications-gap` | Same inputs as `outbox-idempotent`, but `notifications` is a placeholder slot with no database and no subscription. The relay publishes `PaymentApproved` and nothing receives it, so no notification row exists at t=50. The lesson's architecture allowance lets a student fill the slot with `commerce.notifications`, attach its database, and subscribe it ([ADR-005](../spec/adr/005-architecture-editor.md)). | The same three; `one-notification-per-payment` violated until the design fills the gap |
 | `cqrs-delayed` | No injected fault. The `OrderUpdated` topic takes 41 ms to deliver, so the update published at t=1 reaches Reporting at t=42. At t=10 Orders is `PAID` and Reporting is `PENDING`; at t=60 both are `PAID`. Client reads at t=10 and t=50 expose the difference. `read-converged` uses `commerce.converged` over the two services' rows. The `delivery-delay` design choice (1–55) sets the destination's `deliveryDelay`. | `write-remains-paid`, `read-converged` |
 | `cascade-unprotected` | Delay Payments → Risk requests by 60 ms while the rule is active before t=60, beyond the 20 ms link timeout. Sixteen incoming checks cause 16 downstream calls, 13 failures, and peak active work of 10. | `bounded-waiting` (violated) |
@@ -330,11 +330,12 @@ Business invariants come in two kinds (#163):
   `bounded-waiting` (`peakActive` at most 3), `bounded-notification-retries`,
   `order-priced-at-checkout`, `no-expired-cart-checkout`,
   `stock-never-negative`, `one-reservation-per-unit`, `writes-in-token-order`,
-  and `file-from-latest-lease`. Their predicates
+  `file-from-latest-lease`, and `no-duplicate-notification` (at most one
+  notification per approved payment). Their predicates
   hold before the first write.
 - A **deadline invariant** requires a state to be reached, so it keeps
   `mode: "at"` with the time by which the lesson's design must have reached it:
-  the three saga invariants (t=60), the three outbox invariants (t=50), the two
+  the three saga invariants (t=60), `approved-payment-notified` (t=50), the two
   CQRS invariants (t=60), and `order-confirmed-despite-notification-failure`
   (t=50) and `failed-notification-dead-lettered` (t=60). An `always` assertion
   cannot state them, because they are false until the design acts.
@@ -346,7 +347,7 @@ final state.
 
 ### Commerce assessment
 
-`commerceAssessment.find` resolves only twelve version-`1.0.0` predicates:
+`commerceAssessment.find` resolves only sixteen version-`1.0.0` predicates:
 
 - `commerce.rows` takes `owner`, `table`, `count`, `key`, and `expected`. It
   requires the exact table row count and compares each expected field against
@@ -404,6 +405,13 @@ final state.
   appear more than once in the provider's visible `sent` list, and every
   `CONFIRMED` order must appear exactly once. Evidence lists each order's status
   and send count.
+- `commerce.payment-notifications` takes `payments` and `notifications`, each
+  `{ owner, table }`, and `minimum`, `maximum`, or both. For every `APPROVED`
+  payment row, keyed by its order, it counts the notification rows with that
+  `orderId`; each count must be within the bounds. A payment that was never
+  approved asks for nothing, and the `maximum` form holds before the first
+  commit, so an `always` assertion can use it. Evidence lists each approved
+  order with its notification count.
 - `commerce.final-orders` takes `owner`, `table`, and `states`. Every order row's
   status must be one of `states`. Evidence lists each order's status.
 

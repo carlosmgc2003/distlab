@@ -19,7 +19,8 @@ declare global {
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-112");
 const GAP = "outbox-notifications-gap";
 const MODEL = "commerce.notifications@1.0.0";
-const NOTIFICATION_CHECK = "An approved payment produces exactly one notification";
+const NOTIFIED_CHECK = "An approved payment produces a notification";
+const AT_MOST_ONE_CHECK = "An approved payment produces at most one notification";
 
 const status = (page: Page) => page.getByRole("status", { name: "Simulation status" });
 const lessonPanel = (page: Page) => page.getByRole("complementary", { name: "Lesson", exact: true });
@@ -48,14 +49,14 @@ async function design(page: Page, options: { readonly database: boolean; readonl
   if (options.database) await database(page).check();
   if (options.subscription) await subscription(page).check();
 }
-const notificationVerdict = (page: Page) => invariants(page).getByRole("listitem").filter({ hasText: NOTIFICATION_CHECK });
+const verdict = (page: Page, check: string) => invariants(page).getByRole("listitem").filter({ hasText: check });
 
 test("#112 designs 1 to 3: the packaged gap, two notifications without idempotency, and every invariant holding with it", async ({ page }) => {
   await page.setViewportSize({ width: 1534, height: 897 });
   await load(page);
   mkdirSync(evidenceDir, { recursive: true });
 
-  // 1. The packaged run: no notification, and the invariant is VIOLATED.
+  // 1. The packaged run: no notification, so "produces a notification" is VIOLATED.
   await openExperiment(page);
   await expect(section(page)).toContainText("0 of 3 design edits");
   await expect(model(page)).toHaveValue("packaged");
@@ -65,7 +66,7 @@ test("#112 designs 1 to 3: the packaged gap, two notifications without idempoten
   await expect(subscription(page)).not.toBeChecked();
   await page.screenshot({ path: path.join(evidenceDir, "1534x897-section-packaged.png") });
   await run(page);
-  await expect(notificationVerdict(page)).toContainText("VIOLATED");
+  await expect(verdict(page, NOTIFIED_CHECK)).toContainText("VIOLATED");
   // No design edit: the Run identity line reads as before.
   await expect(runIdentity(page)).not.toContainText("design edit");
 
@@ -79,7 +80,8 @@ test("#112 designs 1 to 3: the packaged gap, two notifications without idempoten
   await expect(experimentDrawer(page).getByRole("note")).toHaveCount(0);
   await expect(runIdentity(page)).toContainText(" · 3 design edits · notifications: commerce.notifications 1.0.0 · run ");
   await run(page);
-  await expect(notificationVerdict(page)).toContainText("VIOLATED");
+  await expect(verdict(page, NOTIFIED_CHECK)).toContainText("HOLDS");
+  await expect(verdict(page, AT_MOST_ONE_CHECK)).toContainText("VIOLATED");
 
   // 3. The same with idempotency: every business invariant holds, and Reset and Run replay the same run.
   await idempotent(page).check();
@@ -87,7 +89,7 @@ test("#112 designs 1 to 3: the packaged gap, two notifications without idempoten
   await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
   await run(page);
-  await expect(invariants(page).getByRole("listitem")).toHaveCount(3);
+  await expect(invariants(page).getByRole("listitem")).toHaveCount(2);
   for (const item of await invariants(page).getByRole("listitem").all()) await expect(item).toContainText("HOLDS");
   await expect(runIdentity(page)).toContainText(" · 3 design edits · notifications: commerce.notifications 1.0.0 · run ");
   const identity = await runIdentity(page).innerText();
