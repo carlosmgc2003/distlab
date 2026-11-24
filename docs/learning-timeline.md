@@ -78,6 +78,10 @@ architecture emphasis and movement text.
   key-value record, the stored `code` or `reason` of a rejection, and the
   stored check id and verdict of a check. A redacted or omitted payload adds
   nothing to the label. Labels do not add causation, ordering, or outcome.
+- Key-value state at a record is read from stored fields: a value stored in a
+  record's before or after is read, not inferred. A segment of a key ends at its
+  stored `expiresAt`, and a hidden payload is never reconstructed (key history,
+  `docs/spec/architecture-visualization.md`).
 - Story selection, filtering, and playback are UI state. They send no worker
   command, do not advance virtual time, and do not modify projections or
   history.

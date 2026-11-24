@@ -568,6 +568,55 @@ other; the ELK layout has 0, 1, 0, and 0. With the default strategy, every
 bus link in the platform fixture and in every packaged lesson runs from the
 west to the east: its source ends left of its target.
 
+## Key history
+
+RFC 0003 K1 (#238). `apps/web/src/kv-history.ts` reads what each
+`KeyValueStore` held, who wrote it, and for how long. Key lanes, the store
+card, and the Story labels for key-value records read it; it draws nothing.
+
+Inputs are the stored records, the declared `KeyValueDefinition`s, the run's
+start time, and a position: a record id, `null` for "before the first
+record", or nothing for the end of the history. Only records at or before the
+position are read, in canonical record order.
+
+For each store, by owner, and each key it returns:
+
+- **Segments.** One per value the key held: the stored value or "not
+  visible", the start time and record id (none for a declared initial entry),
+  the stored `expiresAt`, the opening operation (`initial`, `set`,
+  `increment`, `compareAndSet`, or `unknown`), the writer, and, once it ended,
+  the time, cause (`overwrite`, `delete`, `compareAndDelete`, `expired`), and
+  record id.
+- **Marks.** Reads (a hit with its stored value, or a miss), failed
+  conditions, and expiries, each with its record id.
+- **Hidden changes.** The count of `kv.changed` and `kv.expired` records whose
+  key is not stored.
+
+`storeAt` returns the live entries of each store at the position.
+
+Rules:
+
+- A value comes from a stored `after`, a stored `value`, or a declared initial
+  entry. Reading a stored value is not inference. A redacted, summarized, or
+  omitted payload yields a segment whose value is not visible, or, when even the
+  key is not stored, a hidden change. Nothing is reconstructed.
+- An entry is absent at and after its stored `expiresAt` (KV-INV-1), even
+  before the `kv.expired` record at the same time. A segment with an expiry ends
+  at that time. Its end names the `kv.expired` record once that record is read,
+  and no record before then.
+- A declared initial entry's TTL is counted from the run's start time.
+- The writer is the `source` of the record named by the stored `causationId`,
+  when that record is a `network.request.sent` at or before the position, and
+  otherwise the store's owner. A read or failed condition names its actor by the
+  same rule.
+- Stores are listed in declaration order, then stores that only records name,
+  in record order. Keys are in code-point order.
+- The module reads no virtual time and imports no runtime module. It is checked
+  with the main-thread boundary walk, like `activity.ts`.
+
+At the end of every packaged lesson with a store, the live entries equal the
+store the run reports (`apps/web/tests/kv-history.test.ts`).
+
 ## Guardrails
 
 - No changes to `@distlab/contracts` types; no new worker commands; review

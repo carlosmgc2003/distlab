@@ -100,7 +100,9 @@ origin to its destination even when that runs against the drawn link. The keys
 background (`flightBackground`) follow the same rule: a key moves the playhead
 only, and the other two are read from records at or before the playhead.
 Component activity in `apps/web/src/activity.ts` is pure: it reads records at or
-before the playhead and nothing after it. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
+before the playhead and nothing after it. Key history in `apps/web/src/kv-history.ts`
+is pure in the same way: it reads stored `kv.*` records at or before a position and
+the declared initial entries, and never reconstructs a value a record does not store. The Experiment drawer (`apps/web/src/ExperimentDrawer.tsx`)
 edits a draft overlay as UI state in up to three sections: Architecture
 (`apps/web/src/ArchitectureSection.tsx`, `apps/web/src/design-edits.ts`), Design
 choices (`apps/web/src/DesignChoicesSection.tsx`, `apps/web/src/design-choices.ts`),
