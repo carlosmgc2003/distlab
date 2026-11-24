@@ -70,7 +70,7 @@ test("the empty state's Choose a lesson opens the same chooser", async ({ page }
   await empty.click();
   await lessonChoice(page, "saga-uncompensated").click();
   await expect(status(page)).toHaveText("READY");
-  await expect(lessonTrigger(page)).toHaveText(/^Lesson: Saga: no compensation/);
+  await expect(lessonTrigger(page)).toHaveText(/^Lesson: Saga: the shipment fails/);
 });
 
 test("with a lesson loaded, Escape and Cancel change nothing and return focus to the trigger", async ({ page }) => {

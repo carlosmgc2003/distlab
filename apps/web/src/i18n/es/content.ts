@@ -52,8 +52,8 @@ export const content: typeof source = {
     "response-lost": "Checkout con respuesta del procesador perdida",
   },
   checkoutExplanations: {
-    normal: "Orders crea el pedido y publica OrderCreated. Payments recibe la aprobación y registra AUTHORIZED.",
-    "response-lost": "El procesador confirma una autorización, pero su respuesta se descarta. Payments observa NETWORK_TIMEOUT y registra UNKNOWN sin un ID de autorización.",
+    normal: "Pedidos crea el pedido y publica OrderCreated. Pagos recibe la aprobación y registra AUTHORIZED.",
+    "response-lost": "El procesador de pagos confirma una autorización para order-1, pero su respuesta a Pagos se pierde. ¿Qué registra Pagos y qué registra el procesador?",
   },
   assessmentTitles: {
     "reliable-checkout-assessment@1": "Checkout confiable",

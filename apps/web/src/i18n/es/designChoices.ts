@@ -6,7 +6,7 @@ export const designChoices: typeof source = {
   choices: {
     idempotency: { label: "Clave de idempotencia", hint: "Payments guarda cada resultado por clave de idempotencia y lo devuelve cuando la clave se repite." },
     timeout: { label: "Timeout del cliente", hint: "Tiempo virtual que el cliente espera una respuesta de Payments antes de rendirse o reintentar." },
-    compensation: { label: "Compensación", hint: "Orders deshace los pasos completados de la saga cuando falla un paso posterior." },
+    compensation: { label: "Compensación", hint: "Pedidos deshace los pasos completados de la saga cuando falla un paso posterior." },
     outbox: { label: "Outbox transaccional", hint: "Payments registra el evento en la misma confirmación que el pago y lo publica más tarde." },
     "consumer-idempotency": { label: "Consumidor idempotente", hint: "Notifications registra el ID de cada evento en una bandeja de entrada y saltea los que ya vio." },
     "circuit-breaker": { label: "Patrón circuit breaker", hint: "Payments deja de llamar al proveedor de riesgo después de fallas repetidas y lo sondea más tarde." },

@@ -118,8 +118,9 @@ and endpoint in the workload. Its descriptor declares that call in
 `workloadCalls: [{ action: "request", target: "target", endpoint: "endpoint" }]`
 (#121), so validation checks that each request's target is linked from the
 client and offers the endpoint, as it does for peers. `commerce.saga-resource`
-reads `forward` and `compensated` rows from configuration; they are lesson data,
-not behavior options, because no `LessonParameterDomain` describes a row. The
+reads `forward` and `compensated` rows, and the `events` that name their logs,
+from configuration; they are lesson data, not behavior options, because no
+`LessonParameterDomain` describes a row. The
 cache models' `ttl` is lesson data too. Their descriptors declare these fields
 in `lessonData` (#122), so a lesson cannot offer them as slot models, whose
 configuration a slot edit replaces with options. The cache lessons offer
@@ -214,8 +215,8 @@ instances share a model definition but receive fresh factory-created handlers.
 | --- | --- | --- |
 | `common.ts` | `commerce.client` | Client action `request`, a workload-addressed call to `data.target` `data.endpoint` (`workloadCalls`, #121); one attempt by default, two when input `retry` is true. Records reply bodies by `label`; on timeout records `UNKNOWN`, and waits 1 virtual ms before a retry. |
 | `retry.ts` | `commerce.payment` | Service `POST /pay`; commits a payment, optionally with a previous result keyed by `idempotencyKey` when configuration `idempotent` is true. A repeated key then returns the original result. |
-| `saga.ts` | `commerce.saga` | Service `POST /checkout`; creates an order, applies Inventory and Payments operations, then requests shipment. A shipment timeout records `NEEDS_COMPENSATION`; configuration `compensate` enables delayed refund, release, and cancellation. |
-| `saga.ts` | `commerce.saga-resource` | Service `POST /apply` and `POST /compensate`; saves configuration `forward` or `compensated` into its own `state` table at `order-1`. Used separately by Inventory and Payments. |
+| `saga.ts` | `commerce.saga` | Service `POST /checkout`; creates an order, applies Inventory and Payments operations, then requests shipment. Any step that is rejected (an error reply, such as a failed commit) or times out records `NEEDS_COMPENSATION` and logs `order.needs-compensation` with the failed step and the steps to undo: those that completed or may have completed, since a timeout is ambiguous. Configuration `compensate` waits 10 ms, undoes them in reverse order, and cancels the order; a compensation that fails logs `compensation.failed` and leaves the order `NEEDS_COMPENSATION`. The reply carries the order's status. |
+| `saga.ts` | `commerce.saga-resource` | Service `POST /apply` and `POST /compensate`; saves configuration `forward` or `compensated` into its own `state` table at `order-1` and logs the business event that `events` names for it (`inventory.reserved`, `payment.refunded`). Used separately by Inventory and Payments. |
 | `saga.ts` | `commerce.carrier` | External `POST /ship`; declares the shipped order ID as visible state and returns `SHIPPED`. The packaged saga fault prevents admission of the shipment request. |
 | `outbox.ts` | `commerce.outbox-payment` | Service `POST /pay` commits a payment and, with configuration `outbox`, a pending outbox row in one transaction. `POST /relay` schedules one background relay tick to publish pending `PaymentApproved` events and then mark them sent. |
 | `outbox.ts` | `commerce.notifications` | Service consumer `PaymentApproved`; inserts notification intent. Configuration `idempotent` commits an inbox entry with the notification and ignores duplicate business `eventId` values. |
@@ -291,7 +292,7 @@ classified and that each family shares its invariants.
 | --- | --- | --- |
 | `retry-unsafe` | Drop the first payment response, time out at 20 ms, and retry with the same key. The second payment row commits at t=22, and the run ends at t=23. | `one-payment-per-order` (violated) |
 | `retry-idempotent` | Same loss and retry with durable previous-result lookup; one payment row exists when the run ends at t=23. | `one-payment-per-order` |
-| `saga-uncompensated` | Drop the shipment request. At t=30 and t=60 the order needs compensation, inventory remains reserved, and payment remains unrefunded. | `failed-order-cancelled`, `failed-order-releases-inventory`, `failed-order-refunded` (all violated) |
+| `saga-uncompensated` | Drop the shipment request. At t=30 and t=60 the order needs compensation, inventory remains reserved, and payment remains unrefunded. `failed-order-releases-inventory` and `failed-order-refunded` use `commerce.rows` with `forbidden`. | `failed-order-cancelled`, `failed-order-releases-inventory`, `failed-order-refunded` (all violated) |
 | `saga-compensated` | Same shipment failure and visible inconsistency at t=30; by t=60 the order is cancelled, inventory released, and payment refunded. Compensation uses separate local transactions. | The same three |
 | `dual-write` | Crash Payments at t=5 after its payment commit and before direct publication. The payment survives restart, but no outbox or notification exists at t=50. | `payment-survives-restart`, `one-notification-per-payment` (violated), `payment-event-published` (violated) |
 | `outbox-unsafe-consumer` | Same crash, durable outbox, restart at t=15/16, and relay request at t=17. One injected duplicate produces two notification rows by t=50; the outbox row is marked sent. | The same three; `one-notification-per-payment` violated |
@@ -354,7 +355,11 @@ final state.
   an unfilled design slot, or a missing table has no rows. With a numeric
   `maximum` instead, it passes while the table has at most that many rows and
   ignores `count`, `key`, and `expected`; this form holds before the first
-  commit, so an `always` assertion can use it.
+  commit, so an `always` assertion can use it. With a `forbidden` object
+  instead, it passes while no row has every field of `forbidden` and ignores
+  the other parameters. It forbids a state rather than requiring one, so a
+  table that never received the row holds: the saga's "a failed order does not
+  keep inventory reserved" reads HOLDS when the reservation never happened.
 - `commerce.metrics` takes `owner` and `expected`, `maximum`, or both. It
   reads that owner's KV entry named `dependency` and returns the metrics as
   evidence. Each `expected` field is compared by equality. Each `maximum` field

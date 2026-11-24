@@ -36,12 +36,13 @@ export const sagaDescriptor: ModelDescriptor = {
 };
 
 /**
- * `forward` and `compensated` are lesson data (the rows it writes), not behavior
- * options, so the model can never fill a slot (#122).
+ * `forward` and `compensated` are lesson data (the rows it writes), and `events`
+ * names the business log of each; none is a behavior option, so the model can
+ * never fill a slot (#122).
  */
 export const sagaResourceDescriptor: ModelDescriptor = {
   ...none, model: "commerce.saga-resource", version: VERSION, kind: "service", endpoints: ["POST /apply", "POST /compensate"],
-  storage: tables("state"), lessonData: ["compensated", "forward"],
+  storage: tables("state"), lessonData: ["compensated", "events", "forward"],
 };
 
 export const carrierDescriptor: ModelDescriptor = { ...none, model: "commerce.carrier", version: VERSION, kind: "external", operations: ["POST /ship"] };

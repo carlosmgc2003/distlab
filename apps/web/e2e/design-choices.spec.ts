@@ -67,7 +67,7 @@ test("switching idempotency on in the retry lesson changes the check outcome, an
   await expect(checks(page)).toContainText("VIOLATED — A retried payment request charges the order once");
 
   // The choices live only in the drawer, which starts closed.
-  await expect(page.getByLabel("Idempotency key")).toBeHidden();
+  await expect(page.getByLabel("Idempotency key", { exact: true })).toBeHidden();
   await openChoices(page);
   const idempotency = panel(page).getByLabel("Idempotency key");
   await expect(idempotency).not.toBeChecked();
@@ -145,7 +145,7 @@ test("Compare drops the choice the pair compares and keeps the shared one", asyn
   await panel(page).getByLabel("Client timeout").fill("40");
   await applyAndRestart(page).click();
   await expect(status(page)).toHaveText("READY");
-  await button(page, "Compare: Retry with idempotency").click();
+  await button(page, "Compare: Retry: idempotency key").click();
   await expect(status(page)).toHaveText("READY");
   await expect(page.getByText("Compare kept 0 student faults, kept timeout=40, and dropped idempotency.")).toBeVisible();
   // The drawer stays open, and the paired lesson's own default for idempotency is on.

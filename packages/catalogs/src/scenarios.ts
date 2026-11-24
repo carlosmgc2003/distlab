@@ -78,14 +78,14 @@ export const checkoutLesson = {
   normal: {
     title: "Checkout with processor response",
     explanation: "Orders creates the order and publishes OrderCreated. Payments receives the approval and records AUTHORIZED.",
-    revision: 1,
-    updated: "2026-11-01",
+    revision: 2,
+    updated: "2026-11-23",
   },
   "response-lost": {
     title: "Checkout with lost processor response",
-    explanation: "The processor commits one authorization, but its response is dropped. Payments observes NETWORK_TIMEOUT and records UNKNOWN without an authorization ID.",
-    revision: 1,
-    updated: "2026-11-01",
+    explanation: "The payment processor commits an authorization for order-1, but its response to Payments is lost. What does Payments record, and what does the processor record?",
+    revision: 2,
+    updated: "2026-11-23",
   },
 } as const;
 
