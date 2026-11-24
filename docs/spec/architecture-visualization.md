@@ -617,6 +617,41 @@ Rules:
 At the end of every packaged lesson with a store, the live entries equal the
 store the run reports (`apps/web/tests/kv-history.test.ts`).
 
+## Key lanes
+
+RFC 0003 K2 (#241). `apps/web/src/kv-lanes.ts` turns the key history of the
+whole run into a time chart of the keyspace, as a model. It draws nothing and
+holds no wording; the panel that renders it words the text model with the
+catalog.
+
+Inputs are the key history read to the end of the run, the stored records, the
+run's start and end times, and the record id of the reading position (`null`
+for "before the first record").
+
+- **Groups.** One per store, in the key history's order: declared stores in
+  architecture order, then stores that only records name. Inside a store, keys
+  are grouped by prefix, the text before their first `:` (`lock:report` and
+  `lock:report:token` share `lock`). Keys without a prefix come first, then
+  prefixes in code-point order, then keys in code-point order.
+- **Bars.** One per segment. Start and end are fractions of the axis, from the
+  run's start (0) to its end (1); an open segment ends at 1. Each bar carries
+  the writer, the stored value or `visible: false`, and, when the segment has a
+  stored `expiresAt`, a fade from 75% of the bar to its end.
+- **Marks.** `conditional-set` (a set whose record stored `ifAbsent`, a
+  compare-and-set, or a compare-and-delete at the end it caused),
+  `condition-failed`, `expired`, `read-hit`, `read-miss`, and `read-hidden` for a
+  read whose stored presence is not visible. Each has its axis position and
+  record id.
+- **Reached.** A bar or mark is reached when its record is at or before the
+  position; a declared initial entry is always reached. A bar's end is reached
+  when its closing record is, or, for an expiry not recorded yet, when the
+  position's time is at or after the stored `expiresAt`.
+- **Text model.** Per row, the segments and marks in record order, as codes and
+  stored values only.
+
+The model reads no virtual time and imports no runtime module, catalog, or
+React; the main-thread boundary walk checks it.
+
 ## Guardrails
 
 - No changes to `@distlab/contracts` types; no new worker commands; review
