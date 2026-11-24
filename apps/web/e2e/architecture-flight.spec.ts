@@ -57,6 +57,8 @@ async function runCheckout(page: Page, scenario: "normal" | "response-lost" = "r
 const narration = (page: Page) => page.locator(".flight-narration");
 const position = (page: Page) => playheadPosition(page);
 /** The milestone number under the playhead, or 0 before the first record. */
+/** Moves focus to ground no control owns, so the keys reach the control group. */
+const neutralGround = (page: Page) => page.locator("#architecture-heading").click();
 const milestone = async (page: Page) => Number((await position(page).innerText()).match(/^Milestone (\d+) of/)?.[1] ?? 0);
 const unavailable = (page: Page, name: string) => expect(control(page, name)).toHaveAttribute("aria-disabled", "true");
 const available = (page: Page, name: string) => expect(control(page, name)).toHaveAttribute("aria-disabled", "false");
@@ -741,7 +743,7 @@ test("Left is Back, Right is Step, and Space is Run or Pause, and no control los
   await expect(control(page, "Continue")).toHaveAttribute("aria-keyshortcuts", "Space");
 
   // On the first milestone, Left is unavailable like Back, and Right is Step.
-  await position(page).click();
+  await neutralGround(page);
   await page.keyboard.press("ArrowLeft");
   await expect(position(page)).toContainText("Milestone 1 of 32 ");
   await page.keyboard.press("ArrowRight");
@@ -756,7 +758,7 @@ test("Left is Back, Right is Step, and Space is Run or Pause, and no control los
   await expect(position(page)).toContainText("Milestone 3 of 32 ");
 
   // Space runs and pauses from neutral ground.
-  await position(page).click();
+  await neutralGround(page);
   await page.keyboard.press("Space");
   await expect(control(page, "Pause")).toBeVisible();
   await page.keyboard.press("Space");
