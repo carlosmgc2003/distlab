@@ -13,7 +13,9 @@ const commerceDataModule = resolve(root, "packages/catalogs/src/commerce/scenari
 const assessmentDataModule = resolve(root, "packages/catalogs/src/commerce/reliable-checkout.ts");
 // Data-only model descriptors (ADR-005): the main thread may import them.
 const descriptorModules = [resolve(root, "packages/catalogs/src/descriptors.ts"), resolve(root, "packages/catalogs/src/commerce/descriptors.ts")];
-const dataModules = new Set([dataModule, commerceDataModule, assessmentDataModule, ...descriptorModules]);
+// Data-only key roles beside the descriptors (RFC 0003 K6, #243): the main thread may import them.
+const keyRolesModule = resolve(root, "packages/catalogs/src/commerce/key-roles.ts");
+const dataModules = new Set([dataModule, commerceDataModule, assessmentDataModule, ...descriptorModules, keyRolesModule]);
 function files(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? files(resolve(directory, entry.name)) : /\.tsx?$/.test(entry.name) ? [resolve(directory, entry.name)] : []);
 }
@@ -73,6 +75,9 @@ test("main-thread import graph uses application contracts and data, never runtim
   walk(resolve(app, "main.tsx"));
   // RFC 0003 K1 (#238): key history is main-thread presentation that no view imports yet, so it is walked on its own.
   walk(resolve(app, "kv-history.ts"));
+  // RFC 0003 K6 (#243): the lenses and their data-only key roles, likewise not imported by a view yet.
+  walk(resolve(app, "kv-lenses.ts"));
+  assert.ok(visited.has(keyRolesModule));
   assert.ok(visited.has(resolve(app, "host.ts")));
   assert.ok(visited.has(dataModule));
   assert.ok(visited.has(commerceDataModule));

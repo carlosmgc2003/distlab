@@ -42,6 +42,7 @@ All paths in this table are relative to `packages/catalogs/`.
 | [`src/commerce/reliable-checkout.ts`](../../packages/catalogs/src/commerce/reliable-checkout.ts) | Data-only Reliable Checkout base document, its overlay policy and check classification, and the packaged assessment definition (`assessmentDefinitions`). |
 | [`src/hosted.ts`](../../packages/catalogs/src/hosted.ts) | `hostedCatalogs`: the ADR-006 hosted catalog registry and the reserved packaged scenario names. Worker and headless tools only. |
 | [`src/commerce/descriptors.ts`](../../packages/catalogs/src/commerce/descriptors.ts) | Data-only model descriptors of the twenty-five commerce models. |
+| [`src/commerce/key-roles.ts`](../../packages/catalogs/src/commerce/key-roles.ts) | Data-only key roles (RFC 0003 K6): per commerce model and version, which key-value keys are a lease, a fencing counter, a cached copy (source table and compared fields), a session, or breaker state (the value's field). Presentation metadata only. |
 | [`examples/commerce.ts`](../../packages/catalogs/examples/commerce.ts) | Headless CLI lesson runner with timeline, stepping, JSON export, and replay. |
 | [`examples/scenario.ts`](../../packages/catalogs/examples/scenario.ts) | Headless `check` command for instructor scenario documents. |
 
@@ -51,7 +52,12 @@ instantiate models or run simulations. The two `descriptors.ts` modules import
 only the `ModelDescriptor` type and export plain descriptor values. Main-thread
 browser code may import these four modules directly. `commerce/reliable-checkout.ts`
 is data-only in the same way; the browser does not import it until the assessment
-view (#97) adds it to the boundary test's list. The package root and `commerce/index.ts` also reach runtime
+view (#97) adds it to the boundary test's list. `commerce/key-roles.ts` imports nothing at run time and
+exports plain values; it is not part of `ModelDescriptor`, so ADR-005 is
+unchanged. A key's role is looked up in the store owner's model first, then in
+the models of the key's writers; the first matching pattern (an exact key, or a
+prefix ending in `*`) wins. Roles never enter a scenario document, a
+projection, a worker command, or history. The package root and `commerce/index.ts` also reach runtime
 factories and belong in the worker or headless composition path.
 
 The [package manifest](../../packages/catalogs/package.json) declares only the

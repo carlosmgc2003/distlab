@@ -30,6 +30,13 @@ reader needs before changing code, and the vocabulary used when discussing them.
   payload is never reconstructed. An entry ends at its stored `expiresAt`, even
   before the `kv.expired` record at the same time. The writer is the sender of
   the request named by the record's `causationId`, or else the store's owner.
+- A **key role** (`packages/catalogs/src/commerce/key-roles.ts`, RFC 0003 K6)
+  says what a key-value key is for (lease, fencing counter, cached copy,
+  session, breaker state), declared per model as data-only presentation
+  metadata. It is not part of `ModelDescriptor`. Lenses in
+  `apps/web/src/kv-lenses.ts` read it with stored records only: records of a
+  holder's trace after its lease ended, the intervals a cached copy differs
+  from its committed row, and a breaker's states.
 - The milestone set lives in
   [docs/learning-timeline.md](docs/learning-timeline.md) and is transcribed in
   `milestoneKinds`. `apps/web/tests/records.test.ts` reads the document and

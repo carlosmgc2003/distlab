@@ -59,7 +59,8 @@ Chromium system dependencies with
 `apps/web/src/worker/` is the browser runtime composition root. Main-thread
 modules may import application contracts, the host client, and the data-only
 `packages/catalogs/src/scenarios.ts`, `packages/catalogs/src/commerce/scenarios.ts`,
-`packages/catalogs/src/descriptors.ts`, and `packages/catalogs/src/commerce/descriptors.ts`
+`packages/catalogs/src/descriptors.ts`, `packages/catalogs/src/commerce/descriptors.ts`,
+and `packages/catalogs/src/commerce/key-roles.ts` (data-only key roles, RFC 0003 K6)
 modules; they must not import runtime model
 factories, ScenarioEngine, or low-level mutation ports. Protocol types come from
 `@distlab/contracts`, and status is a projection field, not a new command. The
