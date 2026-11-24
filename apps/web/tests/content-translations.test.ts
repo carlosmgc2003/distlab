@@ -31,7 +31,7 @@ function assertCovers(table: string, actual: Readonly<Record<string, string>>, e
 
 test("CONTENT-1: every commerce check of every lesson has a Spanish label, keyed by id or lesson/id", () => {
   const keys = commerceLessonNames.flatMap(name => commerceChecks(name).map(check => checkKey(name, check.id)));
-  assert.equal(new Set(commerceLessonNames.flatMap(name => commerceChecks(name).map(check => check.id))).size, 37);
+  assert.equal(new Set(commerceLessonNames.flatMap(name => commerceChecks(name).map(check => check.id))).size, 38);
   assertCovers("checks", content.checks, keys);
 });
 

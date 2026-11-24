@@ -187,7 +187,7 @@ test("the gap lesson's empty overlay runs, replays deterministically, and report
   assert.ok(expectations.every(id => verdicts(first)[id] === "PASS"));
   assert.deepEqual(verdicts(first), {
     "committed-before-crash": "PASS", "nothing-published-yet": "PASS", "durable-outbox": "PASS",
-    "payment-survives-restart": "PASS", "one-notification-per-payment": "FAIL", "payment-event-published": "PASS",
+    "payment-survives-restart": "PASS", "outbox-marked-sent": "PASS", "approved-payment-notified": "FAIL", "no-duplicate-notification": "PASS",
   });
   // The event is published, but nothing is subscribed to receive it.
   assert.ok(first.history.observations.some(item => item.type === "message.published"));
@@ -211,8 +211,9 @@ test("a design without consumer idempotency fills the gap, but the duplicate del
   const result = compose(GAP, { version: 1, architecture: { slots: [slot()], resources: [database], subscriptions: [subscription] } });
   assert.ok(result.ok, JSON.stringify(result));
   const run = await runDocument(result.document);
-  assert.equal(verdicts(run)["one-notification-per-payment"], "FAIL");
-  assert.equal(verdicts(run)["payment-event-published"], "PASS");
+  assert.equal(verdicts(run)["approved-payment-notified"], "PASS");
+  assert.equal(verdicts(run)["no-duplicate-notification"], "FAIL");
+  assert.equal(verdicts(run)["outbox-marked-sent"], "PASS");
 });
 
 test("a design missing the subscription or the database is rejected at its overlay path", () => {

@@ -254,6 +254,23 @@ test("a saga step that fails in any way leaves an honest saga: no run ends, and 
   });
 });
 
+test("the outbox family's verdicts follow what happened: a late duplicate, a failed relay mark, a payment never approved", async () => {
+  const lesson = (id: string) => lessons.find(item => item.id === id)!;
+  const verdicts = (result: HarnessExport) => Object.fromEntries(result.results.map(item => [item.id, item.status]));
+  const fault = (point: string, effect: Record<string, CanonicalValue>, extra: Record<string, CanonicalValue>) =>
+    ({ version: 1, faults: [{ id: "student-outbox", point, from: 0, probability: 1, maxApplications: 1, effect, ...extra }] });
+  // A delivery delayed 28 ms creates the notifications at t=48 and t=51: the duplicate after the deadline is still caught (#163).
+  const late = await run(lesson("outbox-unsafe-consumer"), fault("message.delivery", { kind: "delay", duration: 28 }, { source: "payments", target: "notifications", name: "PaymentApproved" }));
+  assert.equal(verdicts(late)["no-duplicate-notification"], "FAIL");
+  assert.equal(late.results.find(item => item.id === "no-duplicate-notification")!.time, 51);
+  // The relay published, but marking the outbox row failed: the customer is still notified once, and only the expectation says the row stayed unsent.
+  const unmarked = verdicts(await run(lesson("outbox-idempotent"), fault("database.commit", { kind: "fail" }, { target: "payments", from: 18 })));
+  assert.deepEqual([unmarked["outbox-marked-sent"], unmarked["approved-payment-notified"], unmarked["no-duplicate-notification"]], ["FAIL", "PASS", "PASS"]);
+  // A payment that never committed asks for no notification.
+  const unpaid = verdicts(await run(lesson("dual-write"), fault("database.commit", { kind: "fail" }, { target: "payments" })));
+  assert.deepEqual([unpaid["payment-survives-restart"], unpaid["approved-payment-notified"], unpaid["no-duplicate-notification"]], ["FAIL", "PASS", "PASS"]);
+});
+
 test("lessons offer only the fault points their architecture has", () => {
   for (const lesson of lessons) {
     const doc = definition(lesson);
