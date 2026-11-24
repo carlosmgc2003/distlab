@@ -6,6 +6,7 @@ import type { Observation, RuntimeProjectionSet, WorkerCommand, WorkerEvent } fr
 import { projection } from "../tests/support.ts";
 import { graphLaidOut, lessonTrigger, loadLesson } from "./support/lesson.ts";
 import { applyMoreFilters, fillFilterField, filterByType, openMoreFilters, viewButton } from "./support/history.ts";
+import { animationOff } from "./support/playhead.ts";
 
 declare global {
   interface Window {
@@ -47,6 +48,7 @@ test("a single dropped response is selected from the Story table and evidence na
   const status = page.getByRole("status", { name: "Simulation status" });
   await loadLesson(page, "response-lost");
   await expect(status).toHaveText("READY");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
   const commands = await commandTypes(page);

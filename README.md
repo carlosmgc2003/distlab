@@ -336,8 +336,9 @@ described as a failed operation. Speed changes only how long the playhead stays
 on each milestone: the host timer moves the playhead over records the worker
 already published and never advances virtual time, records an observation, or
 sends a worker command. Play ends with the last milestone painted. Choosing a
-record in Recorded history takes the graph highlight back and returns the
-playhead to the start, and reduced motion rests each token where
+record in Recorded history moves the playhead to it (or to the last milestone
+before it), the selected row follows `Step` and `Back`, and ③ Investigate
+reveals the outcome when the playhead first reaches the end. Reduced motion rests each token where
 the record says the movement stopped. The narration and the component inspector
 share one side column, so the graph keeps its height at the supported desktop
 baselines.

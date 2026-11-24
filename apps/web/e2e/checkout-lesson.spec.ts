@@ -4,6 +4,7 @@ import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/
 import { checkoutAssessment, checkoutCatalog, responseLostCheckout } from "@distlab/catalogs";
 import { DeterministicScenarioEngine, openHarness } from "@distlab/scenario";
 import AxeBuilder from "@axe-core/playwright";
+import { animationOff } from "./support/playhead.ts";
 import { loadLesson } from "./support/lesson.ts";
 import { expectLegibleView } from "./support/graph.ts";
 import { inServiceState } from "./support/service-state.ts";
@@ -80,6 +81,8 @@ test("the response-lost checkout lesson runs from load to a headless-equivalent 
   }
   const initial = await latestProjection(page);
 
+  // Animation off: the outcome and its evidence links are revealed as soon as the run has executed (RFC 0002 P5).
+  await animationOff(page);
   // The first Step, from the keyboard, executes the whole run once; the next ones move the playhead.
   await button("Step").focus();
   await page.keyboard.press("Enter");

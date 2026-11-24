@@ -29,6 +29,7 @@ export const app: typeof source = {
   deliveryFact: (p: { destination: string; attempt: number; state: string }, _f: Fmt) => `${p.destination}: intento ${p.attempt} (${p.state})`,
   deliveries: (items: readonly string[], f: Fmt) => `Intentos de entrega registrados: ${f.list(items)}`,
   deliveriesUnavailable: "Intentos de entrega registrados: ninguno todavía.",
+  outcomeWaits: "El resultado aparece acá cuando el cabezal llega al final de la corrida.",
   investigatePrompt: "Investigá: ¿qué registro prueba la autorización? ¿Qué sabe Payments después del timeout? Un timeout no prueba que la autorización se haya deshecho.",
   goalQuestionResponseLost: "¿Un timeout significa que el pago falló?",
   goalQuestionCheckout: "¿Cómo viaja un checkout por un sistema distribuido?",

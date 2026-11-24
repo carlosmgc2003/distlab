@@ -55,6 +55,7 @@ import {
 } from "./story-timeline.ts";
 import type { StoryLegendEntry, StoryMilestone, StoryTableRow } from "./story-timeline.ts";
 import type { ComponentNames } from "./component-display.ts";
+import type { PlayheadSpan } from "./playhead.ts";
 
 /**
  * Review navigation. One place decides where the reader is in Recorded history:
@@ -66,8 +67,10 @@ import type { ComponentNames } from "./component-display.ts";
  * worker command. Scroll and focus are returned as requests for the DOM adapter
  * to apply, so navigation can be tested without a browser.
  *
- * It is not playback. The architecture-graph flight cursor owns playback and
- * shares no seam with this module; selecting a record here never moves it.
+ * The selected record is the playhead (RFC 0002 P5). The shell moves the
+ * playhead to the record a reader selects, and tells this module where the
+ * playhead went with the `follow` intent; this module never moves the playhead
+ * itself, and nothing here plays, ticks, or reads a clock.
  */
 
 /**
@@ -152,6 +155,8 @@ export interface ReviewContext {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
   readonly componentTitles: readonly ComponentTitle[];
+  /** The records the playhead stands on, once the run has executed; later records are not reached yet. */
+  readonly playhead?: PlayheadSpan;
 }
 
 /** A reader's move. Named by intent, not by the state it touches. */
@@ -169,6 +174,8 @@ export type ReviewIntent =
   | { readonly type: "set-filter-field"; readonly field: TextFilterField }
   | { readonly type: "switch-view"; readonly view: ReviewViewMode }
   | { readonly type: "published"; readonly observations: readonly Observation[] }
+  /** The playhead moved to `observationId` (null: before the first record), covering `span`. */
+  | { readonly type: "follow"; readonly observationId: string | null; readonly span: PlayheadSpan }
   | { readonly type: "focus-applied" };
 
 export function createReviewNavigation(): ReviewNavigation {
@@ -228,6 +235,7 @@ export function transition(state: ReviewNavigation, intent: ReviewIntent, contex
     case "set-filter-field": return { ...state, filterField: intent.field };
     case "switch-view": return state.view === intent.view ? state : { ...state, view: intent.view, scroll: scrollTo(state, "top") };
     case "published": return published(state, intent.observations);
+    case "follow": return follow(state, intent.observationId, intent.span, context);
     case "focus-applied": return state.focus === null ? state : { ...state, focus: null };
   }
 }
@@ -264,8 +272,13 @@ export interface ReviewView {
   readonly storyCopy: string;
   readonly storyDetailCopy: string;
   readonly storyCount: string;
-  /** The selection highlight, or the live cue. Never a playback cursor. */
+  /** The selection highlight, painted while the playhead stands on no record. */
   readonly emphasis: GraphEmphasis | undefined;
+  /**
+   * Records at or after this sequence are not reached yet: they come after the playhead
+   * (RFC 0002 P5). Undefined before the run has executed, when nothing is marked.
+   */
+  readonly reachedBefore: number | undefined;
   readonly focus: FocusRequest | null;
   readonly scroll: ScrollRequest;
 }
@@ -298,7 +311,8 @@ export function derive(state: ReviewNavigation, context: ReviewContext, m: Messa
     explanation = parts.join(" ");
   }
 
-  // A selected record takes the graph highlight back from the playhead. Growth raises no cue (RFC 0002 P5).
+  // The graph paints the playhead's milestone; the selection's highlight shows only while the playhead
+  // stands on no record. Growth raises no cue (RFC 0002 P5).
   const emphasis = selected ? emphasisFor(selected, edges, m, names) : undefined;
 
   const tableExtra = selected !== undefined && !milestones.some(item => item.observation.id === selected.id) && filtered.some(item => item.id === selected.id);
@@ -329,6 +343,7 @@ export function derive(state: ReviewNavigation, context: ReviewContext, m: Messa
     storyDetailCopy: storyDetail(milestones, m),
     storyCount,
     emphasis,
+    reachedBefore: context.playhead?.to,
     focus: state.focus,
     scroll: { ...state.scroll, view: state.view, index: selectedIndex, ...(selected ? { observationId: selected.id } : {}) },
   };
@@ -453,6 +468,20 @@ function published(state: ReviewNavigation, next: readonly Observation[]): Revie
     };
   }
   return { ...state, published: next, seenSequence: next.at(-1)?.sequence ?? state.seenSequence };
+}
+
+/**
+ * The playhead moved, so the selected row follows it (RFC 0002 P5). A selection the playhead
+ * already stands on stays: a record that is not a milestone, chosen through an evidence or related
+ * link, keeps its detail while the playhead stands on the milestone before it. No feedback is
+ * raised, because the top bar already announces the playhead, and focus does not move.
+ */
+function follow(state: ReviewNavigation, observationId: string | null, span: PlayheadSpan, context: ReviewContext): ReviewNavigation {
+  if (state.selectedId === observationId) return state;
+  const selected = state.selectedId === null ? undefined : context.observations.find(item => item.id === state.selectedId);
+  if (selected !== undefined && span.from <= selected.sequence && selected.sequence < span.to) return state;
+  if (observationId === null && selected === undefined) return state;
+  return { ...state, selectedId: observationId, scroll: scrollTo(state, "ensure-visible") };
 }
 
 // --- helpers ---

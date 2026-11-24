@@ -365,7 +365,7 @@ test("reduced motion rests the token where the record stopped and keeps the narr
   await expect(page.locator("#movement-cue")).toContainText("Response dropped from Payment Processor to Payments");
 });
 
-test("selecting a record in Recorded history takes the graph highlight back", async ({ page }) => {
+test("OT-READ-AC-1: selecting a record in Recorded history moves the playhead, and the graph paints that milestone", async ({ page }) => {
   test.setTimeout(180_000);
   mkdirSync(evidenceDir, { recursive: true });
   await observeWorker(page);
@@ -374,18 +374,24 @@ test("selecting a record in Recorded history takes the graph highlight back", as
   await expect(narration(page)).toBeVisible();
 
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
-  // Selecting a movement milestone in the Story table is a reader choice.
   await viewButton(page, "Story table").click();
+  // The playhead's milestone is the selected row (RFC 0002 P5).
+  const selected = page.locator(".story-table button[aria-pressed='true']");
+  await expect(selected).toHaveCount(1);
+  await expect(selected).toContainText("Message delivered");
+  const before = await milestone(page);
+  // Selecting the first request moves the playhead back to it.
   await page.locator(".story-table button").filter({ hasText: "Request sent" }).first().click();
-  await expect(page.locator(".story-table button[aria-pressed='true']")).toHaveCount(1);
+  await expect(selected).toHaveCount(1);
+  await expect(selected).toContainText("Request sent");
   await page.getByRole("tab", { name: "Architecture", exact: true }).click();
-  // The reader's choice wins: the playhead returns to the start and the graph shows the selection.
-  await expect(narration(page)).toHaveCount(0);
-  await expect(page.locator("[data-flight-token]")).toHaveCount(0);
+  await expect(position(page)).toHaveText(/^Milestone \d+ of 32 /);
+  expect(await milestone(page)).toBeLessThan(before);
+  await expect(narration(page)).toBeVisible();
+  await expect(page.locator("[data-flight-token]")).toHaveCount(1);
   await expect(page.locator(".react-flow__edge.is-movement")).toHaveCount(1);
   await expect(page.locator("#movement-cue")).toContainText("from Customer App to Orders");
-  await expect(position(page)).toHaveText("Before the first record. The run recorded 32 milestones.");
-  await page.screenshot({ path: path.join(evidenceDir, "1534x897-history-selection-wins.png") });
+  await page.screenshot({ path: path.join(evidenceDir, "1534x897-history-selection-moves-playhead.png") });
 });
 
 test("the graph keeps a legible view while the narration column opens and closes", async ({ page }) => {

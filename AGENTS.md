@@ -150,8 +150,11 @@ document, a projection, or history.
 Review navigation in `apps/web/src/review-navigation.ts` decides
 the review position in Recorded history and is pure: it reads records and link
 identity, never a DOM node, virtual time, or a worker command, and it returns
-scroll and focus as requests for the presentation to apply. The playhead and
-review navigation share no seam; nothing in review navigation is a cursor.
+scroll and focus as requests for the presentation to apply. The review position
+is the playhead (RFC 0002 P5): the shell moves the playhead to a record the
+reader selects, and review navigation follows the playhead with its `follow`
+transition; it never moves the playhead itself. ③ Investigate withholds the
+outcome until the playhead first reaches the end of the run.
 
 ## Coding Style & Naming Conventions
 

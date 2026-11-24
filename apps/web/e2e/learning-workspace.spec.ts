@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { loadLesson } from "./support/lesson.ts";
 import { viewButton } from "./support/history.ts";
+import { runToEnd } from "./support/playhead.ts";
 
 for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 768, 390]) {
   test(`learning workspace discloses tools without losing context for ${scenario} at ${width}px`, async ({ page }) => {
@@ -22,9 +23,9 @@ for (const scenario of ["normal", "response-lost"]) for (const width of [1366, 7
     await expect(page.locator(".timeline-panel details")).toHaveCount(0);
     await expect(viewButton(page, "Story diagram")).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".story-table")).toHaveCount(0);
-    // The detail is docked, never floating, and starts empty (#146).
+    // The detail is docked, never floating (#146), and shows the record under the playhead (RFC 0002 P5).
     await expect(page.locator(".story-inspector")).toHaveCount(0);
-    await expect(page.locator("#inspection-panel")).toContainText("Select an observation to see its detail.");
+    await expect(page.locator("#inspection-panel")).toContainText(/Observation #\d+/);
     if (width === 1366) {
       expect(await page.locator(".story-strip").evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThanOrEqual(1);
       const diagram = await page.locator(".story-strip").boundingBox();
@@ -75,8 +76,8 @@ test("after response-lost completes, the guide and every evidence link are reada
   await page.goto("/");
   await loadLesson(page, "response-lost");
   await expect(status(page)).toHaveText("READY");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(status(page)).toHaveText("COMPLETED");
+  // Animation off: the outcome and its evidence links are revealed as soon as the run completes (RFC 0002 P5).
+  await runToEnd(page);
   const panel = lessonPanel(page);
   await expect(panel.getByRole("heading", { level: 3 })).toHaveText([/^① Goal/, /^② Run/, /^③ Investigate/, /^④ Experiment/]);
 
@@ -106,15 +107,15 @@ test("after response-lost completes, the guide and every evidence link are reada
 });
 
 for (const lesson of ["normal", "retry-unsafe"]) {
-  test(`the current-step marker is on Run after loading ${lesson} and on Investigate after the run completes`, async ({ page }) => {
+  test(`OT-READ-AC-7: the current-step marker is on Run after loading ${lesson} and on Investigate once the playhead is at the end`, async ({ page }) => {
     await page.goto("/");
     await loadLesson(page, lesson);
     await expect(status(page)).toHaveText("READY");
     const current = lessonPanel(page).locator("[aria-current='step']");
     await expect(current).toHaveCount(1);
     await expect(current).toHaveAccessibleName("② Run");
-    await page.getByRole("button", { name: "Run", exact: true }).click();
-    await expect(status(page)).toHaveText("COMPLETED");
+    // With Animation off, Run puts the playhead on the last milestone at once.
+    await runToEnd(page);
     await expect(current).toHaveCount(1);
     await expect(current).toHaveAccessibleName("③ Investigate");
     // Emphasis only: every section stays readable whichever step is current.

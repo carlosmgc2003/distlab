@@ -13,6 +13,14 @@ import type { StoryLegendEntry, StoryMilestone, StoryTableRow } from "./story-ti
 import { createReviewNavigation, derive, feedbackText, filterErrorText, transition } from "./review-navigation.ts";
 import type { ReviewContext, ReviewIntent, ReviewNavigation, ReviewViewMode } from "./review-navigation.ts";
 import { HelpHint } from "./ui-hint.tsx";
+import type { PlayheadSpan } from "./playhead.ts";
+
+/** Where the playhead stands, for Recorded history to follow (RFC 0002 P5). */
+export interface HistoryPlayhead {
+  /** The record of the milestone under the playhead, or null before the first record. */
+  readonly observationId: string | null;
+  readonly span: PlayheadSpan;
+}
 
 const SPAN_PREVIEW = 12;
 
@@ -29,7 +37,7 @@ const VIEW_CHOICES: readonly ReviewViewMode[] = ["diagram", "table"];
  * constraints are active, and which record is revealed all live in
  * `review-navigation.ts`; this file decides none of it.
  */
-export function TimelineView({ observations, edges, componentTitles = [], checkLabels = {}, onEmphasis, focusedObservationId, focusToken = 0 }: {
+export function TimelineView({ observations, edges, componentTitles = [], checkLabels = {}, onEmphasis, focusedObservationId, focusToken = 0, playhead, onSelectRecord }: {
   readonly observations: readonly Observation[];
   readonly edges: readonly MovementEdge[];
   readonly componentTitles?: readonly ComponentTitle[];
@@ -38,6 +46,10 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
   readonly onEmphasis: (emphasis: GraphEmphasis | undefined) => void;
   readonly focusedObservationId?: string;
   readonly focusToken?: number;
+  /** The playhead, once the run has executed. The selected row follows it, and later rows read as not reached. */
+  readonly playhead?: HistoryPlayhead;
+  /** A reader selected a record: a row, a related-observation link, or an evidence link. The shell moves the playhead. */
+  readonly onSelectRecord?: (observationId: string) => void;
 }) {
   const m = useMessages();
   const [navigation, send] = useReducer(reduce, undefined, createReviewNavigation);
@@ -51,13 +63,21 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
   const emphasisRef = useRef<GraphEmphasis | undefined>(undefined);
   const requestedRef = useRef<number>(-1);
 
+  const span = playhead?.span;
   const context: ReviewContext = useMemo(() => ({
     observations,
     edges,
     componentTitles,
-  }), [observations, edges, componentTitles]);
+    ...(span ? { playhead: span } : {}),
+  }), [observations, edges, componentTitles, span]);
   const view = derive(navigation, context, m);
   const dispatch = (intent: ReviewIntent) => send({ intent, context });
+  // A reader's selection moves the playhead (RFC 0002 P5). It is handed to the shell in the same
+  // event, so play stops before another beat can move the selection away.
+  const choose = (intent: Extract<ReviewIntent, { readonly type: "select" | "reveal" }>) => {
+    dispatch(intent);
+    if (observations.some(item => item.id === intent.observationId)) onSelectRecord?.(intent.observationId);
+  };
 
   // History continuity: growth raises a cue for the newest movement, replacement
   // drops the review position and every active constraint.
@@ -70,8 +90,15 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
     if (focusedObservationId === undefined) return;
     if (requestedRef.current === focusToken) return;
     requestedRef.current = focusToken;
-    dispatch({ type: "reveal", observationId: focusedObservationId });
+    choose({ type: "reveal", observationId: focusedObservationId });
   }, [focusedObservationId, focusToken]);
+
+  // The playhead moved: the selected row follows it, unless the playhead already stands on the selection.
+  const followId = playhead?.observationId;
+  useEffect(() => {
+    if (followId === undefined || span === undefined) return;
+    dispatch({ type: "follow", observationId: followId, span });
+  }, [followId, span?.from, span?.to]);
 
   // Derive returns a fresh projection each render, so the graph highlight is
   // compared by value. Comparing by identity would hand the shell a new object
@@ -177,14 +204,15 @@ export function TimelineView({ observations, edges, componentTitles = [], checkL
       aria-label={m.timeline.view.rowsLabel}>
       {filtered.length === 0 ? <p className="timeline-empty">{observations.length === 0 ? m.timeline.view.noObservations : explanation}</p> : null}
       <StoryView presentation={navigation.view} milestones={milestones} rows={tableRows} lanes={lanes} legend={legend} summary={storyCopy} detail={storyDetailCopy}
-        reduction={reduction} selectedId={navigation.selectedId} componentLabels={componentLabels} hasRecords={filtered.length > 0} onChoose={id => dispatch({ type: "select", observationId: id })} />
+        reduction={reduction} selectedId={navigation.selectedId} componentLabels={componentLabels} hasRecords={filtered.length > 0}
+        reachedBefore={view.reachedBefore} onChoose={id => choose({ type: "select", observationId: id })} />
     </div>
     </div>
     </section>
     {/* Observation detail is docked as the right column in every view, never floating (#146). */}
     <ObservationDetail observation={selected} observations={observations} componentTitles={componentTitles} checkLabels={checkLabels}
       hidden={selected !== undefined && !filtered.some(item => item.id === selected.id)}
-      onSelect={id => dispatch({ type: "reveal", observationId: id })}
+      onSelect={id => choose({ type: "reveal", observationId: id })}
       onShowTrace={traceId => dispatch({ type: "narrow-to-trace", traceId })}
       onUseText={(field, value) => dispatch({ type: "set-draft", draft: withExactValue(navigation.draft, field, value) })}
       onUseEntity={(kind, id) => dispatch({ type: "set-draft", draft: withExactValue(withExactValue(navigation.draft, "entityKind", kind), "entityId", id) })} />
@@ -207,7 +235,7 @@ function sameEmphasis(left: GraphEmphasis | undefined, right: GraphEmphasis | un
     && left.pulseId === right.pulseId && left.origin === right.origin
     && left.nodeIds.length === right.nodeIds.length && left.nodeIds.every((id, index) => id === right.nodeIds[index]);
 }
-function StoryView({ presentation, milestones, rows, lanes, legend, summary, detail, reduction, selectedId, componentLabels, hasRecords, onChoose }: {
+function StoryView({ presentation, milestones, rows, lanes, legend, summary, detail, reduction, selectedId, componentLabels, hasRecords, reachedBefore, onChoose }: {
   readonly presentation: ReviewViewMode;
   readonly milestones: readonly StoryMilestone[];
   readonly rows: readonly StoryTableRow[];
@@ -219,9 +247,14 @@ function StoryView({ presentation, milestones, rows, lanes, legend, summary, det
   readonly selectedId: string | null;
   readonly componentLabels: ReadonlyMap<string, string>;
   readonly hasRecords: boolean;
+  /** Records at or after this sequence come after the playhead. Undefined before the run has executed. */
+  readonly reachedBefore: number | undefined;
   readonly onChoose: (id: string) => void;
 }) {
   const m = useMessages();
+  // Not reached yet is stated as an attribute and as read text, not by color alone (OT-READ-AC-3).
+  const ahead = (observation: Observation) => reachedBefore !== undefined && observation.sequence >= reachedBefore;
+  const reached = (observation: Observation) => reachedBefore === undefined ? {} : { "data-reached": ahead(observation) ? "false" : "true" };
   const cells = new Map(milestones.map(milestone => [`${milestone.lane}:${milestone.column}`, milestone]));
   const columns = milestones.length;
   const gridColumns = `10rem repeat(${Math.max(columns, 1)}, minmax(6rem, 1fr))`;
@@ -254,8 +287,8 @@ function StoryView({ presentation, milestones, rows, lanes, legend, summary, det
               return <div key={cell?.observation.id ?? `empty-${milestone.column}`} className="story-cell"
                 data-boundary={milestone.timeBoundary ? "true" : "false"}>
                 {cell ? <button type="button" className={`story-milestone story-milestone-${cell.kind}`}
-                  data-observation-id={cell.observation.id}
-                  aria-label={m.timeline.view.milestoneLabel({ label: cell.label, component: componentLabels.get(lane) ?? lane, time: cell.observation.time, sequence: cell.observation.sequence })}
+                  data-observation-id={cell.observation.id} {...reached(cell.observation)}
+                  aria-label={m.timeline.view.milestoneLabel({ label: cell.label, component: componentLabels.get(lane) ?? lane, time: cell.observation.time, sequence: cell.observation.sequence, ahead: ahead(cell.observation) })}
                   aria-pressed={cell.observation.id === selectedId}
                   data-selected={cell.observation.id === selectedId ? "true" : "false"}
                   onClick={() => onChoose(cell.observation.id)}>
@@ -282,10 +315,11 @@ function StoryView({ presentation, milestones, rows, lanes, legend, summary, det
           {rows.map(row => {
             const observation = row.observation;
             const where = observation.target !== undefined ? `${observation.source} → ${observation.target}` : observation.source;
-            return <tr key={observation.id} data-selected={observation.id === selectedId ? "true" : "false"} data-kind={row.kind}>
+            return <tr key={observation.id} data-selected={observation.id === selectedId ? "true" : "false"} data-kind={row.kind} {...reached(observation)}>
               <th scope="row">
                 <button type="button" data-observation-id={observation.id} aria-pressed={observation.id === selectedId}
-                  onClick={() => onChoose(observation.id)}>{row.label}</button>
+                  onClick={() => onChoose(observation.id)}>{row.label}
+                  {ahead(observation) ? <span className="story-not-reached"> {m.timeline.view.notReached}</span> : null}</button>
               </th>
               <td><span className={`story-shape story-shape-${row.kind}`} aria-hidden="true">{row.shape}</span>{row.categoryLabel}</td>
               <td>{row.timeBoundary ? `t=${observation.time}` : m.timeline.view.timeUnchanged(observation.time)}</td>

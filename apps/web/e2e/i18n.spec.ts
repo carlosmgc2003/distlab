@@ -194,6 +194,11 @@ test("OT-PLAY: in Spanish the control group, the playback settings, the playhead
   await expect(control(es.simulationControls.pause)).toBeVisible();
   await control(es.simulationControls.pause).click();
   await expect(control(es.simulationControls.continue)).toBeVisible();
+  // RFC 0002 P5: ③ Investigar waits for the playhead, and Recorded history marks what it has not reached.
+  await expect(page.locator(".lesson-step-investigate")).toContainText(es.app.outcomeWaits);
+  await page.getByRole("tab", { name: es.app.tabs.history, exact: true }).click();
+  await page.locator(".timeline-view-switch button").nth(1).click();
+  await expect(page.locator(".story-table tr[data-reached='false']").first()).toContainText(es.timeline.view.notReached);
   expect(await workerCommands(page)).toEqual(["load", "run"]);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });

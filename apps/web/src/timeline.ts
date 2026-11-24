@@ -29,7 +29,7 @@ export interface GraphEmphasis {
   readonly pulseId?: string;
   /**
    * How the highlight was raised. `selection` is a record the reader chose in
-   * Recorded history, and it takes the graph highlight back from the playhead.
+   * Recorded history; the graph paints it only while the playhead stands on no record.
    */
   readonly origin?: "selection";
 }

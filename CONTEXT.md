@@ -42,9 +42,10 @@ reader needs before changing code, and the vocabulary used when discussing them.
   milestones the worker already published. A milestone that travels a link is
   painted as a movement token (`flight.ts`); any other milestone is painted on
   its component. The playhead never advances virtual time, allocates an
-  observation, or sends a worker command. Selecting a row in Recorded history
-  is review navigation, not playback: it takes the graph highlight back, and
-  the playhead returns to the start.
+  observation, or sends a worker command. Every region reads it (RFC 0002 P5):
+  the selected row in Recorded history is the playhead, and ③ Investigate
+  reveals the lesson's outcome when the playhead first reaches the end of the
+  run (at once with Animation off), and keeps it after `Back`.
 - **Review navigation** (`apps/web/src/review-navigation.ts`) is the one place
   that decides where the reader is in Recorded history: the **review position**
   (the stored record under review), the active constraints, and a focus request.
@@ -54,8 +55,12 @@ reader needs before changing code, and the vocabulary used when discussing them.
   adapts the DOM to it; it decides none of it. A record reached from a row, from
   a related-observation link, or from an evidence link arrives by the same
   transition, so the constraints hiding it are cleared in one place.
-- The review position is **not** a cursor. Playback and review deliberately share
-  no seam, so nothing in review navigation may be named a cursor.
+- The review position **is** the playhead. A record the reader selects moves the
+  playhead to the last milestone at or before it, and a playhead move selects
+  that milestone's row through the `follow` transition; a selected record that
+  is not a milestone stays selected while the playhead stands on the milestone
+  before it. Review navigation never moves the playhead itself: the shell does,
+  with no worker command. Rows after the playhead read as **not reached yet**.
 
 ## Application composition root
 
