@@ -18,18 +18,34 @@ const only = (value: { [key: string]: CanonicalValue }, required: readonly strin
   const keys = Object.keys(value);
   return required.every(key => keys.includes(key)) && keys.every(key => required.includes(key) || optional.includes(key));
 };
+/** What a failed condition found: absent, or the live value with its expiry when it has one. */
+const actualPresence = (value: CanonicalValue | undefined): boolean => {
+  if (!plain(value)) return false;
+  if (value.present === false) return Object.keys(value).length === 1;
+  return value.present === true && Object.hasOwn(value, "value") && only(value, ["present", "value"], ["expiresAt"]) &&
+    (value.expiresAt === undefined || timeValue(value.expiresAt));
+};
 const readRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
   (value.present === true ? only(value, ["key", "present", "value"]) : value.present === false && only(value, ["key", "present"]));
 const changedRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
   (value.operation === "set" || value.operation === "delete" || value.operation === "increment" || value.operation === "compareAndSet" || value.operation === "compareAndDelete") &&
   presence(value.before) && presence(value.after) && (value.expiresAt === undefined || timeValue(value.expiresAt)) &&
-  only(value, ["key", "operation", "before", "after"], ["expiresAt"]);
+  // `ifAbsent` is stored only on a set that passed it, and only as true.
+  (value.ifAbsent === undefined || value.ifAbsent === true) &&
+  only(value, ["key", "operation", "before", "after"], value.operation === "set" ? ["expiresAt", "ifAbsent"] : ["expiresAt"]);
 const conditionRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
-  (value.operation === "set" || value.operation === "compareAndSet" || value.operation === "compareAndDelete") && only(value, ["key", "operation"]);
+  // A failed set is always set-if-absent and a failed compare-and-delete always expected a value.
+  (value.operation === "set" ? plain(value.expected) && value.expected.present === false
+    : value.operation === "compareAndDelete" ? plain(value.expected) && value.expected.present === true
+      : value.operation === "compareAndSet") &&
+  presence(value.expected) && actualPresence(value.actual) && only(value, ["key", "operation", "expected", "actual"]);
 const expiredRecord = (value: CanonicalValue | undefined): boolean => plain(value) && typeof value.key === "string" && value.key.length > 0 &&
   timeValue(value.expiresAt) && timeValue(value.generation) && only(value, ["key", "value", "expiresAt", "generation"]);
 const data = (value: unknown): CanonicalValue => { try { return canonicalCopy(value); } catch { return invalid(); } };
 const tag = (value: CanonicalValue | undefined): CanonicalValue => value === undefined ? { present: false } : { present: true, value: data(value) };
+/** The live entry a failed condition found, as `kv.condition.failed` stores it. */
+const actual = (entry: { value: CanonicalValue; expiresAt?: SimulationTime } | undefined): CanonicalValue => entry === undefined ? { present: false }
+  : { present: true, value: data(entry.value), ...(entry.expiresAt === undefined ? {} : { expiresAt: entry.expiresAt }) };
 const keyOf = (key: unknown): string => typeof key === "string" && key.length > 0 ? key : invalid();
 const ttlOf = (value: unknown): Duration | undefined => value === undefined ? undefined :
   typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value as Duration : invalid();
@@ -177,22 +193,25 @@ export class DeterministicKeyValueStore implements KeyValueStore {
     this.#observe(KeyValueObservationTypes.Read, { key, ...tag(entry?.value) as object });
     return entry && data(entry.value);
   }
-  #write(key: string, value: CanonicalValue, ttl: Duration | undefined, operation: string, previous: Entry | undefined): void {
+  #write(key: string, value: CanonicalValue, ttl: Duration | undefined, operation: string, previous: Entry | undefined, ifAbsent = false): void {
     const generation = this.#next(key);
     const expiresAt = ttl === undefined ? undefined : this.#due(ttl);
     const armed = this.#arm(key, generation, expiresAt, this.#link(this.#options.activeEvent()));
     previous?.handle?.cancel();
     this.#entries.set(key, { value, generation, ...armed });
     this.#generations.set(key, generation);
-    this.#observe(KeyValueObservationTypes.Changed, { key, operation, before: tag(previous?.value), after: tag(value),
+    this.#observe(KeyValueObservationTypes.Changed, { key, operation, ...(ifAbsent ? { ifAbsent: true } : {}), before: tag(previous?.value), after: tag(value),
       ...(expiresAt === undefined ? {} : { expiresAt }) });
   }
   set(key: string, value: CanonicalValue, options?: SetOptions): boolean {
     this.#active(); keyOf(key); const copy = data(value), parsed = optionsOf(options, true), ttl = ttlOf(parsed.ttl);
     this.#next(key); if (ttl !== undefined) this.#due(ttl);
     const previous = this.#live(key);
-    if (parsed.ifAbsent && previous) { this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "set" }); return false; }
-    this.#write(key, copy, ttl, "set", previous); return true;
+    if (parsed.ifAbsent && previous) {
+      this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "set", expected: { present: false }, actual: actual(previous) });
+      return false;
+    }
+    this.#write(key, copy, ttl, "set", previous, parsed.ifAbsent === true); return true;
   }
   delete(key: string): boolean {
     this.#active(); keyOf(key);
@@ -227,7 +246,10 @@ export class DeterministicKeyValueStore implements KeyValueStore {
     this.#next(key); if (ttl !== undefined) this.#due(ttl);
     const previous = this.#live(key);
     const matches = checked.present ? previous !== undefined && canonicalEncode(previous.value) === canonicalEncode(checked.value) : previous === undefined;
-    if (!matches) { this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "compareAndSet" }); return false; }
+    if (!matches) {
+      this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "compareAndSet", expected: checked as CanonicalValue, actual: actual(previous) });
+      return false;
+    }
     this.#write(key, copy, ttl, "compareAndSet", previous); return true;
   }
   compareAndDelete(key: string, expected: { readonly present: true; readonly value: CanonicalValue }): boolean {
@@ -235,7 +257,8 @@ export class DeterministicKeyValueStore implements KeyValueStore {
     const value = checked.present ? checked.value : invalid();
     const previous = this.#live(key);
     if (!previous || canonicalEncode(previous.value) !== canonicalEncode(value)) {
-      this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "compareAndDelete" }); return false;
+      this.#observe(KeyValueObservationTypes.ConditionFailed, { key, operation: "compareAndDelete", expected: { present: true, value }, actual: actual(previous) });
+      return false;
     }
     this.#remove(key, previous, "compareAndDelete"); return true;
   }

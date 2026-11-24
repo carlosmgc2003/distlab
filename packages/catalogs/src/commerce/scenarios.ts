@@ -70,8 +70,8 @@ const commerceRevisions: Readonly<Record<CommerceLessonName, LessonRevision>> = 
   "cache-invalidated": revised(2, "2026-11-23"),
   "inventory-oversell": revised(2, "2026-11-23"),
   "inventory-optimistic": revised(2, "2026-11-23"),
-  "lease-unfenced": revised(2, "2026-11-23"),
-  "lease-fenced": revised(2, "2026-11-23"),
+  "lease-unfenced": revised(3, "2026-11-24"),
+  "lease-fenced": revised(3, "2026-11-24"),
   "clock-last-write-wins": revised(2, "2026-11-23"),
   "clock-lamport": revised(2, "2026-11-23"),
 };
