@@ -244,11 +244,9 @@ async function lessonRun(id: string) {
 test("recorded lessons: the lease is set and expires, a cached price is read, a cart is read not present", async () => {
   const lease = await lessonRun("lease-unfenced");
   const taken = lease.at(2, "kv.changed");
-  // `ifAbsent` is stored once #240 lands; until then the lock's set reads as a plain set.
-  const ifAbsent = (taken.data as { ifAbsent?: boolean }).ifAbsent === true;
-  assert.equal(recordLabel(taken, en), ifAbsent ? "Key set (set-if-absent): lock:report" : "Key set: lock:report");
+  assert.equal(recordLabel(taken, en), "Key set (set-if-absent): lock:report");
   assert.equal(kvSentence(taken, lease.observations, en, lease.names),
-    `Worker 1 set lock:report${ifAbsent ? " with set-if-absent" : ""}. It now holds worker-1. It expires at t=12.`);
+    "Worker 1 set lock:report with set-if-absent. It now holds worker-1. It expires at t=12.");
   const expired = lease.at(12, "kv.expired");
   assert.equal(kvSentence(expired, lease.observations, en, lease.names), "lock:report expired at t=12. No component removed it: its lifetime ended.");
 

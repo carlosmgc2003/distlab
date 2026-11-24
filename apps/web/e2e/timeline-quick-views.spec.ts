@@ -118,7 +118,7 @@ test("the Coordination quick view keeps the key-value writes, reads, and expirie
   await viewButton(page, "Story table").click();
   const labels = await page.locator(".story-table button[data-observation-id]").allInnerTexts();
   // Each label names the stored operation; the lock is taken twice and expires twice.
-  expect(labels.filter(text => /^Key set( \(set-if-absent\))?: lock:report$/.test(text))).toHaveLength(2);
+  expect(labels.filter(text => text === "Key set (set-if-absent): lock:report")).toHaveLength(2);
   expect(labels.filter(text => text === "Key expired: lock:report")).toHaveLength(2);
   expect(labels.filter(text => text === "Key incremented: lock:report:token")).toHaveLength(2);
   expect(labels.filter(text => /^Key read \((present|not present)\): lock:report:token$/.test(text))).toHaveLength(2);
