@@ -54,7 +54,7 @@ async function expectPlayheadRow(rows: Locator, index: number): Promise<void> {
   await expect(rows.nth(index)).toHaveAttribute("data-reached", "true");
   if (index + 1 < await rows.count()) {
     await expect(rows.nth(index + 1)).toHaveAttribute("data-reached", "false");
-    await expect(rows.nth(index + 1).getByRole("button")).toContainText("not reached");
+    await expect(rows.nth(index + 1).getByRole("rowheader")).toContainText("not reached");
   }
 }
 

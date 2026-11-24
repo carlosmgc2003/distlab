@@ -349,3 +349,16 @@ test("OT-READ-AC-3: records after the playhead are marked not reached, and nothi
   assert.equal(derive(state, context({ playhead: spans.before }), m).reachedBefore, 1);
   assert.equal(derive(state, context({ playhead: spans.o5 }), m).reachedBefore, Infinity);
 });
+
+test("a selection that moves the playhead is announced by the playhead position, not twice", () => {
+  const start = published(createReviewNavigation());
+  // The playhead stands on o3 (o3 and o4); selecting o1 moves it, so this region stays quiet.
+  const moved = transition(start, { type: "select", observationId: "o1" }, context({ playhead: spans.o3 }));
+  assert.equal(moved.selectedId, "o1");
+  assert.equal(moved.feedback, null);
+  // Selecting o4 leaves the playhead on o3, so the selection is announced here.
+  const kept = transition(start, { type: "select", observationId: "o4" }, context({ playhead: spans.o3 }));
+  assert.equal(kept.feedback?.kind, "selected");
+  // Before the run has executed there is no playhead to announce it.
+  assert.equal(transition(start, { type: "select", observationId: "o1" }, context()).feedback?.kind, "selected");
+});

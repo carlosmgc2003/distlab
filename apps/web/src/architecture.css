@@ -476,7 +476,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-rows .story-table button { display: block; width: 100%; min-height: 32px; padding: 2px 4px; border: 0; border-radius: 0; background: transparent; text-align: left; }
 .story-table tr[data-selected="true"] { background: var(--selection-bg); }
 .story-table tr[data-reached="false"] { color: var(--text-secondary); }
-.story-not-reached { font-size: .75rem; font-style: italic; font-weight: 400; }
+.story-not-reached { display: block; padding: 0 4px 2px; font-size: .75rem; font-style: italic; font-weight: 400; }
 /* A selected record that is not a milestone, listed only while it is selected. */
 .story-table tr[data-kind="other"] th button { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .story-table tr[data-kind="other"] td { color: var(--text-secondary); }

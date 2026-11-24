@@ -72,7 +72,8 @@ test("a single dropped response is selected from the Story table and evidence na
   expect(selectedSequence).toBeDefined();
   await expect(selected.getByRole("button")).toBeFocused();
   await expect(selected).toBeInViewport();
-  await expect(page.locator("#timeline-feedback")).toContainText(`Selected Observation #${selectedSequence}:`);
+  // The selection moved the playhead, so the top bar's playhead position announces it (RFC 0002 P5).
+  await expect(page.getByRole("status", { name: "Playhead position" })).toContainText(`observation #${selectedSequence}.`);
   await expect(page.locator("#inspection-panel")).toContainText("network.response.dropped");
 
   await page.locator("#inspection-panel").getByText("Related evidence", { exact: true }).click();

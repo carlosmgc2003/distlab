@@ -384,10 +384,15 @@ function revealRecord(state: ReviewNavigation, observationId: string, context: R
 
 function selectRecord(state: ReviewNavigation, observationId: string, context: ReviewContext): ReviewNavigation {
   const observation = context.observations.find(item => item.id === observationId);
+  // A selection that moves the playhead is announced once, by the top bar's playhead position, which
+  // names the same observation. One the playhead already stands on, or any before the run has
+  // executed, is announced here.
+  const span = context.playhead;
+  const movesPlayhead = observation !== undefined && span !== undefined && (observation.sequence < span.from || observation.sequence >= span.to);
   return {
     ...state,
     selectedId: observationId,
-    feedback: observation ? { kind: "selected", selection: selectionRef(observation) } : state.feedback,
+    feedback: observation && !movesPlayhead ? { kind: "selected", selection: selectionRef(observation) } : state.feedback,
     scroll: scrollTo(state, "ensure-visible"),
   };
 }

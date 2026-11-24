@@ -192,6 +192,8 @@ Rules that keep the regions distinct:
 - The selection is stated once, in the observation detail header
   ("Observation #‹sequence› · ‹label› · t=‹time›"). One polite live region,
   read and not shown, announces it; no banner or position line restates it.
+  Once the run has executed, a selection that moves the playhead is announced
+  by the top bar's playhead position instead, which names the same observation.
 - While a filter is active, the result count is shown once, beside the filter
   row ("22 of 267 shown").
 - The selected row is the playhead (RFC 0002 P5): `Step`, `Back`, `Run`, and

@@ -318,8 +318,8 @@ function StoryView({ presentation, milestones, rows, lanes, legend, summary, det
             return <tr key={observation.id} data-selected={observation.id === selectedId ? "true" : "false"} data-kind={row.kind} {...reached(observation)}>
               <th scope="row">
                 <button type="button" data-observation-id={observation.id} aria-pressed={observation.id === selectedId}
-                  onClick={() => onChoose(observation.id)}>{row.label}
-                  {ahead(observation) ? <span className="story-not-reached"> {m.timeline.view.notReached}</span> : null}</button>
+                  onClick={() => onChoose(observation.id)}>{row.label}</button>
+                {ahead(observation) ? <span className="story-not-reached">{m.timeline.view.notReached}</span> : null}
               </th>
               <td><span className={`story-shape story-shape-${row.kind}`} aria-hidden="true">{row.shape}</span>{row.categoryLabel}</td>
               <td>{row.timeBoundary ? `t=${observation.time}` : m.timeline.view.timeUnchanged(observation.time)}</td>
@@ -627,7 +627,7 @@ function DetailBody({ observation, observations, componentTitles, checkLabels, h
       {observation.parentSpanId !== undefined ? <><dt>{m.timeline.view.technical.parentSpan}</dt><dd>{observation.parentSpanId}</dd></> : null}
       {observation.causationId !== undefined ? <><dt>{m.timeline.view.technical.causation}</dt><dd>{observation.causationId}</dd></> : null}
       {eventId !== undefined ? <><dt>{m.timeline.view.technical.event}</dt><dd><span>{eventId}</span><CopyButton what="event" value={eventId} /></dd></> : null}
-      {entities.length > 0 ? <><dt>{m.timeline.view.technical.entities}</dt><dd>{entities.map(entity => `${entity.kind} ${entity.id}`).join(", ")}</dd></> : null}
+      {entities.length > 0 ? <><dt>{m.timeline.view.technical.entities}</dt><dd data-raw-record="">{entities.map(entity => `${entity.kind} ${entity.id}`).join(", ")}</dd></> : null}
     </dl>
     <h4>{m.timeline.view.storedData}</h4>
     <p>{payloadCopy(observation, m)}</p>
