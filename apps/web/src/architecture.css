@@ -470,12 +470,17 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 /* Contention is not a failure: a dotted outline in the warning tone, never the error tone. */
 .story-milestone-contention { border-style: dotted; border-width: 3px; border-color: var(--status-warning); }
 .story-shape-contention { color: var(--status-warning); }
+/* After the playhead (RFC 0002 P5): a hatched fill and the secondary text color, never color alone;
+   the cell's accessible name and the table row's text also say "not reached yet". */
+.story-milestone[data-reached="false"]:not([data-selected="true"]) { color: var(--text-secondary); background: repeating-linear-gradient(135deg, var(--surface-panel) 0 6px, var(--surface-subtle) 6px 8px); }
 .story-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
 .story-table caption { padding: 4px 0; text-align: left; color: var(--text-secondary); }
 .story-table th, .story-table td { padding: 4px 6px; border-bottom: 1px solid var(--border-subtle); text-align: left; vertical-align: top; }
 .story-table thead th { background: var(--surface-subtle); }
 .timeline-rows .story-table button { display: block; width: 100%; min-height: 32px; padding: 2px 4px; border: 0; border-radius: 0; background: transparent; text-align: left; }
 .story-table tr[data-selected="true"] { background: var(--selection-bg); }
+.story-table tr[data-reached="false"] { color: var(--text-secondary); }
+.story-not-reached { display: block; padding: 0 4px 2px; font-size: .75rem; font-style: italic; font-weight: 400; }
 /* A selected record that is not a milestone, listed only while it is selected. */
 .story-table tr[data-kind="other"] th button { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .story-table tr[data-kind="other"] td { color: var(--text-secondary); }

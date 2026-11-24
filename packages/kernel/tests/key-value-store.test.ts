@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DeterministicServiceRuntime, ExecutionHistory, HeadlessSimulationFactory } from "@distlab/kernel";
+import { DeterministicKeyValueStore, DeterministicServiceRuntime, ExecutionHistory, HeadlessSimulationFactory } from "@distlab/kernel";
 import { duration, simulationTime } from "@distlab/contracts/kernel";
-import type { RunInputs } from "@distlab/contracts/kernel";
+import type { CanonicalValue, RunInputs } from "@distlab/contracts/kernel";
 import type { KeyValueDefinition, KeyValueStore, MessageBus, ServiceDefinition } from "@distlab/contracts";
 
 const inputs: RunInputs = { contractVersion: 1, modelVersions: { service: "1" }, architecture: {}, scenario: {},
@@ -68,7 +68,27 @@ test("expiry ties see absence in both event orders and stale expiry cannot remov
   }
 });
 
-test("conditional contenders have one winner, structural CAS and failed conditions preserve TTL", async () => {
+/** Stored payloads of one observation type, as plain JSON. */
+const payloads = (sim: { history: { query(filter: { type: string }): readonly { data?: unknown }[] } }, type: string): unknown[] =>
+  JSON.parse(JSON.stringify(sim.history.query({ type }).map(o => o.data)));
+
+test("KV-AC-1 a set with ifAbsent records ifAbsent, and a plain set records none", async () => {
+  const { sim } = fixture([], {
+    write: kv => {
+      kv.set("lease", "a", { ifAbsent: true, ttl: duration(5) });
+      kv.set("plain", 1);
+      kv.set("explicit", 2, { ifAbsent: false });
+    },
+  }, (setup, runtime) => { setup.schedule(at(1, "write", runtime)); });
+  await sim.run();
+  assert.deepEqual(payloads(sim, "kv.changed"), [
+    { key: "lease", operation: "set", ifAbsent: true, before: { present: false }, after: { present: true, value: "a" }, expiresAt: 6 },
+    { key: "plain", operation: "set", before: { present: false }, after: { present: true, value: 1 } },
+    { key: "explicit", operation: "set", before: { present: false }, after: { present: true, value: 2 } },
+  ]);
+});
+
+test("KV-AC-3 conditional contenders have one winner, structural CAS and failed conditions preserve TTL", async () => {
   const results: boolean[] = [];
   const { sim } = fixture([], {
     first: kv => results.push(kv.set("lock", { a: 1, b: [2] }, { ifAbsent: true, ttl: duration(5) })),
@@ -83,8 +103,17 @@ test("conditional contenders have one winner, structural CAS and failed conditio
   });
   await sim.run();
   assert.deepEqual(results, [true, false, true, false, false]);
-  assert.equal(sim.history.query({ type: "kv.condition.failed" }).length, 3);
+  // Each failed condition stores what it required and what the store held, with its expiry.
+  assert.deepEqual(payloads(sim, "kv.condition.failed"), [
+    { key: "lock", operation: "set", expected: { present: false }, actual: { present: true, value: { a: 1, b: [2] }, expiresAt: 6 } },
+    { key: "lock", operation: "compareAndSet", expected: { present: true, value: { a: 1, b: [2] } }, actual: { present: true, value: "winner", expiresAt: 5 } },
+    // At t=5 the winner's lease has ended, so the store held nothing.
+    { key: "lock", operation: "compareAndSet", expected: { present: true, value: "winner" }, actual: { present: false } },
+  ]);
   assert.equal(sim.history.query({ type: "kv.expired" }).length, 1);
+  const first = sim.history.export();
+  await sim.reset(); await sim.run();
+  assert.deepEqual(sim.history.export(), first);
 });
 
 test("KV-AC-6 compareAndDelete removes a live matching entry and cancels its expiry", async () => {
@@ -114,7 +143,9 @@ test("KV-AC-6 compareAndDelete with another value keeps the entry and its expiry
   await sim.run();
   assert.deepEqual(results, [false, "b"]);
   assert.equal(sim.history.query({ type: "kv.changed" }).length, 0);
-  assert.deepEqual(JSON.parse(JSON.stringify(sim.history.query({ type: "kv.condition.failed" }).map(o => o.data))), [{ key: "lock", operation: "compareAndDelete" }]);
+  assert.deepEqual(payloads(sim, "kv.condition.failed"), [
+    { key: "lock", operation: "compareAndDelete", expected: { present: true, value: "a" }, actual: { present: true, value: "b", expiresAt: 5 } },
+  ]);
   assert.deepEqual(sim.history.query({ type: "kv.expired" }).map(o => [o.time, (o.data as { expiresAt: number }).expiresAt]), [[5, 5]]);
 });
 
@@ -128,8 +159,45 @@ test("KV-AC-6 compareAndDelete sees an entry whose TTL has ended as absent", asy
     assert.deepEqual(results, [false], order);
     assert.equal(sim.history.query({ type: "kv.changed" }).length, 0);
     assert.equal(sim.history.query({ type: "kv.expired" }).length, 1);
-    assert.equal(sim.history.query({ type: "kv.condition.failed" }).length, 1);
+    assert.deepEqual(payloads(sim, "kv.condition.failed"), [
+      { key: "lock", operation: "compareAndDelete", expected: { present: true, value: "a" }, actual: { present: false } },
+    ], order);
   }
+});
+
+test("KV-AC-3 and KV-AC-6: the schemas reject a failed condition without expected or actual, and ifAbsent on any operation but set", () => {
+  const schemas = new Map<string, (data: CanonicalValue | undefined) => boolean>();
+  new DeterministicKeyValueStore({
+    definition: { owner, initial: [] },
+    clock: { now: () => simulationTime(0) },
+    scheduler: { schedule: () => { throw Error("unused"); } },
+    observations: { record: () => { throw Error("unused"); }, registerSchema: (type, validate) => { schemas.set(type, validate); } },
+    activeOwner: () => undefined, dispatching: () => false, activeEvent: () => undefined, check: () => {},
+  });
+  const condition = schemas.get("kv.condition.failed")!;
+  const changed = schemas.get("kv.changed")!;
+  const failedSet = { key: "k", operation: "set", expected: { present: false }, actual: { present: true, value: "a", expiresAt: 3 } };
+  assert.equal(condition(failedSet), true);
+  assert.equal(condition({ key: "k", operation: "compareAndSet", expected: { present: true, value: 1 }, actual: { present: false } }), true);
+  assert.equal(condition({ key: "k", operation: "compareAndDelete", expected: { present: true, value: 1 }, actual: { present: true, value: 2 } }), true);
+  for (const bad of [
+    { key: "k", operation: "set" },
+    { key: "k", operation: "set", expected: { present: false } },
+    { key: "k", operation: "set", actual: { present: false } },
+    // A failed set always required absence; a failed compare-and-delete always expected a value.
+    { ...failedSet, expected: { present: true, value: "a" } },
+    { key: "k", operation: "compareAndDelete", expected: { present: false }, actual: { present: false } },
+    // An absent entry stores no value or expiry.
+    { ...failedSet, actual: { present: false, expiresAt: 3 } },
+    { ...failedSet, actual: { present: true, value: "a", extra: 1 } },
+    { ...failedSet, operation: "delete" },
+  ]) assert.equal(condition(bad as CanonicalValue), false, JSON.stringify(bad));
+  const set = { key: "k", operation: "set", before: { present: false }, after: { present: true, value: 1 } };
+  assert.equal(changed(set), true);
+  assert.equal(changed({ ...set, ifAbsent: true }), true);
+  assert.equal(changed({ ...set, ifAbsent: false }), false);
+  for (const operation of ["increment", "compareAndSet"]) assert.equal(changed({ ...set, operation, ifAbsent: true }), false, operation);
+  assert.equal(changed({ key: "k", operation: "delete", ifAbsent: true, before: { present: true, value: 1 }, after: { present: false } }), false);
 });
 
 test("KV-AC-6 compareAndDelete runs reproduce history after reset", async () => {

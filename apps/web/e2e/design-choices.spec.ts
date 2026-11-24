@@ -6,6 +6,7 @@ import { commerceScenario } from "@distlab/catalogs";
 import { projection } from "../tests/support.ts";
 import { loadLesson } from "./support/lesson.ts";
 import { applyAndRestart, choicesSection, experimentDrawer, experimentTrigger, openExperiment } from "./support/experiment.ts";
+import { animationOff } from "./support/playhead.ts";
 
 declare global {
   interface Window {
@@ -41,6 +42,8 @@ async function openChoices(page: Page) {
   await openExperiment(page);
 }
 async function runToEnd(page: Page) {
+  // Animation off: the outcome is revealed as soon as the run completes (RFC 0002 P5).
+  await animationOff(page);
   await button(page, "Run").click();
   await expect(status(page)).toHaveText("COMPLETED");
 }

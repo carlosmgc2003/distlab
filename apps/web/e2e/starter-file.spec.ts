@@ -6,6 +6,7 @@ import { hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";
 import { loadLesson } from "./support/lesson.ts";
 import { experimentTrigger } from "./support/experiment.ts";
+import { animationOff } from "./support/playhead.ts";
 
 // #116: save a packaged lesson as a starter scenario file, open it, and run it (ADR-006).
 
@@ -30,6 +31,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
   await page.goto("/");
   await loadLesson(page, "retry-idempotent");
   await expect(status(page)).toHaveText("READY");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
   await expect(page.getByRole("list", { name: "Business invariants", exact: true }).getByRole("listitem").filter({ hasText: label })).toContainText("HOLDS");
@@ -58,6 +60,7 @@ test("Save as scenario file downloads Retry: idempotent as a starter that opens 
   // A starter is offered only for a packaged lesson.
   await expect(save).toHaveCount(0);
 
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
   const checks = page.getByRole("list", { name: "Scenario checks", exact: true });

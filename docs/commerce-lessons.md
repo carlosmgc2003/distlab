@@ -192,10 +192,10 @@ here with the rest.
 | `retry-idempotent` | 2 | 2026-11-23 |
 | `saga-uncompensated` | 3 | 2026-11-23 |
 | `saga-compensated` | 3 | 2026-11-23 |
-| `dual-write` | 2 | 2026-11-23 |
-| `outbox-unsafe-consumer` | 2 | 2026-11-23 |
-| `outbox-idempotent` | 2 | 2026-11-23 |
-| `outbox-notifications-gap` | 2 | 2026-11-23 |
+| `dual-write` | 3 | 2026-11-24 |
+| `outbox-unsafe-consumer` | 3 | 2026-11-24 |
+| `outbox-idempotent` | 3 | 2026-11-24 |
+| `outbox-notifications-gap` | 3 | 2026-11-24 |
 | `cqrs-delayed` | 1 | 2026-11-13 |
 | `cascade-unprotected` | 2 | 2026-11-23 |
 | `cascade-breaker` | 2 | 2026-11-23 |
@@ -205,8 +205,8 @@ here with the rest.
 | `cache-invalidated` | 2 | 2026-11-23 |
 | `inventory-oversell` | 2 | 2026-11-23 |
 | `inventory-optimistic` | 2 | 2026-11-23 |
-| `lease-unfenced` | 2 | 2026-11-23 |
-| `lease-fenced` | 2 | 2026-11-23 |
+| `lease-unfenced` | 3 | 2026-11-24 |
+| `lease-fenced` | 3 | 2026-11-24 |
 | `clock-last-write-wins` | 2 | 2026-11-23 |
 | `clock-lamport` | 2 | 2026-11-23 |
 
@@ -335,9 +335,11 @@ transactional consumer inbox.
 **Problem:** a service can crash after its DB commit but before publication;
 publishing later can also produce duplicate consumer effects.
 
-**Topology:** Client → Payments → Payments DB (payment + outbox); Payments relay →
-MessageBus `PaymentApproved` → Notifications → Notifications DB (intent + inbox).
-A notification row represents a durable notification intent, not a real email.
+**Topology:** Client → Payments → Payments DB (payment + outbox); Scheduler →
+Payments (`POST /relay`); Payments relay → MessageBus `PaymentApproved` →
+Notifications → Notifications DB (intent + inbox). The Scheduler is a
+maintenance client, not the customer. A notification row represents a durable
+notification intent, not a real email.
 
 **Initial state:** all four tables empty; services running at t=0.
 
@@ -348,14 +350,20 @@ never fires if no event is published).
 
 **Expected timeline:**
 
-1. t=1: local payment commit. Outbox variants insert the event in that **same**
-   transaction; unsafe dual write has no durable event record.
+1. t=1: local payment commit, logged as `payment.approved`. Outbox variants
+   insert the event in that **same** transaction (`event: "in-outbox"`); the
+   dual write has no durable event record and schedules its publication for
+   t=11 (`event: "publish-pending"`). Payments answers at once: the customer
+   receives `APPROVED` at t=2.
 2. t=5: crash during the 10 ms commit-to-publish window. Committed rows survive;
-   publication continuation is abandoned. At t=6 no notification exists.
+   the dual write's scheduled publication is cancelled. At t=6 no notification
+   exists.
 3. t=15/16: restart through STARTING → RUNNING.
-4. t=17: a maintenance client requests one relay tick. The service schedules its
-   own background handler; t=19 it publishes pending outbox events asynchronously.
-   The relay then marks each record sent. It does not share another service's DB.
+4. t=17: the Scheduler requests one relay tick. The service schedules its own
+   background handler; at t=19 it logs `outbox.relay` with the rows it still
+   owes, publishes them, and marks each sent. The dual write logs `pending: 0`:
+   the restarted service has no record of the event it never published. The
+   relay does not share another service's DB.
 5. t=20/23: consumer sees the same event twice. Its acknowledgement is held for
    5 ms after commit so the duplicate arrives before the bus settles the delivery.
    Safe processing commits the notification and inbox together, keyed by the
@@ -368,6 +376,32 @@ never fires if no event is published).
 | `npm run lesson -- dual-write` | 1 | 0 | 0 |
 | `npm run lesson -- outbox-unsafe-consumer` | 1 | 1 | 2 |
 | `npm run lesson -- outbox-idempotent` | 1 | 1 | 1 |
+
+**Expected checks:** two business invariants, one per design decision.
+"An approved payment produces a notification" is a deadline (t=50): the dual
+write violates it. "An approved payment produces at most one notification" is
+checked after every event: the unsafe consumer violates it at t=23, when the
+duplicate commits, and a delayed delivery cannot move that past a check time.
+Both cross Payments' approved rows with Notifications' rows by order, so a
+payment that was never approved asks for nothing. The scenario expectations pin
+the crash (t=6), the payment surviving the restart (t=50), and, in the outbox
+lessons, the relay marking its row sent (t=50).
+
+The design choices `outbox` and `consumer-idempotency` are independent, and
+each decides one invariant: the outbox decides whether the payment is notified,
+the inbox decides whether it is notified at most once.
+
+**Experiments** (one fault from the Experiment drawer):
+
+- In `outbox-idempotent`, drop the first `PaymentApproved` delivery. The bus
+  redelivers it after the acknowledgement timeout, and the one notification is
+  created at t=32: at-least-once delivery.
+- In `outbox-idempotent`, fail Payments' commits from t=18. The relay publishes,
+  but marking the row sent fails: the customer is still notified once, and only
+  the expectation says the row stayed unsent. In a production relay, the next
+  tick would publish the event again; that is where real duplicates come from.
+- In `outbox-unsafe-consumer`, delay the delivery by 28 ms. The two
+  notifications are created at t=48 and t=51; the duplicate is still caught.
 
 **Concept:** local atomicity solves the lost-event gap, not exactly-once delivery.
 A relay crash between publish and marking sent can republish a logical event;
@@ -720,11 +754,15 @@ three design edits. No binding is offered, and no design choice targets the slot
 
 **Expected checks:**
 
-| Design | Notification effects | One notification per payment | Event published |
+| Design | Notification effects | Produces a notification | At most one notification |
 | --- | ---: | --- | --- |
 | Packaged (empty slot): `npm run lesson -- outbox-notifications-gap` | 0 | VIOLATED | HOLDS |
-| Slot filled, database attached, subscribed | 2 | VIOLATED | HOLDS |
+| Slot filled, database attached, subscribed | 2 | HOLDS | VIOLATED |
 | The same with `idempotent` on (reference design) | 1 | HOLDS | HOLDS |
+
+In every design the relay publishes the event and marks its row sent (the
+`outbox-marked-sent` expectation): the empty slot shows an event that is
+published and never delivered.
 
 Every scenario expectation of section 3 is reproduced by the packaged run, so
 the empty slot is a meaningful first run: the event is published and never
@@ -791,7 +829,7 @@ answers `LOCK_UNAVAILABLE` and does not write.
 **Expected timeline:**
 
 - t=2: worker-1's set creates `lock:report`, expiring at t=12
-  (`kv.changed`). At t=4 its increment returns token 1.
+  (`kv.changed` with `ifAbsent: true`). At t=4 its increment returns token 1.
 - t=5: worker-1 checks its lease (`lease.checked`, `validUntil: 11`,
   `valid: true`) and sends its write, which the fault holds up until t=36.
 - t=12: the store removes the entry (`kv.expired`).
@@ -821,8 +859,9 @@ two `kv.expired` records.
 
 **Design choices:** *Fencing tokens* switches storage's check. *Lease
 duration* (1–60 ms) is the TTL both workers set: at 40 ms the entry is still
-live when worker-2 asks, so its set-if-absent fails (`kv.condition.failed`)
-and it answers `LOCK_BUSY`. No stale write can happen in that run, though a
+live when worker-2 asks, so its set-if-absent fails (`kv.condition.failed`,
+whose `actual` stores worker-1's entry and its expiry) and it answers
+`LOCK_BUSY`. No stale write can happen in that run, though a
 longer delay would bring it back.
 
 **Concept:** a lease does not give mutual exclusion on its own, because the

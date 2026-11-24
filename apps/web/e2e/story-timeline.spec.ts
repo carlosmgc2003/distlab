@@ -200,7 +200,8 @@ test("response-lost Story milestones stay linked to their records without new co
     await page.locator(rowSelector(observation)).click();
     const detail = page.locator("#inspection-panel");
     await expect(detail).toContainText(observation.id);
-    await expect(page.locator("#timeline-feedback")).toContainText(`Selected Observation #${observation.sequence}:`);
+    // The selection moved the playhead, so the top bar's playhead position announces it (RFC 0002 P5).
+    await expect(page.getByRole("status", { name: "Playhead position" })).toContainText(`observation #${observation.sequence}.`);
     expect(await page.locator(".story-table tr[data-selected='true'] button").innerText()).toBe(label);
   }
   await expect(page.locator(".story-table tr[data-selected='true']")).toHaveCount(1);

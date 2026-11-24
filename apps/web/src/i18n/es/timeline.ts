@@ -271,8 +271,10 @@ export const timeline: typeof source = {
     legendLabel: "Categorías de hitos, formas y cantidades",
     diagramLabel: "Diagrama de historia",
     corner: "Componente",
-    milestoneLabel: (p: { label: string; component: string; time: number | string; sequence: number | string }, _f: Fmt) =>
-      `${p.label}, ${p.component}, tiempo virtual ${p.time}, secuencia ${p.sequence}`,
+    milestoneLabel: (p: { label: string; component: string; time: number | string; sequence: number | string; ahead?: boolean }, _f: Fmt) =>
+      `${p.label}, ${p.component}, tiempo virtual ${p.time}, secuencia ${p.sequence}${p.ahead ? ", todavía no alcanzado" : ""}`,
+    /** A Story table row after the playhead (RFC 0002 P5): read with the row, so it is not color alone. */
+    notReached: "no alcanzado",
     tableCaption: (reduction: string, _f: Fmt) => `${reduction} Cada fila elige la misma observación registrada que la tira.`,
     tableHeads: {
       milestone: "Hito",

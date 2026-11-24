@@ -295,8 +295,10 @@ export const timeline = {
     legendLabel: "Milestone categories, shapes, and counts",
     diagramLabel: "Story diagram",
     corner: "Component",
-    milestoneLabel: (p: { label: string; component: string; time: number | string; sequence: number | string }, _f: Fmt) =>
-      `${p.label}, ${p.component}, virtual time ${p.time}, sequence ${p.sequence}`,
+    milestoneLabel: (p: { label: string; component: string; time: number | string; sequence: number | string; ahead?: boolean }, _f: Fmt) =>
+      `${p.label}, ${p.component}, virtual time ${p.time}, sequence ${p.sequence}${p.ahead ? ", not reached yet" : ""}`,
+    /** A Story table row after the playhead (RFC 0002 P5): read with the row, so it is not color alone. */
+    notReached: "not reached",
     tableCaption: (reduction: string, _f: Fmt) => `${reduction} Each row selects the same recorded observation as the strip.`,
     tableHeads: {
       milestone: "Milestone",

@@ -2,28 +2,23 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { currentStep } from "../src/lesson-steps.ts";
 
-// #140: the Lesson panel's current-step marker is emphasis only and depends on status and progress.
+// #140, RFC 0002 P5: the Lesson panel's current-step marker is emphasis only and follows the playhead.
 
-test("② Run is current while the session is ready or paused before any event is processed", () => {
-  assert.equal(currentStep("READY", 0), "run");
-  assert.equal(currentStep("PAUSED", 0), "run");
+test("OT-READ-AC-7: ② Run is current until the playhead leaves the start", () => {
+  assert.equal(currentStep({ loaded: true, atStart: true, revealed: false }), "run");
 });
 
-test("no section is current once events are processed but the run has not ended", () => {
-  assert.equal(currentStep("READY", 1), null);
-  assert.equal(currentStep("PAUSED", 4), null);
-  assert.equal(currentStep("RUNNING", 0), null);
-  assert.equal(currentStep("RUNNING", 9), null);
+test("OT-READ-AC-7: no section is current while the playhead is between the start and the end", () => {
+  assert.equal(currentStep({ loaded: true, atStart: false, revealed: false }), null);
 });
 
-test("③ Investigate is current when the run is completed or failed", () => {
-  assert.equal(currentStep("COMPLETED", 31), "investigate");
-  assert.equal(currentStep("FAILED", 3), "investigate");
-  // A run that fails before any event is still over: the outcome is what to read next.
-  assert.equal(currentStep("FAILED", 0), "investigate");
+test("OT-READ-AC-7: ③ Investigate is current once the playhead has reached the end, also after moving back", () => {
+  assert.equal(currentStep({ loaded: true, atStart: false, revealed: true }), "investigate");
+  // A run that recorded no milestone reveals its outcome with the playhead still before the first record.
+  assert.equal(currentStep({ loaded: true, atStart: true, revealed: true }), "investigate");
 });
 
 test("with no session there is no current step", () => {
-  assert.equal(currentStep(undefined, undefined), null);
-  assert.equal(currentStep(undefined, 0), null);
+  assert.equal(currentStep({ loaded: false, atStart: true, revealed: false }), null);
+  assert.equal(currentStep({ loaded: false, atStart: false, revealed: true }), null);
 });

@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { budgets, measureLayout, viewports } from "./layout-budget.ts";
 import type { BudgetLesson, BudgetState, BudgetViewport, LayoutBudget, LayoutMeasures } from "./layout-budget.ts";
 import { loadLesson } from "./support/lesson.ts";
+import { animationOff } from "./support/playhead.ts";
 
 const lessons: readonly BudgetLesson[] = ["response-lost", "saga-uncompensated", "retry-unsafe"];
 
@@ -55,6 +56,7 @@ for (const viewport of Object.keys(viewports) as BudgetViewport[]) {
       readings.READY = await settledMeasures(page, `${lesson} READY ${viewport}`);
       expectWithinBudget(readings.READY, budgets[viewport][lesson].READY, `${lesson} READY ${viewport}`);
 
+      await animationOff(page);
       await page.getByRole("button", { name: "Run", exact: true }).click();
       await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
       readings.COMPLETED = await settledMeasures(page, `${lesson} COMPLETED ${viewport}`);

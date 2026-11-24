@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implementation-ready MVP baseline |
 | Owner | DistLab core team |
-| Last updated | 2026-11-15 |
-| Related issues | #197 |
+| Last updated | 2026-11-24 |
+| Related issues | #197, #240 |
 
 ## Responsibility
 
@@ -113,12 +113,21 @@ they are not full simulation snapshots. No caller alias reaches stored values.
 | Event | When | Required data |
 | --- | --- | --- |
 | `kv.read` | Owner read | Key, presence, value when present |
-| `kv.changed` | set, delete, increment, CAS, or compare-and-delete succeeds | Key, operation, before, after, expiry |
-| `kv.condition.failed` | Conditional mismatch | Key, operation |
+| `kv.changed` | set, delete, increment, CAS, or compare-and-delete succeeds | Key, operation, before, after, expiry; `ifAbsent: true` on a set that passed it |
+| `kv.condition.failed` | Conditional mismatch | Key, operation, expected, actual |
 | `kv.expired` | Entry becomes physically removed at expiry | Key, prior value, expiresAt, generation |
 
 The store owns schemas. Before/after values use the same presence tags as
-`ExpectedValue`; absent expiry is omitted. Records follow mutation and retain
+`ExpectedValue`; absent expiry is omitted. `kv.changed` carries `ifAbsent: true`
+only when `operation` is `set` and the call passed `ifAbsent: true`; it is
+omitted otherwise and never stored as false. `kv.condition.failed` stores
+`expected`, what the operation required, with the `ExpectedValue` tags (a failed
+`set` always required `{ present: false }`, and a failed `compareAndDelete`
+always expected a value), and `actual`, what the store held: `{ present: false }`
+when no live entry exists, including an expired one, or
+`{ present: true, value, expiresAt? }`, where `expiresAt` is present only when
+the live entry has one. A failed condition can then be explained from stored
+fields, without inference. Records follow mutation and retain
 owner/entity metadata and task correlation. Scheduled expiry preserves the
 correlation and cause of the write that set that TTL. Visibility applies to
 values, never execution behavior. [Observability](observability.md) owns terminal
@@ -169,17 +178,24 @@ const renewed = kv.compareAndSet("lease:sku-1",
 
 - **KV-AC-1:** Construct initial data and exercise get/set/delete/increment;
   absence, null, replacement, preserved counter TTL, and copies follow the API.
+  A successful set with `ifAbsent: true` records `ifAbsent: true`; a plain set,
+  or one with `ifAbsent: false`, records no `ifAbsent` field.
 - **KV-AC-2:** Reads/writes exactly at expiry see absence in both equal-time
   orders; replacing TTL prevents stale expiry, and each expiration records once.
 - **KV-AC-3:** Two tasks competing with ifAbsent/CAS yield one winner; structural
   equality works; failed conditions preserve TTL; expired leases cannot renew.
+  Each failed condition records `expected` and `actual`: the loser of a
+  set-if-absent stores the winner's value and expiry, and a CAS on an expired
+  lease stores `actual: { present: false }`. The schema rejects a failed
+  condition without either field, and `ifAbsent` on any operation but `set`.
 - **KV-AC-4:** Reject invalid keys/TTL/data and foreign capabilities atomically;
   counter type/overflow failures preserve values; sink failure seals execution.
 - **KV-AC-5:** Crash preserves unexpired data, expiry continues, and reset/fresh
   runs match history/state. Old handles fail and no wall-clock APIs are used.
 - **KV-AC-6:** compareAndDelete removes a live entry holding the expected value
   and cancels its expiry; another value keeps the entry and its expiry and
-  records a failed condition; an expired entry returns false; an absent or
+  records a failed condition with the expected and the live value; an expired
+  entry returns false and records `actual: { present: false }`; an absent or
   untagged expectation is invalid; fresh and reset runs match history.
 
 ## Acceptance coverage

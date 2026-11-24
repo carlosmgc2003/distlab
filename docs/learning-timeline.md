@@ -72,8 +72,10 @@ Revealing an observation, from an evidence link, a causation link, or a trace,
 shows the Story table so the revealed observation always has a row to focus.
 
 Selecting a milestone in the strip and selecting its row select the same
-observation, so both produce the same Observation detail and the same
-architecture emphasis and movement text.
+observation, so both produce the same Observation detail and move the playhead
+to the same milestone (RFC 0002 P5). The selected row is the playhead: `Step`
+and `Back` move it on both representations, and once the run has executed the
+milestones after it are marked not reached yet, in words and as an attribute.
 
 ### Non-inference rules
 

@@ -63,13 +63,23 @@ export const commerceAssessment: ScenarioAssessment = {
   version: "1.0.0",
   find: id => !["commerce.rows", "commerce.metrics", "commerce.attempts", "commerce.dead-letters", "commerce.pricing", "commerce.live-carts",
     "commerce.stock", "commerce.reservations", "commerce.charges", "commerce.unconfirmed-charges", "commerce.notifications", "commerce.final-orders",
-    "commerce.fencing", "commerce.converged", "commerce.kv-entries"].includes(id) ? undefined : {
+    "commerce.fencing", "commerce.converged", "commerce.kv-entries", "commerce.payment-notifications"].includes(id) ? undefined : {
     id, version: "1.0.0", evaluate({ parameters, projection }) {
       const p = record(parameters);
       if (id === "commerce.charges") {
         // No order holds more than `maximum` approved, unvoided authorizations at the processor.
         const evidence = countBy(approved(projection.components, text(p.processor)).map(entry => text(entry.orderId)));
         return { pass: Object.values(evidence).every(count => count <= (p.maximum as number)), evidence };
+      }
+      if (id === "commerce.payment-notifications") {
+        // Every APPROVED payment (keyed by its order) has at least `minimum` and at most `maximum`
+        // notifications for that order. A payment that was never approved asks for nothing.
+        const payments = record(p.payments!), notifications = record(p.notifications!);
+        const notified = countBy(Object.values(tableRows(projection.databases, text(notifications.owner), text(notifications.table))).map(row => text(record(row).orderId)));
+        const evidence = Object.entries(tableRows(projection.databases, text(payments.owner), text(payments.table)))
+          .filter(([, row]) => record(row).status === "APPROVED").map(([orderId]) => ({ orderId, notifications: notified[orderId] ?? 0 }));
+        const pass = evidence.every(item => (typeof p.minimum !== "number" || item.notifications >= p.minimum) && (typeof p.maximum !== "number" || item.notifications <= p.maximum));
+        return { pass, evidence };
       }
       if (id === "commerce.unconfirmed-charges") {
         // Every approved, unvoided authorization belongs to a CONFIRMED order.

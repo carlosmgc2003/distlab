@@ -47,7 +47,7 @@ at a time, so until they land the shipped shell can still differ from it.
 | Region | Holds | Rules |
 | --- | --- | --- |
 | Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, which reads `Pause` while the playhead plays, then `Back`, `Step`, `Reset`); the run summary (status · milestone `n of N` · the virtual time of the record under the playhead) | One row, at most 64 px, identical on both tabs. No drawer, no second control group, no tagline. |
-| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run, Step, and Back do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure, for every lesson: the engine counters (processed and pending events, random draws, observations) and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
+| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run, Step, and Back do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure, for every lesson: the engine counters (processed and pending events, random draws, observations) and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run until the playhead leaves the start, Investigate once it has reached the end of the run. Nothing is gated, except that ③ Investigate withholds the outcome, the checks, and the Run overview until the playhead first reaches the end (at once with Animation off) and says so in one line. |
 | Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds one slim row of **Playback settings** (**Animation** and **Speed**) above the architecture graph, and nothing below the graph. |
 | Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds up to three sections, in this order: Architecture (only when the lesson's policy has an architecture allowance, #112), Design choices (only when the policy declares parameters), and Faults, with one footer: `Apply and restart`, `Discard changes`, `Close`. While it is open, the movement detail and the Component inspector go under the graph instead of beside it, so the canvas keeps the panel's width (#166). | No other overlay is added. |
 
@@ -192,8 +192,15 @@ Rules that keep the regions distinct:
 - The selection is stated once, in the observation detail header
   ("Observation #‹sequence› · ‹label› · t=‹time›"). One polite live region,
   read and not shown, announces it; no banner or position line restates it.
+  Once the run has executed, a selection that moves the playhead is announced
+  by the top bar's playhead position instead, which names the same observation.
 - While a filter is active, the result count is shown once, beside the filter
   row ("22 of 267 shown").
+- The selected row is the playhead (RFC 0002 P5): `Step`, `Back`, `Run`, and
+  the keys move it, and selecting a row moves the playhead. Once the run has
+  executed, milestones after the playhead are **not reached yet**: a hatched
+  cell in the diagram, secondary text and the words "not reached" in the table,
+  and `data-reached="false"` on both; the diagram cell's name says it too.
 
 Observation detail is summary-first, in this order: **Event summary**
 (plain-language stored event label, sequence, virtual time, source, target,
@@ -320,8 +327,8 @@ legible name size. A reader's own
 pan and zoom are kept while both components are already visible. Under
 `prefers-reduced-motion: reduce` the view changes without animation.
 
-Choosing a record in Recorded history takes the graph highlight back and the
-playhead returns to before the first record. Nothing flashes by itself while
+Choosing a record in Recorded history moves the playhead to it, or to the last
+milestone before it, and the graph paints that milestone. Nothing flashes by itself while
 the worker executes a run: the graph shows the playhead. Both tab panels stay
 mounted, so the playhead and the narration survive a tab switch.
 

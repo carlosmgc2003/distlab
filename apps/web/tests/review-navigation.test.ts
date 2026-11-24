@@ -305,3 +305,60 @@ test("navigation is pure: it names no DOM node, host timer, or worker command", 
   assert.doesNotMatch(body, forbidden, "review-navigation.ts");
   assert.doesNotMatch(body, /\bWorker\b/, "navigation sends no worker command");
 });
+// RFC 0002 P5: the selected row is the playhead. The shell moves the playhead to a reader's
+// selection; `follow` moves the selection to the playhead. Milestones here: o1, o3, o5.
+const spans = {
+  before: { from: -Infinity, to: 1 },
+  o1: { from: 1, to: 3 },
+  o3: { from: 3, to: 5 },
+  o5: { from: 5, to: Infinity },
+};
+
+test("OT-READ-AC-2: the selected row follows the playhead, without moving focus or raising feedback", () => {
+  const ctx = context();
+  const start = published(createReviewNavigation());
+  const stepped = transition(start, { type: "follow", observationId: "o1", span: spans.o1 }, ctx);
+  assert.equal(stepped.selectedId, "o1");
+  assert.equal(stepped.focus, null);
+  assert.equal(stepped.feedback, null);
+  assert.equal(stepped.scroll.kind, "ensure-visible");
+  const next = transition(stepped, { type: "follow", observationId: "o3", span: spans.o3 }, ctx);
+  assert.equal(next.selectedId, "o3");
+  // Back to before the first record clears the selection; staying there changes nothing.
+  const cleared = transition(next, { type: "follow", observationId: null, span: spans.before }, ctx);
+  assert.equal(cleared.selectedId, null);
+  assert.equal(transition(cleared, { type: "follow", observationId: null, span: spans.before }, ctx), cleared);
+  // The same follow twice is no change, so the scroll request is not repeated.
+  assert.equal(transition(next, { type: "follow", observationId: "o3", span: spans.o3 }, ctx), next);
+});
+
+test("OT-READ-AC-9: a record that is not a milestone stays selected while the playhead stands on the milestone before it", () => {
+  const ctx = context();
+  const revealed = transition(published(createReviewNavigation()), { type: "reveal", observationId: "o4" }, ctx);
+  assert.equal(revealed.selectedId, "o4");
+  // The shell moved the playhead to o3, the last milestone at or before o4: the selection stays on o4.
+  assert.equal(transition(revealed, { type: "follow", observationId: "o3", span: spans.o3 }, ctx), revealed);
+  // Step moves the playhead on to o5, and the selection follows it.
+  assert.equal(transition(revealed, { type: "follow", observationId: "o5", span: spans.o5 }, ctx).selectedId, "o5");
+});
+
+test("OT-READ-AC-3: records after the playhead are marked not reached, and nothing is marked before the run executes", () => {
+  const state = published(createReviewNavigation());
+  assert.equal(derive(state, context(), m).reachedBefore, undefined);
+  assert.equal(derive(state, context({ playhead: spans.o3 }), m).reachedBefore, 5);
+  assert.equal(derive(state, context({ playhead: spans.before }), m).reachedBefore, 1);
+  assert.equal(derive(state, context({ playhead: spans.o5 }), m).reachedBefore, Infinity);
+});
+
+test("a selection that moves the playhead is announced by the playhead position, not twice", () => {
+  const start = published(createReviewNavigation());
+  // The playhead stands on o3 (o3 and o4); selecting o1 moves it, so this region stays quiet.
+  const moved = transition(start, { type: "select", observationId: "o1" }, context({ playhead: spans.o3 }));
+  assert.equal(moved.selectedId, "o1");
+  assert.equal(moved.feedback, null);
+  // Selecting o4 leaves the playhead on o3, so the selection is announced here.
+  const kept = transition(start, { type: "select", observationId: "o4" }, context({ playhead: spans.o3 }));
+  assert.equal(kept.feedback?.kind, "selected");
+  // Before the run has executed there is no playhead to announce it.
+  assert.equal(transition(start, { type: "select", observationId: "o1" }, context()).feedback?.kind, "selected");
+});

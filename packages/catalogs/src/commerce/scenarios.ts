@@ -57,10 +57,10 @@ const commerceRevisions: Readonly<Record<CommerceLessonName, LessonRevision>> = 
   "retry-idempotent": revised(2, "2026-11-23"),
   "saga-uncompensated": revised(3, "2026-11-23"),
   "saga-compensated": revised(3, "2026-11-23"),
-  "dual-write": revised(2, "2026-11-23"),
-  "outbox-unsafe-consumer": revised(2, "2026-11-23"),
-  "outbox-idempotent": revised(2, "2026-11-23"),
-  "outbox-notifications-gap": revised(2, "2026-11-23"),
+  "dual-write": revised(3, "2026-11-24"),
+  "outbox-unsafe-consumer": revised(3, "2026-11-24"),
+  "outbox-idempotent": revised(3, "2026-11-24"),
+  "outbox-notifications-gap": revised(3, "2026-11-24"),
   "cqrs-delayed": revised(1, "2026-11-13"),
   "cascade-unprotected": revised(2, "2026-11-23"),
   "cascade-breaker": revised(2, "2026-11-23"),
@@ -70,8 +70,8 @@ const commerceRevisions: Readonly<Record<CommerceLessonName, LessonRevision>> = 
   "cache-invalidated": revised(2, "2026-11-23"),
   "inventory-oversell": revised(2, "2026-11-23"),
   "inventory-optimistic": revised(2, "2026-11-23"),
-  "lease-unfenced": revised(2, "2026-11-23"),
-  "lease-fenced": revised(2, "2026-11-23"),
+  "lease-unfenced": revised(3, "2026-11-24"),
+  "lease-fenced": revised(3, "2026-11-24"),
   "clock-last-write-wins": revised(2, "2026-11-23"),
   "clock-lamport": revised(2, "2026-11-23"),
 };
@@ -139,11 +139,12 @@ function outboxScenario(name: CommerceLessonName): CanonicalValue {
   const outbox = name !== "dual-write";
   const idempotent = name === "outbox-idempotent";
   const gap = name === "outbox-notifications-gap";
+  const notified = { payments: { owner: "payments", table: "payments" }, notifications: { owner: "notifications", table: "notifications" } };
   return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
     architecture: {
-      components: [component("client", "client", "client"), component("payments", "outbox-payment", "service", { outbox }),
+      components: [component("client", "client", "client"), component("scheduler", "client", "client"), component("payments", "outbox-payment", "service", { outbox }),
         gap ? component("notifications", "placeholder-service") : component("notifications", "notifications", "service", { idempotent })],
-      links: [link("client", "payments", 40)],
+      links: [link("client", "payments", 40), link("scheduler", "payments", 40)],
       databases: [database("payments", ["payments", "outbox"]), ...gap ? [] : [database("notifications", ["notifications", "inbox"])]], stores: [],
       destinations: [{ id: "PaymentApproved", kind: "topic", deliveryDelay: 1, ackTimeout: 10, retryDelay: 1, maxAttempts: 3, capacity: 100 }],
       subscriptions: gap ? [] : [{ destination: "PaymentApproved", consumer: "notifications" }],
@@ -155,14 +156,16 @@ function outboxScenario(name: CommerceLessonName): CanonicalValue {
       { id: "crash-after-commit", at: 5, kind: "fault", fault: { id: "payment-crash", kind: "crash", target: "payments" } },
       { id: "restart", at: 15, kind: "service", target: "payments", state: "STARTING" },
       { id: "ready", at: 16, kind: "service", target: "payments", state: "RUNNING" },
-      request("relay", 17, "payments", "POST /relay"),
+      // A maintenance tick from the scheduler, not the customer, asks the restarted service to relay.
+      { ...request("relay", 17, "payments", "POST /relay"), target: "scheduler" },
     ], assertions: [
       assertion("committed-before-crash", 6, "payments", "payments", 1, "order-1", { status: "APPROVED" }),
       assertion("nothing-published-yet", 6, "notifications", "notifications", 0),
       assertion("durable-outbox", 6, "payments", "outbox", outbox ? 1 : 0, outbox ? "payment-approved-1" : "", outbox ? { sent: false } : {}),
       assertion("payment-survives-restart", 50, "payments", "payments", 1, "order-1", { status: "APPROVED" }),
-      assertion("one-notification-per-payment", 50, "notifications", "notifications", 1),
-      assertion("payment-event-published", 50, "payments", "outbox", 1, "payment-approved-1", { sent: true }),
+      ...outbox ? [assertion("outbox-marked-sent", 50, "payments", "outbox", 1, "payment-approved-1", { sent: true })] : [],
+      { id: "approved-payment-notified", predicate: "commerce.payment-notifications", mode: "at", at: 50, parameters: { ...notified, minimum: 1 } },
+      always("no-duplicate-notification", "commerce.payment-notifications", { ...notified, maximum: 1 }),
     ],
   } as CanonicalValue;
 }
@@ -428,9 +431,10 @@ export function commerceChecks(name: CommerceLessonName): readonly CommerceCheck
         expectation("committed-before-crash", "The payment committed before Payments crashed (t=6)"),
         expectation("nothing-published-yet", "No notification existed when Payments crashed (t=6)"),
         expectation("durable-outbox", name === "dual-write" ? "No outbox row recorded the event (t=6)" : "The outbox recorded the unsent event with the payment (t=6)"),
-        invariant("payment-survives-restart", "An approved payment survives a crash and restart"),
-        invariant("one-notification-per-payment", "An approved payment produces exactly one notification"),
-        invariant("payment-event-published", "An approved payment's event is recorded and published"),
+        expectation("payment-survives-restart", "The payment survived the crash and restart (t=50)"),
+        ...name === "dual-write" ? [] : [expectation("outbox-marked-sent", "The relay published the event and marked its outbox row sent (t=50)")],
+        invariant("approved-payment-notified", "An approved payment produces a notification"),
+        invariant("no-duplicate-notification", "An approved payment produces at most one notification"),
       ];
     case "cqrs":
       return [
