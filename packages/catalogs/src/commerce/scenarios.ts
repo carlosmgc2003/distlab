@@ -70,8 +70,8 @@ const commerceRevisions: Readonly<Record<CommerceLessonName, LessonRevision>> = 
   "cache-invalidated": revised(2, "2026-11-23"),
   "inventory-oversell": revised(2, "2026-11-23"),
   "inventory-optimistic": revised(2, "2026-11-23"),
-  "lease-unfenced": revised(3, "2026-11-24"),
-  "lease-fenced": revised(3, "2026-11-24"),
+  "lease-unfenced": revised(4, "2026-11-24"),
+  "lease-fenced": revised(4, "2026-11-24"),
   "clock-last-write-wins": revised(2, "2026-11-23"),
   "clock-lamport": revised(2, "2026-11-23"),
 };
@@ -324,7 +324,8 @@ function inventoryScenario(name: CommerceLessonName): CanonicalValue {
  * Leases and fencing tokens, outside commerce: two report workers share one
  * report file and a key-value node. A worker takes the lease with a
  * set-if-absent that expires after 10 ms, then draws a fencing token with an
- * increment. Worker-1 takes the lease at t=2 (token 1) and checks it at t=5,
+ * increment. Worker-1 takes the lease at t=2 (token 1) and checks it at t=5;
+ * worker-2 first asks at t=5, finds the lease taken, and answers LOCK_BUSY,
  * but its write is held up 30 ms on the way to storage, as a long pause would
  * hold it. The lease expires at t=12, worker-2 takes it at t=17 with token 2
  * and writes at t=21, and worker-1's write arrives at t=36. The pair differs
@@ -333,7 +334,7 @@ function inventoryScenario(name: CommerceLessonName): CanonicalValue {
 function leaseScenario(name: CommerceLessonName): CanonicalValue {
   const fencing = name === "lease-fenced";
   const path = "reports/daily.csv";
-  const job = (worker: string, at: number) => ({ ...request(`job-${worker}`, at, worker, "POST /job", { path, content: `report by ${worker}` }), target: "scheduler" });
+  const job = (worker: string, at: number, id = `job-${worker}`) => ({ ...request(id, at, worker, "POST /job", { path, content: `report by ${worker}` }), target: "scheduler" });
   const worker = (id: string) => component(id, "lease-worker", "service", { kv: "kv", storage: "storage", ttl: 10 });
   return { version: 1, name: `${name}@1`, seed: "commerce-classroom-1", startTime: 0, configuration,
     architecture: {
@@ -345,7 +346,8 @@ function leaseScenario(name: CommerceLessonName): CanonicalValue {
     }, external: [], faults: [fault("delayed-stale-write", "network.request", "worker-1", "storage", "PUT /file", { kind: "delay", duration: 30 })],
     actions: [
       ...["kv", "storage", "worker-1", "worker-2"].map(target => ({ id: `start-${target}`, at: 0, kind: "service", target, state: "RUNNING" })),
-      job("worker-1", 0), job("worker-2", 15),
+      // Worker-2 first asks at t=3, while worker-1 holds the lease: its set-if-absent fails and it answers LOCK_BUSY (#245).
+      job("worker-1", 0), job("worker-2", 3, "job-worker-2-busy"), job("worker-2", 15),
     ], assertions: [
       { id: "lease-passed-on", predicate: "commerce.kv-entries", mode: "at", at: 20, parameters: { owner: "kv", expected: { "lock:report": "worker-2", "lock:report:token": 2 } } },
       always("writes-in-token-order", "commerce.fencing", { owner: "storage", table: "writes" }),

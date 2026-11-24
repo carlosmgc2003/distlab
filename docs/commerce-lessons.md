@@ -205,8 +205,8 @@ here with the rest.
 | `cache-invalidated` | 2 | 2026-11-23 |
 | `inventory-oversell` | 2 | 2026-11-23 |
 | `inventory-optimistic` | 2 | 2026-11-23 |
-| `lease-unfenced` | 3 | 2026-11-24 |
-| `lease-fenced` | 3 | 2026-11-24 |
+| `lease-unfenced` | 4 | 2026-11-24 |
+| `lease-fenced` | 4 | 2026-11-24 |
 | `clock-last-write-wins` | 2 | 2026-11-23 |
 | `clock-lamport` | 2 | 2026-11-23 |
 
@@ -801,8 +801,9 @@ stall (a long pause, a slow network) and write after the lease expired and
 another worker took it. The key-value store cannot stop that write; only the
 resource can.
 
-**Topology:** a `scheduler` client starts jobs on two report workers,
-`worker-1` and `worker-2` (`commerce.lease-worker`). Both reach `kv`
+**Topology:** a `scheduler` client starts three jobs on two report workers,
+`worker-1` and `worker-2` (`commerce.lease-worker`): worker-1's at t=0, and
+worker-2's at t=3 and at t=15. Both reach `kv`
 (`commerce.kv-server`), a key-value node whose endpoints are the
 `KeyValueStore` operations and nothing else. Each worker writes
 `reports/daily.csv` to `storage` (`commerce.lease-storage`, tables `files` and
@@ -832,6 +833,10 @@ answers `LOCK_UNAVAILABLE` and does not write.
   (`kv.changed` with `ifAbsent: true`). At t=4 its increment returns token 1.
 - t=5: worker-1 checks its lease (`lease.checked`, `validUntil: 11`,
   `valid: true`) and sends its write, which the fault holds up until t=36.
+- t=5: worker-2's first job (`job-worker-2-busy`, started at t=3) reaches the
+  store while worker-1 holds the lease. Its set-if-absent finds the lease taken
+  (`kv.condition.failed`, whose `actual` is worker-1's entry expiring at t=12),
+  so worker-2 logs `lease.busy` and the job answers `LOCK_BUSY` at t=7.
 - t=12: the store removes the entry (`kv.expired`).
 - t=17: worker-2's set succeeds, expiring at t=27. At t=19 it draws token 2,
   and at t=21 storage writes its report.
@@ -854,12 +859,12 @@ held `worker-2` and the token counter held 2.
 
 In the browser, the graph draws `kv` as a shared key-value store that both
 workers point at, not as a service. Its state shows the live lease entry with
-its expiry and the token counter. Recorded history shows each `kv.changed` and the
-two `kv.expired` records.
+its expiry and the token counter. Recorded history shows each `kv.changed`, the
+failed condition at t=5, and the two `kv.expired` records.
 
 **Design choices:** *Fencing tokens* switches storage's check. *Lease
 duration* (1–60 ms) is the TTL both workers set: at 40 ms the entry is still
-live when worker-2 asks, so its set-if-absent fails (`kv.condition.failed`,
+live when worker-2 asks again at t=17, so its set-if-absent fails (`kv.condition.failed`,
 whose `actual` stores worker-1's entry and its expiry) and it answers
 `LOCK_BUSY`. No stale write can happen in that run, though a
 longer delay would bring it back.

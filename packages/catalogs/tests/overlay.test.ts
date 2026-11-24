@@ -462,18 +462,19 @@ test("the fenced lease stays safe when a student delays the lock's own calls, an
   // Its own clock check stops it: a worker that passes the check drew its token while its lease was live.
   const slowToken = await run(lesson, { version: 1, faults: [{ id: "student-slow-token", point: "network.request", source: "worker-1", target: "kv", from: 0, probability: 1, maxApplications: 1, occurrence: 2, effect: { kind: "delay", duration: 16 } }] });
   assert.equal(slowToken.status, "COMPLETED");
-  assert.deepEqual(outcomes(slowToken), { "job-worker-1": "LEASE_EXPIRED", "job-worker-2": "WRITTEN" });
+  assert.deepEqual(outcomes(slowToken), { "job-worker-1": "LEASE_EXPIRED", "job-worker-2-busy": "LOCK_BUSY", "job-worker-2": "WRITTEN" });
   assert.deepEqual(JSON.parse(JSON.stringify(file(slowToken))), { content: "report by worker-2", writer: "worker-2", token: 1 });
   assert.deepEqual(slowToken.results.map(item => item.status), ["FAIL", "PASS", "PASS"], "the packaged setup expectation names token 2; both invariants hold");
   // A call to the store that times out leaves the worker not knowing whether it holds the lease, so it does not write.
   const lostAnswer = await run(lesson, { version: 1, faults: [{ id: "student-lost-answer", point: "network.response", source: "kv", target: "worker-1", from: 0, probability: 1, maxApplications: 1, effect: { kind: "drop" } }] });
   // The entry it could not confirm still expires at t=12, so worker-2 takes the lease at t=17 and writes.
-  assert.deepEqual(outcomes(lostAnswer), { "job-worker-1": "LOCK_UNAVAILABLE", "job-worker-2": "WRITTEN" });
+  assert.deepEqual(outcomes(lostAnswer), { "job-worker-1": "LOCK_UNAVAILABLE", "job-worker-2-busy": "LOCK_BUSY", "job-worker-2": "WRITTEN" });
   assert.equal(file(lostAnswer)!.writer, "worker-2");
   // A 40 ms lease is still live at t=17: the store's set-if-absent fails, and worker-2 never writes.
   const longLease = await run(lesson, { version: 1, parameters: [{ key: "lease-ttl", value: 40 }] });
-  assert.deepEqual(outcomes(longLease), { "job-worker-1": "WRITTEN", "job-worker-2": "LOCK_BUSY" });
-  assert.deepEqual(longLease.history.observations.filter(item => item.type === "kv.condition.failed").map(item => item.time), [17]);
+  assert.deepEqual(outcomes(longLease), { "job-worker-1": "WRITTEN", "job-worker-2-busy": "LOCK_BUSY", "job-worker-2": "LOCK_BUSY" });
+  // Worker-2 finds the lease taken both times: at t=5, as in the packaged run, and at t=17.
+  assert.deepEqual(longLease.history.observations.filter(item => item.type === "kv.condition.failed").map(item => item.time), [5, 17]);
 });
 
 test("the event delivery delay decides what each CQRS read answers, and the read model converges within the deadline at every offered delay", async () => {

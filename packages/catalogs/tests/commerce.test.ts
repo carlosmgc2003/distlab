@@ -196,7 +196,11 @@ test("the lease pair builds its lock from KeyValueStore operations: set-if-absen
     ]);
     // The store expires the lease by itself, while worker-1's write is still in flight.
     assert.deepEqual(kv(r, "kv.expired"), [[12, "lock:report", null, 12], [27, "lock:report", null, 27]]);
-    assert.equal(kv(r, "kv.condition.failed").length, 0);
+    // Worker-2's first job asks at t=5, while worker-1 holds the lease: one failed set-if-absent (#245).
+    assert.deepEqual(kv(r, "kv.condition.failed"), [[5, "lock:report", "set", null]]);
+    assert.deepEqual(JSON.parse(JSON.stringify(r.history.observations.filter(o => o.type === "kv.condition.failed").map(o => o.data))), [
+      { key: "lock:report", operation: "set", expected: { present: false }, actual: { present: true, value: "worker-1", expiresAt: 12 } },
+    ]);
     assert.deepEqual(Object.keys(object(object(r.state).databases!)), ["storage"]);
     // Each worker counts its lease from before it asked, so its estimate ends before the entry does.
     assert.deepEqual(JSON.parse(JSON.stringify(logs(r, "lease.checked"))), [
@@ -206,13 +210,13 @@ test("the lease pair builds its lock from KeyValueStore operations: set-if-absen
     assert.deepEqual(result(r, "lease-passed-on"), [{ key: "lock:report", value: "worker-2", expiresAt: 27 }, { key: "lock:report:token", value: 2, expiresAt: null }]);
   }
   // Unfenced: worker-1's write, delayed to t=36, overwrites worker-2's report.
-  assert.deepEqual(outcome(unsafe), [["job-worker-2", "WRITTEN", 2], ["job-worker-1", "WRITTEN", 1]]);
+  assert.deepEqual(outcome(unsafe), [["job-worker-2-busy", "LOCK_BUSY", undefined], ["job-worker-2", "WRITTEN", 2], ["job-worker-1", "WRITTEN", 1]]);
   assert.deepEqual(JSON.parse(JSON.stringify(logs(unsafe, "storage.written"))).at(-1), { path: "reports/daily.csv", writer: "worker-1", token: 1, overwrote: "worker-2" });
   assert.deepEqual(result(unsafe, "writes-in-token-order"), [{ seq: 1, writer: "worker-2", token: 2 }, { seq: 2, writer: "worker-1", token: 1 }]);
   assert.deepEqual(result(unsafe, "file-from-latest-lease"), [{ path: "reports/daily.csv", writer: "worker-1", token: 1, largestAccepted: 2 }]);
   assert.deepEqual(unsafe.results.filter(item => item.status === "FAIL").map(item => item.time), [36, 36]);
   // Fenced: storage has accepted token 2, so it rejects token 1.
-  assert.deepEqual(outcome(safe), [["job-worker-2", "WRITTEN", 2], ["job-worker-1", "REJECTED", 1]]);
+  assert.deepEqual(outcome(safe), [["job-worker-2-busy", "LOCK_BUSY", undefined], ["job-worker-2", "WRITTEN", 2], ["job-worker-1", "REJECTED", 1]]);
   assert.deepEqual(JSON.parse(JSON.stringify(logs(safe, "storage.fenced"))), [{ path: "reports/daily.csv", writer: "worker-1", token: 1, highestToken: 2 }]);
 });
 

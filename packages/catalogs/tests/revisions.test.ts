@@ -74,8 +74,8 @@ const recorded: Readonly<Record<string, { readonly revision: number; readonly fi
   "cache-invalidated": { revision: 2, fingerprint: "0a7c09426a2644e0" },
   "inventory-oversell": { revision: 2, fingerprint: "431f5e6b9c180ba3" },
   "inventory-optimistic": { revision: 2, fingerprint: "378f400b61283198" },
-  "lease-unfenced": { revision: 3, fingerprint: "ce8b9f8c098afbd8" },
-  "lease-fenced": { revision: 3, fingerprint: "bb6ac0c76c3662de" },
+  "lease-unfenced": { revision: 4, fingerprint: "29ff4cdfbbc9baf1" },
+  "lease-fenced": { revision: 4, fingerprint: "d97eb4bf6b5af029" },
   "clock-last-write-wins": { revision: 2, fingerprint: "51006084d91bfd03" },
   "clock-lamport": { revision: 2, fingerprint: "ea564f47922bfafd" },
 };
