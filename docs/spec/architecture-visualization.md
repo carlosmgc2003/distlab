@@ -617,6 +617,36 @@ Rules:
 At the end of every packaged lesson with a store, the live entries equal the
 store the run reports (`apps/web/tests/kv-history.test.ts`).
 
+## Store card and key-value movement
+
+RFC 0003 K3 (#242). Two pure models; the graph rendering, the playback wiring,
+and the narration are a separate render issue.
+
+`apps/web/src/kv-card.ts` reads the key history at the position and returns, per
+store:
+
+- **Shown**: the first four live entries in key order, with their stored value
+  (or not visible), writer, stored `expiresAt`, and the share of the lifetime
+  left, `(expiresAt − now) / (expiresAt − start)`, where `now` is the stored time
+  of the record at the position. **More** counts the rest.
+- **Ended**: the entries whose segment ended at exactly the record at the
+  position, by expiry, delete, or compare-and-delete. An overwrite leaves the
+  key live and is not listed.
+- **Effect**: when the record at the position is this store's `kv.*` record, its
+  type, key, stored operation, and writer (an expiry has no writer).
+
+`apps/web/src/kv-movement.ts` gives each `kv.*` record one cue:
+
+- a store its service owns: a `kv` movement from the owner's node to its
+  satellite `resource:kv:‹owner›`, with the stored operation (`get` for a read)
+  and whether a condition failed;
+- a shared key-value node (`commerce.kv-server`): no movement, because the
+  network request already moves; the card shows the effect;
+- an expiry: a `no-caller` cue on the store, with no movement.
+
+Both read only stored fields and node identity, and the main-thread boundary
+walk checks them.
+
 ## Guardrails
 
 - No changes to `@distlab/contracts` types; no new worker commands; review

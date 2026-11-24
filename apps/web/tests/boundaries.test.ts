@@ -73,6 +73,9 @@ test("main-thread import graph uses application contracts and data, never runtim
   walk(resolve(app, "main.tsx"));
   // RFC 0003 K1 (#238): key history is main-thread presentation that no view imports yet, so it is walked on its own.
   walk(resolve(app, "kv-history.ts"));
+  // RFC 0003 K3 (#242): the store card and key-value movement models, likewise not imported by a view yet.
+  walk(resolve(app, "kv-card.ts"));
+  walk(resolve(app, "kv-movement.ts"));
   assert.ok(visited.has(resolve(app, "host.ts")));
   assert.ok(visited.has(dataModule));
   assert.ok(visited.has(commerceDataModule));
