@@ -10,6 +10,7 @@ import {
   playheadKeyAction,
   playheadPhase,
   playheadPosition,
+  playheadSummary,
   playheadTick,
 } from "../src/playhead.ts";
 import type { PlayheadContext, PlayheadState } from "../src/playhead.ts";
@@ -150,4 +151,15 @@ test("Left is Back, Right is Step, and Space is Run or Pause, unless a focused c
   assert.equal(playheadKeyAction({ ...free, key: " ", repeat: true }), null);
   assert.equal(playheadKeyAction({ ...free, key: "ArrowRight", modified: true }), null);
   for (const key of ["ArrowUp", "ArrowDown", "Enter", "Escape", "a", "Home"]) assert.equal(playheadKeyAction({ ...free, key }), null);
+});
+
+test("OT-PLAY-AC-6: the top bar states the milestone and the virtual time of the record under the playhead, and nothing before the run executes", () => {
+  const steps = [{ time: simulationTime(0) }, { time: simulationTime(0) }, { time: simulationTime(12) }];
+  // Before the run has executed, whatever the loaded session recorded, the top bar states no position and no time.
+  assert.deepEqual(playheadSummary(steps, -1, false, m), { milestone: "—", time: "—" });
+  // Executed, before the first record: the count, and no time, because the playhead stands on no record.
+  assert.deepEqual(playheadSummary(steps, -1, true, m), { milestone: "0 of 3", time: "—" });
+  assert.deepEqual(playheadSummary(steps, 2, true, m), { milestone: "3 of 3", time: "12" });
+  assert.deepEqual(playheadSummary(steps, 1, true, es), { milestone: "2 de 3", time: "0" });
+  assert.deepEqual(playheadSummary([], -1, true, m), { milestone: "0 of 0", time: "—" });
 });

@@ -21,6 +21,8 @@ export const simulationControls: typeof source = {
   pendingRun: "Ejecución en curso…",
   pendingLoading: "Cargando…",
   pendingAssessment: "Evaluación en curso…",
+  milestone: "Hito",
+  milestoneOf: (p: { index: number; total: number }, f: Fmt) => `${f.number(p.index)} de ${f.number(p.total)}`,
   virtualTime: "Tiempo virtual",
   processedEvents: "Eventos procesados",
   pendingEvents: "Eventos pendientes",

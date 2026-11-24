@@ -31,7 +31,8 @@ async function completedHistory(page: Page) {
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
 }
 const commands = (page: Page) => page.evaluate(() => window.toolbarEvidence.commands.map(command => command.type));
-const virtualTime = (page: Page) => page.locator(".run-summary .run-metrics").innerText();
+/** The engine counters in Advanced diagnostics: the top bar states the playhead, which Run keeps moving. */
+const engineCounters = (page: Page) => page.locator(".advanced-diagnostics .diagnostics").evaluate(element => element.textContent ?? "");
 
 test("each filter dimension has exactly one input control, and chips only remove", async ({ page }) => {
   await completedHistory(page);
@@ -136,7 +137,7 @@ test("More filters moves focus in and back, discards on Escape and Cancel, and n
 test("changing the view or the filters sends no worker command and keeps virtual time", async ({ page }) => {
   await completedHistory(page);
   const before = await commands(page);
-  const time = await virtualTime(page);
+  const counters = await engineCounters(page);
   for (const name of ["Story table", "Story diagram"] as const) await viewButton(page, name).click();
   await page.getByLabel("Show", { exact: true }).selectOption("messages");
   await page.getByLabel("Component", { exact: true }).selectOption("orders");
@@ -145,6 +146,6 @@ test("changing the view or the filters sends no worker command and keeps virtual
   await applyMoreFilters(page);
   await page.getByRole("button", { name: "Clear all filters" }).click();
   expect(await commands(page)).toEqual(before);
-  expect(await virtualTime(page)).toBe(time);
+  expect(await engineCounters(page)).toBe(counters);
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
 });

@@ -145,11 +145,15 @@ test("desktop baselines expose exactly two investigation tabs with one committed
       expect(effectAt).toBeGreaterThanOrEqual(0);
       expect(relatedAt).toBeGreaterThan(effectAt);
       expect(technicalAt).toBeGreaterThan(relatedAt);
+      // OT-PLAY-AC-5 and OT-PLAY-AC-6: the top bar states the run's status and the playhead, with one
+      // virtual time; the processed and pending event counts are in Advanced diagnostics.
       const summary = page.locator(".run-summary");
       await expect(summary).toContainText("COMPLETED");
-      await expect(summary).toContainText("Virtual time");
-      await expect(summary).toContainText("Processed events");
-      await expect(summary).toContainText("Pending events");
+      await expect(summary.locator("dt")).toHaveText(["Milestone", "Virtual time"]);
+      await expect(page.locator("header.top-bar")).not.toContainText("Processed events");
+      await expect(page.locator("header.top-bar")).not.toContainText("Pending events");
+      const diagnostics = page.getByLabel("Engine counters", { exact: true });
+      await expect(diagnostics.locator("dt")).toHaveText(["Processed events", "Pending events", "Random draws", "Observations"]);
       await expect(page.getByText("Latest committed simulation state")).toHaveCount(0);
       await expect(page.getByText("Run complete")).toHaveCount(0);
       await expect(page.getByText("Execution completed. Reset to run this scenario again.")).toHaveCount(0);

@@ -5,7 +5,6 @@ import { useMessages } from "./i18n/react.tsx";
 import type { ComponentNames } from "./component-display.ts";
 import type { PlaybackSettings } from "./flight-playback.ts";
 import type { FlightPace } from "./flight.ts";
-import type { PlayheadPosition } from "./playhead.ts";
 import { recordStepText, travelsLink } from "./playhead-steps.ts";
 import type { PlayheadStep, RecordStep } from "./playhead-steps.ts";
 
@@ -33,18 +32,6 @@ export function PlaybackSettingsBar({ settings }: { readonly settings: PlaybackS
   </div>;
 }
 
-/** The playhead's position, stated once and kept beside the graph it drives. */
-export function FlightReadout({ position }: { readonly position: PlayheadPosition }) {
-  const m = useMessages();
-  return <div className="flight-readout">
-    <p className="flight-position" role="status" aria-label={m.playback.narration.position} aria-live="polite" aria-atomic="true">
-      {position.text}
-      {/* A jump names two recorded times. The playhead never paints the interval as a duration. */}
-      {position.jump ? <span className="flight-jump"> <span aria-hidden="true">⤼</span> {position.jump}</span> : null}
-    </p>
-  </div>;
-}
-
 /**
  * The narration for the milestone under the playhead, in three levels (RFC 0002): what was
  * recorded and where, then the one question to keep in mind, then everything else the record
@@ -54,7 +41,9 @@ export function FlightReadout({ position }: { readonly position: PlayheadPositio
  *
  * Every line is a presentation mapping over stored observation fields, plus one pattern question.
  */
-export function FlightNarration({ step, activity, changes, names, detailsOpen, onDetailsToggle, inTransit }: {
+export function FlightNarration({ step, activity, changes, names, detailsOpen, onDetailsToggle, inTransit, jump }: {
+  /** One sentence naming the virtual-time jump into this milestone, when time advanced since the previous one. */
+  readonly jump?: string;
   /** One sentence naming the hops still in transit at the cursor, when there are any. */
   readonly inTransit?: string;
   readonly step: PlayheadStep;
@@ -83,6 +72,8 @@ export function FlightNarration({ step, activity, changes, names, detailsOpen, o
     {/* Level 1: what was recorded, and between which components. */}
     <h4><span className="flight-glyph" aria-hidden="true">{text.glyph}</span> {step.headline}</h4>
     <p className="flight-route">{text.route}</p>
+    {/* A jump names two recorded times. The playhead never paints the interval as a duration. */}
+    {jump !== undefined ? <p className="flight-jump"><span aria-hidden="true">⤼</span> {jump}</p> : null}
     {/* The playhead shows one record at a time, so what left earlier and has not arrived is said here and drawn on its link. */}
     {inTransit !== undefined ? <p className="flight-in-transit">{inTransit}</p> : null}
     {/* Level 2: the question, and for a movement that did not arrive, what the record does not say. */}

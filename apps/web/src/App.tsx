@@ -596,15 +596,18 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
     {linkCopy && !imported && linkCopy.id === loadedChoice?.id ? <p className="lesson-link-status" role="status">
       {linkCopy.copied ? m.app.lessonLinkCopied : m.app.lessonLinkNotCopied(linkCopy.url)}
     </p> : null}
-    {/* Engine counters stay here; Distributed state moved to the Service state dialog (#142). */}
-    {projection && report ? <details className="raw-state advanced-diagnostics">
+    {/* Engine counters stay here, for every lesson; the top bar states the playhead (RFC 0002, decision 3).
+        Distributed state moved to the Service state dialog (#142). */}
+    {projection ? <details className="raw-state advanced-diagnostics">
       <summary>{m.app.advancedDiagnostics}</summary>
       <dl className="diagnostics" aria-label={m.app.engineCounters}>
+        <dt>{m.simulationControls.processedEvents}</dt><dd>{projection.simulation.processedEvents}</dd>
+        <dt>{m.simulationControls.pendingEvents}</dt><dd>{projection.simulation.pendingEvents}</dd>
         <dt>{m.app.randomDraws}</dt><dd>{projection.simulation.randomDrawCount}</dd>
         <dt>{m.app.observations}</dt><dd>{projection.history.observations.length}</dd>
       </dl>
       {/* The checkout scenario's name and seed in its precise wording (#204). */}
-      {checkoutGuide && loadedChoice ? <p className="scenario-details">{m.app.scenarioDetails({ name: report.scenarioName, seed: report.seed })}</p> : null}
+      {checkoutGuide && loadedChoice && report ? <p className="scenario-details">{m.app.scenarioDetails({ name: report.scenarioName, seed: report.seed })}</p> : null}
     </details> : null}
   </>;
   // When a run ends, ③ Investigate is revealed and its summary announced once (#141). Focus does not
