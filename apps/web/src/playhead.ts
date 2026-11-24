@@ -154,6 +154,35 @@ export interface PlayheadPosition {
   readonly jump?: string;
 }
 
+/** The top bar's short statement of the playhead: its milestone and the virtual time of its record. */
+export interface PlayheadSummary {
+  /** "7 of 19"; "0 of 19" before the first record; "—" before the run has executed. */
+  readonly milestone: string;
+  /** The virtual time of the record under the playhead, or "—" when it stands on none. */
+  readonly time: string;
+}
+
+const NONE = "—";
+
+/**
+ * The top bar states the playhead, and only the playhead (RFC 0002 P2, decision 3): no second
+ * virtual time, and no engine counter. Before the run has executed it states nothing.
+ */
+export function playheadSummary(
+  steps: readonly { readonly time: SimulationTime }[],
+  index: number,
+  executed: boolean,
+  m: Messages,
+): PlayheadSummary {
+  if (!executed) return { milestone: NONE, time: NONE };
+  const at = Math.min(index, steps.length - 1);
+  const step = at >= 0 ? steps[at] : undefined;
+  return {
+    milestone: m.simulationControls.milestoneOf({ index: step === undefined ? 0 : at + 1, total: steps.length }),
+    time: step === undefined ? NONE : String(step.time),
+  };
+}
+
 /**
  * The playhead stated once: milestone number, milestone count, and the virtual time and sequence
  * of its record. Before the run has executed it says so, whatever the loaded session recorded.

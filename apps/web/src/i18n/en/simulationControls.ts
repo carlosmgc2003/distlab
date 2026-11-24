@@ -22,6 +22,9 @@ export const simulationControls = {
   pendingRun: "Run in progress…",
   pendingLoading: "Loading…",
   pendingAssessment: "Assessment running…",
+  /** The top bar's statement of the playhead (playhead.ts). */
+  milestone: "Milestone",
+  milestoneOf: (p: { index: number; total: number }, f: Fmt) => `${f.number(p.index)} of ${f.number(p.total)}`,
   virtualTime: "Virtual time",
   processedEvents: "Processed events",
   pendingEvents: "Pending events",

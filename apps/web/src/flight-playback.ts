@@ -8,9 +8,10 @@ import {
   playheadExecuted,
   playheadKeyAction,
   playheadPosition,
+  playheadSummary,
   playheadTick,
 } from "./playhead.ts";
-import type { PlayheadCommand, PlayheadContext, PlayheadControls, PlayheadPosition, PlayheadState } from "./playhead.ts";
+import type { PlayheadCommand, PlayheadContext, PlayheadControls, PlayheadPosition, PlayheadState, PlayheadSummary } from "./playhead.ts";
 import { playheadSteps } from "./playhead-steps.ts";
 import type { PlayheadStep } from "./playhead-steps.ts";
 import { activityAt, activityChanges } from "./activity.ts";
@@ -49,6 +50,8 @@ export interface Playhead {
   /** Changes on every start of play, so a token painted again starts from the start of its leg. */
   readonly paint: number;
   readonly position: PlayheadPosition;
+  /** The top bar's short statement: milestone and the virtual time of its record. */
+  readonly summary: PlayheadSummary;
   /** Component activity read from records at or before the playhead; empty before the first record. */
   readonly activity: ReadonlyMap<string, ComponentActivity>;
   /** Activity that differs from the previous milestone, one sentence per component. */
@@ -149,6 +152,7 @@ export function usePlayhead(input: {
     settings,
     paint: state.paint,
     position: playheadPosition(steps, index, executed, m),
+    summary: playheadSummary(steps, index, executed, m),
     activity,
     activityChanges: changes,
     inTransit,

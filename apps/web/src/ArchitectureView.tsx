@@ -10,7 +10,7 @@ import type { ComponentNames } from "./component-display.ts";
 import { legibleViewport, legibleZoom, revealViewport } from "./layout/legible-fit.ts";
 import type { Insets, Rect, Viewport } from "./layout/legible-fit.ts";
 import type { ArchitectureEdge, ArchitectureNode, OwnershipEdge, ResourceNode } from "./architecture-view.ts";
-import { FlightNarration, FlightReadout } from "./ArchitecturePlayback.tsx";
+import { FlightNarration } from "./ArchitecturePlayback.tsx";
 import type { Playhead } from "./flight-playback.ts";
 import { recordStepText, travelsLink } from "./playhead-steps.ts";
 import { TRANSIT_SAMPLE_GLYPH, flightBackground, flightDelayMs, flightInTransitText, flightLegend, flightTransitGroups } from "./flight.ts";
@@ -858,7 +858,6 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
       <HelpHint label={m.architecture.view.controlsHelpLabel} bodyId="graph-controls-help">{m.architecture.view.controlsHelp}</HelpHint>
       <HelpHint label={m.architecture.view.paceHelpLabel} bodyId="flight-pace-help">{m.architecture.view.paceHelp}</HelpHint>
     </div>
-    <FlightReadout position={playback.position} />
     {/* While a movement is painted, the narration carries this region's sentence, so it is stated once. */}
     {current ? null
       : <p id="movement-cue" className="movement-cue" role="status" aria-label={m.architecture.view.movementRegion}>{movementText ?? m.architecture.view.noMovement}</p>}
@@ -895,6 +894,7 @@ export function ArchitectureView({ architecture, metadata, scenarioName, names, 
       {selectedId || current ? <div className="architecture-side">
         {current ? <FlightNarration step={current} activity={playback.activity} changes={playback.activityChanges}
           detailsOpen={detailsOpen} onDetailsToggle={setDetailsOpen} {...(inTransitText !== undefined ? { inTransit: inTransitText } : {})}
+          {...(playback.position.jump !== undefined ? { jump: playback.position.jump } : {})}
           {...(graph.names ? { names: graph.names } : {})} /> : null}
         {selectedId ? <ComponentInspector node={graph.nodes.find(node => node.id === selectedId) ?? graph.resourceNodes.find(node => node.id === selectedId)}>
           {graph.nodes.some(node => node.id === selectedId) && inspectorFacts ? inspectorFacts(selectedId) : null}

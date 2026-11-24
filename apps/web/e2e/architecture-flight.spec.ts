@@ -467,8 +467,8 @@ test("components show idle, processing, or waiting from the records at the curso
   await observeWorker(page);
   await loadScenario(page);
   const status = async () => page.getByRole("status", { name: "Simulation status" }).innerText();
-  // Virtual time, processed events, and pending events, as the status line states them.
-  const counters = async () => page.locator(".run-summary").innerText();
+  // The engine counters, as Advanced diagnostics states them: the top bar states the playhead, which moves.
+  const counters = async () => page.locator(".advanced-diagnostics .diagnostics").evaluate(element => element.textContent ?? "");
   const node = (name: string) => page.getByRole("button", { name, exact: true });
   const badge = (id: string) => page.locator(`${nodeSelector(id)} .activity-badge`);
 

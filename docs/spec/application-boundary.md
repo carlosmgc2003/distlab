@@ -291,8 +291,10 @@ gestures, and the playhead stay in the UI. They do not advance virtual time,
 record observations, or send worker commands.
 
 Presentation is layered, and the layering is not a boundary of its own. The
-shell states the committed run once, as status, virtual time, processed events,
-and pending events; engine counters stay behind a disclosure. The simulation
+shell states the run once, as its status and the playhead: the milestone number,
+the milestone count, and the virtual time of the record under the playhead. The
+engine counters, processed and pending events among them, stay behind the
+Advanced diagnostics disclosure, and no region shows a second virtual time. The simulation
 control group and recorded-history navigation are separate control groups, and
 only the first one sends worker commands. Switching between the architecture,
 recorded history, and observation detail regions is a view control: it changes

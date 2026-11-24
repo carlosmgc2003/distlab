@@ -17,7 +17,7 @@ export function SimulationControls({ host, snapshot, playhead, locked = false }:
   readonly host: SimulationHost;
   readonly snapshot: HostSnapshot;
   /** The playhead's controls; absent while no session is loaded. */
-  readonly playhead?: Pick<Playhead, "controls" | "toggle" | "forward" | "back">;
+  readonly playhead?: Pick<Playhead, "controls" | "toggle" | "forward" | "back" | "position" | "summary">;
   /** An assessment suite is running (#97): it owns the session until it ends, so every control waits. */
   readonly locked?: boolean;
 }) {
@@ -37,7 +37,8 @@ export function SimulationControls({ host, snapshot, playhead, locked = false }:
   const statusCode = status ?? (error?.code === "SIMULATION_FAILED" ? "FAILED" : null);
   const statusLabel = statusCode !== null ? byCode(m.simulationControls.status, statusCode) ?? statusCode
     : error ? m.simulationControls.statusUnavailable : locked ? m.simulationControls.statusAssessmentRunning : m.simulationControls.statusChoose;
-  const simulation = projection?.simulation;
+  const summary = playhead?.summary;
+  const position = playhead?.position;
   const toggle = controls?.toggle;
 
   return <>
@@ -55,7 +56,7 @@ export function SimulationControls({ host, snapshot, playhead, locked = false }:
       </div>
       <p id="controls-help" className="sr-only">{m.simulationControls.help}</p>
     </div>
-    {/* The one visible presentation of the committed run: status, virtual time, and boundary counts. */}
+    {/* The one visible presentation of the run: its status and the playhead (RFC 0002 P2). Engine counters are in Advanced diagnostics. */}
     <section className="run-summary" aria-labelledby="run-summary-label">
       <h2 id="run-summary-label" className="sr-only">{m.simulationControls.committedState}</h2>
       <p className="run-status" role="status" aria-label={m.simulationControls.statusLabel} aria-atomic="true">
@@ -63,10 +64,13 @@ export function SimulationControls({ host, snapshot, playhead, locked = false }:
         {pendingMessage ? ` · ${pendingMessage}` : ""}
       </p>
       <dl className="run-metrics">
-        <div><dt>{m.simulationControls.virtualTime}</dt><dd>{simulation ? simulation.time : "—"}</dd></div>
-        <div><dt>{m.simulationControls.processedEvents}</dt><dd>{simulation ? simulation.processedEvents : "—"}</dd></div>
-        <div><dt>{m.simulationControls.pendingEvents}</dt><dd>{simulation ? simulation.pendingEvents : "—"}</dd></div>
+        <div><dt>{m.simulationControls.milestone}</dt><dd>{summary?.milestone ?? "—"}</dd></div>
+        <div><dt>{m.simulationControls.virtualTime}</dt><dd>{summary?.time ?? "—"}</dd></div>
       </dl>
+      {/* The same position as one sentence, with the record's sequence and any virtual-time jump, for assistive technology. */}
+      {position ? <p className="sr-only" role="status" aria-label={m.playback.narration.position} aria-live="polite" aria-atomic="true">
+        {position.jump ? `${position.text} ${position.jump}` : position.text}
+      </p> : null}
     </section>
   </>;
 }

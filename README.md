@@ -287,7 +287,10 @@ whole run in the worker, once. From then on `Run` plays the run (it reads
 one milestone; none of them sends a worker command. One slim row above the graph
 holds **Animation** (on by default; off, `Run` shows the end of the run at once)
 and **Speed** (Slow, Steady, or Fast). The **playhead** moves over the Story
-view's milestones. A milestone that travels a link paints a token on that link:
+view's milestones, and the top bar states it: the run's status, the milestone
+number and count, and the virtual time of the record under the playhead. The
+processed and pending event counts are under **Advanced diagnostics** in the
+Lesson panel. A milestone that travels a link paints a token on that link:
 `REQ` for a request, `RES` for a response, `MSG`
 for a message, `ACK` for an acknowledgement, `⊘` for a recorded drop, and `◷`
 for a recorded timeout. The token always travels from the record's origin to its
@@ -307,7 +310,7 @@ response sent, an open transaction, or an unacknowledged delivery), or
 deadline). States are read only from records at or before the playhead, and each
 has a word, a symbol, and an outline pattern. A dropped request or response does
 not end a wait, because the caller has recorded nothing. When virtual time
-advances between two milestones, the playhead position names both times, for
+advances between two milestones, the narration names both times, for
 example `t=55 → t=1025`, without painting the interval as a duration. The legend
 reserves its own column in the fitted view so it covers no node, and folds away
 on narrow canvases. Only `Run` carries the primary action paint. A movement that arrived leaves the

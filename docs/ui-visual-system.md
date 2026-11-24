@@ -46,8 +46,8 @@ at a time, so until they land the shipped shell can still differ from it.
 
 | Region | Holds | Rules |
 | --- | --- | --- |
-| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, which reads `Pause` while the playhead plays, then `Back`, `Step`, `Reset`); the committed run summary (status · virtual time · processed · pending) | One row, at most 64 px, identical on both tabs. No drawer, no second control group, no tagline. |
-| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run, Step, and Back do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure: engine counters and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
+| Top bar | The product name; a lesson trigger, `Lesson: ‹title›`, that opens the Lesson chooser; the **Simulation execution** group (`Run`, which reads `Pause` while the playhead plays, then `Back`, `Step`, `Reset`); the run summary (status · milestone `n of N` · the virtual time of the record under the playhead) | One row, at most 64 px, identical on both tabs. No drawer, no second control group, no tagline. |
+| Lesson panel | A guided flow in four numbered sections: ① **Goal** (title, question, one-sentence description); ② **Run** (what Run, Step, and Back do, and the run status in words); ③ **Investigate** (the outcome first, then evidence links, then the lesson's questions, then **Show service state**; an imported document's checks come first, as it has no outcome line, #160); ④ **Experiment** (what is applied: seed, design choices, student faults; **Compare with ‹pair›**; **Change the experiment…**; the **Advanced diagnostics** disclosure, for every lesson: the engine counters (processed and pending events, random draws, observations) and, for a checkout lesson, the scenario details) | The left column, 300–340 px wide. It scrolls on its own, starts expanded, collapses to a rail with one toggle, and is visible on both tabs. The current-step marker is emphasis only: Run while nothing has been processed, Investigate after COMPLETED or FAILED. Nothing is gated. |
 | Workspace | The tabs **Architecture** and **Recorded history** | The Architecture panel holds one slim row of **Playback settings** (**Animation** and **Speed**) above the architecture graph, and nothing below the graph. |
 | Overlays | **Lesson chooser**: a modal dialog. **Service state**: a modal dialog. **Experiment drawer**: docked on the right and non-modal, so Pick on graph keeps working. It holds up to three sections, in this order: Architecture (only when the lesson's policy has an architecture allowance, #112), Design choices (only when the policy declares parameters), and Faults, with one footer: `Apply and restart`, `Discard changes`, `Close`. While it is open, the movement detail and the Component inspector go under the graph instead of beside it, so the canvas keeps the panel's width (#166). | No other overlay is added. |
 
@@ -93,11 +93,13 @@ horizontal overflow; zoom support is not mobile support.
 
 Rules that keep the regions distinct:
 
-- The committed run is stated once, in the top bar's run summary. Status,
-  virtual time, and the two event counts share one region and one line; no
-  second line restates completion, and no region repeats the run's virtual time.
-  Engine counters such as random draws and the observation count stay under the
-  **Advanced diagnostics** disclosure in ④ Experiment.
+- The run is stated once, in the top bar's run summary: its status and the
+  playhead, as the milestone number, the milestone count, and the virtual time
+  of the record under the playhead (RFC 0002 P2, decision 3). Before the run
+  executes both read `—`. No second line restates completion, and no region
+  shows a second virtual time. The engine counters (processed and pending
+  events, random draws, and the observation count) stay under the **Advanced
+  diagnostics** disclosure in ④ Experiment, for every lesson.
 - There is one control group, **Simulation execution**, in the top bar: `Run`
   (which reads `Continue` after a pause and `Pause` while the playhead plays,
   in the same place), `Back`, `Step`, and `Reset` (RFC 0002 P2). It is a
@@ -225,10 +227,13 @@ bar: the first `Run` or `Step` executes the run, and from then on `Run`
   check recorded by the simulation names no component and is narrated without
   a badge. Milestones keep canonical sequence order; nothing is merged,
   reordered, or dropped.
-- The playhead states its position in one region beside the graph: the
-  milestone number, the milestone count, the recorded virtual time, and the
-  observation sequence. The panel's heading line carries the `Graph controls`
-  and `Playback speed` explanations, so neither costs the graph a row.
+- The playhead states its position once, in the top bar's run summary. The
+  same position as one sentence, with the observation sequence and any
+  virtual-time jump, is a polite live region for assistive technology. A jump
+  is also a line of the narration, under the route. Nothing above the canvas
+  restates the position, so the canvas never resizes as the playhead moves. The
+  panel's heading line carries the `Graph controls` and `Playback speed`
+  explanations, so neither costs the graph a row.
 - **Animation** on (the default): `Run` plays, moving the playhead one
   milestone at a time. Off: `Run` puts the playhead on the last milestone at
   once, and **Speed** is unavailable. Turning Animation off stops play where it
