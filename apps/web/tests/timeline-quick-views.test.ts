@@ -75,6 +75,8 @@ const sample: readonly Observation[] = [
   row({ id: "12", sequence: 12, type: "kv.expired", source: "orders" }),
   row({ id: "13", sequence: 13, type: "database.transaction.rejected", source: "payments" }),
   row({ id: "14", sequence: 14, type: "runtime.log", source: "orders" }),
+  row({ id: "15", sequence: 15, type: "kv.read", source: "orders" }),
+  row({ id: "16", sequence: 16, type: "kv.condition.failed", source: "orders" }),
 ];
 
 function typesOf(observations: readonly Observation[]): readonly string[] {
@@ -83,7 +85,7 @@ function typesOf(observations: readonly Observation[]): readonly string[] {
 
 test("every quick view is a read-only predicate over the recorded snapshot", () => {
   assert.deepEqual(QUICK_VIEWS.map(view => view.id), [
-    "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "failures",
+    "faults-and-timeouts", "requests-and-responses", "messages", "state-changes", "failures", "coordination",
   ]);
   for (const view of QUICK_VIEWS) {
     assert.ok(m.timeline.quickView.views[view.id].label.length > 0);
@@ -107,7 +109,10 @@ test("each preset keeps exactly the stored records it names", () => {
     "requests-and-responses": ["network.request.sent", "network.response.dropped", "network.request.timedout"],
     messages: ["message.published", "message.acknowledged"],
     "state-changes": ["database.transaction.committed", "database.transaction.rolledback", "external.effect.committed", "kv.expired"],
-    failures: ["database.transaction.rejected"],
+    // A failed key-value condition is contention, not a failure, and Rejections & failures still keeps it.
+    failures: ["database.transaction.rejected", "kv.condition.failed"],
+    // Coordination keeps every key-value write, read, expiry, and failed condition, and no other record.
+    coordination: ["kv.expired", "kv.read", "kv.condition.failed"],
   };
   for (const view of QUICK_VIEWS) {
     const kept = quickViewObservations(sample, view.id);
@@ -121,13 +126,13 @@ test("each preset keeps exactly the stored records it names", () => {
   // Recorded history shows milestones only, so no quick view keeps a record that is not one.
   for (const view of QUICK_VIEWS) assert.equal(matchesQuickView(view.id, sample.find(item => item.type === "scheduler.event.dispatched")!), false);
   // One teaching category list, owned by the record readers.
-  assert.equal(recordKinds.length, 14);
+  assert.equal(recordKinds.length, 16);
 });
 
 test("quick view counts and summaries state shown out of recorded total", () => {
   const counts = quickViewCounts(sample);
   assert.deepEqual(counts, {
-    "faults-and-timeouts": 3, "requests-and-responses": 3, messages: 2, "state-changes": 4, failures: 1,
+    "faults-and-timeouts": 3, "requests-and-responses": 3, messages: 2, "state-changes": 4, failures: 2, coordination: 3,
   });
   assert.equal(counts["faults-and-timeouts"]! + counts.messages!, 5);
   for (const view of QUICK_VIEWS) {
@@ -150,6 +155,18 @@ test("quick view counts and summaries state shown out of recorded total", () => 
   assert.ok(quickViewSummary(null, 1, 1, es).includes("de 1 observación registrada."));
   assert.equal(quickViewChip("messages", es).label, "Vista rápida Mensajes");
   assert.equal(quickViewChip("failures", es).label, "Vista rápida Rechazos y fallos");
+  // The Coordination copy, word for word (#239).
+  assert.equal(quickViewChip("coordination", m).label, "Quick view Coordination");
+  assert.equal(quickViewChip("coordination", es).label, "Vista rápida Coordinación");
+  assert.equal(m.timeline.quickView.views.coordination.inline, "key-value operations");
+  assert.equal(es.timeline.quickView.views.coordination.inline, "operaciones clave-valor");
+  assert.equal(quickViewSummary("coordination", 3, 16, m),
+    "Coordination shows 3 of 16 recorded observations. It keeps key-value writes, reads, expiries, and failed conditions.");
+  assert.equal(quickViewSummary("coordination", 3, 16, es).endsWith("Conserva las escrituras, lecturas, vencimientos y condiciones fallidas clave-valor."), true);
+  assert.equal(emptyQuickViewExplanation("coordination", 2, m).startsWith(
+    "The Coordination quick view keeps key-value writes, reads, expiries, and failed conditions, and this run recorded 2 observations without any of them."), true);
+  assert.equal(emptyQuickViewExplanation("coordination", 2, es).startsWith(
+    "La vista rápida Coordinación conserva las escrituras, lecturas, vencimientos y condiciones fallidas clave-valor, y esta ejecución registró 2 observaciones sin ninguna de ellas."), true);
   assert.ok(quickViewFeedback(null, 1, 1, m).includes("The 1 recorded observation is available again."));
   assert.ok(quickViewFeedback("messages", 2, 5, es).includes("Muestra 2 de 5 observaciones registradas"));
 });

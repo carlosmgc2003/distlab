@@ -31,6 +31,7 @@ export const playback: typeof source = {
     "service.handler.failed": "Falló el handler. ¿Qué había cambiado antes de fallar, y qué lo volverá a intentar?",
     "kv.changed": "Cambió una clave. ¿Qué lectores todavía tienen el valor anterior?",
     "kv.expired": "Venció una clave. ¿Qué hará el próximo lector de esta clave?",
+    "kv.read": "Se leyó una clave. ¿El valor que devolvió sigue siendo el actual?",
     "kv.condition.failed": "La escritura condicional no se hizo. ¿Qué valor había en su lugar, y quién lo escribió?",
     "fault.rule.matched": "Una regla de falla coincidió con esta operación. ¿Qué componente notará la falla, y cómo?",
     "fault.effect.selected": "La falla eligió su efecto. ¿Qué registrará a continuación cada lado de la operación?",

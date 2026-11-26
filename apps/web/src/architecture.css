@@ -253,6 +253,7 @@ h2 { font-size: 1.05rem; margin: 0 0 4px; }
 .flight-jump { display: block; width: fit-content; margin: 4px 0 0; padding: 0 6px; font-size: .78rem; border: 1px dashed var(--status-warning); border-radius: 4px; background: var(--status-warning-bg); color: var(--text-primary); font-weight: 600; }
 .flight-in-transit { margin: 0 0 6px; padding: 2px 6px; border-left: 2px dashed var(--flight-request); font-size: .8rem; overflow-wrap: anywhere; }
 .flight-route { margin: 0 0 6px; color: var(--text-secondary); font-size: .8rem; overflow-wrap: anywhere; }
+.flight-sentence { margin: 0 0 6px; font-size: .85rem; overflow-wrap: anywhere; }
 .flight-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px 12px; margin: 0 0 8px; font-size: .8rem; }
 .flight-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-bottom: 3px; border-bottom: 1px solid var(--border-faint); }
 .flight-facts dt { color: var(--text-secondary); font-weight: 600; }
@@ -466,6 +467,9 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .story-milestone-retry, .story-milestone-rollback { border-style: double; border-width: 3px; }
 .story-milestone-fault, .story-milestone-drop, .story-milestone-failure { border-style: dotted; border-width: 3px; }
 .story-milestone-timeout, .story-milestone-external { border-radius: 14px; }
+/* Contention is not a failure: a dotted outline in the warning tone, never the error tone. */
+.story-milestone-contention { border-style: dotted; border-width: 3px; border-color: var(--status-warning); }
+.story-shape-contention { color: var(--status-warning); }
 /* After the playhead (RFC 0002 P5): a hatched fill and the secondary text color, never color alone;
    the cell's accessible name and the table row's text also say "not reached yet". */
 .story-milestone[data-reached="false"]:not([data-selected="true"]) { color: var(--text-secondary); background: repeating-linear-gradient(135deg, var(--surface-panel) 0 6px, var(--surface-subtle) 6px 8px); }
@@ -680,6 +684,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .timeline-detail { padding: 16px; border-color: var(--border-subtle); }
 .detail-disclosure { border-block-start: 1px solid var(--border-subtle); margin: 12px 0; }
 .event-path { font-weight: 650; line-height: 1.6; }
+.detail-summary { margin: 0 0 8px; line-height: 1.5; overflow-wrap: anywhere; }
 .detail-header { font-size: 1rem; }
 .workspace-empty { max-width: 48rem; margin: auto; padding: 40px; background: var(--surface-panel); border: 1px solid var(--border-subtle); border-radius: 16px; line-height: 1.7; }
 .workspace-empty h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); line-height: 1.2; }
@@ -738,6 +743,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background:
 .story-stage button.story-milestone .story-milestone-label { font-size: .75rem; line-height: 1.35; }
 .story-stage button.story-milestone-message { border-style: dashed; }
 .story-stage button.story-milestone-fault, .story-stage button.story-milestone-drop, .story-stage button.story-milestone-failure { border-style: dotted; }
+.story-stage button.story-milestone-contention { border-style: dotted; border-color: var(--status-warning); }
 .story-stage button.story-milestone[aria-pressed="true"] { background: var(--selection-bg); border-color: var(--selection-border); }
 .story-table-scroll { flex: 1; min-height: 0; overflow: auto; }
 .timeline-rows-frame { position: relative; flex: 1 1 0; min-height: 5.5rem; display: flex; flex-direction: column; }

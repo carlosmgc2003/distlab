@@ -28,20 +28,30 @@ explain the lesson:
 - `database.transaction.committed`, `database.transaction.rolledback`
 - `external.effect.committed`
 - `fault.rule.matched`, `fault.effect.selected`, and any other `fault.*` record
-- `database.transaction.rejected`, `kv.condition.failed`, `service.handler.failed`
+- `database.transaction.rejected`, `service.handler.failed`
 - `message.nacked`, `message.dead`
-- `kv.changed`, `kv.expired`
+- `kv.changed`, `kv.expired`, `kv.read`, `kv.condition.failed`
 - `runtime.log`, the business logs a lesson's models write, such as a saga's
   compensation or a lease check
 - `scenario.assertion.evaluated`, only the first result of each check and each
   change of that result
+
+Key-value records have categories of their own. A failed condition is
+contention, not a failure: a set-if-absent that finds a lock taken is the lock
+working as designed (RFC 0003, decisions 3 and 4).
+
+| Record | Category |
+| --- | --- |
+| `kv.changed`, `kv.expired` | `kv` |
+| `kv.read` | `kv-read` |
+| `kv.condition.failed` | `contention` |
 
 A check is evaluated at every boundary, so an evaluation that repeats the
 previous stored verdict of the same check is not a milestone. A check
 evaluation without a stored check id or verdict is always a milestone.
 
 Everything else — scheduler and clock bookkeeping, transaction starts, staged
-writes, row reads, key-value reads, handler starts and completions, lifecycle
+writes, row reads, handler starts and completions, lifecycle
 records, component actions, and simulation lifecycle records — is not listed.
 Story never adds, reorders, or merges observations: a milestone holds the same
 stored `Observation` object the worker published, and its column position is
@@ -77,9 +87,9 @@ milestones after it are marked not reached yet, in words and as an attribute.
   time is implied between milestones, and none is stored.
 - Labels describe the stored type and stored fields only: the stored `attempt`
   on a delivery, the stored `message` of a business log, the stored `key` of a
-  key-value record, the stored `code` or `reason` of a rejection, and the
-  stored check id and verdict of a check. A redacted or omitted payload adds
-  nothing to the label. Labels do not add causation, ordering, or outcome.
+  key-value record and its stored `operation`, `ifAbsent`, or presence, the
+  stored `code` or `reason` of a rejection, and the stored check id and verdict
+  of a check. A redacted or omitted payload adds nothing to the label. Labels do not add causation, ordering, or outcome.
 - Key-value state at a record is read from stored fields: a value stored in a
   record's before or after is read, not inferred. A segment of a key ends at its
   stored `expiresAt`, and a hidden payload is never reconstructed (key history,
@@ -117,6 +127,7 @@ categories as the Story milestones:
   external effects, and key-value changes and expiries.
 - **Rejections & failures** — rejected transactions and key-value conditions,
   failed handlers, and rejected and dead-lettered messages.
+- **Coordination** — key-value writes, reads, expiries, and failed conditions.
 
 Every quick view is a set of milestone categories, because Recorded history
 lists milestones only.

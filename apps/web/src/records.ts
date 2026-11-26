@@ -50,13 +50,15 @@ export type RecordKind =
   | "timeout"
   | "failure"
   | "kv"
+  | "kv-read"
+  | "contention"
   | "log"
   | "check";
 
 /** Every teaching category, in legend order. */
 export const recordKinds: readonly RecordKind[] = [
   "request", "response", "message", "retry", "commit", "rollback", "external", "fault", "drop", "timeout",
-  "failure", "kv", "log", "check",
+  "failure", "kv", "kv-read", "contention", "log", "check",
 ];
 
 /**
@@ -91,9 +93,10 @@ export const milestoneKinds = {
   "service.handler.failed": "failure",
   "message.nacked": "failure",
   "message.dead": "failure",
-  "kv.condition.failed": "failure",
+  "kv.condition.failed": "contention",
   "kv.changed": "kv",
   "kv.expired": "kv",
+  "kv.read": "kv-read",
   "runtime.log": "log",
   "scenario.assertion.evaluated": "check",
 } as const satisfies Readonly<Record<string, RecordKind>>;
@@ -323,7 +326,7 @@ export function storedQualifier(observation: Observation, m: Messages): string {
   switch (observation.type) {
     case "message.delivered": return attemptLabel(observation, m);
     case "runtime.log": return detail("message");
-    case "kv.changed": case "kv.expired": case "kv.condition.failed": return detail("key");
+    case "kv.changed": case "kv.expired": case "kv.read": case "kv.condition.failed": return detail("key");
     case "database.transaction.rejected": case "service.handler.failed": return code("code");
     case "message.nacked": case "message.dead": return code("reason");
     case "scenario.assertion.evaluated": {

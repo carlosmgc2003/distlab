@@ -18,6 +18,7 @@ import type { Messages } from "./i18n/catalog.ts";
 import type { QuickViewId } from "./timeline-quick-views.ts";
 import type { ClearedField } from "./timeline-query.ts";
 import { displayName } from "./component-display.ts";
+import { kvLabel } from "./kv-wording.ts";
 import type { ComponentNames } from "./component-display.ts";
 
 export interface GraphEmphasis {
@@ -62,7 +63,8 @@ export interface TerminalMark {
  * state their stored type, which is all that is stored for them.
  */
 export function recordLabel(observation: Observation, m: Messages): string {
-  const base = byCode(m.timeline.recordLabels, observation.type)
+  // A key-value record is named by its stored operation (RFC 0003 K4), else by its type.
+  const base = kvLabel(observation, m) ?? byCode(m.timeline.recordLabels, observation.type)
     ?? (observation.type.startsWith("fault.") ? m.timeline.faultRecorded : undefined);
   return base === undefined ? observation.type : `${base}${storedQualifier(observation, m)}`;
 }

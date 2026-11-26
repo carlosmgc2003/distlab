@@ -200,8 +200,8 @@ test("the cache pair shows the price Orders used, the end-of-run KV state, and T
   await filterByType(page, "kv.expired");
   const rows = page.locator("#timeline-rows .story-table tbody tr");
   await expect(rows).toHaveCount(3);
-  await expect(rows.filter({ hasText: "Key-value entry expired: cart:cart-1" })).toHaveCount(1);
-  await expect(rows.filter({ hasText: "Key-value entry expired: price:sku-1" })).toContainText("catalog");
+  await expect(rows.filter({ hasText: "Key expired: cart:cart-1" })).toHaveCount(1);
+  await expect(rows.filter({ hasText: "Key expired: price:sku-1" })).toContainText("catalog");
 });
 
 test("the inventory pair shows stock with its version and each client's outcome, and the rejected commit in history", async ({ page }) => {
