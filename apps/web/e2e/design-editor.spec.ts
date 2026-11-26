@@ -8,6 +8,7 @@ import type { RuntimeProjectionSet, WorkerCommand } from "@distlab/contracts";
 import { projection } from "../tests/support.ts";
 import { loadLesson } from "./support/lesson.ts";
 import { applyAndRestart, experimentDrawer, openExperiment } from "./support/experiment.ts";
+import { animationOff } from "./support/playhead.ts";
 
 // #112: the Design editor is the Architecture section of the Experiment drawer. In the gap lesson the
 // student fills the notifications slot, gives it a database, and subscribes it, then applies the design.
@@ -39,6 +40,8 @@ async function load(page: Page) {
   await expect(status(page)).toHaveText("READY");
 }
 async function run(page: Page) {
+  // Animation off: the outcome is revealed as soon as the run completes (RFC 0002 P5).
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
 }

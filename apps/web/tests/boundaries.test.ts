@@ -73,6 +73,8 @@ test("main-thread import graph uses application contracts and data, never runtim
   walk(resolve(app, "main.tsx"));
   // RFC 0003 K1 (#238): key history is main-thread presentation that no view imports yet, so it is walked on its own.
   walk(resolve(app, "kv-history.ts"));
+  // RFC 0003 K2 (#241): the key lanes model, likewise not imported by a view yet.
+  walk(resolve(app, "kv-lanes.ts"));
   // RFC 0003 K7 (#244): the key history difference for Compare, likewise not imported by a view yet.
   walk(resolve(app, "kv-compare.ts"));
   assert.ok(visited.has(resolve(app, "host.ts")));

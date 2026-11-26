@@ -9,7 +9,11 @@ import {
   playheadExecuted,
   playheadKeyAction,
   playheadPhase,
+  playheadIndexAt,
   playheadPosition,
+  playheadRevealsOutcome,
+  playheadSeek,
+  playheadSpan,
   playheadSummary,
   playheadTick,
 } from "../src/playhead.ts";
@@ -162,4 +166,45 @@ test("OT-PLAY-AC-6: the top bar states the milestone and the virtual time of the
   assert.deepEqual(playheadSummary(steps, 2, true, m), { milestone: "3 of 3", time: "12" });
   assert.deepEqual(playheadSummary(steps, 1, true, es), { milestone: "2 de 3", time: "0" });
   assert.deepEqual(playheadSummary([], -1, true, m), { milestone: "0 of 0", time: "—" });
+});
+
+test("OT-READ-AC-1: Recorded history moves the playhead to a milestone, stopping play, once the run has executed", () => {
+  assert.deepEqual(playheadSeek(at(3, true), executed, 11), at(11));
+  assert.deepEqual(playheadSeek(at(3), executed, -1), at(-1));
+  // An index past the last milestone stands on the last one.
+  assert.deepEqual(playheadSeek(at(3), executed, COUNT + 4), at(COUNT - 1));
+  // The same position is no change.
+  const standing = at(6);
+  assert.equal(playheadSeek(standing, executed, 6), standing);
+  // OT-READ-AC-8: before the run has executed, selecting a record moves nothing and executes nothing.
+  assert.equal(playheadSeek(INITIAL_PLAYHEAD, unrun, 2), null);
+  assert.equal(playheadSeek({ ...INITIAL_PLAYHEAD, intent: "play" }, unrun, 2), null);
+});
+
+test("a record belongs to the last milestone at or before it, and the playhead's span marks what is reached", () => {
+  const steps = [{ sequence: 4 }, { sequence: 24 }, { sequence: 48 }];
+  assert.equal(playheadIndexAt(steps, 2), -1);
+  assert.equal(playheadIndexAt(steps, 4), 0);
+  assert.equal(playheadIndexAt(steps, 30), 1);
+  assert.equal(playheadIndexAt(steps, 48), 2);
+  assert.equal(playheadIndexAt(steps, 90), 2);
+  assert.equal(playheadIndexAt([], 9), -1);
+  assert.deepEqual(playheadSpan(steps, -1), { from: -Infinity, to: 4 });
+  assert.deepEqual(playheadSpan(steps, 1), { from: 24, to: 48 });
+  assert.deepEqual(playheadSpan(steps, 2), { from: 48, to: Infinity });
+  assert.deepEqual(playheadSpan([], -1), { from: -Infinity, to: Infinity });
+  // Every record maps into the span of its own milestone.
+  for (const sequence of [0, 4, 5, 24, 47, 48, 99]) {
+    const span = playheadSpan(steps, playheadIndexAt(steps, sequence));
+    assert.ok(span.from <= sequence && sequence < span.to, `#${sequence}`);
+  }
+});
+
+test("OT-READ-AC-4 and OT-READ-AC-5: the outcome is revealed at the last milestone, or at once with Animation off", () => {
+  assert.equal(playheadRevealsOutcome(-1, unrun), false);
+  assert.equal(playheadRevealsOutcome(-1, { ...unrun, animation: false }), false);
+  for (const index of [-1, 0, 5, COUNT - 2]) assert.equal(playheadRevealsOutcome(index, executed), false, `milestone ${index}`);
+  assert.equal(playheadRevealsOutcome(COUNT - 1, executed), true);
+  assert.equal(playheadRevealsOutcome(0, { ...executed, animation: false }), true);
+  assert.equal(playheadRevealsOutcome(-1, { ...executed, count: 0 }), true);
 });

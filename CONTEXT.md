@@ -30,6 +30,11 @@ reader needs before changing code, and the vocabulary used when discussing them.
   payload is never reconstructed. An entry ends at its stored `expiresAt`, even
   before the `kv.expired` record at the same time. The writer is the sender of
   the request named by the record's `causationId`, or else the store's owner.
+- **Key lanes** (`apps/web/src/kv-lanes.ts`, RFC 0003 K2) is the time chart of
+  the keyspace built from key history: one row per key, grouped by store and by
+  the prefix before the key's first `:`, with a bar per value held and a mark
+  per conditional write, failed condition, read, and expiry, each reached or not
+  at the position. It is a model; the panel that draws it words it.
 - The milestone set lives in
   [docs/learning-timeline.md](docs/learning-timeline.md) and is transcribed in
   `milestoneKinds`. `apps/web/tests/records.test.ts` reads the document and
@@ -42,9 +47,10 @@ reader needs before changing code, and the vocabulary used when discussing them.
   milestones the worker already published. A milestone that travels a link is
   painted as a movement token (`flight.ts`); any other milestone is painted on
   its component. The playhead never advances virtual time, allocates an
-  observation, or sends a worker command. Selecting a row in Recorded history
-  is review navigation, not playback: it takes the graph highlight back, and
-  the playhead returns to the start.
+  observation, or sends a worker command. Every region reads it (RFC 0002 P5):
+  the selected row in Recorded history is the playhead, and ③ Investigate
+  reveals the lesson's outcome when the playhead first reaches the end of the
+  run (at once with Animation off), and keeps it after `Back`.
 - **Review navigation** (`apps/web/src/review-navigation.ts`) is the one place
   that decides where the reader is in Recorded history: the **review position**
   (the stored record under review), the active constraints, and a focus request.
@@ -54,8 +60,12 @@ reader needs before changing code, and the vocabulary used when discussing them.
   adapts the DOM to it; it decides none of it. A record reached from a row, from
   a related-observation link, or from an evidence link arrives by the same
   transition, so the constraints hiding it are cleared in one place.
-- The review position is **not** a cursor. Playback and review deliberately share
-  no seam, so nothing in review navigation may be named a cursor.
+- The review position **is** the playhead. A record the reader selects moves the
+  playhead to the last milestone at or before it, and a playhead move selects
+  that milestone's row through the `follow` transition; a selected record that
+  is not a milestone stays selected while the playhead stands on the milestone
+  before it. Review navigation never moves the playhead itself: the shell does,
+  with no worker command. Rows after the playhead read as **not reached yet**.
 
 ## Application composition root
 

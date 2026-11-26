@@ -8,10 +8,13 @@ import {
   playheadExecuted,
   playheadKeyAction,
   playheadPosition,
+  playheadRevealsOutcome,
+  playheadSeek,
+  playheadSpan,
   playheadSummary,
   playheadTick,
 } from "./playhead.ts";
-import type { PlayheadCommand, PlayheadContext, PlayheadControls, PlayheadPosition, PlayheadState, PlayheadSummary } from "./playhead.ts";
+import type { PlayheadCommand, PlayheadContext, PlayheadControls, PlayheadPosition, PlayheadSpan, PlayheadState, PlayheadSummary } from "./playhead.ts";
 import { playheadSteps } from "./playhead-steps.ts";
 import type { PlayheadStep } from "./playhead-steps.ts";
 import { activityAt, activityChanges } from "./activity.ts";
@@ -58,10 +61,19 @@ export interface Playhead {
   readonly activityChanges: readonly string[];
   /** Hops that left before the playhead's milestone and have no arrival or drop recorded at or before it. */
   readonly inTransit: readonly FlightStep[];
+  /** The records the playhead stands on (`playheadSpan`); Recorded history marks later ones as not reached. */
+  readonly span: PlayheadSpan;
+  /**
+   * The lesson's outcome is revealed (RFC 0002 P5, decision 4): the playhead has reached the end of
+   * the run once, or Animation was off when the run executed. It stays revealed until a load or a reset.
+   */
+  readonly revealed: boolean;
   /** `Run`, or `Pause` while playing. */
   readonly toggle: () => void;
   readonly forward: () => void;
   readonly back: () => void;
+  /** Recorded history moves the playhead to a milestone index (-1: before the first record). */
+  readonly seek: (index: number) => void;
 }
 
 /**
@@ -83,34 +95,35 @@ export function usePlayhead(input: {
   readonly execute: () => Promise<unknown>;
   /** Changes with the loaded session or a reset: the playhead returns to the start. */
   readonly sessionKey: string;
-  /** Changes when Recorded history takes over the graph highlight: the playhead stands down. */
-  readonly release: string | undefined;
   readonly settings: PlaybackSettings;
   /** The session's component display names, for the narration and activity lines (#103). */
   readonly names?: ComponentNames;
 }): Playhead {
-  const { observations, edges, executed, busy, execute, sessionKey, release, settings, names } = input;
+  const { observations, edges, executed, busy, execute, sessionKey, settings, names } = input;
   const m = useMessages();
   // Text is produced here at render time, so a language switch recomputes it and nothing stale survives.
   const steps = useMemo(() => playheadSteps(observations, edges, m, names), [observations, edges, m, names]);
   const [state, setState] = useState<PlayheadState>(INITIAL_PLAYHEAD);
+  const [revealed, setRevealed] = useState(false);
   const count = steps.length;
   const context: PlayheadContext = { executed, busy, count, animation: settings.animation };
 
-  // A new session, a reset, or a new history selection returns the playhead to the start.
-  useEffect(() => { setState(current => ({ ...INITIAL_PLAYHEAD, paint: current.paint })); }, [sessionKey]);
+  // A new session or a reset returns the playhead to the start and withholds the outcome again.
+  useEffect(() => {
+    setState(current => ({ ...INITIAL_PLAYHEAD, paint: current.paint }));
+    setRevealed(false);
+  }, [sessionKey]);
   const wasExecuted = useRef(executed);
   useEffect(() => {
     const before = wasExecuted.current;
     wasExecuted.current = executed;
-    if (before && !executed) setState(current => ({ ...INITIAL_PLAYHEAD, paint: current.paint }));
+    if (before && !executed) {
+      setState(current => ({ ...INITIAL_PLAYHEAD, paint: current.paint }));
+      setRevealed(false);
+    }
     // The run the first Run or Step asked for has executed: apply what it asked for.
     else if (executed) setState(current => playheadExecuted(current, count));
   }, [executed, count]);
-  useEffect(() => {
-    if (release === undefined) return;
-    setState(current => current.intent !== null ? current : { ...current, index: -1, playing: false });
-  }, [release]);
   // Turning Animation off stops play; it never moves the playhead by itself.
   useEffect(() => { if (!settings.animation) setState(current => current.playing ? { ...current, playing: false } : current); }, [settings.animation]);
 
@@ -123,6 +136,10 @@ export function usePlayhead(input: {
     // A refused run leaves nothing to wait for: the playhead returns to before the first Run.
     if (outcome.execute) void execute().catch(() => setState(current => ({ ...current, intent: null })));
   }, [execute]);
+  const seek = useCallback((index: number) => {
+    const next = playheadSeek(latest.current.state, latest.current.context, index);
+    if (next !== null) setState(next);
+  }, []);
   const toggle = useCallback(() => command("toggle"), [command]);
   const forward = useCallback(() => command("step"), [command]);
   const back = useCallback(() => command("back"), [command]);
@@ -143,6 +160,10 @@ export function usePlayhead(input: {
     [observations, previousId, activity, step, m, names],
   );
   const inTransit = useMemo(() => flightInTransit(steps, index), [steps, index]);
+  // Latched: once the playhead has reached the end, moving it back never withholds the outcome again.
+  const reveals = playheadRevealsOutcome(index, context);
+  useEffect(() => { if (reveals) setRevealed(true); }, [reveals]);
+  const span = useMemo(() => playheadSpan(steps, index), [steps, index]);
 
   return {
     steps,
@@ -156,7 +177,9 @@ export function usePlayhead(input: {
     activity,
     activityChanges: changes,
     inTransit,
-    toggle, forward, back,
+    span,
+    revealed: revealed || reveals,
+    toggle, forward, back, seek,
   };
 }
 

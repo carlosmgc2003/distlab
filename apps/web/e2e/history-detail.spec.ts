@@ -2,6 +2,7 @@ import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import { loadLesson } from "./support/lesson.ts";
 import { viewButton } from "./support/history.ts";
+import { animationOff } from "./support/playhead.ts";
 
 /**
  * Observation detail is the docked right column of Recorded history (#146): it never floats over the
@@ -18,6 +19,8 @@ async function completedHistory(page: Page) {
   await page.goto("/");
   await loadLesson(page, "response-lost");
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("READY");
+  // Animation off: Run stands the playhead on the last milestone, so nothing plays during the checks.
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   await page.getByRole("tab", { name: "Recorded history", exact: true }).click();
@@ -62,7 +65,8 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1534, height: 897
     await page.setViewportSize(viewport);
     await completedHistory(page);
     const detail = page.locator("#inspection-panel");
-    await expect(detail).toContainText("Select an observation to see its detail.");
+    // The selected row is the playhead (RFC 0002 P5): the detail shows the record under it.
+    await expect(detail.locator(".detail-header")).toHaveText(/^Observation #\d+ · /);
     for (const view of views) {
       await viewButton(page, view).click();
       await expect(viewButton(page, view)).toHaveAttribute("aria-pressed", "true");
@@ -94,7 +98,7 @@ for (const viewport of [{ width: 1366, height: 768 }, { width: 1534, height: 897
   });
 }
 
-test("a selection is announced once, by one live region", async ({ page }) => {
+test("a selection is announced once, by one live region: the playhead's position, which it moves", async ({ page }) => {
   await completedHistory(page);
   await viewButton(page, "Story table").click();
   await recordLiveRegions(page);
@@ -104,14 +108,14 @@ test("a selection is announced once, by one live region", async ({ page }) => {
   const mentions = async () => (await page.evaluate(() => (window as unknown as { liveTexts: { region: string; text: string }[] }).liveTexts))
     .filter(entry => new RegExp(`#${sequence}(?!\\d)`).test(entry.text));
   await expect.poll(mentions).toHaveLength(1);
-  expect((await mentions())[0]!.region).toBe("timeline-feedback");
+  expect((await mentions())[0]!.region).toBe("Playhead position");
   // Each further selection is announced once more, by the same region.
   await rows.nth(2).click();
   const next = /#(\d+)/.exec(await page.locator("#inspection-panel .detail-header").innerText())![1]!;
   expect(next).not.toBe(sequence);
   const announced = (await page.evaluate(() => (window as unknown as { liveTexts: { region: string; text: string }[] }).liveTexts))
     .filter(entry => new RegExp(`#${next}(?!\\d)`).test(entry.text));
-  expect(announced.map(entry => entry.region)).toEqual(["timeline-feedback"]);
+  expect(announced.map(entry => entry.region)).toEqual(["Playhead position"]);
 });
 
 test("an active filter shows its result count once, next to the filter row", async ({ page }) => {

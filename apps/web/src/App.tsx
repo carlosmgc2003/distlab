@@ -19,7 +19,7 @@ import { LessonChooser } from "./LessonChooser.tsx";
 import { topicList, type TopicFilter } from "./lesson-topics.ts";
 import { LessonPanel } from "./LessonPanel.tsx";
 import { currentStep } from "./lesson-steps.ts";
-import { endsRun, outcomeSummary, runOutcome } from "./lesson-outcome.ts";
+import { outcomeSummary, runOutcome } from "./lesson-outcome.ts";
 import { carryOverlay, designEdits, draftFromOverlay, faultMarks, isEmptyOverlay, overlayFromDraft, sameOverlay } from "./break-faults.ts";
 import type { DraftEntry } from "./break-faults.ts";
 import { DesignChoicesHelp, DesignChoicesSection } from "./DesignChoicesSection.tsx";
@@ -36,6 +36,7 @@ import { movementEdges, mapArchitecture } from "./architecture-view.ts";
 import { componentNames } from "./component-display.ts";
 import { PlaybackSettingsBar } from "./ArchitecturePlayback.tsx";
 import { usePlaybackSettings, usePlayhead, usePlayheadKeys } from "./flight-playback.ts";
+import { playheadIndexAt } from "./playhead.ts";
 import { ComponentRuntimeFacts, DistributedState } from "./FaultInspectionView.tsx";
 import { inspectFaults } from "./fault-inspection.ts";
 import { SimulationAlert, SimulationControls } from "./SimulationControls.tsx";
@@ -175,16 +176,25 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
     : assessment ? Object.fromEntries(assessment.checks.map(check => [check.id, invariantLabel(assessment.definition, check, m)]))
     : loadedChoice ? lessonCheckLabels(loadedChoice, m) : {}, [imported, importedScenario, assessment, loadedChoice, m]);
   // The playhead lives in the shell, so its position and the narration survive a tab switch.
-  // Choosing a record in Recorded history takes the graph highlight back, so the playhead stands
-  // down. A record that travels no link has no pulse id, so its movement text is the fallback identity.
-  const release = emphasis?.origin === "selection" ? emphasis.pulseId ?? emphasis.text : undefined;
   const executeRun = useCallback(() => host.run(), [host]);
   const runStatus = projection?.simulation.status;
+  const executed = runStatus === "COMPLETED" || runStatus === "FAILED";
   const playback = usePlayhead({
-    observations: projection?.history.observations ?? [], edges, names, release, settings: playbackSettings,
-    executed: runStatus === "COMPLETED" || runStatus === "FAILED", busy, execute: executeRun,
+    observations: projection?.history.observations ?? [], edges, names, settings: playbackSettings,
+    executed, busy, execute: executeRun,
     sessionKey: `${sessionName}:${snapshot.attempt}`,
   });
+  // Recorded history reads the playhead (RFC 0002 P5): its selected row follows the playhead, and a
+  // record a reader selects moves the playhead to the last milestone at or before it. No worker command.
+  const playheadRecord = playback.step?.observationId ?? null;
+  const historyPlayhead = useMemo(() => executed ? { observationId: playheadRecord, span: playback.span } : undefined,
+    [executed, playheadRecord, playback.span]);
+  const { seek, steps: playheadStepList } = playback;
+  const historyObservations = projection?.history.observations;
+  const selectRecord = useCallback((observationId: string) => {
+    const record = historyObservations?.find(item => item.id === observationId);
+    if (record) seek(playheadIndexAt(playheadStepList, record.sequence));
+  }, [historyObservations, seek, playheadStepList]);
   // The keys answer only while the graph the playhead paints is on screen.
   usePlayheadKeys(playback, tab === "architecture" && projection !== null && !suiteActive);
   const mark = terminalMark(projection?.simulation.status, snapshot.error);
@@ -544,7 +554,9 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
   };
   const serviceState = projection ? commerce ? <ServiceStateGrid projection={projection} names={names} />
     : report ? <DistributedState report={report} onShowEvidence={id => { setServiceStateOpen(false); showEvidence(id); }} /> : null : null;
-  const lessonInvestigate = <>
+  // The outcome waits for the playhead (RFC 0002 P5, decision 4): the checks, their verdicts, and the
+  // Run overview stay out of ③ Investigate until the playhead first reaches the end of the run.
+  const outcome = <>
     {/* An imported document's checks lead ③ Investigate, as a packaged lesson's do (#160); the Architecture tab holds only the graph. */}
     {imported && importedScenario && projection ? <ImportedChecks projection={projection} document={importedScenario} onShowEvidence={showEvidence} /> : null}
     {checkView ? <>
@@ -553,6 +565,9 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
       <LessonChecks view={checkView} onShowEvidence={showEvidence} />
     </> : null}
     {runOverview}
+  </>;
+  const lessonInvestigate = <>
+    {!projection ? null : playback.revealed ? outcome : <p className="lesson-outcome-waits">{m.app.outcomeWaits}</p>}
     {imported ? <p>{m.app.importedNote(lesson?.seed ?? "")}</p>
       : !checkoutGuide ? <p>{m.app.commerceNote(lesson?.seed ?? "")}</p> : <>
       <p>{m.app.objective}</p>
@@ -610,27 +625,28 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
       {checkoutGuide && loadedChoice && report ? <p className="scenario-details">{m.app.scenarioDetails({ name: report.scenarioName, seed: report.seed })}</p> : null}
     </details> : null}
   </>;
-  // When a run ends, ③ Investigate is revealed and its summary announced once (#141). Focus does not
-  // move. Leaving the ended state (Reset, a new load) clears the region silently, so the next run's
-  // identical summary is announced again.
+  // When the playhead first reaches the end of the run (at once with Animation off), ③ Investigate is
+  // revealed and its summary announced once (#141, RFC 0002 decision 4). Focus does not move. Moving
+  // back keeps it; a Reset or a new load clears the region silently, so the next run's identical
+  // summary is announced again.
   const [announced, setAnnounced] = useState(false);
   const [revealToken, setRevealToken] = useState(0);
-  const previousStatus = useRef(status);
+  const previousReveal = useRef(playback.revealed);
   useEffect(() => {
-    const before = previousStatus.current;
-    previousStatus.current = status;
-    if (endsRun(status) && !endsRun(before)) {
+    const before = previousReveal.current;
+    previousReveal.current = playback.revealed;
+    if (playback.revealed && !before) {
       setAnnounced(true);
       setRevealToken(token => token + 1);
-    } else if (!endsRun(status)) setAnnounced(false);
-  }, [status]);
+    } else if (!playback.revealed) setAnnounced(false);
+  }, [playback.revealed]);
   const lessonPanel = assessment ? <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
     step={suite.results.length && !suiteActive ? "investigate" : "run"}
     goal={<AssessmentGoal choice={assessment} />} run={<AssessmentRun choice={assessment} suite={suite} busy={commandBusy} />}
     investigate={<AssessmentInvestigate choice={assessment} suite={suite} onShowResults={() => showTab("assessment")} />}
     experiment={<AssessmentExperiment />} />
     : <LessonPanel collapsed={lessonCollapsed} onCollapsedChange={setLessonCollapsed}
-    step={currentStep(status, projection?.simulation.processedEvents)}
+    step={currentStep({ loaded: projection !== null, atStart: playback.index < 0, revealed: playback.revealed })}
     goal={lessonGoal} run={lessonRun} investigate={lessonInvestigate} experiment={lessonExperiment} revealInvestigate={revealToken} />;
   const workspaceTabs = assessment ? assessmentTabs : tabs;
 
@@ -694,6 +710,7 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
         <div id="history-panel" className="panel-history" role="tabpanel" tabIndex={-1}
           aria-labelledby="tab-history" hidden={tab !== "history"}>
           <TimelineView key={timelineKey} observations={projection.history.observations} edges={edges} componentTitles={componentTitles} checkLabels={checkLabels} onEmphasis={onEmphasis}
+            onSelectRecord={selectRecord} {...(historyPlayhead ? { playhead: historyPlayhead } : {})}
             {...(evidenceFocus ? { focusedObservationId: evidenceFocus.id, focusToken: evidenceFocus.token } : {})} />
         </div>
         </> : <section className="panel-loading" role="tabpanel" aria-labelledby={`tab-${tab}`} hidden={tab === "assessment"}>
@@ -740,7 +757,7 @@ export function App({ host, initialLink = null }: { readonly host: SimulationHos
         </ol>
       </section>
     </div>}
-    <p className="sr-only" role="status" aria-live="polite" aria-label={m.app.lessonOutcomeLabel}>{announced ? summary ?? "" : ""}</p>
+    <p className="sr-only" role="status" aria-live="polite" aria-label={m.app.lessonOutcomeLabel}>{announced && playback.revealed ? summary ?? "" : ""}</p>
     <ServiceStateDialog open={serviceStateOpen && serviceState !== null} time={projection?.simulation.time} onClose={closeServiceState}>{serviceState}</ServiceStateDialog>
     <LessonChooser key={chooserOpening.count} initialTopic={chooserOpening.topic} open={chooserOpen} lessons={scenarios} assessments={assessments}
       current={assessment ? `assessment:${assessment.id}` : imported ? null : loadedChoice?.id ?? null} busy={busy}

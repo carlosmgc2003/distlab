@@ -348,8 +348,16 @@ and `Pause` as one control (`apps/web/src/playhead.ts`):
 | Keys | Not taken: a key never executes the run, so only the buttons start it | With the Architecture tab shown, Left arrow is `Back`, Right arrow is `Step`, and Space is `Run` or `Pause`. A key that the focused control already uses is left to that control, and no key is handled while a dialog is open | The same | The same |
 
 `Back` is unavailable on the first milestone, and a run that records one
-milestone ends on it. Selecting a record in Recorded history takes the graph
-highlight back, and the playhead returns to before the first record.
+milestone ends on it. Once the run has executed, selecting a record in
+Recorded history, through a row, a related-observation link, or an evidence
+link, moves the playhead to the last milestone at or before that record, and
+every playhead move selects its milestone's row (RFC 0002 P5). Before the run
+has executed, selecting a record moves nothing. Neither sends a worker command.
+
+③ Investigate withholds the lesson's outcome, its checks with their verdicts,
+and the Run overview until the playhead first reaches the last milestone, or,
+with Animation off, until the run has executed. The outcome is then announced
+once, and stays shown after `Back`; `Reset` and a new load withhold it again.
 
 ## Deferred capabilities
 

@@ -118,6 +118,52 @@ export function playheadTick(state: PlayheadState, count: number): PlayheadState
   return { ...state, index, playing: index < count - 1 };
 }
 
+/**
+ * Moves the playhead to `index` (-1 is before the first record), stopping play. This is how
+ * Recorded history moves it (RFC 0002 P5): selecting a record. Null before the run has executed,
+ * because only `Run` and `Step` execute it.
+ */
+export function playheadSeek(state: PlayheadState, context: PlayheadContext, index: number): PlayheadState | null {
+  if (!context.executed) return null;
+  const target = Math.max(-1, Math.min(index, context.count - 1));
+  return target === state.index && !state.playing ? state : { ...state, index: target, playing: false };
+}
+
+/**
+ * The milestone a record belongs to: the last milestone at or before it in canonical order, or -1
+ * when the record comes before the first milestone. A milestone belongs to itself.
+ */
+export function playheadIndexAt(steps: readonly { readonly sequence: number }[], sequence: number): number {
+  let found = -1;
+  for (let index = 0; index < steps.length && steps[index]!.sequence <= sequence; index += 1) found = index;
+  return found;
+}
+
+/**
+ * The records the playhead stands on: from its milestone up to, not including, the next one.
+ * Before the first record it covers everything before the first milestone. A record in the span
+ * is reached; a record at or after `to` is not reached yet.
+ */
+export interface PlayheadSpan {
+  readonly from: number;
+  readonly to: number;
+}
+
+export function playheadSpan(steps: readonly { readonly sequence: number }[], index: number): PlayheadSpan {
+  const at = Math.min(index, steps.length - 1);
+  return { from: at >= 0 ? steps[at]!.sequence : -Infinity, to: steps[at + 1]?.sequence ?? Infinity };
+}
+
+/**
+ * Whether the lesson's outcome is revealed now (RFC 0002 P5, decision 4): once the run has
+ * executed and the playhead stands on its last milestone, or at once when Animation is off or the
+ * run recorded no milestone. The caller latches it, so moving back never hides it again.
+ */
+export function playheadRevealsOutcome(index: number, context: PlayheadContext): boolean {
+  if (!context.executed) return false;
+  return !context.animation || context.count === 0 || index >= context.count - 1;
+}
+
 export interface PlayheadToggle {
   /** True while playing: the control pauses. */
   readonly pauses: boolean;

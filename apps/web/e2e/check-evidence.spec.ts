@@ -1,6 +1,7 @@
 import { expect, test } from "./support/test.ts";
 import type { Page } from "@playwright/test";
 import { loadLesson } from "./support/lesson.ts";
+import { runToEnd } from "./support/playhead.ts";
 
 // #165: Show evidence shows the rows the check stored, readable without opening the technical record.
 
@@ -13,8 +14,8 @@ test("#165 Show evidence on the double charge shows both payment rows above the 
   await page.goto("/");
   await loadLesson(page, "retry-unsafe");
   await expect(status(page)).toHaveText("READY");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(status(page)).toHaveText("COMPLETED");
+  // Animation off: the outcome, with its checks, is shown as soon as the run completes (RFC 0002 P5).
+  await runToEnd(page);
   await invariants(page).getByRole("button", { name: "Show evidence: A retried payment request charges the order once", exact: true }).click();
 
   const detail = page.locator("#inspection-panel");
@@ -35,8 +36,8 @@ test("#165 a check that holds shows its evidence too, labelled with the lesson's
   await page.goto("/");
   await loadLesson(page, "inventory-optimistic");
   await expect(status(page)).toHaveText("READY");
-  await page.getByRole("button", { name: "Run", exact: true }).click();
-  await expect(status(page)).toHaveText("COMPLETED");
+  // Animation off: the outcome, with its checks, is shown as soon as the run completes (RFC 0002 P5).
+  await runToEnd(page);
   await invariants(page).getByRole("button", { name: "Show evidence: Stock is never negative", exact: true }).click();
   const detail = page.locator("#inspection-panel");
   await expect(detail).toContainText("Stock is never negative — The check passed at t=8.");

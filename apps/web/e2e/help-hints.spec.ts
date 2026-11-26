@@ -6,6 +6,7 @@ import { loadLesson } from "./support/lesson.ts";
 import { openMoreFilters } from "./support/history.ts";
 import { experimentDrawer, openExperiment } from "./support/experiment.ts";
 import { openServiceState, serviceStateDialog } from "./support/service-state.ts";
+import { animationOff } from "./support/playhead.ts";
 
 declare global {
   interface Window { hintEvidence: { commands: WorkerCommand[] }; }
@@ -35,6 +36,7 @@ async function completed(page: Page, lesson = "response-lost") {
   const status = page.getByRole("status", { name: "Simulation status" });
   await loadLesson(page, lesson);
   await expect(status).toHaveText("READY");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status).toHaveText("COMPLETED");
 }

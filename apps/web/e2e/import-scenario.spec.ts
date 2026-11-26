@@ -9,6 +9,7 @@ import { checkoutOverlayPolicy, hostedCatalogs } from "@distlab/catalogs";
 import { validateScenarioDocument } from "@distlab/scenario";
 import { loadLesson } from "./support/lesson.ts";
 import { experimentTrigger } from "./support/experiment.ts";
+import { animationOff } from "./support/playhead.ts";
 
 // ADR-006 browser import (#115): open a scenario file, run it, and read its checks.
 
@@ -62,6 +63,7 @@ test("APP-AC-8 opening the vision §19 file shows an imported header, runs, and 
   await expect(page.getByText("This scenario accepts no student changes: its file declares no overlay policy.")).toBeVisible();
   await expect(experimentTrigger(page)).toHaveCount(0);
 
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
   const checks = page.getByRole("list", { name: "Scenario checks", exact: true });
@@ -154,6 +156,7 @@ test("#160: an imported document's checks lead ③ Investigate, and its Architec
   await page.goto("/");
   await openFile(page, "processor-response-lost.json", fixtureText);
   await expect(status(page)).toHaveText("READY");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(status(page)).toHaveText("COMPLETED");
 

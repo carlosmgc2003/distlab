@@ -6,6 +6,7 @@ import type { Page } from "@playwright/test";
 import type { RuntimeProjectionSet, WorkerCommand, WorkerEvent } from "@distlab/contracts";
 import { lessonTrigger, loadLesson } from "./support/lesson.ts";
 import { filterByType, viewButton } from "./support/history.ts";
+import { animationOff } from "./support/playhead.ts";
 
 const evidenceDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "evidence", "issue-70");
 
@@ -215,6 +216,7 @@ test("switching tabs preserves investigation state, moves focus, and sends no wo
   expect(await commands()).toEqual(beforeCommands);
 
   // Evidence links activate the history tab, select the record, and focus the row.
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   const afterRunCommands = await commands();
@@ -253,6 +255,7 @@ test("observation detail gives each teaching event a plain-language summary-firs
   await observeWorker(page);
   await page.setViewportSize({ width: 1366, height: 768 });
   await loadScenario(page, "response-lost");
+  await animationOff(page);
   await page.getByRole("button", { name: "Run", exact: true }).click();
   await expect(page.getByRole("status", { name: "Simulation status" })).toHaveText("COMPLETED");
   const beforeCommands = await page.evaluate(() => window.workspaceEvidence.commands.map(command => command.type));
