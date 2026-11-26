@@ -30,6 +30,11 @@ reader needs before changing code, and the vocabulary used when discussing them.
   payload is never reconstructed. An entry ends at its stored `expiresAt`, even
   before the `kv.expired` record at the same time. The writer is the sender of
   the request named by the record's `causationId`, or else the store's owner.
+- **Key lanes** (`apps/web/src/kv-lanes.ts`, RFC 0003 K2) is the time chart of
+  the keyspace built from key history: one row per key, grouped by store and by
+  the prefix before the key's first `:`, with a bar per value held and a mark
+  per conditional write, failed condition, read, and expiry, each reached or not
+  at the position. It is a model; the panel that draws it words it.
 - The milestone set lives in
   [docs/learning-timeline.md](docs/learning-timeline.md) and is transcribed in
   `milestoneKinds`. `apps/web/tests/records.test.ts` reads the document and
